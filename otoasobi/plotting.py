@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 import numpy as np
 
+from otoasobi.phones import phone_kind
 from otoasobi.segment import Span
 
 LABEL_COLORS = {
@@ -43,16 +44,16 @@ def draw_analysis(fig: Figure, y, sr: int, spans: list[Span], title: str) -> Non
         ax.axvspan(
             span.start,
             span.end,
-            color=LABEL_COLORS.get(span.label, "#CCCCCC"),
+            color=LABEL_COLORS.get(phone_kind(span.label), "#CCCCCC"),
             alpha=0.28,
             linewidth=0,
         )
         mid = (span.start + span.end) / 2
-        if span.end - span.start >= 0.04:
+        if span.end - span.start >= 0.025:
             ax.text(
                 mid,
                 ymax * 0.86,
-                span.label if not span.token else f"{span.label}\n{span.token}",
+                span.label,
                 ha="center",
                 va="top",
                 fontsize=8,

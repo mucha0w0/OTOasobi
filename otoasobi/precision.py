@@ -5,7 +5,7 @@ import numpy as np
 from otoasobi.align_mms import AlignedChar, align_chars, available as mms_available
 from otoasobi.features import FrameTrack
 from otoasobi.parser import Token
-from otoasobi.phones import mms_plan
+from otoasobi.phones import SILENCE_LABEL, mms_plan, phone_name
 from otoasobi.segment import (
     Span,
     _bounds_from_mask,
@@ -223,13 +223,13 @@ def _label_with_cut(
     harm: tuple[np.ndarray, np.ndarray] | None,
 ) -> list[Span]:
     if mora.kind in {"N", "Q"}:
-        return [Span(start, end, "子音", mora.text)]
+        return [Span(start, end, phone_name(mora, "C"), mora.text)]
     if mora.kind == "V" or not mora.needs_cv_split:
-        return [Span(start, end, "母音", mora.text)]
+        return [Span(start, end, phone_name(mora, "V"), mora.text)]
     cut = _refine_cv(mora, start, end, c_peak, vowel_peak, track, harm)
     return [
-        Span(start, cut, "子音", mora.text),
-        Span(cut, end, "母音", mora.text),
+        Span(start, cut, phone_name(mora, "C"), mora.text),
+        Span(cut, end, phone_name(mora, "V"), mora.text),
     ]
 
 
@@ -317,14 +317,14 @@ def segment_precision(
 
     spans: list[Span] = []
     if leading_rest:
-        spans.append(Span(0.0, speech_start, "無音", tokens[0].text))
+        spans.append(Span(0.0, speech_start, SILENCE_LABEL, tokens[0].text))
     elif speech_start > 0.02:
-        spans.append(Span(0.0, speech_start, "無音", ""))
+        spans.append(Span(0.0, speech_start, SILENCE_LABEL, ""))
 
     index_chunks = _speech_token_indices(tokens)
     if not index_chunks:
         if speech_end < duration:
-            spans.append(Span(speech_start, duration, "無音", tokens[-1].text if trailing_rest else ""))
+            spans.append(Span(speech_start, duration, SILENCE_LABEL, tokens[-1].text if trailing_rest else ""))
         engine = "mms+praat" if "praat" in bits else "mms"
         return _clean(spans, duration), engine
 
@@ -347,12 +347,12 @@ def segment_precision(
             next_start = mora_bounds[index_chunks[i + 1][0]][0]
             if next_start > last_end + 0.005:
                 rest_text = internal_rests[i].text if i < len(internal_rests) else "_"
-                spans.append(Span(last_end, next_start, "無音", rest_text))
+                spans.append(Span(last_end, next_start, SILENCE_LABEL, rest_text))
 
     last_end = spans[-1].end if spans else speech_end
     if last_end < duration - 0.01:
         rest_text = tokens[-1].text if trailing_rest else ""
-        spans.append(Span(last_end, duration, "無音", rest_text))
+        spans.append(Span(last_end, duration, SILENCE_LABEL, rest_text))
 
     engine = "mms+praat" if "praat" in bits else "mms"
     return _clean(spans, duration), engine

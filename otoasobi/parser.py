@@ -1,13 +1,48 @@
 from __future__ import annotations
 
+import unicodedata
 from dataclasses import dataclass
 
 SMALL_YOON = set("ゃゅょャュョ")
 SMALL_VOWEL = set("ぁぃぅぇぉァィゥェォ")
-HIRAGANA = set("あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわゐゑをんがぎぐげござじずぜぞだぢづでどばびぶべぼぱぴぷぺぽぁぃぅぇぉゃゅょっゎ")
+SMALL_KANA = SMALL_YOON | SMALL_VOWEL
+HIRAGANA = set("あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわゐゑをんがぎぐげござじずぜぞだぢづでどばびぶべぼぱぴぷぺぽぁぃぅぇぉゃゅょっゎゔ")
 KATAKANA = set("アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヰヱヲンガギグゲゴザジズゼゾダヂヅデドバビブベボパピプペポァィゥェォャュョッヮヴ")
 
 VOWELS = set("あいうえおをアイウエオ")
+
+_KATA2HIRA = str.maketrans(
+    "ァアィイゥウェエォオカガキギクグケゲコゴサザシジスズセゼソゾタダチヂッツヅテデトドナニヌネノハバパヒビピフブプヘベペホボポマミムメモャヤュユョヨラリルレロヮワヰヱヲンヴヵヶ",
+    "ぁあぃいぅうぇえぉおかがきぎくぐけげこごさざしじすずせぜそぞただちぢっつづてでとどなにぬねのはばぱひびぴふぶぷへべぺほぼぽまみむめもゃやゅゆょよらりるれろゎわゐゑをんゔかけ",
+)
+_HIRA2KATA = str.maketrans(
+    "ぁあぃいぅうぇえぉおかがきぎくぐけげこごさざしじすずせぜそぞただちぢっつづてでとどなにぬねのはばぱひびぴふぶぷへべぺほぼぽまみむめもゃやゅゆょよらりるれろゎわゐゑをんゔ",
+    "ァアィイゥウェエォオカガキギクグケゲコゴサザシジスズセゼソゾタダチヂッツヅテデトドナニヌネノハバパヒビピフブプヘベペホボポマミムメモャヤュユョヨラリルレロヮワヰヱヲンヴ",
+)
+_SMALL_TO_VOWEL = {
+    "ぁ": "a",
+    "ぃ": "i",
+    "ぅ": "u",
+    "ぇ": "e",
+    "ぉ": "o",
+    "ゃ": "a",
+    "ゅ": "u",
+    "ょ": "o",
+}
+_I_PALATAL = {
+    "k": "ky",
+    "g": "gy",
+    "n": "ny",
+    "h": "hy",
+    "m": "my",
+    "r": "ry",
+    "b": "by",
+    "p": "py",
+    "s": "sh",
+    "t": "ch",
+    "d": "j",
+    "z": "j",
+}
 
 # mora text -> (kind, consonant or None, vowel or None)
 # kind: V, CV, N, Q
@@ -88,50 +123,134 @@ _YOON = {
     "ぴゅ": ("py", "u"),
     "ぴょ": ("py", "o"),
 }
+
+
+def _add_extra(text: str, cons: str, vow: str) -> None:
+    entry = ("CV", cons, vow)
+    MORA_TABLE[text] = entry
+    kata = text.translate(_HIRA2KATA)
+    if kata != text:
+        MORA_TABLE[kata] = entry
+
+
 for _text, (_c, _v) in _YOON.items():
-    MORA_TABLE[_text] = ("CV", _c, _v)
+    _add_extra(_text, _c, _v)
 
-_KATA = {
-    "ヴ": ("CV", "v", "u"),
-    "ヴァ": ("CV", "v", "a"),
-    "ヴィ": ("CV", "v", "i"),
-    "ヴェ": ("CV", "v", "e"),
-    "ヴォ": ("CV", "v", "o"),
-    "ファ": ("CV", "f", "a"),
-    "フィ": ("CV", "f", "i"),
-    "フェ": ("CV", "f", "e"),
-    "フォ": ("CV", "f", "o"),
-    "ティ": ("CV", "t", "i"),
-    "ディ": ("CV", "d", "i"),
-    "トゥ": ("CV", "t", "u"),
-    "ドゥ": ("CV", "d", "u"),
-    "チェ": ("CV", "ch", "e"),
-    "シェ": ("CV", "sh", "e"),
-    "ジェ": ("CV", "j", "e"),
-    "ツァ": ("CV", "ts", "a"),
-    "ツィ": ("CV", "ts", "i"),
-    "ツェ": ("CV", "ts", "e"),
-    "ツォ": ("CV", "ts", "o"),
-    "ウィ": ("CV", "w", "i"),
-    "ウェ": ("CV", "w", "e"),
-    "ウォ": ("CV", "w", "o"),
+
+_EXTRAS = {
+    "いぇ": ("y", "e"),
+    "うぁ": ("w", "a"),
+    "うぃ": ("w", "i"),
+    "うぇ": ("w", "e"),
+    "うぉ": ("w", "o"),
+    "きぇ": ("ky", "e"),
+    "ぎぇ": ("gy", "e"),
+    "くぁ": ("kw", "a"),
+    "くぃ": ("kw", "i"),
+    "くぇ": ("kw", "e"),
+    "くぉ": ("kw", "o"),
+    "くゎ": ("kw", "a"),
+    "ぐぁ": ("gw", "a"),
+    "ぐぃ": ("gw", "i"),
+    "ぐぇ": ("gw", "e"),
+    "ぐぉ": ("gw", "o"),
+    "すぃ": ("s", "i"),
+    "ずぃ": ("z", "i"),
+    "しぇ": ("sh", "e"),
+    "じぇ": ("j", "e"),
+    "ちぇ": ("ch", "e"),
+    "つぁ": ("ts", "a"),
+    "つぃ": ("ts", "i"),
+    "つぇ": ("ts", "e"),
+    "つぉ": ("ts", "o"),
+    "てぃ": ("t", "i"),
+    "てゅ": ("ty", "u"),
+    "とぅ": ("t", "u"),
+    "でぃ": ("d", "i"),
+    "でゅ": ("dy", "u"),
+    "どぅ": ("d", "u"),
+    "にぇ": ("ny", "e"),
+    "ひぇ": ("hy", "e"),
+    "ふぁ": ("f", "a"),
+    "ふぃ": ("f", "i"),
+    "ふぇ": ("f", "e"),
+    "ふぉ": ("f", "o"),
+    "ふゃ": ("fy", "a"),
+    "ふゅ": ("fy", "u"),
+    "ふょ": ("fy", "o"),
+    "みぇ": ("my", "e"),
+    "りぇ": ("ry", "e"),
+    "びぇ": ("by", "e"),
+    "ぴぇ": ("py", "e"),
+    "ゔ": ("v", "u"),
+    "ゔぁ": ("v", "a"),
+    "ゔぃ": ("v", "i"),
+    "ゔぇ": ("v", "e"),
+    "ゔぉ": ("v", "o"),
+    "ゔゅ": ("vy", "u"),
 }
-MORA_TABLE.update(_KATA)
+for _text, (_c, _v) in _EXTRAS.items():
+    _add_extra(_text, _c, _v)
 
-# hiragana versions of a few foreign syllables
-MORA_TABLE["ふぁ"] = ("CV", "f", "a")
-MORA_TABLE["ふぃ"] = ("CV", "f", "i")
-MORA_TABLE["ふぇ"] = ("CV", "f", "e")
-MORA_TABLE["ふぉ"] = ("CV", "f", "o")
-MORA_TABLE["てぃ"] = ("CV", "t", "i")
-MORA_TABLE["でぃ"] = ("CV", "d", "i")
-MORA_TABLE["しぇ"] = ("CV", "sh", "e")
-MORA_TABLE["ちぇ"] = ("CV", "ch", "e")
-MORA_TABLE["じぇ"] = ("CV", "j", "e")
-
-FRICATIVE = {"s", "sh", "h", "hy", "f", "z", "j", "ts", "ch", "v"}
-STOP = {"k", "t", "p", "b", "d", "g", "ky", "gy", "py", "by"}
+FRICATIVE = {"s", "sh", "h", "hy", "f", "fy", "z", "j", "ts", "ch", "v", "vy"}
+STOP = {"k", "t", "p", "b", "d", "g", "ky", "gy", "py", "by", "ty", "dy", "kw", "gw"}
 NASAL = {"n", "ny", "m", "my"}
+
+
+def _hira(text: str) -> str:
+    return text.translate(_KATA2HIRA)
+
+
+def _lookup_mora(text: str) -> tuple[str, str | None, str | None] | None:
+    entry = MORA_TABLE.get(text) or MORA_TABLE.get(_hira(text))
+    return entry
+
+
+def _palatalize(cons: str) -> str:
+    if cons in _I_PALATAL:
+        return _I_PALATAL[cons]
+    if cons.endswith("y") or cons in {"sh", "ch", "j"}:
+        return cons
+    return cons + "y"
+
+
+def _combine_with_small(base: str, small: str) -> tuple[str, str | None, str] | None:
+    """Attach a small kana to a base mora (と+ぅ → tu, り+ぇ → rye)."""
+    small = _hira(small)
+    if small not in _SMALL_TO_VOWEL:
+        return None
+    entry = _lookup_mora(base)
+    if entry is None:
+        return None
+    kind, cons, vow = entry
+    if kind not in {"V", "CV"}:
+        return None
+    new_vow = _SMALL_TO_VOWEL[small]
+    is_yoon = small in "ゃゅょ"
+    is_small_e = small == "ぇ"
+
+    if cons is None:
+        if vow == "i" and (is_yoon or is_small_e):
+            return ("CV", "y", new_vow)
+        if vow == "u" and small in "ぁぃぇぉ":
+            return ("CV", "w", new_vow)
+        return None
+
+    if vow == "i" and (is_yoon or is_small_e):
+        return ("CV", _palatalize(cons), new_vow)
+    if is_yoon:
+        if cons in {"t", "d"}:
+            return ("CV", cons + "y", new_vow)
+        if cons in {"f", "v"}:
+            return ("CV", cons + "y", new_vow)
+        if cons in {"k", "g"} and vow == "u":
+            return ("CV", cons + "w", new_vow)
+        return ("CV", _palatalize(cons) if vow == "i" else cons, new_vow)
+    if cons in {"k", "g"} and vow == "u" and small in "ぁぃぇぉ":
+        return ("CV", cons + "w", new_vow)
+    if new_vow == vow:
+        return None
+    return ("CV", cons, new_vow)
 
 
 @dataclass(frozen=True)
@@ -180,6 +299,7 @@ def stem_from_path(path: str) -> str:
 def parse_stem(stem: str) -> list[Token]:
     if not stem:
         raise FilenameError("ファイル名が空です")
+    stem = unicodedata.normalize("NFC", stem)
     tokens: list[Token] = []
     i = 0
     n = len(stem)
@@ -192,18 +312,29 @@ def parse_stem(stem: str) -> list[Token]:
             tokens.append(Token("rest", stem[i:j]))
             i = j
             continue
-        if i + 1 < n and stem[i : i + 2] in MORA_TABLE:
-            text = stem[i : i + 2]
-            kind, cons, vow = MORA_TABLE[text]
-            tokens.append(Token(kind, text, cons, vow))
-            i += 2
-            continue
-        if ch in MORA_TABLE:
-            kind, cons, vow = MORA_TABLE[ch]
+        if i + 1 < n:
+            two = stem[i : i + 2]
+            entry = _lookup_mora(two)
+            if entry is None and two[1] in SMALL_KANA:
+                entry = _combine_with_small(two[0], two[1])
+            if entry is not None and (
+                two in MORA_TABLE or _hira(two) in MORA_TABLE or two[1] in SMALL_KANA
+            ):
+                kind, cons, vow = entry
+                tokens.append(Token(kind, two, cons, vow))
+                i += 2
+                continue
+        entry = _lookup_mora(ch)
+        if entry is not None:
+            kind, cons, vow = entry
             tokens.append(Token(kind, ch, cons, vow))
             i += 1
             continue
-        if ch in SMALL_YOON or ch in SMALL_VOWEL:
+        if ch in SMALL_VOWEL:
+            tokens.append(Token("V", ch, None, _SMALL_TO_VOWEL[_hira(ch)]))
+            i += 1
+            continue
+        if ch in SMALL_YOON:
             raise FilenameError(f"単独の小書き仮名は使えません: {ch}")
         raise FilenameError(f"使えない文字です: {ch!r}")
     if not tokens:

@@ -29,6 +29,7 @@ import pyqtgraph as pg
 
 from otoasobi.analyze import Analysis, analyze_wav, default_txt_path, write_label_txt
 from otoasobi.parser import FilenameError
+from otoasobi.phones import phone_kind
 from otoasobi.segment import Span
 
 ENGINE_LABEL = {
@@ -159,7 +160,7 @@ class WaveformView(pg.PlotWidget):
         self._lower.setData(t, lo)
         peak = max(0.2, float(np.max(np.abs(analysis.y))))
         for span in analysis.spans:
-            rgb = LABEL_COLORS.get(span.label, (120, 120, 120))
+            rgb = LABEL_COLORS.get(phone_kind(span.label), (120, 120, 120))
             region = pg.LinearRegionItem(
                 values=(span.start, span.end),
                 brush=(*rgb, 55),
@@ -169,10 +170,9 @@ class WaveformView(pg.PlotWidget):
             region.setZValue(-20)
             self.addItem(region)
             self._regions.append(region)
-            if span.end - span.start >= 0.05:
+            if span.end - span.start >= 0.025:
                 text = pg.TextItem(color="#F9FAFB", anchor=(0.5, 1))
-                label = span.label if not span.token else f"{span.label}  {span.token}"
-                text.setHtml(f"<span style='font-family: Yu Gothic UI; font-size: 11px'>{label}</span>")
+                text.setHtml(f"<span style='font-family: Yu Gothic UI; font-size: 11px'>{span.label}</span>")
                 text.setPos((span.start + span.end) / 2, peak * 0.92)
                 self.addItem(text)
                 self._texts.append(text)
@@ -285,7 +285,7 @@ class MainWindow(QMainWindow):
         splitter.addWidget(self.wave)
 
         self.table = QTableWidget(0, 4)
-        self.table.setHorizontalHeaderLabels(["開始 (秒)", "終了 (秒)", "ラベル", "かな"])
+        self.table.setHorizontalHeaderLabels(["開始 (秒)", "終了 (秒)", "音素", "かな"])
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
@@ -445,7 +445,7 @@ class MainWindow(QMainWindow):
                 item = QTableWidgetItem(value)
                 item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
                 if col == 2:
-                    rgb = LABEL_COLORS.get(span.label, (180, 180, 180))
+                    rgb = LABEL_COLORS.get(phone_kind(span.label), (180, 180, 180))
                     item.setForeground(QColor(*rgb))
                 self.table.setItem(row, col, item)
 
@@ -462,7 +462,8 @@ class MainWindow(QMainWindow):
     def _summary(self, analysis: Analysis) -> str:
         counts = {"無音": 0, "子音": 0, "母音": 0}
         for span in analysis.spans:
-            counts[span.label] = counts.get(span.label, 0) + 1
+            kind = phone_kind(span.label)
+            counts[kind] = counts.get(kind, 0) + 1
         mora_n = sum(1 for token in analysis.tokens if not token.is_rest)
         rest_n = sum(1 for token in analysis.tokens if token.is_rest)
         engine = ENGINE_LABEL.get(analysis.engine, analysis.engine)

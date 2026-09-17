@@ -6,6 +6,7 @@ import numpy as np
 
 from otoasobi.features import FrameTrack, close_short_gaps, runs
 from otoasobi.parser import Token, speech_chunks
+from otoasobi.phones import SILENCE_LABEL, phone_name
 
 
 @dataclass
@@ -400,13 +401,13 @@ def _cv_cut(track: FrameTrack, mora: Token, start: float, end: float) -> float:
 
 def _label_mora(mora: Token, start: float, end: float, track: FrameTrack) -> list[Span]:
     if mora.kind in {"N", "Q"}:
-        return [Span(start, end, "子音", mora.text)]
+        return [Span(start, end, phone_name(mora, "C"), mora.text)]
     if mora.kind == "V" or not mora.needs_cv_split:
-        return [Span(start, end, "母音", mora.text)]
+        return [Span(start, end, phone_name(mora, "V"), mora.text)]
     cut = _cv_cut(track, mora, start, end)
     return [
-        Span(start, cut, "子音", mora.text),
-        Span(cut, end, "母音", mora.text),
+        Span(start, cut, phone_name(mora, "C"), mora.text),
+        Span(cut, end, phone_name(mora, "V"), mora.text),
     ]
 
 
@@ -422,16 +423,16 @@ def segment_tokens(tokens: list[Token], track: FrameTrack, duration: float) -> l
 
     if leading_rest:
         rest_end = speech_start
-        spans.append(Span(0.0, rest_end, "無音", tokens[0].text))
+        spans.append(Span(0.0, rest_end, SILENCE_LABEL, tokens[0].text))
     else:
         if speech_start > 0.02:
-            spans.append(Span(0.0, speech_start, "無音", ""))
+            spans.append(Span(0.0, speech_start, SILENCE_LABEL, ""))
 
     if not chunks:
         if not leading_rest:
-            spans.append(Span(0.0, duration, "無音", "_"))
+            spans.append(Span(0.0, duration, SILENCE_LABEL, "_"))
         elif speech_end < duration:
-            spans.append(Span(speech_start, duration, "無音", tokens[-1].text if trailing_rest else ""))
+            spans.append(Span(speech_start, duration, SILENCE_LABEL, tokens[-1].text if trailing_rest else ""))
         return _clean(spans, duration)
 
     if len(chunks) == 1:
@@ -454,12 +455,12 @@ def segment_tokens(tokens: list[Token], track: FrameTrack, duration: float) -> l
             gap_end = chunk_bounds[i + 1][0]
             rest_text = internal_rests[i].text if i < len(internal_rests) else "_"
             if gap_end > c1 + 0.005:
-                spans.append(Span(c1, gap_end, "無音", rest_text))
+                spans.append(Span(c1, gap_end, SILENCE_LABEL, rest_text))
 
     last_end = spans[-1].end if spans else speech_end
     if last_end < duration - 0.01:
         rest_text = tokens[-1].text if trailing_rest else ""
-        spans.append(Span(last_end, duration, "無音", rest_text))
+        spans.append(Span(last_end, duration, SILENCE_LABEL, rest_text))
     return _clean(spans, duration)
 
 
@@ -503,7 +504,7 @@ def _split_speech_chunks(
 
 def _clean(spans: list[Span], duration: float) -> list[Span]:
     if not spans:
-        return [Span(0.0, duration, "無音", "")]
+        return [Span(0.0, duration, SILENCE_LABEL, "")]
     spans = sorted(spans, key=lambda s: s.start)
     out: list[Span] = []
     for span in spans:
@@ -514,14 +515,14 @@ def _clean(spans: list[Span], duration: float) -> list[Span]:
         if out and abs(span.start - out[-1].end) > 0.0001:
             gap_start = out[-1].end
             if start > gap_start + 0.005:
-                out.append(Span(gap_start, start, "無音", ""))
+                out.append(Span(gap_start, start, SILENCE_LABEL, ""))
         out.append(Span(start, end, span.label, span.token))
     if out[0].start > 0.005:
-        out.insert(0, Span(0.0, out[0].start, "無音", ""))
+        out.insert(0, Span(0.0, out[0].start, SILENCE_LABEL, ""))
     else:
         out[0] = Span(0.0, out[0].end, out[0].label, out[0].token)
     if duration - out[-1].end > 0.005:
-        out.append(Span(out[-1].end, duration, "無音", ""))
+        out.append(Span(out[-1].end, duration, SILENCE_LABEL, ""))
     else:
         last = out[-1]
         out[-1] = Span(last.start, duration, last.label, last.token)

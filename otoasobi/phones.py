@@ -34,11 +34,18 @@ _CONS_MMS: dict[str, list[str]] = {
     "p": ["p"],
     "py": ["p", "y"],
     "v": ["v"],
+    "kw": ["k", "w"],
+    "gw": ["g", "w"],
+    "ty": ["t", "y"],
+    "dy": ["d", "y"],
+    "fy": ["f", "y"],
+    "vy": ["v", "y"],
     "N": ["n"],
     "cl": ["q"],
 }
 
 _VOWELS = set("aiueo")
+SILENCE_LABEL = "無音"
 
 
 @dataclass(frozen=True)
@@ -79,3 +86,24 @@ def mms_plan(tokens: list[Token]) -> list[MmsUnit]:
     for i, token in enumerate(tokens):
         plan.extend(token_mms_units(token, i))
     return plan
+
+
+def phone_name(token: Token, part: str) -> str:
+    """Phoneme label for a mora slice. part is 'C' or 'V'."""
+    if token.kind == "N":
+        return token.consonant or "N"
+    if token.kind == "Q":
+        return token.consonant or "cl"
+    if part == "V":
+        return token.vowel if token.vowel in _VOWELS else "a"
+    if token.consonant:
+        return token.consonant
+    return token.vowel if token.vowel in _VOWELS else "a"
+
+
+def phone_kind(label: str) -> str:
+    if label == SILENCE_LABEL:
+        return SILENCE_LABEL
+    if label in _VOWELS:
+        return "母音"
+    return "子音"
