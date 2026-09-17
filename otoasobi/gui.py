@@ -1,0 +1,421 @@
+from __future__ import annotations
+
+import multiprocessing
+import sys
+from pathlib import Path
+
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QAction, QColor, QDragEnterEvent, QDropEvent, QIcon, QKeySequence
+from PySide6.QtWidgets import (
+    QAbstractItemView,
+    QApplication,
+    QFileDialog,
+    QHBoxLayout,
+    QHeaderView,
+    QLabel,
+    QMainWindow,
+    QMessageBox,
+    QSplitter,
+    QStatusBar,
+    QTableWidget,
+    QTableWidgetItem,
+    QToolBar,
+    QVBoxLayout,
+    QWidget,
+)
+
+import numpy as np
+import pyqtgraph as pg
+
+from otoasobi.analyze import Analysis, analyze_wav, default_txt_path, write_label_txt
+from otoasobi.parser import FilenameError
+from otoasobi.segment import Span
+
+LABEL_COLORS = {
+    "無音": (154, 160, 166),
+    "子音": (217, 119, 6),
+    "母音": (15, 157, 142),
+}
+
+STYLESHEET = """
+QMainWindow, QWidget {
+    background: #161616;
+    color: #F3F4F6;
+    font-family: "Yu Gothic UI", "Meiryo UI", sans-serif;
+    font-size: 13px;
+}
+QToolBar {
+    background: #202020;
+    border: none;
+    spacing: 8px;
+    padding: 6px 10px;
+}
+QToolButton {
+    background: #2A2A2A;
+    color: #F3F4F6;
+    border: 1px solid #3A3A3A;
+    padding: 6px 14px;
+    border-radius: 4px;
+}
+QToolButton:hover { background: #333333; }
+QToolButton:pressed { background: #0F9D8E; color: #06110F; }
+QTableWidget {
+    background: #1A1A1A;
+    alternate-background-color: #1F1F1F;
+    gridline-color: #2E2E2E;
+    border: none;
+    selection-background-color: #0F9D8E;
+    selection-color: #06110F;
+}
+QHeaderView::section {
+    background: #202020;
+    color: #D1D5DB;
+    border: none;
+    border-bottom: 1px solid #2E2E2E;
+    padding: 6px 8px;
+}
+QStatusBar {
+    background: #141414;
+    color: #9CA3AF;
+}
+QMenuBar {
+    background: #202020;
+    color: #F3F4F6;
+    padding: 4px 8px;
+}
+QMenuBar::item:selected { background: #2A2A2A; }
+QMenu {
+    background: #202020;
+    color: #F3F4F6;
+    border: 1px solid #3A3A3A;
+}
+QMenu::item:selected { background: #0F9D8E; color: #06110F; }
+QSplitter::handle { background: #2A2A2A; }
+QScrollBar:vertical, QScrollBar:horizontal {
+    background: #161616;
+    width: 10px;
+    height: 10px;
+}
+QScrollBar::handle { background: #3F3F3F; border-radius: 4px; }
+"""
+
+
+def _icon_path() -> Path | None:
+    candidates = [
+        Path(sys.executable).parent / "app.ico",
+        Path(__file__).resolve().parent.parent / "packaging" / "app.ico",
+    ]
+    for path in candidates:
+        if path.exists():
+            return path
+    return None
+
+
+class WaveformView(pg.PlotWidget):
+    def __init__(self) -> None:
+        super().__init__(background="#161616")
+        self.setAcceptDrops(False)
+        plot = self.getPlotItem()
+        plot.showGrid(x=True, y=False, alpha=0.15)
+        plot.setLabel("bottom", "時間", units="s")
+        plot.hideAxis("left")
+        plot.getViewBox().setDefaultPadding(0.02)
+        self._upper = pg.PlotCurveItem(pen=None)
+        self._lower = pg.PlotCurveItem(pen=None)
+        self._fill = pg.FillBetweenItem(self._lower, self._upper, brush=(230, 230, 230, 170))
+        self.addItem(self._fill)
+        self.addItem(self._upper)
+        self.addItem(self._lower)
+        self._regions: list[pg.LinearRegionItem] = []
+        self._texts: list[pg.TextItem] = []
+        self._playhead = pg.InfiniteLine(angle=90, movable=False, pen=pg.mkPen("#FBBF24", width=1.5))
+        self.addItem(self._playhead)
+        self._playhead.setVisible(False)
+
+    def clear_labels(self) -> None:
+        for item in self._regions + self._texts:
+            self.removeItem(item)
+        self._regions.clear()
+        self._texts.clear()
+
+    def set_empty(self) -> None:
+        self.clear_labels()
+        self._upper.setData([], [])
+        self._lower.setData([], [])
+        self._playhead.setVisible(False)
+        self.setXRange(0, 1, padding=0)
+
+    def set_analysis(self, analysis: Analysis) -> None:
+        self.clear_labels()
+        t, lo, hi = _envelope(analysis.y, analysis.sr)
+        self._upper.setData(t, hi)
+        self._lower.setData(t, lo)
+        peak = max(0.2, float(np.max(np.abs(analysis.y))))
+        for span in analysis.spans:
+            rgb = LABEL_COLORS.get(span.label, (120, 120, 120))
+            region = pg.LinearRegionItem(
+                values=(span.start, span.end),
+                brush=(*rgb, 55),
+                pen=pg.mkPen((*rgb, 160), width=1),
+                movable=False,
+            )
+            region.setZValue(-20)
+            self.addItem(region)
+            self._regions.append(region)
+            if span.end - span.start >= 0.05:
+                text = pg.TextItem(color="#F9FAFB", anchor=(0.5, 1))
+                label = span.label if not span.token else f"{span.label}  {span.token}"
+                text.setHtml(f"<span style='font-family: Yu Gothic UI; font-size: 11px'>{label}</span>")
+                text.setPos((span.start + span.end) / 2, peak * 0.92)
+                self.addItem(text)
+                self._texts.append(text)
+        self.setYRange(-peak, peak, padding=0.04)
+        self.setXRange(0, analysis.duration, padding=0.01)
+        self._playhead.setVisible(False)
+
+    def focus_span(self, span: Span) -> None:
+        pad = max(0.05, (span.end - span.start) * 0.4)
+        self.setXRange(max(0.0, span.start - pad), span.end + pad, padding=0)
+
+
+def _envelope(y: np.ndarray, sr: int, bins: int = 5000) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    y = np.asarray(y, dtype=np.float64)
+    if len(y) == 0:
+        return np.array([0.0]), np.array([0.0]), np.array([0.0])
+    hop = max(1, len(y) // bins)
+    n = len(y) // hop
+    chunk = y[: n * hop].reshape(n, hop)
+    t = (np.arange(n) + 0.5) * hop / sr
+    return t, chunk.min(axis=1), chunk.max(axis=1)
+
+
+class MainWindow(QMainWindow):
+    def __init__(self) -> None:
+        super().__init__()
+        self.setWindowTitle("音遊びラベル")
+        self.resize(1180, 720)
+        self.setMinimumSize(860, 540)
+        self.setAcceptDrops(True)
+        icon = _icon_path()
+        if icon:
+            self.setWindowIcon(QIcon(str(icon)))
+        self.analysis: Analysis | None = None
+        self._playing = False
+        self._build()
+
+    def _build(self) -> None:
+        toolbar = QToolBar()
+        toolbar.setMovable(False)
+        toolbar.setFloatable(False)
+        self.addToolBar(toolbar)
+
+        self.act_open = QAction("開く", self)
+        self.act_open.setShortcut(QKeySequence.Open)
+        self.act_open.triggered.connect(self.open_wav)
+        self.act_play = QAction("再生", self)
+        self.act_play.setShortcut(QKeySequence(Qt.Key.Key_Space))
+        self.act_play.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
+        self.act_play.triggered.connect(self.toggle_play)
+        self.act_save = QAction("保存", self)
+        self.act_save.setShortcut(QKeySequence.Save)
+        self.act_save.triggered.connect(self.save_txt)
+        self.act_reanalyze = QAction("再解析", self)
+        self.act_reanalyze.setShortcut(QKeySequence("F5"))
+        self.act_reanalyze.triggered.connect(self.reanalyze)
+        for action in (self.act_open, self.act_play, self.act_save, self.act_reanalyze):
+            toolbar.addAction(action)
+
+        self.file_label = QLabel("WAVを開くか、ここにドロップしてください")
+        self.file_label.setStyleSheet("color: #9CA3AF; padding-left: 12px;")
+        file_host = QWidget()
+        file_layout = QHBoxLayout(file_host)
+        file_layout.setContentsMargins(8, 0, 8, 0)
+        file_layout.addWidget(self.file_label, 1)
+        toolbar.addWidget(file_host)
+
+        legend = QLabel("　".join(
+            f"<span style='color: rgb{LABEL_COLORS[name]}'>■</span> {name}"
+            for name in ("無音", "子音", "母音")
+        ))
+        legend.setTextFormat(Qt.TextFormat.RichText)
+        toolbar.addWidget(legend)
+
+        splitter = QSplitter(Qt.Orientation.Vertical)
+        self.wave = WaveformView()
+        splitter.addWidget(self.wave)
+
+        self.table = QTableWidget(0, 4)
+        self.table.setHorizontalHeaderLabels(["開始 (秒)", "終了 (秒)", "ラベル", "かな"])
+        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.table.setAlternatingRowColors(True)
+        self.table.verticalHeader().setVisible(False)
+        header = self.table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
+        self.table.itemSelectionChanged.connect(self._on_row_selected)
+        splitter.addWidget(self.table)
+        splitter.setStretchFactor(0, 3)
+        splitter.setStretchFactor(1, 1)
+
+        root = QWidget()
+        layout = QVBoxLayout(root)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(splitter)
+        self.setCentralWidget(root)
+
+        status = QStatusBar()
+        self.setStatusBar(status)
+        status.showMessage("ファイル名はひらがな・ヴなどのカタカナ・休符 _ のみです。")
+
+        file_menu = self.menuBar().addMenu("ファイル")
+        file_menu.addAction(self.act_open)
+        file_menu.addAction(self.act_save)
+        file_menu.addSeparator()
+        quit_act = QAction("終了", self)
+        quit_act.setShortcut(QKeySequence.Quit)
+        quit_act.triggered.connect(self.close)
+        file_menu.addAction(quit_act)
+        view_menu = self.menuBar().addMenu("解析")
+        view_menu.addAction(self.act_reanalyze)
+        view_menu.addAction(self.act_play)
+
+    def dragEnterEvent(self, event: QDragEnterEvent) -> None:
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+
+    def dropEvent(self, event: QDropEvent) -> None:
+        for url in event.mimeData().urls():
+            path = url.toLocalFile()
+            if path.lower().endswith(".wav"):
+                self.load_path(path)
+                return
+
+    def open_wav(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(self, "WAVを開く", "", "WAV (*.wav)")
+        if path:
+            self.load_path(path)
+
+    def load_path(self, path: str) -> None:
+        self._stop_play()
+        try:
+            analysis = analyze_wav(path)
+        except FilenameError as exc:
+            QMessageBox.warning(self, "ファイル名エラー", str(exc))
+            return
+        except Exception as exc:
+            QMessageBox.critical(self, "解析エラー", f"{type(exc).__name__}: {exc}")
+            return
+        self.analysis = analysis
+        self.file_label.setText(analysis.path.name)
+        self.wave.set_analysis(analysis)
+        self._fill_table(analysis.spans)
+        txt = default_txt_path(analysis.path)
+        write_label_txt(txt, analysis.spans)
+        self.statusBar().showMessage(self._summary(analysis) + f"  →  {txt.name} に保存しました")
+
+    def reanalyze(self) -> None:
+        if self.analysis is None:
+            self.open_wav()
+            return
+        self.load_path(str(self.analysis.path))
+
+    def save_txt(self) -> None:
+        if self.analysis is None:
+            QMessageBox.information(self, "保存", "先にWAVを開いてください。")
+            return
+        suggested = str(default_txt_path(self.analysis.path))
+        path, _ = QFileDialog.getSaveFileName(self, "ラベルを保存", suggested, "テキスト (*.txt)")
+        if not path:
+            return
+        write_label_txt(path, self.analysis.spans)
+        self.statusBar().showMessage(f"保存しました: {path}")
+
+    def toggle_play(self) -> None:
+        if self.analysis is None:
+            return
+        if self._playing:
+            self._stop_play()
+            return
+        try:
+            import winsound
+
+            winsound.PlaySound(str(self.analysis.path), winsound.SND_FILENAME | winsound.SND_ASYNC)
+            self._playing = True
+            self.act_play.setText("停止")
+        except Exception as exc:
+            QMessageBox.critical(self, "再生エラー", str(exc))
+
+    def _stop_play(self) -> None:
+        if not self._playing:
+            return
+        try:
+            import winsound
+
+            winsound.PlaySound(None, winsound.SND_PURGE)
+        except Exception:
+            pass
+        self._playing = False
+        self.act_play.setText("再生")
+
+    def closeEvent(self, event) -> None:
+        self._stop_play()
+        super().closeEvent(event)
+
+    def _fill_table(self, spans: list[Span]) -> None:
+        self.table.setRowCount(len(spans))
+        for row, span in enumerate(spans):
+            values = (f"{span.start:.3f}", f"{span.end:.3f}", span.label, span.token)
+            for col, value in enumerate(values):
+                item = QTableWidgetItem(value)
+                item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                if col == 2:
+                    rgb = LABEL_COLORS.get(span.label, (180, 180, 180))
+                    item.setForeground(QColor(*rgb))
+                self.table.setItem(row, col, item)
+
+    def _on_row_selected(self) -> None:
+        if self.analysis is None:
+            return
+        rows = self.table.selectionModel().selectedRows()
+        if not rows:
+            return
+        index = rows[0].row()
+        if 0 <= index < len(self.analysis.spans):
+            self.wave.focus_span(self.analysis.spans[index])
+
+    def _summary(self, analysis: Analysis) -> str:
+        counts = {"無音": 0, "子音": 0, "母音": 0}
+        for span in analysis.spans:
+            counts[span.label] = counts.get(span.label, 0) + 1
+        mora_n = sum(1 for token in analysis.tokens if not token.is_rest)
+        rest_n = sum(1 for token in analysis.tokens if token.is_rest)
+        return (
+            f"{analysis.duration:.2f}秒 / モーラ{mora_n} / 休符{rest_n} / "
+            f"無音{counts['無音']} 子音{counts['子音']} 母音{counts['母音']}"
+        )
+
+
+def main(argv: list[str] | None = None) -> None:
+    multiprocessing.freeze_support()
+    argv = sys.argv if argv is None else [sys.argv[0], *argv]
+    app = QApplication(argv)
+    app.setApplicationName("音遊びラベル")
+    app.setStyleSheet(STYLESHEET)
+    pg.setConfigOptions(antialias=True, foreground="#D1D5DB")
+    icon = _icon_path()
+    if icon:
+        app.setWindowIcon(QIcon(str(icon)))
+    window = MainWindow()
+    window.show()
+    paths = [a for a in argv[1:] if not a.startswith("-")]
+    if paths:
+        window.load_path(paths[0])
+    raise SystemExit(app.exec())
+
+
+if __name__ == "__main__":
+    main()

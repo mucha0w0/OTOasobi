@@ -1,4 +1,9 @@
+# Runtime: Python 3.12 (packaging / PyInstaller)
 numpy>=2.0
-scipy>=1.13
-matplotlib>=3.8
 soundfile>=0.12
+PySide6>=6.7
+pyqtgraph>=0.13
+
+# Dev / exe
+# pyinstaller>=6.0
+# pillow>=10.0
