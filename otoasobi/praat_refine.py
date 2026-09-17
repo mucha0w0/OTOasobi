@@ -72,3 +72,22 @@ def voicing_onset(
                 return cut
             break
     return fallback
+
+
+def formant_f2(y: np.ndarray, sr: int) -> tuple[np.ndarray, np.ndarray]:
+    snd = _sound(y, sr)
+    formant = snd.to_formant_burg(
+        time_step=0.01,
+        max_number_of_formants=5.0,
+        maximum_formant=5500.0,
+        window_length=0.025,
+        pre_emphasis_from=50.0,
+    )
+    t0 = float(formant.start_time)
+    t1 = float(formant.end_time)
+    times = np.arange(t0, t1, 0.01)
+    vals = np.empty(len(times), dtype=float)
+    for i, t in enumerate(times):
+        v = formant.get_value_at_time(2, float(t))
+        vals[i] = float(v) if v is not None and np.isfinite(v) else np.nan
+    return times, vals

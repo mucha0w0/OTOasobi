@@ -186,6 +186,137 @@ def _nasal_onsets(track: FrameTrack, start: float, end: float, count: int) -> li
     return onsets
 
 
+F2_REF = {"i": 2300.0, "e": 1900.0, "a": 1250.0, "o": 950.0, "u": 850.0}
+
+
+def _rms_valley(track: FrameTrack, t0: float, t1: float, fallback: float) -> float:
+    sel = (track.times >= t0) & (track.times <= t1)
+    if int(np.count_nonzero(sel)) < 4:
+        return fallback
+    times = track.times[sel]
+    rms = track.rms[sel]
+    win = max(3, min(7, len(rms) // 3 * 2 + 1))
+    if win % 2 == 0:
+        win += 1
+    kernel = np.ones(win) / win
+    smooth = np.convolve(rms, kernel, mode="same")
+    inner = slice(1, max(2, len(smooth) - 1))
+    idx = int(np.argmin(smooth[inner])) + 1
+    return float(times[idx])
+
+
+def _max_delta_time(times: np.ndarray, values: np.ndarray, t0: float, t1: float, fallback: float) -> float:
+    sel = (times >= t0) & (times <= t1) & np.isfinite(values)
+    if int(np.count_nonzero(sel)) < 4:
+        return fallback
+    t = times[sel]
+    v = values[sel]
+    d = np.abs(np.diff(v))
+    return float(t[int(np.argmax(d)) + 1])
+
+
+def _f2_crossing(
+    times: np.ndarray,
+    f2: np.ndarray,
+    t0: float,
+    t1: float,
+    v0: str | None,
+    v1: str | None,
+    fallback: float,
+) -> float:
+    sel = (times >= t0) & (times <= t1) & np.isfinite(f2)
+    if int(np.count_nonzero(sel)) < 4:
+        return fallback
+    t = times[sel]
+    v = f2[sel]
+    target0 = F2_REF.get(v0 or "", 1200.0)
+    target1 = F2_REF.get(v1 or "", 1200.0)
+    mid_f = 0.5 * (target0 + target1)
+    idx = int(np.argmin(np.abs(v - mid_f)))
+    cut = float(t[idx])
+    if min(target0, target1) - 80 <= v[idx] <= max(target0, target1) + 80:
+        return cut
+    return _max_delta_time(times, f2, t0, t1, fallback)
+
+
+def vowel_boundary(
+    track: FrameTrack,
+    t_a: float,
+    t_b: float,
+    v_a: str | None,
+    v_b: str | None,
+    f2: tuple[np.ndarray, np.ndarray] | None = None,
+) -> float:
+    t0, t1 = (t_a, t_b) if t_a <= t_b else (t_b, t_a)
+    mid = 0.5 * (t0 + t1)
+    if t1 - t0 < 0.05:
+        return mid
+    if v_a == v_b:
+        return _rms_valley(track, t0, t1, mid)
+    if f2 is not None:
+        return _f2_crossing(f2[0], f2[1], t0, t1, v_a, v_b, mid)
+    return _max_delta_time(track.times, track.bright, t0, t1, mid)
+
+
+def spread_peaks(peaks: list[float], t0: float, t1: float, min_sep: float = 0.11) -> list[float]:
+    p = [float(x) for x in peaks]
+    n = len(p)
+    if n <= 1:
+        return p
+    span = max(t1 - t0, min_sep * n)
+    if span < min_sep * (n - 0.5):
+        step = span / n
+        return [t0 + (i + 0.5) * step for i in range(n)]
+    for _ in range(10):
+        p[0] = min(max(p[0], t0 + 0.03), t1 - min_sep * (n - 1) - 0.03)
+        for i in range(1, n):
+            p[i] = max(p[i], p[i - 1] + min_sep)
+        p[-1] = min(p[-1], t1 - 0.03)
+        for i in range(n - 2, -1, -1):
+            p[i] = min(p[i], p[i + 1] - min_sep)
+    return p
+
+
+def vowel_mora_onsets(
+    track: FrameTrack,
+    start: float,
+    end: float,
+    vowels: list[str | None],
+    peaks: list[float] | None = None,
+    f2: tuple[np.ndarray, np.ndarray] | None = None,
+) -> list[float]:
+    n = len(vowels)
+    if n <= 1:
+        return [start]
+    if peaks is not None and len(peaks) == n:
+        peaks = spread_peaks(peaks, start, end)
+        onsets = [start]
+        for i in range(1, n):
+            mid = 0.5 * (peaks[i - 1] + peaks[i])
+            acoustic = vowel_boundary(track, peaks[i - 1], peaks[i], vowels[i - 1], vowels[i], f2)
+            if abs(acoustic - mid) <= 0.04:
+                onsets.append(acoustic)
+            else:
+                onsets.append(mid)
+        for i in range(1, n):
+            onsets[i] = max(onsets[i], onsets[i - 1] + 0.07)
+            onsets[i] = min(onsets[i], end - 0.07 * (n - i))
+        onsets[0] = start
+        return onsets
+    step = (end - start) / n
+    onsets = [start]
+    for i in range(1, n):
+        guess = start + i * step
+        lo = max(start, guess - step * 0.45)
+        hi = min(end, guess + step * 0.45)
+        onsets.append(vowel_boundary(track, lo, hi, vowels[i - 1], vowels[i], f2))
+    for i in range(1, n):
+        onsets[i] = max(onsets[i], onsets[i - 1] + 0.07)
+        onsets[i] = min(onsets[i], end - 0.07 * (n - i))
+    onsets[0] = start
+    return onsets
+
+
 def _equal_bounds(start: float, end: float, count: int) -> list[tuple[float, float]]:
     if count <= 0:
         return []
@@ -221,6 +352,9 @@ def _mora_bounds(track: FrameTrack, moras: list[Token], start: float, end: float
         onsets = _nasal_onsets(track, start, end, n)
         if onsets is not None:
             return _onsets_to_bounds(onsets, start, end)
+    if all(m.is_vowel_only for m in moras):
+        onsets = vowel_mora_onsets(track, start, end, [m.vowel for m in moras])
+        return _onsets_to_bounds(onsets, start, end)
     return _equal_bounds(start, end, n)
 
 

@@ -15,6 +15,8 @@ from otoasobi.segment import (
     nasal_vowel_start,
     stop_closure_start,
     stop_vowel_start,
+    vowel_boundary,
+    vowel_mora_onsets,
 )
 
 
@@ -114,6 +116,7 @@ def _mora_bounds_from_align(
     speech_start: float,
     speech_end: float,
     leading_rest: bool,
+    f2: tuple[np.ndarray, np.ndarray] | None = None,
 ) -> dict[int, tuple[float, float]]:
     speech_indices = [i for i, token in enumerate(tokens) if not token.is_rest]
     if not speech_indices:
@@ -121,18 +124,45 @@ def _mora_bounds_from_align(
 
     peaks: dict[int, float] = {}
     vowel_by_index: dict[int, float | None] = {}
-    prev_limit = speech_start
-    raw_onsets: dict[int, float] = {}
     for i in speech_indices:
         chars = aligned_by_index[i]
         c_times = [c.time for c in chars if c.role == "C"]
         v_times = [c.time for c in chars if c.role == "V"]
-        peak = c_times[0] if c_times else (v_times[0] if v_times else prev_limit)
+        peak = c_times[0] if c_times else (v_times[0] if v_times else speech_start)
         peaks[i] = peak
         vowel_by_index[i] = v_times[0] if v_times else None
-        raw_onsets[i] = _mora_onset(track, tokens[i], peak, prev_limit, speech_end)
-        if v_times:
-            prev_limit = v_times[0] + 0.05
+
+    moras = [tokens[i] for i in speech_indices]
+    if all(m.is_vowel_only for m in moras):
+        onsets = vowel_mora_onsets(
+            track,
+            speech_start,
+            speech_end,
+            [m.vowel for m in moras],
+            [peaks[i] for i in speech_indices],
+            f2,
+        )
+        bounds: dict[int, tuple[float, float]] = {}
+        for k, i in enumerate(speech_indices):
+            start = onsets[k]
+            end = onsets[k + 1] if k + 1 < len(onsets) else speech_end
+            if end <= start + 0.04:
+                end = min(speech_end, start + 0.08)
+            bounds[i] = (start, end)
+        return bounds
+
+    prev_limit = speech_start
+    raw_onsets: dict[int, float] = {}
+    for i in speech_indices:
+        mora = tokens[i]
+        peak = peaks[i]
+        if mora.is_vowel_only:
+            raw_onsets[i] = peak
+        else:
+            raw_onsets[i] = _mora_onset(track, mora, peak, prev_limit, speech_end)
+        v_peak = vowel_by_index[i]
+        if v_peak is not None:
+            prev_limit = v_peak + 0.05
         else:
             prev_limit = peak + 0.04
 
@@ -142,6 +172,9 @@ def _mora_bounds_from_align(
         speech_start = raw_onsets[first]
         if leading_rest:
             speech_start = max(speech_start, min(0.04, peaks[first] * 0.3))
+    elif first_mora.is_vowel_only:
+        speech_start = min(raw_onsets[first], speech_start)
+        speech_start = min(speech_start, peaks[first])
     else:
         speech_start = min(raw_onsets[first], speech_start)
 
@@ -151,14 +184,26 @@ def _mora_bounds_from_align(
             starts.append(speech_start)
             continue
         prev_i = speech_indices[k - 1]
-        prev_v = vowel_by_index[prev_i]
+        prev_mora = tokens[prev_i]
+        mora = tokens[i]
         floor = starts[-1] + 0.06
+        if prev_mora.is_vowel_only and mora.is_vowel_only:
+            prev_peak = vowel_by_index[prev_i] or peaks[prev_i]
+            curr_peak = vowel_by_index[i] or peaks[i]
+            mid = 0.5 * (prev_peak + curr_peak)
+            onset = vowel_boundary(track, prev_peak, curr_peak, prev_mora.vowel, mora.vowel, f2)
+            if abs(onset - mid) > 0.04:
+                onset = mid
+            onset = max(onset, floor)
+            starts.append(onset)
+            continue
+        prev_v = vowel_by_index[prev_i]
         if prev_v is not None:
             floor = max(floor, prev_v + 0.045)
         onset = max(raw_onsets[i], floor)
         starts.append(onset)
 
-    bounds: dict[int, tuple[float, float]] = {}
+    bounds = {}
     for k, i in enumerate(speech_indices):
         start = starts[k]
         end = starts[k + 1] if k + 1 < len(starts) else speech_end
@@ -219,6 +264,7 @@ def segment_precision(
         rms_start = stop_closure_start(track, rms_start, 0.0)
     speech_start, speech_end = rms_start, rms_end
     harm = None
+    f2 = None
     bits: list[str] = []
 
     try:
@@ -233,9 +279,11 @@ def segment_precision(
             if abs(p1 - rms_end) <= 0.12:
                 speech_end = p1
             harm = praat_refine.harmonicity(y, sr)
+            f2 = praat_refine.formant_f2(y, sr)
             bits.append("praat")
     except Exception:
         harm = None
+        f2 = None
 
     plan = mms_plan(tokens)
     if not plan:
@@ -252,7 +300,7 @@ def segment_precision(
     leading_rest = bool(tokens) and tokens[0].is_rest
     trailing_rest = bool(tokens) and tokens[-1].is_rest
     mora_bounds = _mora_bounds_from_align(
-        tokens, grouped, track, speech_start, speech_end, leading_rest
+        tokens, grouped, track, speech_start, speech_end, leading_rest, f2
     )
     speech_start = mora_bounds[speech_indices[0]][0] if speech_indices else speech_start
     vowel_peaks = {

@@ -16,6 +16,7 @@ class FrameTrack:
     zcr: np.ndarray
     flux: np.ndarray
     centroid: np.ndarray
+    bright: np.ndarray
 
 
 def _to_mono(y: np.ndarray) -> np.ndarray:
@@ -35,6 +36,8 @@ def compute_features(y: np.ndarray, sr: int, hop_s: float = 0.01, win_s: float =
     freqs = rfftfreq(win, 1 / sr)
     hi = freqs >= 3500
     lo = freqs < 2000
+    f1b = (freqs >= 250) & (freqs < 1000)
+    f2b = (freqs >= 1000) & (freqs < 3000)
     n_frames = max(1, 1 + (len(y) - win) // hop)
     rms = np.zeros(n_frames)
     ratio = np.zeros(n_frames)
@@ -42,6 +45,7 @@ def compute_features(y: np.ndarray, sr: int, hop_s: float = 0.01, win_s: float =
     prev = None
     flux = np.zeros(n_frames)
     centroid = np.zeros(n_frames)
+    bright = np.zeros(n_frames)
     for i in range(n_frames):
         start = i * hop
         frame = y[start : start + win]
@@ -58,6 +62,9 @@ def compute_features(y: np.ndarray, sr: int, hop_s: float = 0.01, win_s: float =
         zcr[i] = float(np.mean(np.abs(np.diff(np.signbit(frame)))))
         mag = spec + 1e-12
         centroid[i] = float(np.sum(freqs * mag) / np.sum(mag))
+        e_f1 = float(np.sum(spec[f1b] ** 2)) + 1e-12
+        e_f2 = float(np.sum(spec[f2b] ** 2))
+        bright[i] = e_f2 / e_f1
         if prev is None:
             flux[i] = 0.0
         else:
@@ -74,6 +81,7 @@ def compute_features(y: np.ndarray, sr: int, hop_s: float = 0.01, win_s: float =
         zcr=zcr,
         flux=flux,
         centroid=centroid,
+        bright=bright,
     )
 
 

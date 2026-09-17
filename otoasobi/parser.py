@@ -161,6 +161,10 @@ class Token:
     def is_nasal(self) -> bool:
         return self.kind == "N" or self.consonant in NASAL
 
+    @property
+    def is_vowel_only(self) -> bool:
+        return self.kind == "V"
+
 
 class FilenameError(ValueError):
     pass
