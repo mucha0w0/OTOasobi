@@ -4,9 +4,18 @@ import numpy as np
 
 from otoasobi.align_mms import AlignedChar, align_chars, available as mms_available
 from otoasobi.features import FrameTrack
-from otoasobi.parser import STOP, Token
+from otoasobi.parser import Token
 from otoasobi.phones import mms_plan
-from otoasobi.segment import Span, _bounds_from_mask, _clean, _cv_cut
+from otoasobi.segment import (
+    Span,
+    _bounds_from_mask,
+    _clean,
+    _cv_cut,
+    nasal_onset,
+    nasal_vowel_start,
+    stop_closure_start,
+    stop_vowel_start,
+)
 
 
 def warmup() -> bool:
@@ -25,31 +34,40 @@ def _group(aligned: list[AlignedChar]) -> dict[int, list[AlignedChar]]:
     return grouped
 
 
-def _refine_onset(track: FrameTrack, mora: Token, peak: float, t_lo: float, t_hi: float) -> float:
-    t_lo = max(0.0, t_lo)
-    peak = min(max(peak, t_lo + 0.01), max(t_lo + 0.02, t_hi))
+def _mora_onset(
+    track: FrameTrack,
+    mora: Token,
+    peak: float,
+    t_lo: float,
+    t_hi: float,
+) -> float:
+    if mora.is_fricative:
+        sel = (track.times >= t_lo) & (track.times <= peak + 0.02)
+        if int(np.count_nonzero(sel)) < 3:
+            return max(t_lo, peak - 0.05)
+        times = track.times[sel]
+        rms = track.rms[sel]
+        ratio = track.ratio[sel]
+        peak_i = int(np.argmin(np.abs(times - peak)))
+        speech_thr = max(float(np.max(track.rms)) * 0.08, 1e-4)
+        mask = (ratio > 1.25) & (rms > speech_thr * 0.2)
+        i = peak_i
+        while i > 0 and bool(mask[i - 1]):
+            i -= 1
+        return float(times[i])
+    if mora.is_stop:
+        return stop_closure_start(track, peak, t_lo)
+    if mora.is_nasal:
+        return nasal_onset(track, peak, t_lo, t_hi)
     sel = (track.times >= t_lo) & (track.times <= peak + 0.02)
     if int(np.count_nonzero(sel)) < 3:
-        return max(t_lo, peak - 0.05)
+        return max(t_lo, peak - 0.04)
     times = track.times[sel]
     rms = track.rms[sel]
-    ratio = track.ratio[sel]
     peak_i = int(np.argmin(np.abs(times - peak)))
     speech_thr = max(float(np.max(track.rms)) * 0.08, 1e-4)
-
-    if mora.is_fricative:
-        mask = (ratio > 1.25) & (rms > speech_thr * 0.2)
-    elif mora.kind == "Q" or mora.consonant in STOP:
-        vowel_thr = max(float(np.max(rms)) * 0.4, speech_thr)
-        vowel_like = (rms > vowel_thr) & (ratio < 1.15)
-        mask = ~vowel_like
-    elif mora.kind == "V":
-        mask = rms > speech_thr
-    else:
-        mask = rms > speech_thr * 0.35
-
     i = peak_i
-    while i > 0 and bool(mask[i - 1]):
+    while i > 0 and rms[i - 1] > speech_thr * 0.35:
         i -= 1
     return float(times[i])
 
@@ -58,27 +76,35 @@ def _refine_cv(
     mora: Token,
     start: float,
     end: float,
+    c_peak: float | None,
     vowel_peak: float | None,
     track: FrameTrack,
     harm: tuple[np.ndarray, np.ndarray] | None,
 ) -> float:
-    acoustic = _cv_cut(track, mora, start, end)
-    if mora.is_fricative or vowel_peak is None:
-        return acoustic
-    guess = min(max(vowel_peak, start + 0.015), end - 0.015)
-    if harm is not None:
-        from otoasobi.praat_refine import voicing_onset
+    if mora.is_fricative:
+        return _cv_cut(track, mora, start, end)
+    if mora.is_stop:
+        burst = c_peak if c_peak is not None else start
+        cut = stop_vowel_start(track, start, end)
+        cut = max(cut, burst + 0.015)
+        if vowel_peak is not None and vowel_peak > burst:
+            cut = min(cut, 0.55 * burst + 0.45 * vowel_peak)
+        if harm is not None:
+            from otoasobi.praat_refine import voicing_onset
 
-        h_times, h_vals = harm
-        voiced = voicing_onset(h_times, h_vals, start, min(end, guess + 0.06), guess)
-        if start + 0.018 < voiced < end - 0.018:
-            if mora.consonant in STOP:
-                return voiced
-            if abs(voiced - acoustic) < 0.06:
-                return voiced
-    if mora.consonant in STOP:
-        return min(guess, acoustic) if acoustic > start + 0.02 else guess
-    return acoustic
+            voiced = voicing_onset(harm[0], harm[1], burst, min(end, (vowel_peak or end)), cut)
+            if burst + 0.01 <= voiced <= min(cut + 0.04, end - 0.015):
+                cut = voiced
+        return min(max(cut, start + 0.02), end - 0.02)
+    if mora.is_nasal:
+        if c_peak is not None and vowel_peak is not None and vowel_peak > c_peak + 0.02:
+            cut = 0.5 * (c_peak + vowel_peak)
+        else:
+            cut = nasal_vowel_start(track, start, end)
+        return min(max(cut, start + 0.02), end - 0.02)
+    if vowel_peak is not None:
+        return min(max(vowel_peak, start + 0.015), end - 0.015)
+    return _cv_cut(track, mora, start, end)
 
 
 def _mora_bounds_from_align(
@@ -87,31 +113,50 @@ def _mora_bounds_from_align(
     track: FrameTrack,
     speech_start: float,
     speech_end: float,
+    leading_rest: bool,
 ) -> dict[int, tuple[float, float]]:
     speech_indices = [i for i, token in enumerate(tokens) if not token.is_rest]
     if not speech_indices:
         return {}
 
     peaks: dict[int, float] = {}
-    prev_vowel = speech_start
+    vowel_by_index: dict[int, float | None] = {}
+    prev_limit = speech_start
     raw_onsets: dict[int, float] = {}
     for i in speech_indices:
         chars = aligned_by_index[i]
         c_times = [c.time for c in chars if c.role == "C"]
         v_times = [c.time for c in chars if c.role == "V"]
-        peak = c_times[0] if c_times else (v_times[0] if v_times else prev_vowel)
+        peak = c_times[0] if c_times else (v_times[0] if v_times else prev_limit)
         peaks[i] = peak
-        raw_onsets[i] = _refine_onset(track, tokens[i], peak, prev_vowel, speech_end)
-        prev_vowel = v_times[0] if v_times else peak
+        vowel_by_index[i] = v_times[0] if v_times else None
+        raw_onsets[i] = _mora_onset(track, tokens[i], peak, prev_limit, speech_end)
+        if v_times:
+            prev_limit = v_times[0] + 0.05
+        else:
+            prev_limit = peak + 0.04
+
+    first = speech_indices[0]
+    first_mora = tokens[first]
+    if first_mora.is_stop:
+        speech_start = raw_onsets[first]
+        if leading_rest:
+            speech_start = max(speech_start, min(0.04, peaks[first] * 0.3))
+    else:
+        speech_start = min(raw_onsets[first], speech_start)
 
     starts: list[float] = []
     for k, i in enumerate(speech_indices):
         if k == 0:
             starts.append(speech_start)
-        else:
-            onset = max(raw_onsets[i], starts[-1] + 0.04)
-            onset = min(onset, peaks[i])
-            starts.append(onset)
+            continue
+        prev_i = speech_indices[k - 1]
+        prev_v = vowel_by_index[prev_i]
+        floor = starts[-1] + 0.06
+        if prev_v is not None:
+            floor = max(floor, prev_v + 0.045)
+        onset = max(raw_onsets[i], floor)
+        starts.append(onset)
 
     bounds: dict[int, tuple[float, float]] = {}
     for k, i in enumerate(speech_indices):
@@ -128,6 +173,7 @@ def _label_with_cut(
     start: float,
     end: float,
     track: FrameTrack,
+    c_peak: float | None,
     vowel_peak: float | None,
     harm: tuple[np.ndarray, np.ndarray] | None,
 ) -> list[Span]:
@@ -135,7 +181,7 @@ def _label_with_cut(
         return [Span(start, end, "子音", mora.text)]
     if mora.kind == "V" or not mora.needs_cv_split:
         return [Span(start, end, "母音", mora.text)]
-    cut = _refine_cv(mora, start, end, vowel_peak, track, harm)
+    cut = _refine_cv(mora, start, end, c_peak, vowel_peak, track, harm)
     return [
         Span(start, cut, "子音", mora.text),
         Span(cut, end, "母音", mora.text),
@@ -168,6 +214,9 @@ def segment_precision(
         raise RuntimeError("MMS is not installed")
 
     rms_start, rms_end = _bounds_from_mask(track, duration)
+    first_speech = next((t for t in tokens if not t.is_rest), None)
+    if first_speech is not None and first_speech.is_stop:
+        rms_start = stop_closure_start(track, rms_start, 0.0)
     speech_start, speech_end = rms_start, rms_end
     harm = None
     bits: list[str] = []
@@ -177,7 +226,9 @@ def segment_precision(
 
         if praat_refine.available():
             p0, p1 = praat_refine.speech_bounds(y, sr, duration)
-            if abs(p0 - rms_start) <= 0.12:
+            if first_speech is not None and first_speech.is_stop:
+                p0 = stop_closure_start(track, p0, 0.0)
+            if abs(p0 - rms_start) <= 0.15:
                 speech_start = p0
             if abs(p1 - rms_end) <= 0.12:
                 speech_end = p1
@@ -198,13 +249,19 @@ def segment_precision(
     if missing:
         raise RuntimeError(f"MMS missed tokens {missing}")
 
-    mora_bounds = _mora_bounds_from_align(tokens, grouped, track, speech_start, speech_end)
+    leading_rest = bool(tokens) and tokens[0].is_rest
+    trailing_rest = bool(tokens) and tokens[-1].is_rest
+    mora_bounds = _mora_bounds_from_align(
+        tokens, grouped, track, speech_start, speech_end, leading_rest
+    )
+    speech_start = mora_bounds[speech_indices[0]][0] if speech_indices else speech_start
     vowel_peaks = {
         i: next((c.time for c in grouped[i] if c.role == "V"), None) for i in speech_indices
     }
+    c_peaks = {
+        i: next((c.time for c in grouped[i] if c.role == "C"), None) for i in speech_indices
+    }
 
-    leading_rest = bool(tokens) and tokens[0].is_rest
-    trailing_rest = bool(tokens) and tokens[-1].is_rest
     rest_tokens = [t for t in tokens if t.is_rest]
     internal_rests = rest_tokens[1:] if leading_rest else rest_tokens
     if trailing_rest and internal_rests:
@@ -227,7 +284,15 @@ def segment_precision(
         for idx in indices:
             start, end = mora_bounds[idx]
             spans.extend(
-                _label_with_cut(tokens[idx], start, end, track, vowel_peaks[idx], harm)
+                _label_with_cut(
+                    tokens[idx],
+                    start,
+                    end,
+                    track,
+                    c_peaks[idx],
+                    vowel_peaks[idx],
+                    harm,
+                )
             )
         if i < len(index_chunks) - 1:
             last_end = mora_bounds[indices[-1]][1]

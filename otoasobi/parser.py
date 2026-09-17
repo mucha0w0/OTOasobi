@@ -131,6 +131,7 @@ MORA_TABLE["じぇ"] = ("CV", "j", "e")
 
 FRICATIVE = {"s", "sh", "h", "hy", "f", "z", "j", "ts", "ch", "v"}
 STOP = {"k", "t", "p", "b", "d", "g", "ky", "gy", "py", "by"}
+NASAL = {"n", "ny", "m", "my"}
 
 
 @dataclass(frozen=True)
@@ -151,6 +152,14 @@ class Token:
     @property
     def is_fricative(self) -> bool:
         return self.consonant in FRICATIVE
+
+    @property
+    def is_stop(self) -> bool:
+        return self.kind == "Q" or self.consonant in STOP
+
+    @property
+    def is_nasal(self) -> bool:
+        return self.kind == "N" or self.consonant in NASAL
 
 
 class FilenameError(ValueError):

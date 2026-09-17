@@ -15,6 +15,7 @@ class FrameTrack:
     ratio: np.ndarray
     zcr: np.ndarray
     flux: np.ndarray
+    centroid: np.ndarray
 
 
 def _to_mono(y: np.ndarray) -> np.ndarray:
@@ -40,6 +41,7 @@ def compute_features(y: np.ndarray, sr: int, hop_s: float = 0.01, win_s: float =
     zcr = np.zeros(n_frames)
     prev = None
     flux = np.zeros(n_frames)
+    centroid = np.zeros(n_frames)
     for i in range(n_frames):
         start = i * hop
         frame = y[start : start + win]
@@ -55,6 +57,7 @@ def compute_features(y: np.ndarray, sr: int, hop_s: float = 0.01, win_s: float =
         ratio[i] = e_hi / e_lo
         zcr[i] = float(np.mean(np.abs(np.diff(np.signbit(frame)))))
         mag = spec + 1e-12
+        centroid[i] = float(np.sum(freqs * mag) / np.sum(mag))
         if prev is None:
             flux[i] = 0.0
         else:
@@ -62,7 +65,16 @@ def compute_features(y: np.ndarray, sr: int, hop_s: float = 0.01, win_s: float =
             flux[i] = float(np.sum(diff[diff > 0]))
         prev = mag
     times = (np.arange(n_frames) * hop + win / 2) / sr
-    return FrameTrack(sr=sr, hop=hop, times=times, rms=rms, ratio=ratio, zcr=zcr, flux=flux)
+    return FrameTrack(
+        sr=sr,
+        hop=hop,
+        times=times,
+        rms=rms,
+        ratio=ratio,
+        zcr=zcr,
+        flux=flux,
+        centroid=centroid,
+    )
 
 
 def close_short_gaps(mask: np.ndarray, max_gap: int) -> np.ndarray:

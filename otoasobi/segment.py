@@ -5,7 +5,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from otoasobi.features import FrameTrack, close_short_gaps, runs
-from otoasobi.parser import STOP, Token, speech_chunks
+from otoasobi.parser import Token, speech_chunks
 
 
 @dataclass
@@ -66,11 +66,141 @@ def _fricative_onsets(track: FrameTrack, start: float, end: float, count: int) -
     return [float(times[a]) for a, _ in merged]
 
 
+def _speech_thr(track: FrameTrack) -> float:
+    return max(float(np.max(track.rms)) * 0.08, 1e-4)
+
+
+def _spaced_peaks(times: np.ndarray, score: np.ndarray, count: int, min_dt: float) -> list[float] | None:
+    if count <= 0 or len(times) == 0:
+        return [] if count == 0 else None
+    order = np.argsort(score)[::-1]
+    chosen: list[float] = []
+    for idx in order:
+        t = float(times[int(idx)])
+        if any(abs(t - c) < min_dt for c in chosen):
+            continue
+        chosen.append(t)
+        if len(chosen) == count:
+            return sorted(chosen)
+    return None
+
+
+def stop_closure_start(track: FrameTrack, burst: float, t_lo: float, max_closure: float = 0.12) -> float:
+    """Start of a stop including the silent closure, without eating a long rest."""
+    t_lo = max(0.0, t_lo)
+    burst = max(burst, t_lo + 0.01)
+    min_t = max(t_lo, burst - max_closure)
+    sel = (track.times >= min_t) & (track.times <= burst + 0.01)
+    if int(np.count_nonzero(sel)) < 3:
+        return min_t
+    times = track.times[sel]
+    rms = track.rms[sel]
+    flux = track.flux[sel]
+    peak_i = int(np.argmin(np.abs(times - burst)))
+    vowel_thr = max(float(np.max(rms)) * 0.38, _speech_thr(track))
+    flux_thr = max(float(np.percentile(flux, 65)), 1e-9)
+    i = peak_i
+    while i > 0 and flux[i - 1] >= flux_thr * 0.35:
+        i -= 1
+    while i > 0 and rms[i - 1] < vowel_thr:
+        i -= 1
+    return max(min_t, float(times[i]))
+
+
+def nasal_onset(track: FrameTrack, peak: float, t_lo: float, t_hi: float) -> float:
+    t_lo = max(0.0, t_lo)
+    peak = min(max(peak, t_lo + 0.01), max(t_lo + 0.02, t_hi))
+    sel = (track.times >= t_lo) & (track.times <= peak + 0.02)
+    if int(np.count_nonzero(sel)) < 3:
+        return max(t_lo, peak - 0.06)
+    times = track.times[sel]
+    centroid = track.centroid[sel]
+    rms = track.rms[sel]
+    peak_i = int(np.argmin(np.abs(times - peak)))
+    speech_thr = _speech_thr(track)
+    vowel_cen = max(float(np.median(centroid)), 900.0)
+    i = peak_i
+    while i > 0 and rms[i - 1] > speech_thr * 0.25 and centroid[i - 1] < vowel_cen:
+        i -= 1
+    return max(t_lo, float(times[i]))
+
+
+def stop_vowel_start(track: FrameTrack, start: float, end: float) -> float:
+    sel = (track.times >= start) & (track.times <= end)
+    if not np.any(sel):
+        return start + (end - start) * 0.35
+    times = track.times[sel]
+    flux = track.flux[sel]
+    inner = slice(1, max(2, len(times) - 1))
+    times_i = times[inner]
+    if len(times_i) == 0:
+        return start + 0.03
+    burst = float(times_i[int(np.argmax(flux[inner]))])
+    cut = burst + 0.018
+    return min(max(cut, start + 0.02), end - 0.015)
+
+
+def nasal_vowel_start(track: FrameTrack, start: float, end: float) -> float:
+    sel = (track.times >= start) & (track.times <= end)
+    if not np.any(sel):
+        return start + (end - start) * 0.32
+    times = track.times[sel]
+    centroid = track.centroid[sel]
+    inner = slice(1, max(2, len(times) - 1))
+    times_i = times[inner]
+    cen_i = centroid[inner]
+    if len(times_i) == 0:
+        return start + (end - start) * 0.32
+    thr = float(np.median(cen_i))
+    vowelish = cen_i > thr
+    if np.any(vowelish):
+        cut = float(times_i[int(np.argmax(vowelish))])
+    else:
+        cut = start + (end - start) * 0.32
+    return min(max(cut, start + 0.02), end - 0.015)
+
+
+def _stop_onsets(track: FrameTrack, start: float, end: float, count: int) -> list[float] | None:
+    sel = (track.times >= start) & (track.times <= end)
+    if not np.any(sel):
+        return None
+    peaks = _spaced_peaks(track.times[sel], track.flux[sel], count, min_dt=0.11)
+    if peaks is None:
+        return None
+    onsets = [stop_closure_start(track, peak, start if i == 0 else peaks[i - 1], 0.12) for i, peak in enumerate(peaks)]
+    onsets[0] = start
+    return onsets
+
+
+def _nasal_onsets(track: FrameTrack, start: float, end: float, count: int) -> list[float] | None:
+    sel = (track.times >= start) & (track.times <= end)
+    if not np.any(sel):
+        return None
+    times = track.times[sel]
+    inv = -track.centroid[sel]
+    peaks = _spaced_peaks(times, inv, count, min_dt=0.10)
+    if peaks is None:
+        return None
+    onsets = [nasal_onset(track, peak, start if i == 0 else peaks[i - 1], end) for i, peak in enumerate(peaks)]
+    onsets[0] = start
+    return onsets
+
+
 def _equal_bounds(start: float, end: float, count: int) -> list[tuple[float, float]]:
     if count <= 0:
         return []
     step = (end - start) / count
     return [(start + i * step, start + (i + 1) * step) for i in range(count)]
+
+
+def _onsets_to_bounds(onsets: list[float], start: float, end: float) -> list[tuple[float, float]]:
+    bounds = []
+    for i, onset in enumerate(onsets):
+        nxt = onsets[i + 1] if i + 1 < len(onsets) else end
+        bounds.append((onset, nxt))
+    bounds[0] = (start, bounds[0][1])
+    bounds[-1] = (bounds[-1][0], end)
+    return bounds
 
 
 def _mora_bounds(track: FrameTrack, moras: list[Token], start: float, end: float) -> list[tuple[float, float]]:
@@ -82,39 +212,47 @@ def _mora_bounds(track: FrameTrack, moras: list[Token], start: float, end: float
     if all(m.is_fricative and m.needs_cv_split for m in moras):
         onsets = _fricative_onsets(track, start, end, n)
         if onsets is not None:
-            bounds = []
-            for i, onset in enumerate(onsets):
-                nxt = onsets[i + 1] if i + 1 < n else end
-                bounds.append((onset, nxt))
-            bounds[0] = (start, bounds[0][1])
-            bounds[-1] = (bounds[-1][0], end)
-            return bounds
+            return _onsets_to_bounds(onsets, start, end)
+    if all(m.is_stop and m.needs_cv_split for m in moras):
+        onsets = _stop_onsets(track, start, end, n)
+        if onsets is not None:
+            return _onsets_to_bounds(onsets, start, end)
+    if all(m.is_nasal and m.needs_cv_split for m in moras):
+        onsets = _nasal_onsets(track, start, end, n)
+        if onsets is not None:
+            return _onsets_to_bounds(onsets, start, end)
     return _equal_bounds(start, end, n)
 
 
 def _cv_cut(track: FrameTrack, mora: Token, start: float, end: float) -> float:
     if end - start < 0.04:
         return start + (end - start) * 0.35
-    sel = (track.times >= start) & (track.times <= end)
-    if not np.any(sel):
-        return start + (end - start) * 0.3
-    times = track.times[sel]
-    ratio = track.ratio[sel]
-    zcr = track.zcr[sel]
-    inner = slice(1, max(2, len(times) - 1))
-    times_i = times[inner]
     if mora.is_fricative:
+        sel = (track.times >= start) & (track.times <= end)
+        if not np.any(sel):
+            return start + (end - start) * 0.3
+        times = track.times[sel]
+        ratio = track.ratio[sel]
+        inner = slice(1, max(2, len(times) - 1))
+        times_i = times[inner]
         score = ratio[inner]
-        thr = 1.2
-        vowelish = score < thr
+        vowelish = score < 1.2
         if np.any(vowelish):
             cut = float(times_i[int(np.argmax(vowelish))])
         else:
             cut = start + (end - start) * 0.28
-    elif mora.consonant in STOP:
-        flux = track.flux[sel][inner]
-        cut = float(times_i[int(np.argmax(flux))]) if len(times_i) else start + 0.02
+    elif mora.is_stop:
+        cut = stop_vowel_start(track, start, end)
+    elif mora.is_nasal:
+        cut = nasal_vowel_start(track, start, end)
     else:
+        sel = (track.times >= start) & (track.times <= end)
+        if not np.any(sel):
+            return start + (end - start) * 0.3
+        times = track.times[sel]
+        zcr = track.zcr[sel]
+        inner = slice(1, max(2, len(times) - 1))
+        times_i = times[inner]
         score = zcr[inner]
         med = float(np.median(score))
         vowelish = score < med
@@ -141,6 +279,9 @@ def _label_mora(mora: Token, start: float, end: float, track: FrameTrack) -> lis
 def segment_tokens(tokens: list[Token], track: FrameTrack, duration: float) -> list[Span]:
     spans: list[Span] = []
     speech_start, speech_end = _bounds_from_mask(track, duration)
+    first_speech = next((t for t in tokens if not t.is_rest), None)
+    if first_speech is not None and first_speech.is_stop:
+        speech_start = stop_closure_start(track, speech_start, 0.0)
     chunks = speech_chunks(tokens)
     leading_rest = bool(tokens) and tokens[0].is_rest
     trailing_rest = bool(tokens) and tokens[-1].is_rest
