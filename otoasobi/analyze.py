@@ -20,6 +20,7 @@ class Analysis:
     duration: float
     tokens: list[Token]
     spans: list[Span]
+    engine: str = "acoustic"
 
 
 def load_wav(path: str | Path) -> tuple[np.ndarray, int]:
@@ -40,7 +41,21 @@ def analyze_wav(path: str | Path) -> Analysis:
     y, sr = load_wav(path)
     duration = len(y) / sr
     track = compute_features(y, sr)
-    spans = segment_tokens(tokens, track, duration)
+    engine = "acoustic"
+    spans = None
+    try:
+        from otoasobi.precision import segment_precision
+
+        spans, engine = segment_precision(tokens, y, sr, track, duration)
+    except Exception:
+        import traceback
+
+        traceback.print_exc()
+        spans = None
+        engine = "acoustic"
+    if spans is None:
+        spans = segment_tokens(tokens, track, duration)
+        engine = "acoustic"
     return Analysis(
         path=path,
         stem=stem,
@@ -49,6 +64,7 @@ def analyze_wav(path: str | Path) -> Analysis:
         duration=duration,
         tokens=tokens,
         spans=spans,
+        engine=engine,
     )
 
 

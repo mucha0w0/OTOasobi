@@ -14,6 +14,7 @@ def main() -> None:
     write_label_txt(out, analysis.spans)
     sys.stdout.reconfigure(encoding="utf-8")
     print(spans_to_txt(analysis.spans), end="")
+    print(f"engine {analysis.engine}", file=sys.stderr)
     print(f"wrote {out}", file=sys.stderr)
 
 

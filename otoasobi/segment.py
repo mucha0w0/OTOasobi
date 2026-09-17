@@ -5,7 +5,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from otoasobi.features import FrameTrack, close_short_gaps, runs
-from otoasobi.parser import Token, speech_chunks
+from otoasobi.parser import STOP, Token, speech_chunks
 
 
 @dataclass
@@ -111,7 +111,7 @@ def _cv_cut(track: FrameTrack, mora: Token, start: float, end: float) -> float:
             cut = float(times_i[int(np.argmax(vowelish))])
         else:
             cut = start + (end - start) * 0.28
-    elif mora.consonant in {"k", "t", "p", "b", "d", "g"}:
+    elif mora.consonant in STOP:
         flux = track.flux[sel][inner]
         cut = float(times_i[int(np.argmax(flux))]) if len(times_i) else start + 0.02
     else:

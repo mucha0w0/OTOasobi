@@ -1,0 +1,5 @@
+# Optional high-precision engine (dev venv / python app.py).
+# Do not bundle these in the default PyInstaller spec.
+praat-parselmouth>=0.4.6
+torch
+torchaudio

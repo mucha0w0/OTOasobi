@@ -4,7 +4,7 @@ import multiprocessing
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QThread, Qt, Signal
 from PySide6.QtGui import QAction, QColor, QDragEnterEvent, QDropEvent, QIcon, QKeySequence
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -30,6 +30,13 @@ import pyqtgraph as pg
 from otoasobi.analyze import Analysis, analyze_wav, default_txt_path, write_label_txt
 from otoasobi.parser import FilenameError
 from otoasobi.segment import Span
+
+ENGINE_LABEL = {
+    "mms+praat": "高精度 (MMS+Praat)",
+    "mms": "高精度 (MMS)",
+    "praat": "Praat+音響",
+    "acoustic": "音響",
+}
 
 LABEL_COLORS = {
     "無音": (154, 160, 166),
@@ -178,6 +185,35 @@ class WaveformView(pg.PlotWidget):
         self.setXRange(max(0.0, span.start - pad), span.end + pad, padding=0)
 
 
+class AnalyzeWorker(QThread):
+    ok = Signal(object)
+    err = Signal(str, str)
+
+    def __init__(self, path: str) -> None:
+        super().__init__()
+        self.path = path
+
+    def run(self) -> None:
+        try:
+            self.ok.emit(analyze_wav(self.path))
+        except FilenameError as exc:
+            self.err.emit("ファイル名エラー", str(exc))
+        except Exception as exc:
+            self.err.emit("解析エラー", f"{type(exc).__name__}: {exc}")
+
+
+class WarmupWorker(QThread):
+    done = Signal(bool)
+
+    def run(self) -> None:
+        try:
+            from otoasobi.precision import warmup
+
+            self.done.emit(bool(warmup()))
+        except Exception:
+            self.done.emit(False)
+
+
 def _envelope(y: np.ndarray, sr: int, bins: int = 5000) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     y = np.asarray(y, dtype=np.float64)
     if len(y) == 0:
@@ -201,7 +237,11 @@ class MainWindow(QMainWindow):
             self.setWindowIcon(QIcon(str(icon)))
         self.analysis: Analysis | None = None
         self._playing = False
+        self._worker: AnalyzeWorker | None = None
+        self._warmup: WarmupWorker | None = None
+        self._precision_ready = False
         self._build()
+        self._start_warmup()
 
     def _build(self) -> None:
         toolbar = QToolBar()
@@ -269,7 +309,7 @@ class MainWindow(QMainWindow):
 
         status = QStatusBar()
         self.setStatusBar(status)
-        status.showMessage("ファイル名はひらがな・ヴなどのカタカナ・休符 _ のみです。")
+        status.showMessage("高精度エンジンを準備しています…  ファイル名はひらがな・ヴなどのカタカナ・休符 _ のみです。")
 
         file_menu = self.menuBar().addMenu("ファイル")
         file_menu.addAction(self.act_open)
@@ -282,6 +322,28 @@ class MainWindow(QMainWindow):
         view_menu = self.menuBar().addMenu("解析")
         view_menu.addAction(self.act_reanalyze)
         view_menu.addAction(self.act_play)
+
+    def _start_warmup(self) -> None:
+        self._warmup = WarmupWorker()
+        self._warmup.done.connect(self._on_warmup)
+        self._warmup.start()
+
+    def _on_warmup(self, ok: bool) -> None:
+        self._precision_ready = bool(ok)
+        if self.analysis is not None:
+            return
+        if ok:
+            self.statusBar().showMessage("高精度エンジンの準備ができました。WAVを開くか、ドロップしてください。")
+        else:
+            self.statusBar().showMessage("音響エンジンで解析します。ファイル名はひらがな・ヴなどのカタカナ・休符 _ のみです。")
+
+    def _set_busy(self, busy: bool) -> None:
+        for action in (self.act_open, self.act_save, self.act_reanalyze):
+            action.setEnabled(not busy)
+        if busy:
+            QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        else:
+            QApplication.restoreOverrideCursor()
 
     def dragEnterEvent(self, event: QDragEnterEvent) -> None:
         if event.mimeData().hasUrls():
@@ -300,15 +362,19 @@ class MainWindow(QMainWindow):
             self.load_path(path)
 
     def load_path(self, path: str) -> None:
+        if self._worker is not None and self._worker.isRunning():
+            return
         self._stop_play()
-        try:
-            analysis = analyze_wav(path)
-        except FilenameError as exc:
-            QMessageBox.warning(self, "ファイル名エラー", str(exc))
-            return
-        except Exception as exc:
-            QMessageBox.critical(self, "解析エラー", f"{type(exc).__name__}: {exc}")
-            return
+        self._set_busy(True)
+        engine_hint = "高精度" if self._precision_ready else "音響"
+        self.statusBar().showMessage(f"解析中（{engine_hint}）…")
+        self._worker = AnalyzeWorker(path)
+        self._worker.ok.connect(self._on_analyzed)
+        self._worker.err.connect(self._on_analyze_failed)
+        self._worker.finished.connect(lambda: self._set_busy(False))
+        self._worker.start()
+
+    def _on_analyzed(self, analysis: Analysis) -> None:
         self.analysis = analysis
         self.file_label.setText(analysis.path.name)
         self.wave.set_analysis(analysis)
@@ -316,6 +382,12 @@ class MainWindow(QMainWindow):
         txt = default_txt_path(analysis.path)
         write_label_txt(txt, analysis.spans)
         self.statusBar().showMessage(self._summary(analysis) + f"  →  {txt.name} に保存しました")
+
+    def _on_analyze_failed(self, title: str, message: str) -> None:
+        if title == "ファイル名エラー":
+            QMessageBox.warning(self, title, message)
+        else:
+            QMessageBox.critical(self, title, message)
 
     def reanalyze(self) -> None:
         if self.analysis is None:
@@ -393,8 +465,9 @@ class MainWindow(QMainWindow):
             counts[span.label] = counts.get(span.label, 0) + 1
         mora_n = sum(1 for token in analysis.tokens if not token.is_rest)
         rest_n = sum(1 for token in analysis.tokens if token.is_rest)
+        engine = ENGINE_LABEL.get(analysis.engine, analysis.engine)
         return (
-            f"{analysis.duration:.2f}秒 / モーラ{mora_n} / 休符{rest_n} / "
+            f"{engine} / {analysis.duration:.2f}秒 / モーラ{mora_n} / 休符{rest_n} / "
             f"無音{counts['無音']} 子音{counts['子音']} 母音{counts['母音']}"
         )
 
