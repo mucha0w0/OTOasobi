@@ -355,3 +355,14 @@ def speech_chunks(tokens: list[Token]) -> list[list[Token]]:
     if current:
         chunks.append(current)
     return chunks
+
+
+def rest_layout(tokens: list[Token]) -> tuple[bool, bool, list[Token]]:
+    """Leading / trailing / internal rest tokens from a filename parse."""
+    leading = bool(tokens) and tokens[0].is_rest
+    trailing = bool(tokens) and tokens[-1].is_rest
+    rests = [token for token in tokens if token.is_rest]
+    internal = rests[1:] if leading else list(rests)
+    if trailing and internal:
+        internal = internal[:-1]
+    return leading, trailing, internal

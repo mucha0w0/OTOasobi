@@ -5,7 +5,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from otoasobi.features import FrameTrack, close_short_gaps, runs
-from otoasobi.parser import Token, speech_chunks
+from otoasobi.parser import Token, rest_layout, speech_chunks
 from otoasobi.phones import SILENCE_LABEL, phone_name
 
 
@@ -23,12 +23,15 @@ def _frame_time(track: FrameTrack, index: int, end: bool = False) -> float:
     return max(0.0, (index * track.hop) / track.sr)
 
 
-def _speech_mask(track: FrameTrack) -> np.ndarray:
+def _rms_threshold(track: FrameTrack) -> float:
     peak = float(np.max(track.rms)) + 1e-12
     noise = float(np.percentile(track.rms, 8))
-    thr = max(peak * 0.045, noise * 4.0, 1e-4)
-    mask = track.rms > thr
-    max_gap = max(1, int(0.09 * track.sr / track.hop))
+    return max(peak * 0.045, noise * 4.0, 1e-4)
+
+
+def _speech_mask(track: FrameTrack, close_ms: float = 30.0) -> np.ndarray:
+    mask = track.rms > _rms_threshold(track)
+    max_gap = max(1, int(close_ms * 0.001 * track.sr / track.hop))
     return close_short_gaps(mask, max_gap)
 
 
@@ -39,6 +42,108 @@ def _bounds_from_mask(track: FrameTrack, duration: float) -> tuple[float, float]
     start_i = int(np.argmax(mask))
     end_i = int(len(mask) - 1 - np.argmax(mask[::-1])) + 1
     return _frame_time(track, start_i), min(duration, _frame_time(track, end_i, end=True))
+
+
+def _islands_from_mask(
+    track: FrameTrack, duration: float, mask: np.ndarray, min_dur: float = 0.01
+) -> list[tuple[float, float]]:
+    out: list[tuple[float, float]] = []
+    for a, b in runs(mask):
+        t0 = _frame_time(track, a)
+        t1 = min(duration, _frame_time(track, b, end=True))
+        if t1 - t0 >= min_dur:
+            out.append((t0, t1))
+    return out
+
+
+def _split_island_with_gap(track: FrameTrack, start: float, end: float) -> list[tuple[float, float]]:
+    """Split one speech island at its lowest valley, keeping a silent gap if present."""
+    min_span = 0.05
+    if end - start < 0.16:
+        mid = 0.5 * (start + end)
+        return [(start, mid), (mid, end)]
+    sel = (track.times >= start) & (track.times <= end)
+    times = track.times[sel]
+    rms = track.rms[sel]
+    if len(times) < 10:
+        mid = 0.5 * (start + end)
+        return [(start, mid), (mid, end)]
+    dt = float(times[1] - times[0]) if len(times) > 1 else 0.01
+    win = max(3, int(0.06 / max(dt, 1e-4)))
+    if win % 2 == 0:
+        win += 1
+    kernel = np.ones(win) / win
+    smooth = np.convolve(rms, kernel, mode="same")
+    inner_lo = max(2, int(0.12 * len(times)))
+    inner_hi = min(len(times) - 3, int(0.88 * len(times)))
+    if inner_hi <= inner_lo:
+        mid = 0.5 * (start + end)
+        return [(start, mid), (mid, end)]
+    idx = inner_lo + int(np.argmin(smooth[inner_lo : inner_hi + 1]))
+    local_peak = float(np.max(smooth)) + 1e-12
+    thr = max(local_peak * 0.18, _rms_threshold(track))
+    left = idx
+    while left > 0 and smooth[left] < thr:
+        left -= 1
+    right = idx
+    while right < len(times) - 1 and smooth[right] < thr:
+        right += 1
+    c1 = float(times[left])
+    c2 = float(times[right])
+    c1 = max(c1, start + min_span)
+    c2 = min(c2, end - min_span)
+    if c2 <= c1 + 0.01:
+        cut = min(max(float(times[idx]), start + min_span), end - min_span)
+        return [(start, cut), (cut, end)]
+    return [(start, c1), (c2, end)]
+
+
+def _match_islands(track: FrameTrack, duration: float, n: int) -> list[tuple[float, float]]:
+    """Keep n speech islands. Extra fragments merge; missing islands are split at valleys."""
+    if n <= 0:
+        return []
+    islands = _islands_from_mask(track, duration, _speech_mask(track, close_ms=30.0))
+    if not islands:
+        return []
+    islands = list(islands)
+    while len(islands) > n:
+        gap_i = min(range(len(islands) - 1), key=lambda i: islands[i + 1][0] - islands[i][1])
+        islands[gap_i] = (islands[gap_i][0], islands[gap_i + 1][1])
+        del islands[gap_i + 1]
+    while len(islands) < n:
+        i = int(np.argmax([end - start for start, end in islands]))
+        parts = _split_island_with_gap(track, islands[i][0], islands[i][1])
+        if len(parts) != 2 or parts[1][0] <= parts[0][0] + 1e-6:
+            start, end = islands[i]
+            mid = 0.5 * (start + end)
+            parts = [(start, mid), (mid, end)]
+        islands = islands[:i] + parts + islands[i + 1 :]
+    return islands
+
+
+def chunk_time_bounds(tokens: list[Token], track: FrameTrack, duration: float) -> list[tuple[float, float]]:
+    """Time range for each filename speech chunk, with genuine rests left as gaps."""
+    chunks = speech_chunks(tokens)
+    n = len(chunks)
+    if n == 0:
+        return []
+    islands = _match_islands(track, duration, n)
+    if len(islands) != n:
+        start, end = _bounds_from_mask(track, duration)
+        islands = _equal_bounds(start, end, n)
+    for i, moras in enumerate(chunks):
+        if moras and moras[0].is_stop:
+            lo = 0.0 if i == 0 else islands[i - 1][1]
+            islands[i] = (stop_closure_start(track, islands[i][0], lo), islands[i][1])
+    for i in range(1, len(islands)):
+        prev_end = islands[i - 1][1]
+        start, end = islands[i]
+        if start < prev_end:
+            start = prev_end
+        if end < start + 0.02:
+            end = min(duration, start + 0.02)
+        islands[i] = (start, end)
+    return islands
 
 
 def _fricative_onsets(track: FrameTrack, start: float, end: float, count: int) -> list[float] | None:
@@ -413,38 +518,22 @@ def _label_mora(mora: Token, start: float, end: float, track: FrameTrack) -> lis
 
 def segment_tokens(tokens: list[Token], track: FrameTrack, duration: float) -> list[Span]:
     spans: list[Span] = []
-    speech_start, speech_end = _bounds_from_mask(track, duration)
-    first_speech = next((t for t in tokens if not t.is_rest), None)
-    if first_speech is not None and first_speech.is_stop:
-        speech_start = stop_closure_start(track, speech_start, 0.0)
     chunks = speech_chunks(tokens)
-    leading_rest = bool(tokens) and tokens[0].is_rest
-    trailing_rest = bool(tokens) and tokens[-1].is_rest
+    leading_rest, trailing_rest, internal_rests = rest_layout(tokens)
+    chunk_bounds = chunk_time_bounds(tokens, track, duration)
+    speech_start = chunk_bounds[0][0] if chunk_bounds else 0.0
 
     if leading_rest:
-        rest_end = speech_start
-        spans.append(Span(0.0, rest_end, SILENCE_LABEL, tokens[0].text))
-    else:
-        if speech_start > 0.02:
-            spans.append(Span(0.0, speech_start, SILENCE_LABEL, ""))
+        spans.append(Span(0.0, speech_start, SILENCE_LABEL, tokens[0].text))
+    elif speech_start > 0.02:
+        spans.append(Span(0.0, speech_start, SILENCE_LABEL, ""))
 
     if not chunks:
         if not leading_rest:
             spans.append(Span(0.0, duration, SILENCE_LABEL, "_"))
-        elif speech_end < duration:
+        elif speech_start < duration:
             spans.append(Span(speech_start, duration, SILENCE_LABEL, tokens[-1].text if trailing_rest else ""))
         return _clean(spans, duration)
-
-    if len(chunks) == 1:
-        chunk_bounds = [(speech_start, speech_end)]
-    else:
-        # Split the speech region into N chunks using the lowest energy valleys.
-        chunk_bounds = _split_speech_chunks(track, speech_start, speech_end, len(chunks))
-
-    rest_tokens = [t for t in tokens if t.is_rest]
-    internal_rests = rest_tokens[1:] if leading_rest else rest_tokens
-    if trailing_rest and internal_rests:
-        internal_rests = internal_rests[:-1]
 
     for i, moras in enumerate(chunks):
         c0, c1 = chunk_bounds[i]
@@ -457,49 +546,11 @@ def segment_tokens(tokens: list[Token], track: FrameTrack, duration: float) -> l
             if gap_end > c1 + 0.005:
                 spans.append(Span(c1, gap_end, SILENCE_LABEL, rest_text))
 
-    last_end = spans[-1].end if spans else speech_end
+    last_end = spans[-1].end if spans else speech_start
     if last_end < duration - 0.01:
         rest_text = tokens[-1].text if trailing_rest else ""
         spans.append(Span(last_end, duration, SILENCE_LABEL, rest_text))
     return _clean(spans, duration)
-
-
-def _split_speech_chunks(
-    track: FrameTrack, start: float, end: float, n_chunks: int
-) -> list[tuple[float, float]]:
-    if n_chunks <= 1:
-        return [(start, end)]
-    sel = (track.times >= start) & (track.times <= end)
-    times = track.times[sel]
-    rms = track.rms[sel]
-    if len(times) < n_chunks * 3:
-        return _equal_bounds(start, end, n_chunks)
-    # moving average to ignore stop closures
-    win = max(3, int(0.08 / ((times[1] - times[0]) if len(times) > 1 else 0.01)))
-    kernel = np.ones(win) / win
-    smooth = np.convolve(rms, kernel, mode="same")
-    # pick n_chunks-1 lowest valleys, well separated
-    min_sep = max(3, len(times) // (n_chunks * 3))
-    order = np.argsort(smooth)
-    chosen: list[int] = []
-    for idx in order:
-        if any(abs(idx - c) < min_sep for c in chosen):
-            continue
-        if idx < min_sep or idx > len(times) - min_sep:
-            continue
-        chosen.append(int(idx))
-        if len(chosen) == n_chunks - 1:
-            break
-    if len(chosen) != n_chunks - 1:
-        return _equal_bounds(start, end, n_chunks)
-    cuts = sorted(float(times[i]) for i in chosen)
-    bounds = []
-    prev = start
-    for cut in cuts:
-        bounds.append((prev, cut))
-        prev = cut
-    bounds.append((prev, end))
-    return bounds
 
 
 def _clean(spans: list[Span], duration: float) -> list[Span]:

@@ -4,13 +4,13 @@ import numpy as np
 
 from otoasobi.align_mms import AlignedChar, align_chars, available as mms_available
 from otoasobi.features import FrameTrack
-from otoasobi.parser import Token
-from otoasobi.phones import SILENCE_LABEL, mms_plan, phone_name
+from otoasobi.parser import Token, rest_layout
+from otoasobi.phones import SILENCE_LABEL, MmsUnit, mms_plan, phone_name, token_mms_units
 from otoasobi.segment import (
     Span,
-    _bounds_from_mask,
     _clean,
     _cv_cut,
+    chunk_time_bounds,
     nasal_onset,
     nasal_vowel_start,
     stop_closure_start,
@@ -117,8 +117,10 @@ def _mora_bounds_from_align(
     speech_end: float,
     leading_rest: bool,
     f2: tuple[np.ndarray, np.ndarray] | None = None,
+    speech_indices: list[int] | None = None,
 ) -> dict[int, tuple[float, float]]:
-    speech_indices = [i for i, token in enumerate(tokens) if not token.is_rest]
+    if speech_indices is None:
+        speech_indices = [i for i, token in enumerate(tokens) if not token.is_rest]
     if not speech_indices:
         return {}
 
@@ -248,6 +250,65 @@ def _speech_token_indices(tokens: list[Token]) -> list[list[int]]:
     return chunks
 
 
+def _plan_for_indices(tokens: list[Token], indices: list[int]) -> list[MmsUnit]:
+    plan: list[MmsUnit] = []
+    for i in indices:
+        plan.extend(token_mms_units(tokens[i], i))
+    return plan
+
+
+def _align_region(
+    y: np.ndarray,
+    sr: int,
+    units: list[MmsUnit],
+    t0: float,
+    t1: float,
+) -> list[AlignedChar]:
+    i0 = max(0, int(round(t0 * sr)))
+    i1 = min(len(y), int(round(t1 * sr)))
+    if i1 - i0 < int(0.08 * sr):
+        raise RuntimeError("region too short for MMS")
+    aligned = align_chars(y[i0:i1], sr, units)
+    offset = i0 / float(sr)
+    return [
+        AlignedChar(
+            char=item.char,
+            time=item.time + offset,
+            score=item.score,
+            token_index=item.token_index,
+            role=item.role,
+        )
+        for item in aligned
+    ]
+
+
+def _align_chunks(
+    y: np.ndarray,
+    sr: int,
+    tokens: list[Token],
+    index_chunks: list[list[int]],
+    chunk_bounds: list[tuple[float, float]],
+    duration: float,
+) -> list[AlignedChar]:
+    aligned: list[AlignedChar] = []
+    pad = 0.04
+    for i, indices in enumerate(index_chunks):
+        plan = _plan_for_indices(tokens, indices)
+        if not plan:
+            continue
+        c0, c1 = chunk_bounds[i]
+        t0 = max(0.0, c0 - pad)
+        t1 = min(duration, c1 + pad)
+        if i > 0:
+            t0 = max(t0, chunk_bounds[i - 1][1])
+        if i + 1 < len(chunk_bounds):
+            t1 = min(t1, chunk_bounds[i + 1][0])
+        if t1 <= t0 + 0.05:
+            t0, t1 = c0, max(c1, c0 + 0.08)
+        aligned.extend(_align_region(y, sr, plan, t0, t1))
+    return aligned
+
+
 def segment_precision(
     tokens: list[Token],
     y: np.ndarray,
@@ -258,11 +319,13 @@ def segment_precision(
     if not mms_available():
         raise RuntimeError("MMS is not installed")
 
-    rms_start, rms_end = _bounds_from_mask(track, duration)
+    plan = mms_plan(tokens)
+    if not plan:
+        raise RuntimeError("no speech phones to align")
+
+    index_chunks = _speech_token_indices(tokens)
+    chunk_bounds = list(chunk_time_bounds(tokens, track, duration))
     first_speech = next((t for t in tokens if not t.is_rest), None)
-    if first_speech is not None and first_speech.is_stop:
-        rms_start = stop_closure_start(track, rms_start, 0.0)
-    speech_start, speech_end = rms_start, rms_end
     harm = None
     f2 = None
     bits: list[str] = []
@@ -270,14 +333,20 @@ def segment_precision(
     try:
         from otoasobi import praat_refine
 
-        if praat_refine.available():
+        if praat_refine.available() and chunk_bounds:
             p0, p1 = praat_refine.speech_bounds(y, sr, duration)
-            if first_speech is not None and first_speech.is_stop:
-                p0 = stop_closure_start(track, p0, 0.0)
-            if abs(p0 - rms_start) <= 0.15:
-                speech_start = p0
-            if abs(p1 - rms_end) <= 0.12:
-                speech_end = p1
+            c0, _c1 = chunk_bounds[0]
+            if abs(p0 - c0) <= 0.15:
+                start = p0
+                if first_speech is not None and first_speech.is_stop:
+                    start = stop_closure_start(track, start, 0.0)
+                chunk_bounds[0] = (start, chunk_bounds[0][1])
+            _cl0, cl1 = chunk_bounds[-1]
+            if abs(p1 - cl1) <= 0.12:
+                chunk_bounds[-1] = (
+                    chunk_bounds[-1][0],
+                    min(duration, max(chunk_bounds[-1][0] + 0.03, p1)),
+                )
             harm = praat_refine.harmonicity(y, sr)
             f2 = praat_refine.formant_f2(y, sr)
             bits.append("praat")
@@ -285,24 +354,47 @@ def segment_precision(
         harm = None
         f2 = None
 
-    plan = mms_plan(tokens)
-    if not plan:
-        raise RuntimeError("no speech phones to align")
-    aligned = align_chars(y, sr, plan)
-    bits.append("mms")
-    grouped = _group(aligned)
+    try:
+        aligned = _align_chunks(y, sr, tokens, index_chunks, chunk_bounds, duration)
+        bits.append("mms")
+    except Exception:
+        aligned = align_chars(y, sr, plan)
+        bits.append("mms")
 
-    speech_indices = [i for i, token in enumerate(tokens) if not token.is_rest]
+    grouped = _group(aligned)
+    speech_indices = [i for chunk in index_chunks for i in chunk]
     missing = [i for i in speech_indices if i not in grouped]
     if missing:
-        raise RuntimeError(f"MMS missed tokens {missing}")
+        aligned = align_chars(y, sr, plan)
+        grouped = _group(aligned)
+        missing = [i for i in speech_indices if i not in grouped]
+        if missing:
+            raise RuntimeError(f"MMS missed tokens {missing}")
 
-    leading_rest = bool(tokens) and tokens[0].is_rest
-    trailing_rest = bool(tokens) and tokens[-1].is_rest
-    mora_bounds = _mora_bounds_from_align(
-        tokens, grouped, track, speech_start, speech_end, leading_rest, f2
-    )
-    speech_start = mora_bounds[speech_indices[0]][0] if speech_indices else speech_start
+    leading_rest, trailing_rest, internal_rests = rest_layout(tokens)
+    mora_bounds: dict[int, tuple[float, float]] = {}
+    for i, indices in enumerate(index_chunks):
+        c0, c1 = chunk_bounds[i]
+        mora_bounds.update(
+            _mora_bounds_from_align(
+                tokens,
+                grouped,
+                track,
+                c0,
+                c1,
+                leading_rest and i == 0,
+                f2,
+                indices,
+            )
+        )
+        for idx in indices:
+            start, end = mora_bounds[idx]
+            start = min(max(start, c0), c1 - 0.02)
+            end = max(min(end, c1), start + 0.02)
+            mora_bounds[idx] = (start, end)
+
+    speech_start = mora_bounds[speech_indices[0]][0] if speech_indices else 0.0
+    speech_end = mora_bounds[speech_indices[-1]][1] if speech_indices else duration
     vowel_peaks = {
         i: next((c.time for c in grouped[i] if c.role == "V"), None) for i in speech_indices
     }
@@ -310,18 +402,12 @@ def segment_precision(
         i: next((c.time for c in grouped[i] if c.role == "C"), None) for i in speech_indices
     }
 
-    rest_tokens = [t for t in tokens if t.is_rest]
-    internal_rests = rest_tokens[1:] if leading_rest else rest_tokens
-    if trailing_rest and internal_rests:
-        internal_rests = internal_rests[:-1]
-
     spans: list[Span] = []
     if leading_rest:
         spans.append(Span(0.0, speech_start, SILENCE_LABEL, tokens[0].text))
     elif speech_start > 0.02:
         spans.append(Span(0.0, speech_start, SILENCE_LABEL, ""))
 
-    index_chunks = _speech_token_indices(tokens)
     if not index_chunks:
         if speech_end < duration:
             spans.append(Span(speech_start, duration, SILENCE_LABEL, tokens[-1].text if trailing_rest else ""))
