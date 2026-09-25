@@ -195,7 +195,8 @@ for _text, (_c, _v) in _EXTRAS.items():
 FRICATIVE = {"s", "sh", "h", "hy", "f", "fy", "z", "j", "ts", "ch", "v", "vy"}
 STOP = {"k", "t", "p", "b", "d", "g", "ky", "gy", "py", "by", "ty", "dy", "kw", "gw"}
 NASAL = {"n", "ny", "m", "my"}
-FLAP = {"r", "ry"}
+# r/ry are flaps. y (や行) shares the same short-consonant boundary.
+FLAP = {"r", "ry", "y"}
 
 
 def _hira(text: str) -> str:
