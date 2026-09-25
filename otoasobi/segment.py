@@ -5,8 +5,8 @@ from dataclasses import dataclass
 import numpy as np
 
 from otoasobi.features import FrameTrack, close_short_gaps, runs
-from otoasobi.parser import Token, rest_layout, speech_chunks
-from otoasobi.phones import SILENCE_LABEL, phone_name
+from otoasobi.parser import MoraGroup, Token, rest_layout, speech_chunks, speech_group_chunks
+from otoasobi.phones import SILENCE_LABEL, phone_kind, phone_name
 
 
 @dataclass
@@ -667,6 +667,43 @@ def _cv_cut(track: FrameTrack, mora: Token, start: float, end: float) -> float:
     return min(max(cut, min_c), max_c)
 
 
+def split_vowel_time(parts: tuple[Token, ...], start: float, end: float) -> list[Span]:
+    """Split one analyzed vowel into equal time slices, one per original mora."""
+    n = len(parts)
+    if n <= 0:
+        return []
+    if end < start:
+        end = start
+    if n == 1:
+        part = parts[0]
+        return [Span(start, end, phone_name(part, "V"), part.text)]
+    step = (end - start) / n
+    spans: list[Span] = []
+    for i, part in enumerate(parts):
+        a = start + i * step
+        b = end if i == n - 1 else start + (i + 1) * step
+        spans.append(Span(a, b, phone_name(part, "V"), part.text))
+    return spans
+
+
+def label_grouped_mora(
+    group: MoraGroup,
+    start: float,
+    end: float,
+    label_head,
+) -> list[Span]:
+    """Label a mora, then divide a merged same-vowel run into equal durations."""
+    if len(group.parts) <= 1:
+        return label_head(group.head, start, end)
+    if group.head.is_vowel_only:
+        return split_vowel_time(group.parts, start, end)
+    pieces = label_head(group.head, start, end)
+    if not pieces or phone_kind(pieces[-1].label) != "母音":
+        return pieces
+    vowel = pieces[-1]
+    return pieces[:-1] + split_vowel_time(group.parts, vowel.start, vowel.end)
+
+
 def _label_mora(mora: Token, start: float, end: float, track: FrameTrack) -> list[Span]:
     if mora.kind in {"N", "Q"}:
         return [Span(start, end, phone_name(mora, "C"), mora.text)]
@@ -681,10 +718,13 @@ def _label_mora(mora: Token, start: float, end: float, track: FrameTrack) -> lis
 
 def segment_tokens(tokens: list[Token], track: FrameTrack, duration: float) -> list[Span]:
     spans: list[Span] = []
-    chunks = speech_chunks(tokens)
+    chunks = speech_group_chunks(tokens)
     leading_rest, trailing_rest, internal_rests = rest_layout(tokens)
     chunk_bounds = chunk_time_bounds(tokens, track, duration)
     speech_start = chunk_bounds[0][0] if chunk_bounds else 0.0
+
+    def label_head(mora: Token, start: float, end: float) -> list[Span]:
+        return _label_mora(mora, start, end, track)
 
     if leading_rest:
         spans.append(Span(0.0, speech_start, SILENCE_LABEL, tokens[0].text))
@@ -698,11 +738,12 @@ def segment_tokens(tokens: list[Token], track: FrameTrack, duration: float) -> l
             spans.append(Span(speech_start, duration, SILENCE_LABEL, tokens[-1].text if trailing_rest else ""))
         return _clean(spans, duration)
 
-    for i, moras in enumerate(chunks):
+    for i, groups in enumerate(chunks):
         c0, c1 = chunk_bounds[i]
-        mora_bounds = _mora_bounds(track, moras, c0, c1)
-        for mora, (m0, m1) in zip(moras, mora_bounds, strict=True):
-            spans.extend(_label_mora(mora, m0, m1, track))
+        heads = [group.head for group in groups]
+        mora_bounds = _mora_bounds(track, heads, c0, c1)
+        for group, (m0, m1) in zip(groups, mora_bounds, strict=True):
+            spans.extend(label_grouped_mora(group, m0, m1, label_head))
         if i < len(chunks) - 1:
             gap_end = chunk_bounds[i + 1][0]
             rest_text = internal_rests[i].text if i < len(internal_rests) else "_"

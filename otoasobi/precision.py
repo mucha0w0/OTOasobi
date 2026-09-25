@@ -4,8 +4,8 @@ import numpy as np
 
 from otoasobi.align_mms import AlignedChar, align_chars, available as mms_available
 from otoasobi.features import FrameTrack
-from otoasobi.parser import Token, rest_layout
-from otoasobi.phones import SILENCE_LABEL, MmsUnit, mms_plan, phone_name, token_mms_units
+from otoasobi.parser import Token, rest_layout, speech_group_chunks
+from otoasobi.phones import SILENCE_LABEL, MmsUnit, phone_name, token_mms_units
 from otoasobi.segment import (
     Span,
     _clean,
@@ -13,6 +13,7 @@ from otoasobi.segment import (
     chunk_time_bounds,
     flap_onset,
     flap_vowel_start,
+    label_grouped_mora,
     nasal_onset,
     nasal_vowel_start,
     stop_closure_start,
@@ -272,21 +273,6 @@ def _label_with_cut(
     ]
 
 
-def _speech_token_indices(tokens: list[Token]) -> list[list[int]]:
-    chunks: list[list[int]] = []
-    current: list[int] = []
-    for i, token in enumerate(tokens):
-        if token.is_rest:
-            if current:
-                chunks.append(current)
-                current = []
-        else:
-            current.append(i)
-    if current:
-        chunks.append(current)
-    return chunks
-
-
 def _plan_for_indices(tokens: list[Token], indices: list[int]) -> list[MmsUnit]:
     plan: list[MmsUnit] = []
     for i in indices:
@@ -357,11 +343,12 @@ def segment_precision(
     if not mms_available():
         raise RuntimeError("MMS is not installed")
 
-    plan = mms_plan(tokens)
+    group_chunks = speech_group_chunks(tokens)
+    index_chunks = [[group.index for group in chunk] for chunk in group_chunks]
+    plan = _plan_for_indices(tokens, [index for chunk in index_chunks for index in chunk])
     if not plan:
         raise RuntimeError("no speech phones to align")
 
-    index_chunks = _speech_token_indices(tokens)
     chunk_bounds = list(chunk_time_bounds(tokens, track, duration))
     first_speech = next((t for t in tokens if not t.is_rest), None)
     harm = None
@@ -452,23 +439,22 @@ def segment_precision(
         engine = "mms+praat" if "praat" in bits else "mms"
         return _clean(spans, duration), engine
 
-    for i, indices in enumerate(index_chunks):
-        for idx in indices:
-            start, end = mora_bounds[idx]
-            spans.extend(
-                _label_with_cut(
-                    tokens[idx],
-                    start,
-                    end,
-                    track,
-                    c_peaks[idx],
-                    vowel_peaks[idx],
-                    harm,
-                )
-            )
-        if i < len(index_chunks) - 1:
-            last_end = mora_bounds[indices[-1]][1]
-            next_start = mora_bounds[index_chunks[i + 1][0]][0]
+    for i, groups in enumerate(group_chunks):
+        for group in groups:
+            start, end = mora_bounds[group.index]
+
+            def label_head(
+                mora: Token,
+                a: float,
+                b: float,
+                idx: int = group.index,
+            ) -> list[Span]:
+                return _label_with_cut(mora, a, b, track, c_peaks[idx], vowel_peaks[idx], harm)
+
+            spans.extend(label_grouped_mora(group, start, end, label_head))
+        if i < len(group_chunks) - 1:
+            last_end = mora_bounds[groups[-1].index][1]
+            next_start = mora_bounds[group_chunks[i + 1][0].index][0]
             if next_start > last_end + 0.005:
                 rest_text = internal_rests[i].text if i < len(internal_rests) else "_"
                 spans.append(Span(last_end, next_start, SILENCE_LABEL, rest_text))

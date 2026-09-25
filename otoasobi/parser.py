@@ -363,6 +363,62 @@ def speech_chunks(tokens: list[Token]) -> list[list[Token]]:
     return chunks
 
 
+@dataclass(frozen=True)
+class MoraGroup:
+    """One mora sent to analysis. Extra parts continue the same vowel."""
+
+    parts: tuple[Token, ...]
+    indices: tuple[int, ...]
+
+    @property
+    def head(self) -> Token:
+        return self.parts[0]
+
+    @property
+    def index(self) -> int:
+        return self.indices[0]
+
+
+def group_moras(tokens: list[Token]) -> list[MoraGroup]:
+    """Collapse a run of the same vowel into one analysis mora.
+
+    「ああ」 is aligned as a single vowel. A vowel-only mora that keeps going
+    with that same vowel is included (「かあ」 as well as 「あああ」). The
+    span is split into equal durations afterward, one slice per original mora.
+    """
+    groups: list[MoraGroup] = []
+    i = 0
+    n = len(tokens)
+    while i < n:
+        token = tokens[i]
+        parts = [token]
+        indices = [i]
+        j = i + 1
+        if token.vowel is not None and not token.is_rest:
+            while j < n and tokens[j].is_vowel_only and tokens[j].vowel == token.vowel:
+                parts.append(tokens[j])
+                indices.append(j)
+                j += 1
+        groups.append(MoraGroup(tuple(parts), tuple(indices)))
+        i = j
+    return groups
+
+
+def speech_group_chunks(tokens: list[Token]) -> list[list[MoraGroup]]:
+    chunks: list[list[MoraGroup]] = []
+    current: list[MoraGroup] = []
+    for group in group_moras(tokens):
+        if group.head.is_rest:
+            if current:
+                chunks.append(current)
+                current = []
+        else:
+            current.append(group)
+    if current:
+        chunks.append(current)
+    return chunks
+
+
 def rest_layout(tokens: list[Token]) -> tuple[bool, bool, list[Token]]:
     """Leading / trailing / internal rest tokens from a filename parse."""
     leading = bool(tokens) and tokens[0].is_rest
