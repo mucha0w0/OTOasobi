@@ -74,7 +74,8 @@ def voicing_onset(
     return fallback
 
 
-def formant_f2(y: np.ndarray, sr: int) -> tuple[np.ndarray, np.ndarray]:
+def formant_tracks(y: np.ndarray, sr: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Times, F1, and F2 from Burg tracking. Missing frames are NaN."""
     snd = _sound(y, sr)
     formant = snd.to_formant_burg(
         time_step=0.01,
@@ -86,8 +87,11 @@ def formant_f2(y: np.ndarray, sr: int) -> tuple[np.ndarray, np.ndarray]:
     t0 = float(formant.start_time)
     t1 = float(formant.end_time)
     times = np.arange(t0, t1, 0.01)
-    vals = np.empty(len(times), dtype=float)
+    f1 = np.empty(len(times), dtype=float)
+    f2 = np.empty(len(times), dtype=float)
     for i, t in enumerate(times):
-        v = formant.get_value_at_time(2, float(t))
-        vals[i] = float(v) if v is not None and np.isfinite(v) else np.nan
-    return times, vals
+        a = formant.get_value_at_time(1, float(t))
+        b = formant.get_value_at_time(2, float(t))
+        f1[i] = float(a) if a is not None and np.isfinite(a) else np.nan
+        f2[i] = float(b) if b is not None and np.isfinite(b) else np.nan
+    return times, f1, f2

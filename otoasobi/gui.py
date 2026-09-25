@@ -28,9 +28,12 @@ import numpy as np
 import pyqtgraph as pg
 
 from otoasobi.analyze import Analysis, analyze_wav, default_txt_path, write_label_txt
+from otoasobi.features import mel_spectrogram
 from otoasobi.parser import FilenameError
 from otoasobi.phones import phone_kind
 from otoasobi.segment import Span
+
+LEFT_AXIS_WIDTH = 52
 
 ENGINE_LABEL = {
     "mms+praat": "高精度 (MMS+Praat)",
@@ -126,7 +129,7 @@ class WaveformView(pg.PlotWidget):
         plot = self.getPlotItem()
         plot.showGrid(x=True, y=False, alpha=0.15)
         plot.setLabel("bottom", "時間", units="s")
-        plot.hideAxis("left")
+        _reserve_left_axis(plot, show_values=False)
         plot.getViewBox().setDefaultPadding(0.02)
         self._upper = pg.PlotCurveItem(pen=None)
         self._lower = pg.PlotCurveItem(pen=None)
@@ -185,6 +188,100 @@ class WaveformView(pg.PlotWidget):
         self.setXRange(max(0.0, span.start - pad), span.end + pad, padding=0)
 
 
+def _reserve_left_axis(plot: pg.PlotItem, *, show_values: bool) -> None:
+    axis = plot.getAxis("left")
+    axis.setWidth(LEFT_AXIS_WIDTH)
+    if show_values:
+        return
+    axis.setStyle(showValues=False, tickLength=0)
+    axis.setPen(pg.mkPen("#161616"))
+
+
+def _hz_ticks(centers_hz: np.ndarray) -> list[tuple[float, str]]:
+    if len(centers_hz) == 0:
+        return []
+    ticks: list[tuple[float, str]] = []
+    used: set[int] = set()
+    lo = float(centers_hz[0])
+    hi = float(centers_hz[-1])
+    for hz in (125, 250, 500, 1000, 2000, 4000, 8000):
+        if hz < lo * 0.7 or hz > hi * 1.15:
+            continue
+        idx = int(np.argmin(np.abs(centers_hz - hz)))
+        if idx in used:
+            continue
+        used.add(idx)
+        label = f"{hz / 1000:g}k" if hz >= 1000 else str(hz)
+        ticks.append((idx + 0.5, label))
+    return ticks
+
+
+class MelSpectrogramView(pg.PlotWidget):
+    def __init__(self) -> None:
+        super().__init__(background="#161616")
+        self.setAcceptDrops(False)
+        self.enableAutoRange(False)
+        plot = self.getPlotItem()
+        plot.showGrid(x=True, y=False, alpha=0.12)
+        plot.setLabel("bottom", "時間", units="s")
+        plot.setLabel("left", "Hz")
+        plot.setTitle("メルスペクトログラム", color="#D1D5DB", size="10pt")
+        _reserve_left_axis(plot, show_values=True)
+        plot.getViewBox().setDefaultPadding(0.0)
+        self._img = pg.ImageItem()
+        self._img.setOpts(axisOrder="col-major")
+        self._img.setLookupTable(pg.colormap.get("magma").getLookupTable(nPts=256))
+        self._img.setZValue(-30)
+        self.addItem(self._img)
+        self._regions: list[pg.LinearRegionItem] = []
+        self._texts: list[pg.TextItem] = []
+
+    def clear_labels(self) -> None:
+        for item in self._regions + self._texts:
+            self.removeItem(item)
+        self._regions.clear()
+        self._texts.clear()
+
+    def set_empty(self) -> None:
+        self.clear_labels()
+        self._img.clear()
+        self.setXRange(0, 1, padding=0)
+        self.setYRange(0, 1, padding=0)
+
+    def set_analysis(self, analysis: Analysis) -> None:
+        self.clear_labels()
+        mel = mel_spectrogram(analysis.y, analysis.sr)
+        db = mel.db
+        n_mels = int(db.shape[0])
+        peak = float(np.max(db)) if db.size else 0.0
+        self._img.setImage(np.ascontiguousarray(db.T), autoLevels=False, levels=(peak - 80.0, peak))
+        self._img.setRect(mel.t0, 0.0, max(mel.t1 - mel.t0, 1e-3), float(n_mels))
+        for span in analysis.spans:
+            rgb = LABEL_COLORS.get(phone_kind(span.label), (120, 120, 120))
+            region = pg.LinearRegionItem(
+                values=(span.start, span.end),
+                brush=(*rgb, 42),
+                pen=pg.mkPen((*rgb, 190), width=1),
+                movable=False,
+            )
+            region.setZValue(5)
+            self.addItem(region)
+            self._regions.append(region)
+            if span.end - span.start >= 0.025:
+                text = pg.TextItem(anchor=(0.5, 1))
+                text.setHtml(
+                    "<span style='font-family: Yu Gothic UI; font-size: 11px; "
+                    f"background-color: rgba(0,0,0,140); color: #F9FAFB'>{span.label}</span>"
+                )
+                text.setPos((span.start + span.end) / 2, n_mels * 0.96)
+                text.setZValue(10)
+                self.addItem(text)
+                self._texts.append(text)
+        self.getPlotItem().getAxis("left").setTicks([_hz_ticks(mel.centers_hz), []])
+        self.setYRange(0, n_mels, padding=0.02)
+        self.setXRange(0, max(analysis.duration, 1e-3), padding=0.01)
+
+
 class AnalyzeWorker(QThread):
     ok = Signal(object)
     err = Signal(str, str)
@@ -229,8 +326,8 @@ class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("音遊びラベル")
-        self.resize(1180, 720)
-        self.setMinimumSize(860, 540)
+        self.resize(1180, 860)
+        self.setMinimumSize(860, 640)
         self.setAcceptDrops(True)
         icon = _icon_path()
         if icon:
@@ -281,8 +378,16 @@ class MainWindow(QMainWindow):
         toolbar.addWidget(legend)
 
         splitter = QSplitter(Qt.Orientation.Vertical)
+        plots = QSplitter(Qt.Orientation.Vertical)
+        plots.setChildrenCollapsible(False)
         self.wave = WaveformView()
-        splitter.addWidget(self.wave)
+        self.mel = MelSpectrogramView()
+        self.mel.setXLink(self.wave)
+        plots.addWidget(self.wave)
+        plots.addWidget(self.mel)
+        plots.setStretchFactor(0, 2)
+        plots.setStretchFactor(1, 3)
+        splitter.addWidget(plots)
 
         self.table = QTableWidget(0, 4)
         self.table.setHorizontalHeaderLabels(["開始 (秒)", "終了 (秒)", "音素", "かな"])
@@ -298,8 +403,8 @@ class MainWindow(QMainWindow):
         header.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
         self.table.itemSelectionChanged.connect(self._on_row_selected)
         splitter.addWidget(self.table)
-        splitter.setStretchFactor(0, 3)
-        splitter.setStretchFactor(1, 1)
+        splitter.setStretchFactor(0, 5)
+        splitter.setStretchFactor(1, 2)
 
         root = QWidget()
         layout = QVBoxLayout(root)
@@ -378,6 +483,7 @@ class MainWindow(QMainWindow):
         self.analysis = analysis
         self.file_label.setText(analysis.path.name)
         self.wave.set_analysis(analysis)
+        self.mel.set_analysis(analysis)
         self._fill_table(analysis.spans)
         txt = default_txt_path(analysis.path)
         write_label_txt(txt, analysis.spans)

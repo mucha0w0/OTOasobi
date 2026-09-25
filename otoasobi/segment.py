@@ -292,7 +292,164 @@ def _nasal_onsets(track: FrameTrack, start: float, end: float, count: int) -> li
     return onsets
 
 
-F2_REF = {"i": 2300.0, "e": 1900.0, "a": 1250.0, "o": 950.0, "u": 850.0}
+def _median_smooth(values: np.ndarray, width: int = 3) -> np.ndarray:
+    src = np.asarray(values, dtype=float)
+    out = src.copy()
+    half = width // 2
+    n = len(src)
+    for i in range(n):
+        chunk = src[max(0, i - half) : min(n, i + half + 1)]
+        finite = chunk[np.isfinite(chunk)]
+        if finite.size:
+            out[i] = float(np.median(finite))
+    return out
+
+
+def _abs_log_delta(values: np.ndarray) -> np.ndarray:
+    src = np.asarray(values, dtype=float)
+    delta = np.zeros(max(0, len(src) - 1), dtype=float)
+    for i in range(len(delta)):
+        a = src[i]
+        b = src[i + 1]
+        if np.isfinite(a) and np.isfinite(b) and a > 50.0 and b > 50.0:
+            delta[i] = abs(float(np.log(b) - np.log(a)))
+    return delta
+
+
+def _strong_peak_index(score: np.ndarray, min_peak: float) -> int | None:
+    if score.size == 0:
+        return None
+    peak = float(np.max(score))
+    if peak < min_peak:
+        return None
+    baseline = float(np.percentile(score, 40))
+    if peak < baseline * 1.8:
+        return None
+    return int(np.argmax(score))
+
+
+def _formant_velocity_time(
+    times: np.ndarray,
+    f1: np.ndarray,
+    f2: np.ndarray,
+    t0: float,
+    t1: float,
+) -> float | None:
+    sel = (times >= t0) & (times <= t1)
+    if int(np.count_nonzero(sel)) < 4:
+        return None
+    t = times[sel]
+    d1 = _abs_log_delta(_median_smooth(f1[sel]))
+    d2 = _abs_log_delta(_median_smooth(f2[sel]))
+    score = d1 + d2
+    idx = _strong_peak_index(score, 0.06)
+    if idx is None:
+        return None
+    return float(t[idx + 1])
+
+
+def _strong_delta_time(times: np.ndarray, values: np.ndarray, t0: float, t1: float) -> float | None:
+    sel = (times >= t0) & (times <= t1) & np.isfinite(values)
+    if int(np.count_nonzero(sel)) < 4:
+        return None
+    t = times[sel]
+    vals = values[sel]
+    delta = np.abs(np.diff(vals))
+    level = float(np.median(np.abs(vals)))
+    idx = _strong_peak_index(delta, max(1e-6, 0.15 * level))
+    if idx is None:
+        return None
+    return float(t[idx + 1])
+
+
+def _rms_dip_near(track: FrameTrack, prior: float, lo: float, hi: float) -> float:
+    if hi - lo < 0.03:
+        return prior
+    sel = (track.times >= lo) & (track.times <= hi)
+    if int(np.count_nonzero(sel)) < 4:
+        return prior
+    times = track.times[sel]
+    rms = track.rms[sel]
+    smooth = np.convolve(rms, np.ones(3) / 3, mode="same")
+    idx = int(np.argmin(smooth))
+    if idx <= 0 or idx >= len(smooth) - 1:
+        return prior
+    if abs(float(times[idx]) - prior) > 0.08:
+        return prior
+    valley = float(smooth[idx])
+    shoulder = float(max(smooth[0], smooth[-1]))
+    if shoulder <= 1e-8 or valley > 0.72 * shoulder:
+        return prior
+    return float(times[idx])
+
+
+def _open_span(start: float, end: float) -> tuple[float, float]:
+    if end < start + 0.01:
+        end = start + 0.02
+    return start, end
+
+
+def refine_vowel_hiatus(
+    track: FrameTrack,
+    prior: float,
+    center_a: float,
+    center_b: float,
+    same_vowel: bool,
+    formants: tuple[np.ndarray, np.ndarray, np.ndarray] | None = None,
+) -> float:
+    """Nudge an MMS vowel boundary between the two vowel centers.
+
+    ``prior`` is the start of the second vowel. A weak spectral change keeps
+    that time. Same vowels move only toward a clear RMS dip near it.
+    """
+    lo, hi = (center_a, center_b) if center_a <= center_b else (center_b, center_a)
+    if hi <= lo:
+        return prior
+    prior = min(max(prior, lo), hi)
+    if hi - lo < 0.02:
+        return prior
+    if same_vowel:
+        return _rms_dip_near(track, prior, lo, hi)
+    if formants is not None:
+        moved = _formant_velocity_time(formants[0], formants[1], formants[2], lo, hi)
+        return prior if moved is None else moved
+    moved = _strong_delta_time(track.times, track.bright, lo, hi)
+    return prior if moved is None else moved
+
+
+def vowel_hiatus_onsets(
+    track: FrameTrack,
+    start: float,
+    end: float,
+    vowels: list[str | None],
+    span_starts: list[float],
+    span_ends: list[float],
+    formants: tuple[np.ndarray, np.ndarray, np.ndarray] | None = None,
+) -> list[float]:
+    n = len(vowels)
+    if n <= 1:
+        return [start]
+    onsets = [start]
+    for i in range(1, n):
+        a0, a1 = _open_span(span_starts[i - 1], span_ends[i - 1])
+        b0, b1 = _open_span(span_starts[i], span_ends[i])
+        same = vowels[i - 1] == vowels[i]
+        onset = refine_vowel_hiatus(
+            track,
+            b0,
+            0.5 * (a0 + a1),
+            0.5 * (b0 + b1),
+            same,
+            formants,
+        )
+        onset = max(onset, onsets[-1] + 0.04)
+        latest = end - 0.04 * (n - i)
+        onset = min(onset, latest)
+        if onset <= onsets[-1]:
+            onset = min(end, onsets[-1] + 0.04)
+        onsets.append(onset)
+    onsets[0] = start
+    return onsets
 
 
 def _rms_valley(track: FrameTrack, t0: float, t1: float, fallback: float) -> float:
@@ -321,37 +478,12 @@ def _max_delta_time(times: np.ndarray, values: np.ndarray, t0: float, t1: float,
     return float(t[int(np.argmax(d)) + 1])
 
 
-def _f2_crossing(
-    times: np.ndarray,
-    f2: np.ndarray,
-    t0: float,
-    t1: float,
-    v0: str | None,
-    v1: str | None,
-    fallback: float,
-) -> float:
-    sel = (times >= t0) & (times <= t1) & np.isfinite(f2)
-    if int(np.count_nonzero(sel)) < 4:
-        return fallback
-    t = times[sel]
-    v = f2[sel]
-    target0 = F2_REF.get(v0 or "", 1200.0)
-    target1 = F2_REF.get(v1 or "", 1200.0)
-    mid_f = 0.5 * (target0 + target1)
-    idx = int(np.argmin(np.abs(v - mid_f)))
-    cut = float(t[idx])
-    if min(target0, target1) - 80 <= v[idx] <= max(target0, target1) + 80:
-        return cut
-    return _max_delta_time(times, f2, t0, t1, fallback)
-
-
 def vowel_boundary(
     track: FrameTrack,
     t_a: float,
     t_b: float,
     v_a: str | None,
     v_b: str | None,
-    f2: tuple[np.ndarray, np.ndarray] | None = None,
 ) -> float:
     t0, t1 = (t_a, t_b) if t_a <= t_b else (t_b, t_a)
     mid = 0.5 * (t0 + t1)
@@ -359,28 +491,7 @@ def vowel_boundary(
         return mid
     if v_a == v_b:
         return _rms_valley(track, t0, t1, mid)
-    if f2 is not None:
-        return _f2_crossing(f2[0], f2[1], t0, t1, v_a, v_b, mid)
     return _max_delta_time(track.times, track.bright, t0, t1, mid)
-
-
-def spread_peaks(peaks: list[float], t0: float, t1: float, min_sep: float = 0.11) -> list[float]:
-    p = [float(x) for x in peaks]
-    n = len(p)
-    if n <= 1:
-        return p
-    span = max(t1 - t0, min_sep * n)
-    if span < min_sep * (n - 0.5):
-        step = span / n
-        return [t0 + (i + 0.5) * step for i in range(n)]
-    for _ in range(10):
-        p[0] = min(max(p[0], t0 + 0.03), t1 - min_sep * (n - 1) - 0.03)
-        for i in range(1, n):
-            p[i] = max(p[i], p[i - 1] + min_sep)
-        p[-1] = min(p[-1], t1 - 0.03)
-        for i in range(n - 2, -1, -1):
-            p[i] = min(p[i], p[i + 1] - min_sep)
-    return p
 
 
 def vowel_mora_onsets(
@@ -388,34 +499,17 @@ def vowel_mora_onsets(
     start: float,
     end: float,
     vowels: list[str | None],
-    peaks: list[float] | None = None,
-    f2: tuple[np.ndarray, np.ndarray] | None = None,
 ) -> list[float]:
     n = len(vowels)
     if n <= 1:
         return [start]
-    if peaks is not None and len(peaks) == n:
-        peaks = spread_peaks(peaks, start, end)
-        onsets = [start]
-        for i in range(1, n):
-            mid = 0.5 * (peaks[i - 1] + peaks[i])
-            acoustic = vowel_boundary(track, peaks[i - 1], peaks[i], vowels[i - 1], vowels[i], f2)
-            if abs(acoustic - mid) <= 0.04:
-                onsets.append(acoustic)
-            else:
-                onsets.append(mid)
-        for i in range(1, n):
-            onsets[i] = max(onsets[i], onsets[i - 1] + 0.07)
-            onsets[i] = min(onsets[i], end - 0.07 * (n - i))
-        onsets[0] = start
-        return onsets
     step = (end - start) / n
     onsets = [start]
     for i in range(1, n):
         guess = start + i * step
         lo = max(start, guess - step * 0.45)
         hi = min(end, guess + step * 0.45)
-        onsets.append(vowel_boundary(track, lo, hi, vowels[i - 1], vowels[i], f2))
+        onsets.append(vowel_boundary(track, lo, hi, vowels[i - 1], vowels[i]))
     for i in range(1, n):
         onsets[i] = max(onsets[i], onsets[i - 1] + 0.07)
         onsets[i] = min(onsets[i], end - 0.07 * (n - i))

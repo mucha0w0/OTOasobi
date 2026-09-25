@@ -42,6 +42,7 @@ def load_model() -> None:
 class AlignedChar:
     char: str
     time: float
+    end: float
     score: float
     token_index: int
     role: str
@@ -82,12 +83,16 @@ def align_chars(y: np.ndarray, sr: int, units: list[MmsUnit]) -> list[AlignedCha
     for unit, group in zip(units, raw_spans, strict=True):
         if not group:
             raise RuntimeError(f"MMS returned no span for {unit.char!r}")
-        span = group[0]
+        start_t = float(group[0].start) * spf
+        end_t = float(group[-1].end) * spf
+        if end_t <= start_t:
+            end_t = start_t + spf
         out.append(
             AlignedChar(
                 char=unit.char,
-                time=float(span.start) * spf,
-                score=float(span.score),
+                time=start_t,
+                end=end_t,
+                score=float(group[0].score),
                 token_index=unit.token_index,
                 role=unit.role,
             )
