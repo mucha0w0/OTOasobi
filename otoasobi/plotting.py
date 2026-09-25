@@ -10,6 +10,7 @@ from otoasobi.segment import Span
 
 LABEL_COLORS = {
     "無音": "#9AA0A6",
+    "息": "#60A5FA",
     "子音": "#D97706",
     "母音": "#0F9D8E",
 }
@@ -67,7 +68,7 @@ def draw_analysis(fig: Figure, y, sr: int, spans: list[Span], title: str) -> Non
     ax.axhline(0, color="#D1D5DB", linewidth=0.6)
     handles = [
         plt.Rectangle((0, 0), 1, 1, color=LABEL_COLORS[name], alpha=0.45, label=name)
-        for name in ("無音", "子音", "母音")
+        for name in ("無音", "息", "子音", "母音")
     ]
     ax.legend(handles=handles, loc="lower right", framealpha=0.92)
     fig.tight_layout()

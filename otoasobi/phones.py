@@ -46,6 +46,7 @@ _CONS_MMS: dict[str, list[str]] = {
 
 _VOWELS = set("aiueo")
 SILENCE_LABEL = "無音"
+BREATH_LABEL = "息"
 
 
 @dataclass(frozen=True)
@@ -104,6 +105,8 @@ def phone_name(token: Token, part: str) -> str:
 def phone_kind(label: str) -> str:
     if label == SILENCE_LABEL:
         return SILENCE_LABEL
+    if label == BREATH_LABEL:
+        return BREATH_LABEL
     if label in _VOWELS:
         return "母音"
     return "子音"

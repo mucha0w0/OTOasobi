@@ -17,6 +17,7 @@ class FrameTrack:
     flux: np.ndarray
     centroid: np.ndarray
     bright: np.ndarray
+    envelope: np.ndarray
 
 
 def _to_mono(y: np.ndarray) -> np.ndarray:
@@ -38,6 +39,16 @@ def compute_features(y: np.ndarray, sr: int, hop_s: float = 0.01, win_s: float =
     lo = freqs < 2000
     f1b = (freqs >= 250) & (freqs < 1000)
     f2b = (freqs >= 1000) & (freqs < 3000)
+    n_freqs = win // 2 + 1
+    fmax = min(5500.0, sr / 2.0 - 1.0)
+    fmin = 70.0
+    if fmax <= fmin + 200.0:
+        fmax = max(fmin + 200.0, sr / 2.0 * 0.95)
+        fmin = min(40.0, fmax * 0.2)
+    n_mels = min(40, max(12, n_freqs // 2))
+    n_ceps = min(12, n_mels - 1)
+    mel_fb, _mel_centers = _mel_filterbank(sr, win, n_mels, fmin, fmax)
+    cepstrum = _cepstrum_matrix(n_mels, n_ceps)
     n_frames = max(1, 1 + (len(y) - win) // hop)
     rms = np.zeros(n_frames)
     ratio = np.zeros(n_frames)
@@ -46,6 +57,7 @@ def compute_features(y: np.ndarray, sr: int, hop_s: float = 0.01, win_s: float =
     flux = np.zeros(n_frames)
     centroid = np.zeros(n_frames)
     bright = np.zeros(n_frames)
+    envelope = np.zeros((n_frames, n_ceps))
     for i in range(n_frames):
         start = i * hop
         frame = y[start : start + win]
@@ -65,6 +77,12 @@ def compute_features(y: np.ndarray, sr: int, hop_s: float = 0.01, win_s: float =
         e_f1 = float(np.sum(spec[f1b] ** 2)) + 1e-12
         e_f2 = float(np.sum(spec[f2b] ** 2))
         bright[i] = e_f2 / e_f1
+        log_mel = np.log(np.maximum(mel_fb @ (spec**2), 1e-10))
+        log_mel -= float(np.mean(log_mel))
+        ceps = cepstrum @ log_mel
+        norm = float(np.linalg.norm(ceps))
+        if norm > 1e-8:
+            envelope[i] = ceps / norm
         if prev is None:
             flux[i] = 0.0
         else:
@@ -82,6 +100,7 @@ def compute_features(y: np.ndarray, sr: int, hop_s: float = 0.01, win_s: float =
         flux=flux,
         centroid=centroid,
         bright=bright,
+        envelope=envelope,
     )
 
 
@@ -91,6 +110,13 @@ class MelSpectrogram:
     t0: float
     t1: float
     centers_hz: np.ndarray
+
+
+def _cepstrum_matrix(n_mels: int, n_ceps: int) -> np.ndarray:
+    """DCT rows for cepstra 1..n_ceps. Coefficient 0 is the frame gain."""
+    bins = np.arange(n_mels, dtype=np.float64)
+    coeffs = np.arange(1, n_ceps + 1, dtype=np.float64)[:, None]
+    return np.cos(np.pi * coeffs * (bins + 0.5) / n_mels)
 
 
 def _hz_to_mel(hz: np.ndarray | float) -> np.ndarray:

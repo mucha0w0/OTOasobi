@@ -44,6 +44,7 @@ ENGINE_LABEL = {
 
 LABEL_COLORS = {
     "無音": (154, 160, 166),
+    "息": (96, 165, 250),
     "子音": (217, 119, 6),
     "母音": (15, 157, 142),
 }
@@ -372,7 +373,7 @@ class MainWindow(QMainWindow):
 
         legend = QLabel("　".join(
             f"<span style='color: rgb{LABEL_COLORS[name]}'>■</span> {name}"
-            for name in ("無音", "子音", "母音")
+            for name in ("無音", "息", "子音", "母音")
         ))
         legend.setTextFormat(Qt.TextFormat.RichText)
         toolbar.addWidget(legend)
@@ -566,7 +567,7 @@ class MainWindow(QMainWindow):
             self.wave.focus_span(self.analysis.spans[index])
 
     def _summary(self, analysis: Analysis) -> str:
-        counts = {"無音": 0, "子音": 0, "母音": 0}
+        counts = {"無音": 0, "息": 0, "子音": 0, "母音": 0}
         for span in analysis.spans:
             kind = phone_kind(span.label)
             counts[kind] = counts.get(kind, 0) + 1
@@ -575,7 +576,7 @@ class MainWindow(QMainWindow):
         engine = ENGINE_LABEL.get(analysis.engine, analysis.engine)
         return (
             f"{engine} / {analysis.duration:.2f}秒 / モーラ{mora_n} / 休符{rest_n} / "
-            f"無音{counts['無音']} 子音{counts['子音']} 母音{counts['母音']}"
+            f"無音{counts['無音']} 息{counts['息']} 子音{counts['子音']} 母音{counts['母音']}"
         )
 
 

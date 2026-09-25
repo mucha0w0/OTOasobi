@@ -40,6 +40,14 @@ def speech_bounds(y: np.ndarray, sr: int, duration: float) -> tuple[float, float
     return start, end
 
 
+def intensity(y: np.ndarray, sr: int) -> tuple[np.ndarray, np.ndarray]:
+    snd = _sound(y, sr)
+    track = snd.to_intensity(minimum_pitch=75.0, time_step=0.01)
+    times = np.asarray(track.xs())
+    vals = np.asarray(track.values[0], dtype=float)
+    return times, vals
+
+
 def harmonicity(y: np.ndarray, sr: int) -> tuple[np.ndarray, np.ndarray]:
     snd = _sound(y, sr)
     harm = snd.to_harmonicity_cc(time_step=0.005)

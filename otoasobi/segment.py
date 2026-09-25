@@ -452,6 +452,77 @@ def _open_span(start: float, end: float) -> tuple[float, float]:
     return start, end
 
 
+def _cosine_distance(a: np.ndarray, b: np.ndarray) -> float:
+    na = float(np.linalg.norm(a))
+    nb = float(np.linalg.norm(b))
+    if na < 1e-8 or nb < 1e-8:
+        return 0.0
+    sim = float(np.dot(a, b) / (na * nb))
+    if sim > 1.0:
+        sim = 1.0
+    elif sim < -1.0:
+        sim = -1.0
+    return 1.0 - sim
+
+
+def _smooth_envelope(rows: np.ndarray) -> np.ndarray:
+    if len(rows) < 3:
+        return rows
+    padded = np.pad(rows, ((1, 1), (0, 0)), mode="edge")
+    kernel = np.array([0.25, 0.5, 0.25])
+    out = np.empty_like(rows)
+    for k in range(rows.shape[1]):
+        out[:, k] = np.convolve(padded[:, k], kernel, mode="valid")
+    norms = np.linalg.norm(out, axis=1, keepdims=True)
+    return out / np.maximum(norms, 1e-8)
+
+
+def _envelope_boundary(track: FrameTrack, t0: float, t1: float) -> float | None:
+    """Time that best separates the two level-free mel envelopes in ``[t0, t1]``.
+
+    Each frame already has its gain removed. The score is the cosine distance
+    between the mean shape on the left of a candidate cut and the mean shape
+    on the right, so a loudness change with the same vowel does not score.
+    Returns None when that separation is too weak to move a boundary.
+    """
+    if t1 - t0 < 0.05 or track.envelope.ndim != 2 or len(track.envelope) != len(track.times):
+        return None
+    sel = (track.times >= t0) & (track.times <= t1)
+    if int(np.count_nonzero(sel)) < 6:
+        return None
+    times = track.times[sel]
+    shape = _smooth_envelope(track.envelope[sel])
+    n = len(times)
+    scores: list[float] = []
+    cuts: list[float] = []
+    for i in range(2, n - 1):
+        if float(times[i - 1] - times[0]) < 0.02 or float(times[-1] - times[i]) < 0.02:
+            continue
+        dist = _cosine_distance(np.mean(shape[:i], axis=0), np.mean(shape[i:], axis=0))
+        scores.append(dist)
+        cuts.append(0.5 * (float(times[i - 1]) + float(times[i])))
+    if len(scores) < 3:
+        return None
+    score = np.asarray(scores, dtype=float)
+    peak = float(np.max(score))
+    # Close vowels such as /u/-/o/ separate by about 0.05. A repeated vowel,
+    # even with noise and a loudness change, stays under about 0.01.
+    if peak < 0.03:
+        return None
+    baseline = float(np.percentile(score, 40))
+    if peak < max(0.03, baseline * 1.55):
+        return None
+    peak_i = int(np.argmax(score))
+    thr = peak * 0.85
+    left = peak_i
+    while left > 0 and float(score[left - 1]) >= thr:
+        left -= 1
+    right = peak_i
+    while right < len(score) - 1 and float(score[right + 1]) >= thr:
+        right += 1
+    return float(cuts[(left + right) // 2])
+
+
 def refine_vowel_hiatus(
     track: FrameTrack,
     prior: float,
@@ -462,8 +533,9 @@ def refine_vowel_hiatus(
 ) -> float:
     """Nudge an MMS vowel boundary between the two vowel centers.
 
-    ``prior`` is the start of the second vowel. A weak spectral change keeps
-    that time. Same vowels move only toward a clear RMS dip near it.
+    ``prior`` is the start of the second vowel. Different vowels move to the
+    cut that separates mel-envelope shape, ignoring level. A weak shape change
+    keeps that time. Same vowels move only toward a clear RMS dip near it.
     """
     lo, hi = (center_a, center_b) if center_a <= center_b else (center_b, center_a)
     if hi <= lo:
@@ -473,6 +545,9 @@ def refine_vowel_hiatus(
         return prior
     if same_vowel:
         return _rms_dip_near(track, prior, lo, hi)
+    moved = _envelope_boundary(track, lo, hi)
+    if moved is not None:
+        return moved
     if formants is not None:
         moved = _formant_velocity_time(formants[0], formants[1], formants[2], lo, hi)
         return prior if moved is None else moved
@@ -554,6 +629,9 @@ def vowel_boundary(
         return mid
     if v_a == v_b:
         return _rms_valley(track, t0, t1, mid)
+    moved = _envelope_boundary(track, t0, t1)
+    if moved is not None:
+        return moved
     return _max_delta_time(track.times, track.bright, t0, t1, mid)
 
 

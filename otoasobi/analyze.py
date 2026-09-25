@@ -6,6 +6,7 @@ from pathlib import Path
 import numpy as np
 import soundfile as sf
 
+from otoasobi.breath import apply_leading_breath
 from otoasobi.features import compute_features
 from otoasobi.parser import Token, parse_stem, stem_from_path
 from otoasobi.segment import Span, segment_tokens
@@ -56,6 +57,12 @@ def analyze_wav(path: str | Path) -> Analysis:
     if spans is None:
         spans = segment_tokens(tokens, track, duration)
         engine = "acoustic"
+    try:
+        spans = apply_leading_breath(spans, y, sr, track)
+    except Exception:
+        import traceback
+
+        traceback.print_exc()
     return Analysis(
         path=path,
         stem=stem,
