@@ -23,6 +23,7 @@ from otoasobi.segment import (
     stop_closure_start,
     stop_vowel_start,
     refine_vowel_hiatus,
+    split_leading_breath,
     vowel_hiatus_onsets,
 )
 
@@ -392,7 +393,12 @@ def segment_precision(
             c0, _c1 = chunk_bounds[0]
             if abs(p0 - c0) <= 0.15:
                 start = p0
-                if first_speech is not None and first_speech.is_stop:
+                # Intensity also rises on a loud inhale. The chunk start was
+                # already moved past that hump; don't pull it back.
+                split = split_leading_breath(track, 0.0, chunk_bounds[0][1])
+                if split is not None and start < split[0] - 0.01:
+                    start = c0
+                elif first_speech is not None and first_speech.is_stop:
                     start = stop_closure_start(track, start, 0.0)
                 chunk_bounds[0] = (start, chunk_bounds[0][1])
             _cl0, cl1 = chunk_bounds[-1]

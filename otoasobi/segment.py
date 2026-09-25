@@ -121,6 +121,108 @@ def _match_islands(track: FrameTrack, duration: float, n: int) -> list[tuple[flo
     return islands
 
 
+def _smooth(values: np.ndarray, width: int) -> np.ndarray:
+    if width <= 1 or len(values) < width:
+        return np.asarray(values, dtype=float)
+    kernel = np.ones(width) / width
+    return np.convolve(np.asarray(values, dtype=float), kernel, mode="same")
+
+
+def split_leading_breath(
+    track: FrameTrack,
+    start: float,
+    end: float,
+) -> tuple[float, float] | None:
+    """Split an inhale off the front of a speech island.
+
+    A loud breath clears the same energy gate as speech, so the first island
+    starts at the inhale and the first phone is cut inside that noise. The
+    inhale is an unvoiced hump, then a valley, then the syllable. Returns
+    ``(breath_end, speech_start)``: the valley begins at ``breath_end``, and
+    ``speech_start`` is the rise after it. ``None`` when there is no separate
+    leading breath.
+    """
+    if end - start < 0.16:
+        return None
+    sel = (track.times >= start) & (track.times <= end)
+    times = track.times[sel]
+    if len(times) < 12:
+        return None
+    rms = _smooth(track.rms[sel], 3)
+    zcr = _smooth(track.zcr[sel], 3)
+    dt = float(np.median(np.diff(times))) if len(times) > 1 else 0.01
+    peak = float(np.max(rms))
+    if peak < 1e-4:
+        return None
+    voiced = zcr < 0.09
+    if int(np.count_nonzero(voiced)) < 4:
+        return None
+    vpeak = float(np.max(rms[voiced]))
+    if vpeak < peak * 0.12:
+        return None
+    body_thr = vpeak * 0.45
+    body: int | None = None
+    need = max(3, int(round(0.03 / max(dt, 1e-3))))
+    for i in range(0, len(rms) - need):
+        if float(np.min(rms[i : i + need])) >= body_thr and bool(np.all(voiced[i : i + need])):
+            body = i
+            break
+    if body is None or float(times[body]) < start + 0.10:
+        return None
+    min_i = int(np.searchsorted(times, start + 0.07, side="left"))
+    max_i = body - max(2, int(round(0.03 / max(dt, 1e-3))))
+    if max_i <= min_i:
+        return None
+    trough_thr = vpeak * 0.32
+    best: int | None = None
+    for i in range(min_i, max_i):
+        if float(rms[i]) > trough_thr:
+            continue
+        wing = max(2, int(round(0.02 / max(dt, 1e-3))))
+        left = max(0, i - wing)
+        right = min(len(rms), i + wing + 1)
+        if float(rms[i]) > float(np.min(rms[left:right])) + peak * 0.02:
+            continue
+        # Compare with the hump immediately before this frame. A longer
+        # window still sees the inhale from inside the consonant and treats
+        # the consonant as the valley.
+        look = max(2, int(round(0.04 / max(dt, 1e-3))))
+        left_peak = float(np.max(rms[max(0, i - look) : i])) if i > 0 else 0.0
+        if left_peak < 1e-5 or float(rms[i]) > left_peak * 0.55:
+            continue
+        pre = rms[:i]
+        hump = float(np.max(pre))
+        if hump < max(vpeak * 0.10, peak * 0.08):
+            continue
+        if float(rms[i]) > hump * 0.62:
+            continue
+        hot = pre >= hump * 0.45
+        if float(np.count_nonzero(hot)) * dt < 0.08:
+            continue
+        if float(np.median(zcr[:i][hot])) < 0.10:
+            continue
+        best = i
+    if best is None:
+        return None
+    # Stay under a quiet initial fricative so [ɸ] is not left in the gap.
+    quiet = max(float(rms[best]) * 1.35, vpeak * 0.05)
+    gap_i = best
+    while gap_i > 0 and float(rms[gap_i - 1]) <= quiet:
+        gap_i -= 1
+    rise_i = best
+    while rise_i < body and float(rms[rise_i]) <= quiet:
+        rise_i += 1
+    if (float(times[rise_i]) - float(times[gap_i])) < 0.02:
+        return None
+    breath_end = float(times[gap_i])
+    speech_start = float(times[min(rise_i, len(times) - 1)])
+    if speech_start <= breath_end + 0.015 or speech_start >= float(times[body]):
+        return None
+    if breath_end <= start + 0.05:
+        return None
+    return breath_end, speech_start
+
+
 def chunk_time_bounds(tokens: list[Token], track: FrameTrack, duration: float) -> list[tuple[float, float]]:
     """Time range for each filename speech chunk, with genuine rests left as gaps."""
     chunks = speech_chunks(tokens)
@@ -135,6 +237,15 @@ def chunk_time_bounds(tokens: list[Token], track: FrameTrack, duration: float) -
         if not moras:
             continue
         lo = 0.0 if i == 0 else islands[i - 1][1]
+        if i == 0:
+            # A leading inhale is its own hump. Keep the consonant after the
+            # valley, and let the onset walk stop at the breath instead of
+            # stepping back into it.
+            split = split_leading_breath(track, islands[i][0], islands[i][1])
+            if split is not None:
+                breath_end, speech_start = split
+                lo = max(lo, breath_end)
+                islands[i] = (max(islands[i][0], speech_start), islands[i][1])
         if moras[0].is_stop:
             islands[i] = (stop_closure_start(track, islands[i][0], lo), islands[i][1])
         elif moras[0].is_weak_fricative:
