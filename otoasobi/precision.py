@@ -15,6 +15,8 @@ from otoasobi.segment import (
     flap_vowel_start,
     labial_onset,
     labial_vowel_start,
+    weak_fricative_onset,
+    weak_fricative_vowel_start,
     label_grouped_mora,
     nasal_onset,
     nasal_vowel_start,
@@ -50,6 +52,8 @@ def _mora_onset(
 ) -> float:
     if mora.is_labial_fricative:
         return labial_onset(track, peak, t_lo, t_hi)
+    if mora.is_weak_fricative:
+        return weak_fricative_onset(track, peak, t_lo, t_hi)
     if mora.is_fricative:
         sel = (track.times >= t_lo) & (track.times <= peak + 0.02)
         if int(np.count_nonzero(sel)) < 3:
@@ -98,6 +102,17 @@ def _refine_cv(
             cut = 0.65 * cut + 0.35 * vowel_peak
         lo = start + 0.035
         hi = min(end - 0.03, start + 0.12)
+        if hi <= lo:
+            return start + (end - start) * 0.4
+        return min(max(cut, lo), hi)
+    if mora.is_weak_fricative:
+        cut = weak_fricative_vowel_start(track, start, end)
+        # A late MMS vowel can confirm the rise. An early one is the miss
+        # this path exists to correct, so it must not pull the cut back.
+        if vowel_peak is not None and cut - 0.03 <= vowel_peak <= cut + 0.04:
+            cut = 0.75 * cut + 0.25 * vowel_peak
+        lo = start + 0.03
+        hi = min(end - 0.025, start + 0.20)
         if hi <= lo:
             return start + (end - start) * 0.4
         return min(max(cut, lo), hi)
@@ -226,7 +241,8 @@ def _mora_bounds_from_align(
         prev_i = speech_indices[k - 1]
         prev_mora = tokens[prev_i]
         mora = tokens[i]
-        if prev_mora.is_vowel_only and mora.is_vowel_only:
+        # 「あお」も「かお」も、間に子音がなければ母音が連続する。
+        if mora.is_vowel_only and prev_mora.vowel is not None:
             span_a = vowel_spans.get(prev_i)
             span_b = vowel_spans.get(i)
             if span_a is not None and span_b is not None:

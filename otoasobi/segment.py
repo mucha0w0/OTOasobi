@@ -132,9 +132,13 @@ def chunk_time_bounds(tokens: list[Token], track: FrameTrack, duration: float) -
         start, end = _bounds_from_mask(track, duration)
         islands = _equal_bounds(start, end, n)
     for i, moras in enumerate(chunks):
-        if moras and moras[0].is_stop:
-            lo = 0.0 if i == 0 else islands[i - 1][1]
+        if not moras:
+            continue
+        lo = 0.0 if i == 0 else islands[i - 1][1]
+        if moras[0].is_stop:
             islands[i] = (stop_closure_start(track, islands[i][0], lo), islands[i][1])
+        elif moras[0].is_weak_fricative:
+            islands[i] = (weak_fricative_onset(track, islands[i][0], lo), islands[i][1])
     for i in range(1, len(islands)):
         prev_end = islands[i - 1][1]
         start, end = islands[i]
@@ -343,6 +347,111 @@ def labial_vowel_start(track: FrameTrack, start: float, end: float) -> float:
     return min(max(cut, lo), hi_cut)
 
 
+def weak_fricative_onset(track: FrameTrack, edge: float, t_lo: float, t_hi: float | None = None) -> float:
+    """Start of [h]/[ç]/[ɸ] when the RMS gate only marked the vowel.
+
+    The consonant is quieter than the vowel and sits against it, so it falls
+    under the speech threshold and the row is analyzed as if it were not there.
+    Walk back from the vowel edge across that quieter region, and stop at
+    silence or at the previous vowel.
+    """
+    edge = float(edge)
+    t_lo = max(0.0, float(t_lo))
+    earliest = max(t_lo, edge - 0.20)
+    if edge <= earliest + 0.015:
+        return max(t_lo, edge)
+    far_hi = edge + 0.14
+    if t_hi is not None:
+        far_hi = min(far_hi, float(t_hi))
+    near = (track.times >= edge) & (track.times <= edge + 0.04)
+    far = (track.times >= edge + 0.06) & (track.times <= far_hi)
+    if int(np.count_nonzero(near)) < 2 and int(np.count_nonzero(far)) < 2:
+        return max(t_lo, edge)
+    levels = []
+    if np.any(near):
+        levels.append(float(np.median(track.rms[near])))
+    if np.any(far):
+        levels.append(float(np.median(track.rms[far])))
+    vowel = max(levels) if levels else 0.0
+    if vowel < 1e-5:
+        return max(t_lo, edge)
+    # A low percentile stays in the pad. Percentile 8 often sits inside [h]
+    # itself, and a threshold taken from there blocks the walk on the first
+    # frame.
+    floor = float(np.percentile(track.rms, 3))
+    thr = max(floor * 2.0, vowel * 0.15, 1e-4)
+    cap = vowel * 0.72
+    if cap <= thr:
+        return max(t_lo, edge)
+    sel = (track.times >= earliest) & (track.times <= edge + 0.01)
+    times = track.times[sel]
+    rms = track.rms[sel]
+    if len(times) < 2:
+        return max(t_lo, edge)
+    i = int(np.argmin(np.abs(times - edge)))
+    while i > 0 and thr < float(rms[i - 1]) < cap:
+        i -= 1
+    while i < len(times) - 1 and float(rms[i]) <= thr and float(times[i]) < edge:
+        i += 1
+    return max(t_lo, min(edge, float(times[i])))
+
+
+def weak_fricative_vowel_start(track: FrameTrack, start: float, end: float) -> float:
+    """Vowel onset after は行 / ふ行.
+
+    [h], [ç], and [ɸ] do not put their energy above 3.5 kHz, so a high/low
+    ratio cut treats the first frame as the vowel. The consonant is the
+    quieter, noisier stretch before the level rises into the vowel.
+    """
+    span = end - start
+    if span < 0.05:
+        return start + span * 0.45
+    hi = min(end - 0.025, start + 0.20)
+    lo = start + 0.03
+    if hi <= lo + 0.015:
+        return start + min(0.05, span * 0.4)
+    sel = (track.times >= start) & (track.times <= hi)
+    times = track.times[sel]
+    if len(times) < 4:
+        return start + min(0.06, span * 0.4)
+    kernel = np.ones(3) / 3.0
+    rms = np.convolve(track.rms[sel], kernel, mode="same")
+    zcr = np.convolve(track.zcr[sel], kernel, mode="same")
+    peak = float(np.max(rms)) + 1e-8
+    zpeak = float(np.max(zcr)) + 1e-8
+    best_i: int | None = None
+    best = -1.0
+    for i in range(1, len(times) - 2):
+        if float(times[i]) < lo:
+            continue
+        before = float(np.mean(rms[max(0, i - 3) : i]))
+        after = float(np.mean(rms[i : i + 3]))
+        rise = (after - before) / peak
+        zb = float(np.mean(zcr[max(0, i - 3) : i]))
+        za = float(np.mean(zcr[i : i + 3]))
+        # The vowel is louder. A drop into a following gap is not the boundary,
+        # and entering the fricative from silence raises the zero-crossing rate.
+        if rise < 0.08:
+            continue
+        if za > zb * 1.15 and za > zb + 0.01:
+            continue
+        zdrop = max(0.0, (zb - za) / zpeak)
+        score = max(rise, 0.0) + 0.55 * zdrop
+        if score > best:
+            best = score
+            best_i = i
+    head = float(np.median(rms[: max(2, min(3, len(rms)))]))
+    tail = float(np.median(rms[max(0, len(rms) // 3) :])) + 1e-8
+    if best_i is None or best < 0.12 or (head > 0.75 * tail and best < 0.2):
+        cut = start + min(0.045, span * 0.35)
+    else:
+        cut = float(times[best_i])
+    hi_cut = min(end - 0.025, start + 0.20)
+    if hi_cut <= lo:
+        return start + span * 0.4
+    return min(max(cut, lo), hi_cut)
+
+
 def flap_vowel_start(track: FrameTrack, start: float, end: float) -> float:
     """Vowel onset just after the short flap release."""
     span = end - start
@@ -381,6 +490,35 @@ def _flap_onsets(track: FrameTrack, start: float, end: float, count: int) -> lis
     onsets = [flap_onset(track, peak, start if i == 0 else peaks[i - 1], end) for i, peak in enumerate(peaks)]
     onsets[0] = start
     return onsets
+
+
+def _weak_fricative_onsets(track: FrameTrack, start: float, end: float, count: int) -> list[float] | None:
+    """Mora onsets for a は行 / ふ行 run: each consonant is a drop into quieter noise."""
+    if count <= 0:
+        return []
+    if count == 1:
+        return [start]
+    sel = (track.times >= start) & (track.times <= end)
+    if int(np.count_nonzero(sel)) < count * 4:
+        return None
+    times = track.times[sel]
+    if len(times) < 6:
+        return None
+    rms = np.convolve(track.rms[sel], np.ones(3) / 3.0, mode="same")
+    zcr = np.convolve(track.zcr[sel], np.ones(3) / 3.0, mode="same")
+    drop = np.maximum(0.0, -np.diff(rms))
+    zrise = np.maximum(0.0, np.diff(zcr))
+    score = drop / (float(np.max(drop)) + 1e-8) + 0.45 * zrise / (float(np.max(zrise)) + 1e-8)
+    at = times[1:]
+    score = score.copy()
+    score[at < start + 0.08] = 0.0
+    score[at > end - 0.06] = 0.0
+    if float(np.max(score)) < 0.35:
+        return None
+    peaks = _spaced_peaks(at, score, count - 1, min_dt=0.12)
+    if peaks is None:
+        return None
+    return [start, *peaks]
 
 
 def _labial_onsets(track: FrameTrack, start: float, end: float, count: int) -> list[float] | None:
@@ -776,6 +914,10 @@ def _mora_bounds(track: FrameTrack, moras: list[Token], start: float, end: float
         onsets = _labial_onsets(track, start, end, n)
         if onsets is not None:
             return _onsets_to_bounds(onsets, start, end)
+    if all(m.is_weak_fricative and m.needs_cv_split for m in moras):
+        onsets = _weak_fricative_onsets(track, start, end, n)
+        if onsets is not None:
+            return _onsets_to_bounds(onsets, start, end)
     if all(m.is_fricative and m.needs_cv_split for m in moras):
         onsets = _fricative_onsets(track, start, end, n)
         if onsets is not None:
@@ -795,13 +937,58 @@ def _mora_bounds(track: FrameTrack, moras: list[Token], start: float, end: float
     if all(m.is_vowel_only for m in moras):
         onsets = vowel_mora_onsets(track, start, end, [m.vowel for m in moras])
         return _onsets_to_bounds(onsets, start, end)
-    return _equal_bounds(start, end, n)
+    return _refine_vowel_sequences(track, moras, _equal_bounds(start, end, n))
+
+
+def _refine_vowel_sequences(
+    track: FrameTrack,
+    moras: list[Token],
+    bounds: list[tuple[float, float]],
+) -> list[tuple[float, float]]:
+    """Move a mora boundary when the next mora continues the previous vowel.
+
+    「かお」 keeps the consonant onset, then places お where the mel envelope
+    changes. A consonant between the vowels, as in 「おか」, is left alone.
+    """
+    if len(bounds) != len(moras):
+        return bounds
+    bounds = list(bounds)
+    for i in range(1, len(moras)):
+        prev = moras[i - 1]
+        mora = moras[i]
+        if not mora.is_vowel_only or prev.vowel is None:
+            continue
+        a0, a1 = bounds[i - 1]
+        b0, b1 = bounds[i]
+        if prev.is_vowel_only:
+            center_a = 0.5 * (a0 + a1)
+        else:
+            center_a = a0 + 0.65 * (a1 - a0)
+        center_b = b0 + 0.55 * (b1 - b0)
+        if center_b <= center_a:
+            continue
+        onset = refine_vowel_hiatus(
+            track,
+            b0,
+            center_a,
+            center_b,
+            prev.vowel == mora.vowel,
+            None,
+        )
+        onset = min(max(onset, a0 + 0.04), b1 - 0.04)
+        if onset <= a0 + 0.02 or onset >= b1 - 0.02:
+            continue
+        bounds[i - 1] = (a0, onset)
+        bounds[i] = (onset, b1)
+    return bounds
 
 
 def _cv_cut(track: FrameTrack, mora: Token, start: float, end: float) -> float:
     if end - start < 0.04:
         return start + (end - start) * 0.35
-    if mora.is_fricative:
+    if mora.is_weak_fricative:
+        cut = weak_fricative_vowel_start(track, start, end)
+    elif mora.is_fricative:
         sel = (track.times >= start) & (track.times <= end)
         if not np.any(sel):
             return start + (end - start) * 0.3

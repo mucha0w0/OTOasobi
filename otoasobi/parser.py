@@ -207,7 +207,13 @@ _EXTRAS = {
 for _text, (_c, _v) in _EXTRAS.items():
     _add_extra(_text, _c, _v)
 
-FRICATIVE = {"s", "sh", "h", "hy", "f", "fy", "z", "j", "ts", "ch"}
+# Sibilants. The CV cut is the drop in energy above 3.5 kHz.
+SIBILANT = {"s", "sh", "z", "j", "ts", "ch"}
+# [h]/[ç] (はひへほ・ひゃ行) and [ɸ] (ふ・ふゃ行). That high band is weak or
+# missing, and the consonant is often quieter than the vowel, so the sibilant
+# ratio test marks one frame or finds no island and skips the row.
+WEAK_FRICATIVE = {"h", "hy", "f", "fy"}
+FRICATIVE = SIBILANT | WEAK_FRICATIVE
 # Japanese ヴ is a voiced labial [β]. Its boundary is the rise into the vowel.
 LABIAL_FRICATIVE = {"v", "vy"}
 STOP = {"k", "t", "p", "b", "d", "g", "ky", "gy", "py", "by", "ty", "dy", "kw", "gw"}
@@ -312,7 +318,11 @@ class Token:
 
     @property
     def is_fricative(self) -> bool:
-        return self.consonant in FRICATIVE
+        return self.consonant in SIBILANT
+
+    @property
+    def is_weak_fricative(self) -> bool:
+        return self.consonant in WEAK_FRICATIVE
 
     @property
     def is_labial_fricative(self) -> bool:
