@@ -1051,15 +1051,26 @@ def _mora_bounds(track: FrameTrack, moras: list[Token], start: float, end: float
     return _refine_vowel_sequences(track, moras, _equal_bounds(start, end, n))
 
 
+def _sonorant_join(prev: Token, mora: Token) -> bool:
+    """True when a vowel or ん meets a vowel, with no consonant between them.
+
+    「かお」「あん」「んあ」 qualify. 「んか」 and 「んな」 do not: the next
+    mora starts with a consonant, so that edge stays a consonant onset.
+    """
+    if mora.is_vowel_only and (prev.vowel is not None or prev.kind == "N"):
+        return True
+    return mora.kind == "N" and prev.vowel is not None
+
+
 def _refine_vowel_sequences(
     track: FrameTrack,
     moras: list[Token],
     bounds: list[tuple[float, float]],
 ) -> list[tuple[float, float]]:
-    """Move a mora boundary when the next mora continues the previous vowel.
+    """Move a mora boundary where a vowel or ん continues without a consonant.
 
-    「かお」 keeps the consonant onset, then places お where the mel envelope
-    changes. A consonant between the vowels, as in 「おか」, is left alone.
+    「かお」 and 「かん」 keep the consonant onset, then place the following
+    vowel or ん where the mel envelope changes. 「んか」 is left alone.
     """
     if len(bounds) != len(moras):
         return bounds
@@ -1067,15 +1078,15 @@ def _refine_vowel_sequences(
     for i in range(1, len(moras)):
         prev = moras[i - 1]
         mora = moras[i]
-        if not mora.is_vowel_only or prev.vowel is None:
+        if not _sonorant_join(prev, mora):
             continue
         a0, a1 = bounds[i - 1]
         b0, b1 = bounds[i]
-        if prev.is_vowel_only:
+        if prev.kind == "N" or prev.is_vowel_only:
             center_a = 0.5 * (a0 + a1)
         else:
             center_a = a0 + 0.65 * (a1 - a0)
-        center_b = b0 + 0.55 * (b1 - b0)
+        center_b = b0 + (0.45 if mora.kind == "N" else 0.55) * (b1 - b0)
         if center_b <= center_a:
             continue
         onset = refine_vowel_hiatus(
@@ -1083,7 +1094,7 @@ def _refine_vowel_sequences(
             b0,
             center_a,
             center_b,
-            prev.vowel == mora.vowel,
+            prev.vowel is not None and prev.vowel == mora.vowel,
             None,
         )
         onset = min(max(onset, a0 + 0.04), b1 - 0.04)

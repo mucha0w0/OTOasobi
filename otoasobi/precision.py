@@ -25,6 +25,7 @@ from otoasobi.segment import (
     refine_vowel_hiatus,
     split_leading_breath,
     vowel_hiatus_onsets,
+    _sonorant_join,
 )
 
 
@@ -166,16 +167,20 @@ def _mora_bounds_from_align(
     peaks: dict[int, float] = {}
     vowel_by_index: dict[int, float | None] = {}
     vowel_spans: dict[int, tuple[float, float]] = {}
+    nucleus_spans: dict[int, tuple[float, float]] = {}
     for i in speech_indices:
         chars = aligned_by_index[i]
-        c_times = [c.time for c in chars if c.role == "C"]
+        c_chars = [c for c in chars if c.role == "C"]
         v_chars = [c for c in chars if c.role == "V"]
         if v_chars:
             vowel_spans[i] = (v_chars[0].time, v_chars[0].end)
             vowel_by_index[i] = v_chars[0].time
+            nucleus_spans[i] = vowel_spans[i]
         else:
             vowel_by_index[i] = None
-        peak = c_times[0] if c_times else (vowel_by_index[i] if vowel_by_index[i] is not None else speech_start)
+            if tokens[i].kind == "N" and c_chars:
+                nucleus_spans[i] = (c_chars[0].time, c_chars[-1].end)
+        peak = c_chars[0].time if c_chars else (vowel_by_index[i] if vowel_by_index[i] is not None else speech_start)
         peaks[i] = peak
 
     moras = [tokens[i] for i in speech_indices]
@@ -242,10 +247,10 @@ def _mora_bounds_from_align(
         prev_i = speech_indices[k - 1]
         prev_mora = tokens[prev_i]
         mora = tokens[i]
-        # 「あお」も「かお」も、間に子音がなければ母音が連続する。
-        if mora.is_vowel_only and prev_mora.vowel is not None:
-            span_a = vowel_spans.get(prev_i)
-            span_b = vowel_spans.get(i)
+        # 「あお」「かお」「あん」「んあ」。子音が間に入る「んか」はここを通らない。
+        if _sonorant_join(prev_mora, mora):
+            span_a = nucleus_spans.get(prev_i)
+            span_b = nucleus_spans.get(i)
             if span_a is not None and span_b is not None:
                 a0, a1 = span_a
                 b0, b1 = span_b
@@ -258,7 +263,7 @@ def _mora_bounds_from_align(
                     b0,
                     0.5 * (a0 + a1),
                     0.5 * (b0 + b1),
-                    prev_mora.vowel == mora.vowel,
+                    prev_mora.vowel is not None and prev_mora.vowel == mora.vowel,
                     formants,
                 )
             else:
