@@ -13,6 +13,8 @@ from otoasobi.segment import (
     chunk_time_bounds,
     flap_onset,
     flap_vowel_start,
+    labial_onset,
+    labial_vowel_start,
     label_grouped_mora,
     nasal_onset,
     nasal_vowel_start,
@@ -46,6 +48,8 @@ def _mora_onset(
     t_lo: float,
     t_hi: float,
 ) -> float:
+    if mora.is_labial_fricative:
+        return labial_onset(track, peak, t_lo, t_hi)
     if mora.is_fricative:
         sel = (track.times >= t_lo) & (track.times <= peak + 0.02)
         if int(np.count_nonzero(sel)) < 3:
@@ -88,6 +92,15 @@ def _refine_cv(
     track: FrameTrack,
     harm: tuple[np.ndarray, np.ndarray] | None,
 ) -> float:
+    if mora.is_labial_fricative:
+        cut = labial_vowel_start(track, start, end)
+        if vowel_peak is not None and start + 0.03 <= vowel_peak <= start + 0.12:
+            cut = 0.65 * cut + 0.35 * vowel_peak
+        lo = start + 0.035
+        hi = min(end - 0.03, start + 0.12)
+        if hi <= lo:
+            return start + (end - start) * 0.4
+        return min(max(cut, lo), hi)
     if mora.is_fricative:
         return _cv_cut(track, mora, start, end)
     if mora.is_stop:

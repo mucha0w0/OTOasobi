@@ -269,6 +269,80 @@ def flap_onset(track: FrameTrack, peak: float, t_lo: float, t_hi: float) -> floa
     return max(t_lo, float(times[i]))
 
 
+def labial_onset(track: FrameTrack, peak: float, t_lo: float, t_hi: float) -> float:
+    """Start of ヴ: the rise out of silence, or the drop into the constriction."""
+    t_lo = max(0.0, t_lo)
+    peak = min(max(peak, t_lo), max(t_lo, t_hi))
+    lo = max(t_lo, peak - 0.10)
+    hi = min(t_hi, max(peak + 0.02, lo + 0.03))
+    sel = (track.times >= lo) & (track.times <= hi)
+    if int(np.count_nonzero(sel)) < 3:
+        return max(t_lo, peak - 0.04)
+    times = track.times[sel]
+    rms = track.rms[sel]
+    if len(times) < 3:
+        return max(t_lo, peak - 0.04)
+    speech_thr = _speech_thr(track)
+    if float(rms[0]) < speech_thr * 1.5:
+        i = 0
+        while i < len(rms) - 1 and float(rms[i]) < speech_thr * 0.45:
+            i += 1
+        return max(t_lo, float(times[i]))
+    i = int(np.argmin(np.diff(rms)))
+    return max(t_lo, float(times[i]))
+
+
+def labial_vowel_start(track: FrameTrack, start: float, end: float) -> float:
+    """Vowel onset after ヴ.
+
+    [β] stays weak and low-frequency, so a high-band ratio cut marks the
+    consonant as a single frame. The vowel is the rise in level, or in
+    centroid when the vowel is more open.
+    """
+    span = end - start
+    if span < 0.05:
+        return start + span * 0.4
+    hi = min(end - 0.03, start + 0.12)
+    if hi <= start + 0.04:
+        return start + span * 0.4
+    sel = (track.times >= start) & (track.times <= hi)
+    if int(np.count_nonzero(sel)) < 4:
+        return min(start + 0.055, end - 0.03)
+    times = track.times[sel]
+    kernel = np.ones(3) / 3.0
+    rms = np.convolve(track.rms[sel], kernel, mode="same")
+    cen = np.convolve(track.centroid[sel], kernel, mode="same")
+    rms_d = np.diff(rms)
+    cen_d = np.diff(cen)
+    rms_scale = float(np.percentile(np.abs(rms_d), 80)) + 1e-8
+    cen_scale = float(np.percentile(np.abs(cen_d), 80)) + 1e-8
+    score = np.maximum(rms_d, 0.0) / rms_scale + 0.5 * np.maximum(cen_d, 0.0) / cen_scale
+    best_i: int | None = None
+    best = 0.0
+    for i, value in enumerate(score):
+        if float(times[i + 1]) < start + 0.03:
+            continue
+        if float(value) > best:
+            best = float(value)
+            best_i = i + 1
+    fallback = start + min(0.055, span * 0.4)
+    if best_i is None:
+        cut = fallback
+    else:
+        rise = float(rms[best_i] - rms[best_i - 1])
+        level = float(np.median(rms)) + 1e-8
+        cen_rise = float(cen[best_i] - cen[best_i - 1])
+        if rise < 0.18 * level and cen_rise < 200.0:
+            cut = fallback
+        else:
+            cut = float(times[best_i])
+    lo = start + 0.035
+    hi_cut = min(end - 0.03, start + 0.11)
+    if hi_cut <= lo:
+        return start + span * 0.4
+    return min(max(cut, lo), hi_cut)
+
+
 def flap_vowel_start(track: FrameTrack, start: float, end: float) -> float:
     """Vowel onset just after the short flap release."""
     span = end - start
@@ -305,6 +379,23 @@ def _flap_onsets(track: FrameTrack, start: float, end: float, count: int) -> lis
     if peaks is None:
         return None
     onsets = [flap_onset(track, peak, start if i == 0 else peaks[i - 1], end) for i, peak in enumerate(peaks)]
+    onsets[0] = start
+    return onsets
+
+
+def _labial_onsets(track: FrameTrack, start: float, end: float, count: int) -> list[float] | None:
+    sel = (track.times >= start) & (track.times <= end)
+    if not np.any(sel):
+        return None
+    times = track.times[sel]
+    rms = track.rms[sel]
+    score = np.zeros(len(rms))
+    if len(rms) >= 3:
+        score[1:-1] = 0.5 * (rms[:-2] + rms[2:]) - rms[1:-1]
+    peaks = _spaced_peaks(times, score, count, min_dt=0.12)
+    if peaks is None:
+        return None
+    onsets = [labial_onset(track, peak, start if i == 0 else peaks[i - 1], end) for i, peak in enumerate(peaks)]
     onsets[0] = start
     return onsets
 
@@ -681,6 +772,10 @@ def _mora_bounds(track: FrameTrack, moras: list[Token], start: float, end: float
         return []
     if n == 1:
         return [(start, end)]
+    if all(m.is_labial_fricative and m.needs_cv_split for m in moras):
+        onsets = _labial_onsets(track, start, end, n)
+        if onsets is not None:
+            return _onsets_to_bounds(onsets, start, end)
     if all(m.is_fricative and m.needs_cv_split for m in moras):
         onsets = _fricative_onsets(track, start, end, n)
         if onsets is not None:
@@ -720,6 +815,8 @@ def _cv_cut(track: FrameTrack, mora: Token, start: float, end: float) -> float:
             cut = float(times_i[int(np.argmax(vowelish))])
         else:
             cut = start + (end - start) * 0.28
+    elif mora.is_labial_fricative:
+        cut = labial_vowel_start(track, start, end)
     elif mora.is_stop:
         cut = stop_vowel_start(track, start, end)
     elif mora.is_nasal:

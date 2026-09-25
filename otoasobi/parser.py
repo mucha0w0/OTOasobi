@@ -207,7 +207,9 @@ _EXTRAS = {
 for _text, (_c, _v) in _EXTRAS.items():
     _add_extra(_text, _c, _v)
 
-FRICATIVE = {"s", "sh", "h", "hy", "f", "fy", "z", "j", "ts", "ch", "v", "vy"}
+FRICATIVE = {"s", "sh", "h", "hy", "f", "fy", "z", "j", "ts", "ch"}
+# Japanese ヴ is a voiced labial [β]. Its boundary is the rise into the vowel.
+LABIAL_FRICATIVE = {"v", "vy"}
 STOP = {"k", "t", "p", "b", "d", "g", "ky", "gy", "py", "by", "ty", "dy", "kw", "gw"}
 NASAL = {"n", "ny", "m", "my"}
 # r/ry are flaps. y (や行) and w (わ行) share the same short-consonant boundary.
@@ -311,6 +313,10 @@ class Token:
     @property
     def is_fricative(self) -> bool:
         return self.consonant in FRICATIVE
+
+    @property
+    def is_labial_fricative(self) -> bool:
+        return self.consonant in LABIAL_FRICATIVE
 
     @property
     def is_stop(self) -> bool:
