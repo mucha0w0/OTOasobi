@@ -11,6 +11,8 @@ from otoasobi.segment import (
     _clean,
     _cv_cut,
     chunk_time_bounds,
+    flap_onset,
+    flap_vowel_start,
     nasal_onset,
     nasal_vowel_start,
     stop_closure_start,
@@ -61,6 +63,8 @@ def _mora_onset(
         return stop_closure_start(track, peak, t_lo)
     if mora.is_nasal:
         return nasal_onset(track, peak, t_lo, t_hi)
+    if mora.is_flap:
+        return flap_onset(track, peak, t_lo, t_hi)
     sel = (track.times >= t_lo) & (track.times <= peak + 0.02)
     if int(np.count_nonzero(sel)) < 3:
         return max(t_lo, peak - 0.04)
@@ -104,6 +108,11 @@ def _refine_cv(
         else:
             cut = nasal_vowel_start(track, start, end)
         return min(max(cut, start + 0.02), end - 0.02)
+    if mora.is_flap:
+        cut = flap_vowel_start(track, start, end)
+        if c_peak is not None:
+            cut = max(cut, c_peak + 0.012)
+        return min(max(cut, start + 0.018), min(end - 0.02, start + 0.06))
     if vowel_peak is not None:
         return min(max(vowel_peak, start + 0.015), end - 0.015)
     return _cv_cut(track, mora, start, end)

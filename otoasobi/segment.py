@@ -246,6 +246,69 @@ def stop_vowel_start(track: FrameTrack, start: float, end: float) -> float:
     return min(max(cut, start + 0.02), end - 0.015)
 
 
+def flap_onset(track: FrameTrack, peak: float, t_lo: float, t_hi: float) -> float:
+    """Start of a flap: the drop into the tap, or the rise out of silence when initial."""
+    t_lo = max(0.0, t_lo)
+    peak = min(max(peak, t_lo), max(t_lo, t_hi))
+    lo = max(t_lo, peak - 0.06)
+    hi = min(t_hi, max(peak + 0.02, lo + 0.03))
+    sel = (track.times >= lo) & (track.times <= hi)
+    if int(np.count_nonzero(sel)) < 3:
+        return max(t_lo, peak - 0.02)
+    times = track.times[sel]
+    rms = track.rms[sel]
+    if len(times) < 3:
+        return max(t_lo, peak - 0.02)
+    speech_thr = _speech_thr(track)
+    if float(rms[0]) < speech_thr * 1.5:
+        i = 0
+        while i < len(rms) - 1 and float(rms[i]) < speech_thr * 0.45:
+            i += 1
+        return max(t_lo, float(times[i]))
+    i = int(np.argmin(np.diff(rms)))
+    return max(t_lo, float(times[i]))
+
+
+def flap_vowel_start(track: FrameTrack, start: float, end: float) -> float:
+    """Vowel onset just after the short flap release."""
+    span = end - start
+    if span < 0.04:
+        return start + span * 0.35
+    hi = min(end - 0.015, start + 0.09)
+    sel = (track.times >= start) & (track.times <= hi)
+    if int(np.count_nonzero(sel)) < 3:
+        cut = start + min(0.03, span * 0.3)
+        return min(max(cut, start + 0.018), end - 0.015)
+    times = track.times[sel]
+    rms = track.rms[sel]
+    search_end = max(1, len(times) - 1)
+    dip_i = int(np.argmin(rms[:search_end]))
+    tail = rms[dip_i:]
+    if len(tail) >= 2:
+        cut = float(times[dip_i + int(np.argmax(np.diff(tail))) + 1])
+    else:
+        cut = float(times[min(dip_i + 1, len(times) - 1)])
+    cut = min(max(cut, start + 0.018), start + 0.06)
+    return min(cut, end - 0.015)
+
+
+def _flap_onsets(track: FrameTrack, start: float, end: float, count: int) -> list[float] | None:
+    sel = (track.times >= start) & (track.times <= end)
+    if not np.any(sel):
+        return None
+    times = track.times[sel]
+    rms = track.rms[sel]
+    score = np.zeros(len(rms))
+    if len(rms) >= 3:
+        score[1:-1] = 0.5 * (rms[:-2] + rms[2:]) - rms[1:-1]
+    peaks = _spaced_peaks(times, score, count, min_dt=0.10)
+    if peaks is None:
+        return None
+    onsets = [flap_onset(track, peak, start if i == 0 else peaks[i - 1], end) for i, peak in enumerate(peaks)]
+    onsets[0] = start
+    return onsets
+
+
 def nasal_vowel_start(track: FrameTrack, start: float, end: float) -> float:
     sel = (track.times >= start) & (track.times <= end)
     if not np.any(sel):
@@ -552,6 +615,10 @@ def _mora_bounds(track: FrameTrack, moras: list[Token], start: float, end: float
         onsets = _nasal_onsets(track, start, end, n)
         if onsets is not None:
             return _onsets_to_bounds(onsets, start, end)
+    if all(m.is_flap and m.needs_cv_split for m in moras):
+        onsets = _flap_onsets(track, start, end, n)
+        if onsets is not None:
+            return _onsets_to_bounds(onsets, start, end)
     if all(m.is_vowel_only for m in moras):
         onsets = vowel_mora_onsets(track, start, end, [m.vowel for m in moras])
         return _onsets_to_bounds(onsets, start, end)
@@ -579,6 +646,8 @@ def _cv_cut(track: FrameTrack, mora: Token, start: float, end: float) -> float:
         cut = stop_vowel_start(track, start, end)
     elif mora.is_nasal:
         cut = nasal_vowel_start(track, start, end)
+    elif mora.is_flap:
+        cut = flap_vowel_start(track, start, end)
     else:
         sel = (track.times >= start) & (track.times <= end)
         if not np.any(sel):

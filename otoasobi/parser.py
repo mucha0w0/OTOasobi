@@ -195,6 +195,7 @@ for _text, (_c, _v) in _EXTRAS.items():
 FRICATIVE = {"s", "sh", "h", "hy", "f", "fy", "z", "j", "ts", "ch", "v", "vy"}
 STOP = {"k", "t", "p", "b", "d", "g", "ky", "gy", "py", "by", "ty", "dy", "kw", "gw"}
 NASAL = {"n", "ny", "m", "my"}
+FLAP = {"r", "ry"}
 
 
 def _hira(text: str) -> str:
@@ -279,6 +280,10 @@ class Token:
     @property
     def is_nasal(self) -> bool:
         return self.kind == "N" or self.consonant in NASAL
+
+    @property
+    def is_flap(self) -> bool:
+        return self.consonant in FLAP
 
     @property
     def is_vowel_only(self) -> bool:
