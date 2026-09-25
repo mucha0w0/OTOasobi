@@ -125,12 +125,25 @@ _YOON = {
 }
 
 
+def _script_forms(text: str) -> set[str]:
+    """Hiragana, katakana, and mixed-script spellings of one mora.
+
+    「ヴ」is the one katakana that shows up inside an otherwise hiragana
+    filename, so 「ヴぃ」 must be a table key and not only a folded lookup.
+    """
+    hira = text.translate(_KATA2HIRA)
+    kata = hira.translate(_HIRA2KATA)
+    forms = {hira, kata}
+    if len(hira) == len(kata) == 2:
+        forms.add(kata[0] + hira[1])
+        forms.add(hira[0] + kata[1])
+    return {form for form in forms if form}
+
+
 def _add_extra(text: str, cons: str, vow: str) -> None:
     entry = ("CV", cons, vow)
-    MORA_TABLE[text] = entry
-    kata = text.translate(_HIRA2KATA)
-    if kata != text:
-        MORA_TABLE[kata] = entry
+    for form in _script_forms(text):
+        MORA_TABLE[form] = entry
 
 
 for _text, (_c, _v) in _YOON.items():
@@ -187,7 +200,9 @@ _EXTRAS = {
     "ゔぃ": ("v", "i"),
     "ゔぇ": ("v", "e"),
     "ゔぉ": ("v", "o"),
+    "ゔゃ": ("vy", "a"),
     "ゔゅ": ("vy", "u"),
+    "ゔょ": ("vy", "o"),
 }
 for _text, (_c, _v) in _EXTRAS.items():
     _add_extra(_text, _c, _v)
@@ -201,6 +216,29 @@ FLAP = {"r", "ry", "y", "w"}
 
 def _hira(text: str) -> str:
     return text.translate(_KATA2HIRA)
+
+
+def _normalize_stem(text: str) -> str:
+    """Fold the spellings of ヴ that filenames actually use.
+
+    Halfwidth ``ｳﾞ`` and the spacing dakuten ``ウ゛`` / ``う゛`` are not
+    precomposed ヴ / ゔ. NFKC turns the spacing mark into a space plus a
+    combiner, so attach that mark before folding.
+    """
+    widened: list[str] = []
+    for ch in text:
+        if 0xFF61 <= ord(ch) <= 0xFF9F:
+            widened.append(unicodedata.normalize("NFKC", ch))
+        else:
+            widened.append(ch)
+    out: list[str] = []
+    for ch in widened:
+        if ch in "\u309b\u309c" and out and 0x3040 <= ord(out[-1]) <= 0x30FF:
+            mark = "\u3099" if ch == "\u309b" else "\u309a"
+            out[-1] = unicodedata.normalize("NFC", out[-1] + mark)
+        else:
+            out.append(ch)
+    return unicodedata.normalize("NFC", "".join(out))
 
 
 def _lookup_mora(text: str) -> tuple[str, str | None, str | None] | None:
@@ -305,7 +343,7 @@ def stem_from_path(path: str) -> str:
 def parse_stem(stem: str) -> list[Token]:
     if not stem:
         raise FilenameError("ファイル名が空です")
-    stem = unicodedata.normalize("NFC", stem)
+    stem = _normalize_stem(stem)
     tokens: list[Token] = []
     i = 0
     n = len(stem)
