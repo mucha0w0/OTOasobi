@@ -76,19 +76,46 @@ def analyze_wav(path: str | Path) -> Analysis:
     )
 
 
+# a i u e o, plus ん (N / M). っ (cl), 無音, and 息 are not onsets.
+_VOWEL_ONSET = frozenset({"a", "i", "u", "e", "o", "N", "M"})
+
+
 def spans_to_txt(spans: list[Span], *, include_token: bool = True) -> str:
+    """Full span log: start, end, phoneme, kana."""
     lines = []
     for span in spans:
         row = f"{span.start:.6f}\t{span.end:.6f}\t{span.label}"
         if include_token:
             row += f"\t{span.token}"
         lines.append(row)
-    return "\n".join(lines) + "\n"
+    return "\n".join(lines) + ("\n" if lines else "")
 
 
-def write_label_txt(path: str | Path, spans: list[Span], *, include_token: bool = True) -> Path:
+def vowel_onset_rows(spans: list[Span]) -> list[tuple[str, float]]:
+    """Kana label and the start time of each vowel, N, or M."""
+    rows: list[tuple[str, float]] = []
+    for span in spans:
+        if span.label not in _VOWEL_ONSET:
+            continue
+        rows.append((span.token or span.label, span.start))
+    return rows
+
+
+def onsets_to_txt(spans: list[Span]) -> str:
+    """User-facing lines: kana, then the vowel-onset time in seconds."""
+    lines = [f"{label}\t{start:.6f}" for label, start in vowel_onset_rows(spans)]
+    return "\n".join(lines) + ("\n" if lines else "")
+
+
+def write_label_txt(path: str | Path, spans: list[Span]) -> Path:
     path = Path(path)
-    path.write_text(spans_to_txt(spans, include_token=include_token), encoding="utf-8")
+    path.write_text(onsets_to_txt(spans), encoding="utf-8")
+    return path
+
+
+def write_log_txt(path: str | Path, spans: list[Span]) -> Path:
+    path = Path(path)
+    path.write_text(spans_to_txt(spans), encoding="utf-8")
     return path
 
 
@@ -97,7 +124,13 @@ def default_txt_path(wav_path: str | Path) -> Path:
     return wav_path.with_suffix(".txt")
 
 
+def default_log_path(wav_path: str | Path) -> Path:
+    wav_path = Path(wav_path)
+    return wav_path.with_suffix(".log.txt")
+
+
 BATCH_TXT_NAME = "OTOasibi_out.txt"
+BATCH_LOG_NAME = "OTOasibi_log.txt"
 
 
 def list_wavs(folder: str | Path) -> list[Path]:
@@ -106,12 +139,20 @@ def list_wavs(folder: str | Path) -> list[Path]:
     return sorted(wavs, key=lambda path: path.name.casefold())
 
 
-def format_batch_txt(entries: list[tuple[str, list[Span]]]) -> str:
+def _format_batch(entries: list[tuple[str, list[Span]]], to_text: Callable[[list[Span]], str]) -> str:
     blocks = []
     for name, spans in entries:
-        body = spans_to_txt(spans).rstrip("\n")
-        blocks.append(f"[{name}]\n{body}")
+        body = to_text(spans).rstrip("\n")
+        blocks.append(f"[{name}]\n{body}" if body else f"[{name}]")
     return "\n\n".join(blocks) + "\n"
+
+
+def format_batch_txt(entries: list[tuple[str, list[Span]]]) -> str:
+    return _format_batch(entries, onsets_to_txt)
+
+
+def format_batch_log(entries: list[tuple[str, list[Span]]]) -> str:
+    return _format_batch(entries, spans_to_txt)
 
 
 @dataclass
@@ -152,5 +193,7 @@ def analyze_folder(
     if not entries:
         return FolderResult(txt=None, skipped=skipped)
     out = folder / BATCH_TXT_NAME
+    log = folder / BATCH_LOG_NAME
     out.write_text(format_batch_txt(entries), encoding="utf-8")
+    log.write_text(format_batch_log(entries), encoding="utf-8")
     return FolderResult(txt=out, skipped=skipped)

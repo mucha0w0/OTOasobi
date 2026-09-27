@@ -5,6 +5,7 @@
 途中: {"id": 1, "event": "progress", "done": 1, "total": 4}
 応答: {"id": 1, "ok": true, "txt": "C:/音声フォルダ/OTOasibi_out.txt", "notice": "..."}
       {"id": 1, "ok": false, "error": "..."}
+全区間のログは同じフォルダの OTOasibi_log.txt に書く。応答の txt は母音始まりのファイル。
 """
 
 from __future__ import annotations

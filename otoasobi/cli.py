@@ -1,7 +1,14 @@
 import sys
 from pathlib import Path
 
-from otoasobi.analyze import analyze_wav, default_txt_path, spans_to_txt, write_label_txt
+from otoasobi.analyze import (
+    analyze_wav,
+    default_log_path,
+    default_txt_path,
+    onsets_to_txt,
+    write_label_txt,
+    write_log_txt,
+)
 
 
 def main() -> None:
@@ -11,11 +18,14 @@ def main() -> None:
     path = Path(sys.argv[1])
     analysis = analyze_wav(path)
     out = default_txt_path(path)
+    log = default_log_path(path)
     write_label_txt(out, analysis.spans)
+    write_log_txt(log, analysis.spans)
     sys.stdout.reconfigure(encoding="utf-8")
-    print(spans_to_txt(analysis.spans), end="")
+    print(onsets_to_txt(analysis.spans), end="")
     print(f"engine {analysis.engine}", file=sys.stderr)
     print(f"wrote {out}", file=sys.stderr)
+    print(f"wrote {log}", file=sys.stderr)
 
 
 if __name__ == "__main__":

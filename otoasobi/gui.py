@@ -27,7 +27,14 @@ from PySide6.QtWidgets import (
 import numpy as np
 import pyqtgraph as pg
 
-from otoasobi.analyze import Analysis, analyze_wav, default_txt_path, write_label_txt
+from otoasobi.analyze import (
+    Analysis,
+    analyze_wav,
+    default_log_path,
+    default_txt_path,
+    write_label_txt,
+    write_log_txt,
+)
 from otoasobi.features import mel_spectrogram
 from otoasobi.parser import FilenameError
 from otoasobi.phones import KIND_RGB, phone_kind
@@ -482,7 +489,9 @@ class MainWindow(QMainWindow):
         self.mel.set_analysis(analysis)
         self._fill_table(analysis.spans)
         txt = default_txt_path(analysis.path)
+        log = default_log_path(analysis.path)
         write_label_txt(txt, analysis.spans)
+        write_log_txt(log, analysis.spans)
         self.statusBar().showMessage(self._summary(analysis) + f"  →  {txt.name} に保存しました")
 
     def _on_analyze_failed(self, title: str, message: str) -> None:
@@ -506,6 +515,8 @@ class MainWindow(QMainWindow):
         if not path:
             return
         write_label_txt(path, self.analysis.spans)
+        log = Path(path).with_suffix(".log.txt")
+        write_log_txt(log, self.analysis.spans)
         self.statusBar().showMessage(f"保存しました: {path}")
 
     def toggle_play(self) -> None:
