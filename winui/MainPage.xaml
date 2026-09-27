@@ -48,6 +48,21 @@
                     Content="txtファイルを開く"
                     HorizontalAlignment="Center"
                     Click="OpenTxt_Click" />
+                <ScrollViewer
+                    x:Name="SkipNoticeHost"
+                    MaxWidth="560"
+                    MaxHeight="240"
+                    HorizontalAlignment="Center"
+                    HorizontalScrollBarVisibility="Disabled"
+                    VerticalScrollBarVisibility="Auto"
+                    Visibility="Collapsed">
+                    <TextBlock
+                        x:Name="SkipNotice"
+                        FontSize="16"
+                        TextAlignment="Center"
+                        TextWrapping="Wrap"
+                        HorizontalAlignment="Center" />
+                </ScrollViewer>
             </StackPanel>
 
             <TextBlock

@@ -78,7 +78,8 @@ sealed class AnalysisClient : IDisposable
         var ok = root.TryGetProperty("ok", out var okValue) && okValue.GetBoolean();
         string? txt = root.TryGetProperty("txt", out var txtValue) ? txtValue.GetString() : null;
         string? error = root.TryGetProperty("error", out var errorValue) ? errorValue.GetString() : null;
-        return new AnalyzeResult(ok, txt, error);
+        string? notice = root.TryGetProperty("notice", out var noticeValue) ? noticeValue.GetString() : null;
+        return new AnalyzeResult(ok, txt, error, notice);
     }
 
     public void Dispose()
@@ -188,4 +189,4 @@ sealed class AnalysisClient : IDisposable
     }
 }
 
-sealed record AnalyzeResult(bool Ok, string? Txt, string? Error);
+sealed record AnalyzeResult(bool Ok, string? Txt, string? Error, string? Notice);

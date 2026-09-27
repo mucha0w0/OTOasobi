@@ -94,7 +94,7 @@ public sealed partial class MainPage : Page
             }
 
             _txtPath = result.Txt;
-            ShowDone();
+            ShowDone(result.Notice);
         }
         catch (Exception ex)
         {
@@ -124,12 +124,23 @@ public sealed partial class MainPage : Page
         StatusProgress.Value = done;
     }
 
-    void ShowDone()
+    void ShowDone(string? notice)
     {
         IdleView.Visibility = Visibility.Collapsed;
         BusyView.Visibility = Visibility.Collapsed;
         ErrorView.Visibility = Visibility.Collapsed;
         StatusBar.Visibility = Visibility.Collapsed;
+        if (string.IsNullOrWhiteSpace(notice))
+        {
+            SkipNotice.Text = "";
+            SkipNoticeHost.Visibility = Visibility.Collapsed;
+        }
+        else
+        {
+            SkipNotice.Text = notice;
+            SkipNoticeHost.Visibility = Visibility.Visible;
+        }
+
         DoneView.Visibility = Visibility.Visible;
     }
 

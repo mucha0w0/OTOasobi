@@ -3,7 +3,7 @@
 1行に1オブジェクト。
 要求: {"id": 1, "cmd": "analyze", "path": "C:/音声フォルダ"}
 途中: {"id": 1, "event": "progress", "done": 1, "total": 4}
-応答: {"id": 1, "ok": true, "txt": "C:/音声フォルダ/OTOasibi_out.txt"}
+応答: {"id": 1, "ok": true, "txt": "C:/音声フォルダ/OTOasibi_out.txt", "notice": "..."}
       {"id": 1, "ok": false, "error": "..."}
 """
 
@@ -13,7 +13,7 @@ import json
 import sys
 import traceback
 
-from otoasobi.analyze import analyze_folder
+from otoasobi.analyze import analyze_folder, skipped_notice
 from otoasobi.parser import FilenameError
 
 
@@ -22,11 +22,17 @@ def _respond(payload: dict) -> None:
     sys.stdout.flush()
 
 
-def _analyze(request_id: object, path: str) -> str:
+def _analyze(request_id: object, path: str) -> dict:
     def on_progress(done: int, total: int) -> None:
         _respond({"id": request_id, "event": "progress", "done": done, "total": total})
 
-    return str(analyze_folder(path, on_progress=on_progress))
+    result = analyze_folder(path, on_progress=on_progress)
+    if result.txt is None:
+        return {"id": request_id, "ok": False, "error": skipped_notice(result.skipped)}
+    payload: dict = {"id": request_id, "ok": True, "txt": str(result.txt)}
+    if result.skipped:
+        payload["notice"] = skipped_notice(result.skipped)
+    return payload
 
 
 def main() -> None:
@@ -48,14 +54,14 @@ def main() -> None:
             path = request.get("path")
             if not isinstance(path, str) or not path:
                 raise RuntimeError("path がありません")
-            txt = _analyze(request_id, path)
+            payload = _analyze(request_id, path)
         except FilenameError as exc:
             _respond({"id": request_id, "ok": False, "error": str(exc)})
         except Exception as exc:
             traceback.print_exc()
             _respond({"id": request_id, "ok": False, "error": str(exc)})
         else:
-            _respond({"id": request_id, "ok": True, "txt": txt})
+            _respond(payload)
 
 
 if __name__ == "__main__":

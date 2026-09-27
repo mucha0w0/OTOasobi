@@ -9,7 +9,7 @@ import soundfile as sf
 
 from otoasobi.breath import apply_leading_breath
 from otoasobi.features import compute_features
-from otoasobi.parser import FilenameError, Token, parse_stem, stem_from_path
+from otoasobi.parser import Token, parse_stem, stem_from_path
 from otoasobi.segment import Span, segment_tokens
 
 
@@ -114,10 +114,21 @@ def format_batch_txt(entries: list[tuple[str, list[Span]]]) -> str:
     return "\n\n".join(blocks) + "\n"
 
 
+@dataclass
+class FolderResult:
+    txt: Path | None
+    skipped: list[str]
+
+
+def skipped_notice(skipped: list[str]) -> str:
+    names = "\n".join(skipped)
+    return f"{len(skipped)}個の解析できないファイルをスキップしました。スキップしたファイル↓\n{names}"
+
+
 def analyze_folder(
     folder: str | Path,
     on_progress: Callable[[int, int], None] | None = None,
-) -> Path:
+) -> FolderResult:
     folder = Path(folder)
     if not folder.is_dir():
         raise RuntimeError("フォルダが見つかりません。")
@@ -128,16 +139,18 @@ def analyze_folder(
     if on_progress is not None:
         on_progress(0, total)
     entries: list[tuple[str, list[Span]]] = []
+    skipped: list[str] = []
     for index, wav in enumerate(wavs, start=1):
         try:
             analysis = analyze_wav(wav)
-        except FilenameError as exc:
-            raise FilenameError(f"{wav.name}: {exc}") from exc
-        except Exception as exc:
-            raise RuntimeError(f"{wav.name}: {exc}") from exc
-        entries.append((wav.name, analysis.spans))
+        except Exception:
+            skipped.append(wav.name)
+        else:
+            entries.append((wav.name, analysis.spans))
         if on_progress is not None:
             on_progress(index, total)
+    if not entries:
+        return FolderResult(txt=None, skipped=skipped)
     out = folder / BATCH_TXT_NAME
     out.write_text(format_batch_txt(entries), encoding="utf-8")
-    return out
+    return FolderResult(txt=out, skipped=skipped)
