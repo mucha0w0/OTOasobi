@@ -1,73 +1,49 @@
-# 音遊びラベル
+# OTOasobi
 
-WAV のファイル名（読み仮名）から音素区間を推定し、ラベルテキストを書き出すツールです。波形とメルスペクトログラムの上に区間を重ねて確認できます。
+オトアソビ。WAV のファイル名（読み仮名）から音素区間を推定し、同じ場所にラベルテキストを書き出す Windows アプリです。
+
+画面は WinUI 3、解析は Python です。
 
 ## できること
 
+- WAV を選ぶか、ウィンドウへドロップして解析する
 - ファイル名をモーラに分解し、子音と母音に分けて時間を割り当てる
 - 先頭の息、休符、無音を区別してラベルにする
-- GUI で区間を確認し、同名の `.txt` を保存する
+- 解析結果を、WAV と同じ場所の同名 `.txt` に保存する
 - 高精度エンジン（MMS 強制アライメントと Praat）があるときはそちらを使い、無いときは音響特徴だけで解析する
 
 ## 必要環境
 
 - Windows
-- Python 3.12（exe のビルドも 3.12 を想定）
+- .NET 10 SDK（画面）
+- Python 3.12（解析）
 
-実行時の依存は `requirements.txt` です。
+解析の依存は `requirements.txt` です。
 
 - numpy
 - soundfile
-- PySide6
-- pyqtgraph
 
-高精度エンジンは任意です。`requirements-precision.txt` の `praat-parselmouth`、`torch`、`torchaudio` が入っているときだけ使います。exe には含めません。
+高精度エンジンは `requirements-precision.txt` の `praat-parselmouth`、`torch`、`torchaudio` です。`.venv` に入っているとき、OTOasobi の解析でも使います。
 
 ## セットアップ
 
 ```powershell
 py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
-```
-
-高精度エンジンも使う場合:
-
-```powershell
 .\.venv\Scripts\python.exe -m pip install -r requirements-precision.txt
 ```
 
+.NET 10 SDK は [ダウンロードページ](https://dotnet.microsoft.com/download) から入れます。入っているかは `dotnet --version` で確認できます。
+
 ## 起動
 
-GUI:
-
 ```powershell
-.\.venv\Scripts\python.exe app.py
+dotnet run --project winui
 ```
 
-WAV を引数に渡すと、起動と同時にそのファイルを解析します。
+起動すると「ファイルを選択またはドラッグ＆ドロップ」と出ます。WAV を選ぶかドロップすると解析が始まり、完了すると同じ場所に `.txt` を保存します。「txtファイルを開く」でそのファイルを開きます。
 
-```powershell
-.\.venv\Scripts\python.exe app.py そせす.wav
-```
-
-ウィンドウへ WAV をドロップしても開けます。
-
-| 操作 | ショートカット |
-| --- | --- |
-| 開く | Ctrl+O |
-| 再生 / 停止 | Space |
-| 保存 | Ctrl+S |
-| 再解析 | F5 |
-
-解析が終わると、WAV と同じ場所に同名の `.txt` を自動で書きます。「保存」から別のパスにも書けます。表の行を選ぶと、波形がその区間へ寄ります。
-
-コマンドラインだけ使う場合:
-
-```powershell
-.\.venv\Scripts\python.exe -m otoasobi.cli そせす.wav
-```
-
-標準出力にラベル、標準エラーに使ったエンジンと保存先を出します。
+ファイル名に使えない文字があるときは、その理由を表示します。
 
 ## ファイル名
 
@@ -107,8 +83,6 @@ WAV を引数に渡すと、起動と同時にそのファイルを解析しま�
 
 音素はローマ字です。母音は `a i u e o`、子音は `s` `sh` `k` `ts` `ch` など、撥音は `N` または `M`、促音は `cl` です。かな列は、その区間が属すモーラの表記です。
 
-画面上の色は次のとおりです。
-
 | 種類 | ラベル |
 | --- | --- |
 | 無音 | `無音` |
@@ -118,39 +92,37 @@ WAV を引数に渡すと、起動と同時にそのファイルを解析しま�
 
 ## 解析エンジン
 
-ステータスバーに、使ったエンジンが出ます。
-
-| 表示 | 内容 |
+| エンジン | 内容 |
 | --- | --- |
 | 高精度 (MMS+Praat) | torchaudio の MMS-FA で文字を合わせ、Praat で発話区間・声帯振動・フォルマントを補正する |
 | 高精度 (MMS) | MMS-FA のみ。Praat が無い、または使えないとき |
-| 音響 | RMS、高域比、ゼロ交差、スペクトル変化だけで区間を切る。exe は常にこちら |
+| 音響 | RMS、高域比、ゼロ交差、スペクトル変化だけで区間を切る |
 
-高精度の読み込みに失敗したときは音響へ戻ります。GUI 起動時に高精度モデルを先に読みます。
+高精度の読み込みに失敗したときは音響へ戻ります。
 
-## exe のビルド
+## 開発用の確認画面
 
-アイコンが無いときは先に作ります。Pillow が必要です。
+`app.py` は解析結果を波形とメルスペクトログラムで見るための開発用画面です。OTOasobi には組み込みません。
 
 ```powershell
-.\.venv\Scripts\python.exe packaging\make_icon.py
-powershell -File scripts\build_exe.ps1
+.\.venv\Scripts\python.exe app.py
+.\.venv\Scripts\python.exe -m otoasobi.cli そせす.wav
 ```
 
-成果物は `dist\OtoasobiLabel\OtoasobiLabel.exe` です。高精度用のパッケージは同梱しません。
+開発用画面の exe は `powershell -File scripts\build_exe.ps1` で、`dist\OtoasobiLabel\OtoasobiLabel.exe` に出力されます。高精度エンジンは同梱しません。
 
 ## 構成
 
 | パス | 役割 |
 | --- | --- |
-| `app.py` | GUI の起動口 |
-| `otoasobi/gui.py` | ウィンドウ、再生、保存 |
-| `otoasobi/cli.py` | `python -m otoasobi.cli` |
-| `otoasobi/parser.py` | ファイル名をモーラへ分解 |
+| `winui/` | OTOasobi の画面（WinUI 3） |
+| `otoasobi/worker.py` | 画面から呼ばれる解析プロセス |
 | `otoasobi/analyze.py` | WAV 読み込みとラベル書き出し |
+| `otoasobi/parser.py` | ファイル名をモーラへ分解 |
 | `otoasobi/segment.py` | 音響エンジンの区間推定 |
 | `otoasobi/precision.py` | MMS と Praat を組み合わせた区間推定 |
 | `otoasobi/features.py` | フレーム特徴とメルスペクトログラム |
 | `otoasobi/breath.py` | 先頭の息 |
-| `packaging/otoasobi.spec` | PyInstaller 設定 |
-| `scripts/build_exe.ps1` | exe ビルド |
+| `app.py` | 開発用の確認画面 |
+| `otoasobi/gui.py` | 開発用画面のウィンドウ |
+| `otoasobi/cli.py` | 開発用のコマンドライン |
