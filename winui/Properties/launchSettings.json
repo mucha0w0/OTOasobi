@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "Otoasobi (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "Otoasobi (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}
