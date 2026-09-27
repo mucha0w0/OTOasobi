@@ -2,6 +2,7 @@
 
 1行に1オブジェクト。
 要求: {"id": 1, "cmd": "analyze", "path": "C:/音声フォルダ"}
+途中: {"id": 1, "event": "progress", "done": 1, "total": 4}
 応答: {"id": 1, "ok": true, "txt": "C:/音声フォルダ/OTOasibi_out.txt"}
       {"id": 1, "ok": false, "error": "..."}
 """
@@ -21,8 +22,11 @@ def _respond(payload: dict) -> None:
     sys.stdout.flush()
 
 
-def _analyze(path: str) -> str:
-    return str(analyze_folder(path))
+def _analyze(request_id: object, path: str) -> str:
+    def on_progress(done: int, total: int) -> None:
+        _respond({"id": request_id, "event": "progress", "done": done, "total": total})
+
+    return str(analyze_folder(path, on_progress=on_progress))
 
 
 def main() -> None:
@@ -44,7 +48,7 @@ def main() -> None:
             path = request.get("path")
             if not isinstance(path, str) or not path:
                 raise RuntimeError("path がありません")
-            txt = _analyze(path)
+            txt = _analyze(request_id, path)
         except FilenameError as exc:
             _respond({"id": request_id, "ok": False, "error": str(exc)})
         except Exception as exc:

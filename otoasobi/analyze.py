@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -113,15 +114,21 @@ def format_batch_txt(entries: list[tuple[str, list[Span]]]) -> str:
     return "\n\n".join(blocks) + "\n"
 
 
-def analyze_folder(folder: str | Path) -> Path:
+def analyze_folder(
+    folder: str | Path,
+    on_progress: Callable[[int, int], None] | None = None,
+) -> Path:
     folder = Path(folder)
     if not folder.is_dir():
         raise RuntimeError("フォルダが見つかりません。")
     wavs = list_wavs(folder)
     if not wavs:
         raise RuntimeError("フォルダ内にWAVファイルがありません。")
+    total = len(wavs)
+    if on_progress is not None:
+        on_progress(0, total)
     entries: list[tuple[str, list[Span]]] = []
-    for wav in wavs:
+    for index, wav in enumerate(wavs, start=1):
         try:
             analysis = analyze_wav(wav)
         except FilenameError as exc:
@@ -129,6 +136,8 @@ def analyze_folder(folder: str | Path) -> Path:
         except Exception as exc:
             raise RuntimeError(f"{wav.name}: {exc}") from exc
         entries.append((wav.name, analysis.spans))
+        if on_progress is not None:
+            on_progress(index, total)
     out = folder / BATCH_TXT_NAME
     out.write_text(format_batch_txt(entries), encoding="utf-8")
     return out

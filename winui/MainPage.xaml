@@ -8,51 +8,85 @@
     Background="Transparent"
     mc:Ignorable="d">
 
-    <Grid Padding="48">
-        <Button
-            x:Name="IdleView"
-            Content="フォルダを選択またはドラッグ＆ドロップ"
-            FontSize="20"
-            Padding="28,16"
-            HorizontalAlignment="Center"
-            VerticalAlignment="Center"
-            Click="IdleView_Click" />
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
 
-        <TextBlock
-            x:Name="BusyView"
-            Text="解析中..."
-            FontSize="22"
-            HorizontalAlignment="Center"
-            VerticalAlignment="Center"
-            Visibility="Collapsed" />
+        <Grid Padding="48">
+            <Button
+                x:Name="IdleView"
+                Content="フォルダを選択またはドラッグ＆ドロップ"
+                FontSize="20"
+                Padding="28,16"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Click="IdleView_Click" />
 
-        <StackPanel
-            x:Name="DoneView"
-            VerticalAlignment="Center"
-            HorizontalAlignment="Center"
-            Spacing="24"
-            Visibility="Collapsed">
             <TextBlock
-                Text="解析が完了しました。解析結果は以下です。"
+                x:Name="BusyView"
+                Text="解析中..."
                 FontSize="22"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Visibility="Collapsed" />
+
+            <StackPanel
+                x:Name="DoneView"
+                VerticalAlignment="Center"
+                HorizontalAlignment="Center"
+                Spacing="24"
+                Visibility="Collapsed">
+                <TextBlock
+                    Text="解析が完了しました。解析結果は以下です。"
+                    FontSize="22"
+                    TextAlignment="Center"
+                    TextWrapping="Wrap"
+                    HorizontalAlignment="Center" />
+                <Button
+                    Content="txtファイルを開く"
+                    HorizontalAlignment="Center"
+                    Click="OpenTxt_Click" />
+            </StackPanel>
+
+            <TextBlock
+                x:Name="ErrorView"
+                FontSize="18"
                 TextAlignment="Center"
                 TextWrapping="Wrap"
-                HorizontalAlignment="Center" />
-            <Button
-                Content="txtファイルを開く"
                 HorizontalAlignment="Center"
-                Click="OpenTxt_Click" />
-        </StackPanel>
+                VerticalAlignment="Center"
+                MaxWidth="560"
+                Tapped="ErrorView_Tapped"
+                Visibility="Collapsed" />
+        </Grid>
 
-        <TextBlock
-            x:Name="ErrorView"
-            FontSize="18"
-            TextAlignment="Center"
-            TextWrapping="Wrap"
-            HorizontalAlignment="Center"
-            VerticalAlignment="Center"
-            MaxWidth="560"
-            Tapped="ErrorView_Tapped"
-            Visibility="Collapsed" />
+        <Border
+            x:Name="StatusBar"
+            Grid.Row="1"
+            Padding="16,10"
+            BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+            BorderThickness="0,1,0,0"
+            Background="{ThemeResource LayerFillColorDefaultBrush}"
+            Visibility="Collapsed">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <ProgressBar
+                    x:Name="StatusProgress"
+                    VerticalAlignment="Center"
+                    Minimum="0"
+                    Maximum="1" />
+                <TextBlock
+                    x:Name="StatusText"
+                    Grid.Column="1"
+                    Margin="16,0,0,0"
+                    VerticalAlignment="Center"
+                    FontSize="14" />
+            </Grid>
+        </Border>
     </Grid>
 </Page>

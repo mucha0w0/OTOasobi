@@ -10,6 +10,7 @@ sealed class AnalysisClient : IDisposable
     readonly Process _process;
     readonly StreamWriter _input;
     readonly ConcurrentDictionary<int, TaskCompletionSource<string>> _pending = new();
+    readonly ConcurrentDictionary<int, Action<int, int>> _progress = new();
     readonly object _writeLock = new();
     int _nextId;
     bool _disposed;
@@ -45,7 +46,7 @@ sealed class AnalysisClient : IDisposable
         _ = Task.Run(ReadLoop);
     }
 
-    public async Task<AnalyzeResult> AnalyzeAsync(string path)
+    public async Task<AnalyzeResult> AnalyzeAsync(string path, Action<int, int>? onProgress = null)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (_process.HasExited)
@@ -54,6 +55,8 @@ sealed class AnalysisClient : IDisposable
         var id = Interlocked.Increment(ref _nextId);
         var done = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
         _pending[id] = done;
+        if (onProgress != null)
+            _progress[id] = onProgress;
         var request = JsonSerializer.Serialize(new { id, cmd = "analyze", path });
         lock (_writeLock)
         {
@@ -61,7 +64,15 @@ sealed class AnalysisClient : IDisposable
             _input.Flush();
         }
 
-        var line = await done.Task.ConfigureAwait(true);
+        string line;
+        try
+        {
+            line = await done.Task.ConfigureAwait(true);
+        }
+        finally
+        {
+            _progress.TryRemove(id, out _);
+        }
         using var doc = JsonDocument.Parse(line);
         var root = doc.RootElement;
         var ok = root.TryGetProperty("ok", out var okValue) && okValue.GetBoolean();
@@ -107,9 +118,35 @@ sealed class AnalysisClient : IDisposable
                 try
                 {
                     using var doc = JsonDocument.Parse(line);
-                    if (!doc.RootElement.TryGetProperty("id", out var idValue) || idValue.ValueKind != JsonValueKind.Number)
+                    var root = doc.RootElement;
+                    if (!root.TryGetProperty("id", out var idValue) || idValue.ValueKind != JsonValueKind.Number)
                         continue;
-                    if (_pending.TryRemove(idValue.GetInt32(), out var done))
+                    var id = idValue.GetInt32();
+                    if (root.TryGetProperty("event", out var eventValue)
+                        && eventValue.ValueKind == JsonValueKind.String
+                        && eventValue.GetString() == "progress")
+                    {
+                        var doneCount = root.TryGetProperty("done", out var doneValue) && doneValue.TryGetInt32(out var parsedDone)
+                            ? parsedDone
+                            : 0;
+                        var total = root.TryGetProperty("total", out var totalValue) && totalValue.TryGetInt32(out var parsedTotal)
+                            ? parsedTotal
+                            : 0;
+                        if (_progress.TryGetValue(id, out var progress))
+                        {
+                            try
+                            {
+                                progress(doneCount, total);
+                            }
+                            catch (Exception)
+                            {
+                            }
+                        }
+
+                        continue;
+                    }
+
+                    if (_pending.TryRemove(id, out var done))
                         done.TrySetResult(line);
                 }
                 catch (JsonException)

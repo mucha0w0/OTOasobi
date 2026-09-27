@@ -73,11 +73,20 @@ public sealed partial class MainPage : Page
     async Task RunAsync(string folderPath)
     {
         _busy = true;
-        ShowBusy();
+        var total = CountTargets(folderPath);
+        ShowBusy(0, total);
+        var queue = DispatcherQueue;
         try
         {
             _analysis ??= new AnalysisClient();
-            var result = await _analysis.AnalyzeAsync(folderPath);
+            var result = await _analysis.AnalyzeAsync(folderPath, (done, count) =>
+            {
+                queue.TryEnqueue(() =>
+                {
+                    if (_busy)
+                        UpdateStatus(done, count);
+                });
+            });
             if (!result.Ok || string.IsNullOrEmpty(result.Txt))
             {
                 ShowError(string.IsNullOrEmpty(result.Error) ? "解析に失敗しました。" : result.Error);
@@ -97,12 +106,22 @@ public sealed partial class MainPage : Page
         }
     }
 
-    void ShowBusy()
+    void ShowBusy(int done, int total)
     {
         IdleView.Visibility = Visibility.Collapsed;
         DoneView.Visibility = Visibility.Collapsed;
         ErrorView.Visibility = Visibility.Collapsed;
         BusyView.Visibility = Visibility.Visible;
+        StatusBar.Visibility = Visibility.Visible;
+        UpdateStatus(done, total);
+    }
+
+    void UpdateStatus(int done, int total)
+    {
+        StatusText.Text = $"{done}（解析完了）/{total}（解析対象）";
+        StatusProgress.IsIndeterminate = false;
+        StatusProgress.Maximum = Math.Max(total, 1);
+        StatusProgress.Value = done;
     }
 
     void ShowDone()
@@ -110,6 +129,7 @@ public sealed partial class MainPage : Page
         IdleView.Visibility = Visibility.Collapsed;
         BusyView.Visibility = Visibility.Collapsed;
         ErrorView.Visibility = Visibility.Collapsed;
+        StatusBar.Visibility = Visibility.Collapsed;
         DoneView.Visibility = Visibility.Visible;
     }
 
@@ -118,8 +138,21 @@ public sealed partial class MainPage : Page
         IdleView.Visibility = Visibility.Collapsed;
         BusyView.Visibility = Visibility.Collapsed;
         DoneView.Visibility = Visibility.Collapsed;
+        StatusBar.Visibility = Visibility.Collapsed;
         ErrorView.Text = message;
         ErrorView.Visibility = Visibility.Visible;
+    }
+
+    static int CountTargets(string folder)
+    {
+        var count = 0;
+        foreach (var path in Directory.EnumerateFiles(folder))
+        {
+            if (path.EndsWith(".wav", StringComparison.OrdinalIgnoreCase))
+                count++;
+        }
+
+        return count;
     }
 
     static string? FolderFrom(IReadOnlyList<string> paths)

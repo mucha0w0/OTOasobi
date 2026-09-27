@@ -28,9 +28,9 @@ public sealed partial class MainWindow : Window
     {
         if (e.WindowActivationState == WindowActivationState.Deactivated)
             return;
-        Activated -= OnFirstActivated;
         if (RootFrame.Content is not MainPage page)
             return;
+        Activated -= OnFirstActivated;
         DispatcherQueue.TryEnqueue(page.ChooseFolder);
     }
 }
