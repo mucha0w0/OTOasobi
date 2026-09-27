@@ -45,6 +45,8 @@ _CONS_MMS: dict[str, list[str]] = {
 }
 
 _VOWELS = set("aiueo")
+# ん is N or M. Both count as a vowel onset for oto.ini aliases.
+VOWEL_ONSET_LABELS = frozenset(_VOWELS | {"N", "M"})
 SILENCE_LABEL = "無音"
 BREATH_LABEL = "息"
 

@@ -45,7 +45,7 @@
                     TextWrapping="Wrap"
                     HorizontalAlignment="Center" />
                 <Button
-                    Content="txtファイルを開く"
+                    Content="oto.iniを開く"
                     HorizontalAlignment="Center"
                     Click="OpenTxt_Click" />
                 <ScrollViewer

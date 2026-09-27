@@ -9,7 +9,9 @@ import soundfile as sf
 
 from otoasobi.breath import apply_leading_breath
 from otoasobi.features import compute_features
+from otoasobi.oto import OTO_INI_NAME, mono_oto_lines, write_oto_ini
 from otoasobi.parser import Token, parse_stem, stem_from_path
+from otoasobi.phones import VOWEL_ONSET_LABELS
 from otoasobi.segment import Span, segment_tokens
 
 
@@ -77,7 +79,7 @@ def analyze_wav(path: str | Path) -> Analysis:
 
 
 # a i u e o, plus ん (N / M). っ (cl), 無音, and 息 are not onsets.
-_VOWEL_ONSET = frozenset({"a", "i", "u", "e", "o", "N", "M"})
+_VOWEL_ONSET = VOWEL_ONSET_LABELS
 
 
 def spans_to_txt(spans: list[Span], *, include_token: bool = True) -> str:
@@ -179,7 +181,7 @@ def analyze_folder(
     total = len(wavs)
     if on_progress is not None:
         on_progress(0, total)
-    entries: list[tuple[str, list[Span]]] = []
+    entries: list[tuple[str, list[Span], float]] = []
     skipped: list[str] = []
     for index, wav in enumerate(wavs, start=1):
         try:
@@ -187,13 +189,19 @@ def analyze_folder(
         except Exception:
             skipped.append(wav.name)
         else:
-            entries.append((wav.name, analysis.spans))
+            entries.append((wav.name, analysis.spans, analysis.duration))
         if on_progress is not None:
             on_progress(index, total)
     if not entries:
         return FolderResult(txt=None, skipped=skipped)
-    out = folder / BATCH_TXT_NAME
+    span_entries = [(name, spans) for name, spans, _duration in entries]
+    oto_lines: list[str] = []
+    for name, spans, duration in entries:
+        oto_lines.extend(mono_oto_lines(name, spans, duration))
+    out = folder / OTO_INI_NAME
     log = folder / BATCH_LOG_NAME
-    out.write_text(format_batch_txt(entries), encoding="utf-8")
-    log.write_text(format_batch_log(entries), encoding="utf-8")
+    onset = folder / BATCH_TXT_NAME
+    write_oto_ini(out, oto_lines)
+    log.write_text(format_batch_log(span_entries), encoding="utf-8")
+    onset.write_text(format_batch_txt(span_entries), encoding="utf-8")
     return FolderResult(txt=out, skipped=skipped)

@@ -5,10 +5,10 @@ from otoasobi.analyze import (
     analyze_wav,
     default_log_path,
     default_txt_path,
-    onsets_to_txt,
     write_label_txt,
     write_log_txt,
 )
+from otoasobi.oto import mono_oto_lines
 
 
 def main() -> None:
@@ -22,7 +22,7 @@ def main() -> None:
     write_label_txt(out, analysis.spans)
     write_log_txt(log, analysis.spans)
     sys.stdout.reconfigure(encoding="utf-8")
-    print(onsets_to_txt(analysis.spans), end="")
+    print("\n".join(mono_oto_lines(path.name, analysis.spans, analysis.duration)), end="\n")
     print(f"engine {analysis.engine}", file=sys.stderr)
     print(f"wrote {out}", file=sys.stderr)
     print(f"wrote {log}", file=sys.stderr)

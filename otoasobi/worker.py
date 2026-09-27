@@ -3,9 +3,9 @@
 1行に1オブジェクト。
 要求: {"id": 1, "cmd": "analyze", "path": "C:/音声フォルダ"}
 途中: {"id": 1, "event": "progress", "done": 1, "total": 4}
-応答: {"id": 1, "ok": true, "txt": "C:/音声フォルダ/OTOasibi_out.txt", "notice": "..."}
+応答: {"id": 1, "ok": true, "txt": "C:/音声フォルダ/oto.ini", "notice": "..."}
       {"id": 1, "ok": false, "error": "..."}
-全区間のログは同じフォルダの OTOasibi_log.txt に書く。応答の txt は母音始まりのファイル。
+応答の txt は単独音モードの oto.ini。全区間は OTOasibi_log.txt、母音始まりは OTOasibi_out.txt。
 """
 
 from __future__ import annotations
