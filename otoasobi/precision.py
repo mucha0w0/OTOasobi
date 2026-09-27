@@ -3,6 +3,7 @@ from __future__ import annotations
 import numpy as np
 
 from otoasobi.align_mms import AlignedChar, align_chars, available as mms_available
+from otoasobi.cv_edge import refine_cv_boundary
 from otoasobi.features import FrameTrack
 from otoasobi.parser import Token, rest_layout, speech_group_chunks
 from otoasobi.phones import SILENCE_LABEL, MmsUnit, phone_name, token_mms_units
@@ -95,6 +96,39 @@ def _mora_onset(
 
 
 def _refine_cv(
+    mora: Token,
+    start: float,
+    end: float,
+    c_peak: float | None,
+    vowel_peak: float | None,
+    track: FrameTrack,
+    harm: tuple[np.ndarray, np.ndarray] | None,
+    y: np.ndarray | None = None,
+    sr: int = 0,
+    harm_fine: tuple[np.ndarray, np.ndarray] | None = None,
+    formants_fine: tuple[np.ndarray, np.ndarray, np.ndarray] | None = None,
+) -> float:
+    cut = _coarse_cv(mora, start, end, c_peak, vowel_peak, track, harm)
+    if y is None or sr <= 0:
+        return cut
+    try:
+        return refine_cv_boundary(
+            mora,
+            cut,
+            start,
+            end,
+            track,
+            y,
+            sr,
+            c_peak,
+            harm_fine,
+            formants_fine,
+        )
+    except Exception:
+        return cut
+
+
+def _coarse_cv(
     mora: Token,
     start: float,
     end: float,
@@ -237,11 +271,16 @@ def _mora_bounds_from_align(
 
     prev_limit = speech_start
     raw_onsets: dict[int, float] = {}
-    for i in speech_indices:
+    for k, i in enumerate(speech_indices):
         mora = tokens[i]
         peak = peaks[i]
         if mora.is_vowel_only:
             raw_onsets[i] = peak
+        elif mora.is_affricate:
+            limit = speech_end
+            if k + 1 < len(speech_indices):
+                limit = max(peaks[speech_indices[k + 1]], peak + 0.05)
+            raw_onsets[i] = affricate_onset(track, peak, prev_limit, limit, vowel_by_index[i])
         else:
             raw_onsets[i] = _mora_onset(track, mora, peak, prev_limit, speech_end)
         v_peak = vowel_by_index[i]
@@ -319,12 +358,28 @@ def _label_with_cut(
     c_peak: float | None,
     vowel_peak: float | None,
     harm: tuple[np.ndarray, np.ndarray] | None,
+    y: np.ndarray | None = None,
+    sr: int = 0,
+    harm_fine: tuple[np.ndarray, np.ndarray] | None = None,
+    formants_fine: tuple[np.ndarray, np.ndarray, np.ndarray] | None = None,
 ) -> list[Span]:
     if mora.kind in {"N", "Q"}:
         return [Span(start, end, phone_name(mora, "C"), mora.text)]
     if mora.kind == "V" or not mora.needs_cv_split:
         return [Span(start, end, phone_name(mora, "V"), mora.text)]
-    cut = _refine_cv(mora, start, end, c_peak, vowel_peak, track, harm)
+    cut = _refine_cv(
+        mora,
+        start,
+        end,
+        c_peak,
+        vowel_peak,
+        track,
+        harm,
+        y,
+        sr,
+        harm_fine,
+        formants_fine,
+    )
     return [
         Span(start, cut, phone_name(mora, "C"), mora.text),
         Span(cut, end, phone_name(mora, "V"), mora.text),
@@ -411,6 +466,8 @@ def segment_precision(
     first_speech = next((t for t in tokens if not t.is_rest), None)
     harm = None
     formants = None
+    harm_fine = None
+    formants_fine = None
     bits: list[str] = []
 
     try:
@@ -437,10 +494,18 @@ def segment_precision(
                 )
             harm = praat_refine.harmonicity(y, sr)
             formants = praat_refine.formant_tracks(y, sr)
+            try:
+                harm_fine = praat_refine.harmonicity(y, sr, time_step=0.002)
+                formants_fine = praat_refine.formant_tracks(y, sr, time_step=0.005)
+            except Exception:
+                harm_fine = None
+                formants_fine = None
             bits.append("praat")
     except Exception:
         harm = None
         formants = None
+        harm_fine = None
+        formants_fine = None
 
     try:
         aligned = _align_chunks(y, sr, tokens, index_chunks, chunk_bounds, duration)
@@ -512,7 +577,19 @@ def segment_precision(
                 b: float,
                 idx: int = group.index,
             ) -> list[Span]:
-                return _label_with_cut(mora, a, b, track, c_peaks[idx], vowel_peaks[idx], harm)
+                return _label_with_cut(
+                    mora,
+                    a,
+                    b,
+                    track,
+                    c_peaks[idx],
+                    vowel_peaks[idx],
+                    harm,
+                    y,
+                    sr,
+                    harm_fine,
+                    formants_fine,
+                )
 
             spans.extend(label_grouped_mora(group, start, end, label_head))
         if i < len(group_chunks) - 1:

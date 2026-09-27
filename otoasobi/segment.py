@@ -427,6 +427,10 @@ def affricate_closure_start(track: FrameTrack, burst: float, t_lo: float, max_cl
     quiet = speech_thr * 1.15
     nasal_floor = speech_thr * 0.55
     i = peak_i
+    # The anchor may sit inside the burst. Leave that high band before
+    # measuring the closure, or the loud release stops the walk immediately.
+    while i > 0 and float(ratio[i - 1]) >= 1.2 and float(rms[i - 1]) >= quiet:
+        i -= 1
     while i > 0:
         prev_rms = float(rms[i - 1])
         if prev_rms >= quiet:
@@ -437,17 +441,66 @@ def affricate_closure_start(track: FrameTrack, burst: float, t_lo: float, max_cl
     return max(min_t, float(times[i]))
 
 
-def affricate_onset(track: FrameTrack, peak: float, t_lo: float, t_hi: float) -> float:
+def _strongest_release(track: FrameTrack, start: float, end: float) -> float | None:
+    """Start of the loudest high-band run in the span.
+
+    A vowel can host a brief ratio bump. The affricate burst is the run whose
+    energy above 3.5 kHz is actually strong, so a weak early bump loses.
+    """
+    sel = (track.times >= start) & (track.times <= end)
+    if int(np.count_nonzero(sel)) < 4:
+        return None
+    times = track.times[sel]
+    ratio = track.ratio[sel]
+    audible = track.rms[sel] > _speech_thr(track) * 0.2
+    fric = audible & (ratio >= 1.2)
+    best_score = 1.8
+    best_at: float | None = None
+    i = 0
+    n = len(times)
+    while i < n:
+        if not bool(fric[i]):
+            i += 1
+            continue
+        j = i + 1
+        while j < n and bool(fric[j]):
+            j += 1
+        if j - i >= 2:
+            score = float(np.max(ratio[i:j]))
+            if score >= best_score:
+                best_score = score
+                best_at = float(times[i])
+        i = j
+    return best_at
+
+
+def affricate_onset(
+    track: FrameTrack,
+    peak: float,
+    t_lo: float,
+    t_hi: float,
+    vowel_at: float | None = None,
+) -> float:
     """Start of [ts]/[tɕ]/[dʑ], including the closure in front of the release.
 
     ``peak`` is an aligned consonant time. For つ that is the [t] letter,
-    which can fall inside the closure, before any energy above 3.5 kHz.
-    The walk stops at ん: the nasal is voiced and low-frequency, not silence.
+    and it often falls inside the preceding vowel, well before the [s].
+    The burst is the strongest high band before this mora's vowel, not the
+    first bump within 150 ms of that early [t]. The walk then stops at the
+    vowel or at ん, and does not treat either as closure.
     """
     t_lo = max(0.0, t_lo)
-    hi = min(t_hi, max(peak, t_lo) + 0.15)
-    lo = max(t_lo, peak - 0.04)
-    release, _fall = _scan_sibilant(track, lo, hi)
+    left = max(t_lo, peak - 0.03)
+    if vowel_at is not None and vowel_at > peak + 0.04:
+        right = min(t_hi, vowel_at + 0.04)
+    else:
+        right = min(t_hi, peak + 0.36)
+    if right < left + 0.05:
+        right = min(t_hi, left + 0.12)
+    release = _strongest_release(track, left, right)
+    farther = min(t_hi, max(peak, t_lo) + 0.36)
+    if release is None and farther > right + 0.03:
+        release = _strongest_release(track, left, farther)
     burst = release if release is not None else max(peak, t_lo + 0.012)
     burst = max(burst, t_lo + 0.012)
     return affricate_closure_start(track, burst, t_lo, max_closure=0.12)

@@ -48,9 +48,9 @@ def intensity(y: np.ndarray, sr: int) -> tuple[np.ndarray, np.ndarray]:
     return times, vals
 
 
-def harmonicity(y: np.ndarray, sr: int) -> tuple[np.ndarray, np.ndarray]:
+def harmonicity(y: np.ndarray, sr: int, time_step: float = 0.005) -> tuple[np.ndarray, np.ndarray]:
     snd = _sound(y, sr)
-    harm = snd.to_harmonicity_cc(time_step=0.005)
+    harm = snd.to_harmonicity_cc(time_step=time_step)
     times = np.asarray(harm.xs())
     vals = np.asarray(harm.values[0], dtype=float)
     vals = np.where(vals < -50.0, np.nan, vals)
@@ -82,11 +82,15 @@ def voicing_onset(
     return fallback
 
 
-def formant_tracks(y: np.ndarray, sr: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def formant_tracks(
+    y: np.ndarray,
+    sr: int,
+    time_step: float = 0.01,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Times, F1, and F2 from Burg tracking. Missing frames are NaN."""
     snd = _sound(y, sr)
     formant = snd.to_formant_burg(
-        time_step=0.01,
+        time_step=time_step,
         max_number_of_formants=5.0,
         maximum_formant=5500.0,
         window_length=0.025,
@@ -94,7 +98,7 @@ def formant_tracks(y: np.ndarray, sr: int) -> tuple[np.ndarray, np.ndarray, np.n
     )
     t0 = float(formant.start_time)
     t1 = float(formant.end_time)
-    times = np.arange(t0, t1, 0.01)
+    times = np.arange(t0, t1, time_step)
     f1 = np.empty(len(times), dtype=float)
     f2 = np.empty(len(times), dtype=float)
     for i, t in enumerate(times):

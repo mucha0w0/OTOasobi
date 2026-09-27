@@ -192,6 +192,85 @@ def mel_spectrogram(y: np.ndarray, sr: int, n_mels: int = 96) -> MelSpectrogram:
     return MelSpectrogram(db=db.T, t0=t0, t1=max(t1, t0 + half), centers_hz=centers)
 
 
+def local_edge_cues(
+    y: np.ndarray,
+    sr: int,
+    t0: float,
+    t1: float,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """RMS, high/low ratio, and four band shapes on a 2 ms grid.
+
+    The window is 10 ms. The ratio is energy at and above 3.5 kHz over energy
+    below 2 kHz, the same split the frication detector uses. Bands are
+    250–700, 700–1200, 1200–2200, and 2200–4000 Hz, each frame scaled to
+    unit sum so a level change alone does not move the shape.
+    """
+    y = _to_mono(y)
+    empty_t = np.zeros(0, dtype=float)
+    empty_b = np.zeros((0, 4), dtype=float)
+    if sr <= 0 or len(y) == 0 or t1 <= t0 + 0.008:
+        return empty_t, empty_t, empty_t, empty_b
+    hop = max(1, int(round(0.002 * sr)))
+    win = max(hop + 1, int(round(0.010 * sr)))
+    if win % 2:
+        win += 1
+    window = np.hanning(win)
+    freqs = rfftfreq(win, 1.0 / sr)
+    hi = freqs >= 3500.0
+    lo = freqs < 2000.0
+    band_hz = ((250.0, 700.0), (700.0, 1200.0), (1200.0, 2200.0), (2200.0, 4000.0))
+    nyquist = float(freqs[-1]) if len(freqs) else 0.0
+    band_bins = []
+    for a, b in band_hz:
+        if nyquist <= a:
+            band_bins.append(np.zeros(len(freqs), dtype=bool))
+            continue
+        band_bins.append((freqs >= a) & (freqs < min(b, nyquist)))
+    half = win // 2
+    step = hop / float(sr)
+    times_l: list[float] = []
+    rms_l: list[float] = []
+    ratio_l: list[float] = []
+    bands_l: list[np.ndarray] = []
+    t = float(t0)
+    limit = float(t1) + step * 0.25
+    while t <= limit:
+        center = int(round(t * sr))
+        left = center - half
+        right = left + win
+        frame = np.zeros(win, dtype=np.float64)
+        src_l = max(0, left)
+        src_r = min(len(y), right)
+        dst_l = src_l - left
+        dst_r = dst_l + (src_r - src_l)
+        if src_r > src_l:
+            frame[dst_l:dst_r] = y[src_l:src_r]
+        windowed = frame * window
+        rms_l.append(float(np.sqrt(np.mean(windowed**2))))
+        power = np.abs(rfft(windowed)) ** 2
+        e_hi = float(np.sum(power[hi])) if np.any(hi) else 0.0
+        e_lo = float(np.sum(power[lo])) if np.any(lo) else 0.0
+        ratio_l.append(e_hi / (e_lo + 1e-12))
+        energy = np.array(
+            [float(np.sum(power[mask])) if np.any(mask) else 0.0 for mask in band_bins],
+            dtype=float,
+        )
+        total = float(np.sum(energy))
+        if total > 1e-12:
+            energy /= total
+        bands_l.append(energy)
+        times_l.append(t)
+        t += step
+        if len(times_l) > 400:
+            break
+    return (
+        np.asarray(times_l, dtype=float),
+        np.asarray(rms_l, dtype=float),
+        np.asarray(ratio_l, dtype=float),
+        np.vstack(bands_l) if bands_l else empty_b,
+    )
+
+
 def close_short_gaps(mask: np.ndarray, max_gap: int) -> np.ndarray:
     out = mask.copy()
     n = len(out)
