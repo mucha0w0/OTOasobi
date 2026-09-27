@@ -48,6 +48,14 @@ _VOWELS = set("aiueo")
 SILENCE_LABEL = "無音"
 BREATH_LABEL = "息"
 
+# One palette for the GUI (tuples) and the matplotlib figure (hex).
+KIND_RGB: dict[str, tuple[int, int, int]] = {
+    SILENCE_LABEL: (154, 160, 166),
+    BREATH_LABEL: (96, 165, 250),
+    "子音": (217, 119, 6),
+    "母音": (15, 157, 142),
+}
+
 
 @dataclass(frozen=True)
 class MmsUnit:

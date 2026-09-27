@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from otoasobi.features import FrameTrack, close_short_gaps, local_edge_cues
+from otoasobi.features import FrameTrack, close_short_gaps, local_edge_cues, runs
 from otoasobi.parser import Token
 from otoasobi.segment import sibilant_release
 
@@ -293,31 +293,20 @@ def _left_edge(times: np.ndarray, mask: np.ndarray, coarse: float) -> float | No
     overlap the stable region just after the coarse cut.
     """
     filled = close_short_gaps(np.asarray(mask, dtype=bool), 1)
-    runs: list[tuple[int, int]] = []
-    i = 0
+    vowel_runs = [(start, end) for start, end in runs(filled) if end - start >= _MIN_RUN]
     n = len(filled)
-    while i < n:
-        if not filled[i]:
-            i += 1
-            continue
-        j = i + 1
-        while j < n and filled[j]:
-            j += 1
-        if j - i >= _MIN_RUN:
-            runs.append((i, j))
-        i = j
-    if not runs:
+    if not vowel_runs:
         return None
     # The run that covers the vowel just after the coarse cut. A later run,
     # such as the next mora, must not steal the boundary.
     nucleus_i = int(np.searchsorted(times, min(coarse + 0.02, float(times[-1])), side="left"))
     nucleus_i = min(max(nucleus_i, 0), n - 1)
-    containing = [run for run in runs if run[0] <= nucleus_i < run[1]]
+    containing = [run for run in vowel_runs if run[0] <= nucleus_i < run[1]]
     if containing:
         start_i = containing[0][0]
     else:
         coarse_i = int(np.searchsorted(times, coarse, side="left"))
-        later = [run for run in runs if run[0] >= coarse_i]
+        later = [run for run in vowel_runs if run[0] >= coarse_i]
         if not later:
             return None
         start_i = max(later, key=lambda run: run[1] - run[0])[0]

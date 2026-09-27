@@ -12,7 +12,7 @@ a = Analysis(
     [str(ROOT / "app.py")],
     pathex=[str(ROOT)],
     binaries=binaries,
-    datas = [(str(ICON), ".")] if ICON.exists() else []
+    datas=[(str(ICON), ".")] if ICON.exists() else [],
     hiddenimports=[
         "otoasobi",
         "otoasobi.analyze",

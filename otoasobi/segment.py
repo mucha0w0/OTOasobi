@@ -323,8 +323,11 @@ def _fricative_onsets(
     return [float(times[a]) for a, _ in merged]
 
 
-def _speech_thr(track: FrameTrack) -> float:
+def speech_threshold(track: FrameTrack) -> float:
     return max(float(np.max(track.rms)) * 0.08, 1e-4)
+
+
+_speech_thr = speech_threshold
 
 
 def _spaced_peaks(times: np.ndarray, score: np.ndarray, count: int, min_dt: float) -> list[float] | None:
@@ -354,7 +357,7 @@ def stop_closure_start(track: FrameTrack, burst: float, t_lo: float, max_closure
     rms = track.rms[sel]
     flux = track.flux[sel]
     peak_i = int(np.argmin(np.abs(times - burst)))
-    vowel_thr = max(float(np.max(rms)) * 0.38, _speech_thr(track))
+    vowel_thr = max(float(np.max(rms)) * 0.38, speech_threshold(track))
     flux_thr = max(float(np.percentile(flux, 65)), 1e-9)
     i = peak_i
     while i > 0 and flux[i - 1] >= flux_thr * 0.35:
@@ -377,7 +380,7 @@ def _scan_sibilant(track: FrameTrack, start: float, end: float) -> tuple[float |
     times = track.times[sel]
     ratio = track.ratio[sel]
     rms = track.rms[sel]
-    audible = rms > _speech_thr(track) * 0.2
+    audible = rms > speech_threshold(track) * 0.2
     fric = audible & (ratio >= 1.2)
     seen = False
     hi_run = 0
@@ -457,7 +460,7 @@ def affricate_closure_start(track: FrameTrack, burst: float, t_lo: float, max_cl
     centroid = track.centroid[sel]
     ratio = track.ratio[sel]
     peak_i = int(np.argmin(np.abs(times - burst)))
-    speech_thr = _speech_thr(track)
+    speech_thr = speech_threshold(track)
     quiet = speech_thr * 1.15
     nasal_floor = speech_thr * 0.55
     i = peak_i
@@ -486,7 +489,7 @@ def _strongest_release(track: FrameTrack, start: float, end: float) -> float | N
         return None
     times = track.times[sel]
     ratio = track.ratio[sel]
-    audible = track.rms[sel] > _speech_thr(track) * 0.2
+    audible = track.rms[sel] > speech_threshold(track) * 0.2
     fric = audible & (ratio >= 1.2)
     best_score = 1.8
     best_at: float | None = None
@@ -569,7 +572,7 @@ def nasal_onset(track: FrameTrack, peak: float, t_lo: float, t_hi: float) -> flo
     centroid = track.centroid[sel]
     rms = track.rms[sel]
     peak_i = int(np.argmin(np.abs(times - peak)))
-    speech_thr = _speech_thr(track)
+    speech_thr = speech_threshold(track)
     vowel_cen = max(float(np.median(centroid)), 900.0)
     i = peak_i
     while i > 0 and rms[i - 1] > speech_thr * 0.25 and centroid[i - 1] < vowel_cen:
@@ -605,7 +608,7 @@ def flap_onset(track: FrameTrack, peak: float, t_lo: float, t_hi: float) -> floa
     rms = track.rms[sel]
     if len(times) < 3:
         return max(t_lo, peak - 0.02)
-    speech_thr = _speech_thr(track)
+    speech_thr = speech_threshold(track)
     if float(rms[0]) < speech_thr * 1.5:
         i = 0
         while i < len(rms) - 1 and float(rms[i]) < speech_thr * 0.45:
@@ -628,7 +631,7 @@ def labial_onset(track: FrameTrack, peak: float, t_lo: float, t_hi: float) -> fl
     rms = track.rms[sel]
     if len(times) < 3:
         return max(t_lo, peak - 0.04)
-    speech_thr = _speech_thr(track)
+    speech_thr = speech_threshold(track)
     if float(rms[0]) < speech_thr * 1.5:
         i = 0
         while i < len(rms) - 1 and float(rms[i]) < speech_thr * 0.45:
@@ -1286,7 +1289,7 @@ def _mora_bounds(track: FrameTrack, moras: list[Token], start: float, end: float
     return _refine_vowel_sequences(track, moras, _equal_bounds(start, end, n))
 
 
-def _sonorant_join(prev: Token, mora: Token) -> bool:
+def sonorant_join(prev: Token, mora: Token) -> bool:
     """True when a vowel or ん meets a vowel, with no consonant between them.
 
     「かお」「あん」「んあ」 qualify. 「んか」 and 「んな」 do not: the next
@@ -1295,6 +1298,9 @@ def _sonorant_join(prev: Token, mora: Token) -> bool:
     if mora.is_vowel_only and (prev.vowel is not None or prev.kind == "N"):
         return True
     return mora.kind == "N" and prev.vowel is not None
+
+
+_sonorant_join = sonorant_join
 
 
 def _refine_vowel_sequences(
@@ -1313,7 +1319,7 @@ def _refine_vowel_sequences(
     for i in range(1, len(moras)):
         prev = moras[i - 1]
         mora = moras[i]
-        if not _sonorant_join(prev, mora):
+        if not sonorant_join(prev, mora):
             continue
         a0, a1 = bounds[i - 1]
         b0, b1 = bounds[i]
@@ -1340,7 +1346,7 @@ def _refine_vowel_sequences(
     return bounds
 
 
-def _cv_cut(track: FrameTrack, mora: Token, start: float, end: float) -> float:
+def cv_cut(track: FrameTrack, mora: Token, start: float, end: float) -> float:
     if end - start < 0.04:
         return start + (end - start) * 0.35
     if mora.is_weak_fricative:
@@ -1372,6 +1378,9 @@ def _cv_cut(track: FrameTrack, mora: Token, start: float, end: float) -> float:
     if max_c <= min_c:
         return (start + end) / 2
     return min(max(cut, min_c), max_c)
+
+
+_cv_cut = cv_cut
 
 
 def split_vowel_time(parts: tuple[Token, ...], start: float, end: float) -> list[Span]:
@@ -1416,7 +1425,7 @@ def _label_mora(mora: Token, start: float, end: float, track: FrameTrack) -> lis
         return [Span(start, end, phone_name(mora, "C"), mora.text)]
     if mora.kind == "V" or not mora.needs_cv_split:
         return [Span(start, end, phone_name(mora, "V"), mora.text)]
-    cut = _cv_cut(track, mora, start, end)
+    cut = cv_cut(track, mora, start, end)
     return [
         Span(start, cut, phone_name(mora, "C"), mora.text),
         Span(cut, end, phone_name(mora, "V"), mora.text),
@@ -1443,7 +1452,7 @@ def segment_tokens(tokens: list[Token], track: FrameTrack, duration: float) -> l
             spans.append(Span(0.0, duration, SILENCE_LABEL, "_"))
         elif speech_start < duration:
             spans.append(Span(speech_start, duration, SILENCE_LABEL, tokens[-1].text if trailing_rest else ""))
-        return _clean(spans, duration)
+        return clean_spans(spans, duration)
 
     for i, groups in enumerate(chunks):
         c0, c1 = chunk_bounds[i]
@@ -1461,10 +1470,10 @@ def segment_tokens(tokens: list[Token], track: FrameTrack, duration: float) -> l
     if last_end < duration - 0.01:
         rest_text = tokens[-1].text if trailing_rest else ""
         spans.append(Span(last_end, duration, SILENCE_LABEL, rest_text))
-    return _clean(spans, duration)
+    return clean_spans(spans, duration)
 
 
-def _clean(spans: list[Span], duration: float) -> list[Span]:
+def clean_spans(spans: list[Span], duration: float) -> list[Span]:
     if not spans:
         return [Span(0.0, duration, SILENCE_LABEL, "")]
     spans = sorted(spans, key=lambda s: s.start)
@@ -1489,3 +1498,6 @@ def _clean(spans: list[Span], duration: float) -> list[Span]:
         last = out[-1]
         out[-1] = Span(last.start, duration, last.label, last.token)
     return out
+
+
+_clean = clean_spans

@@ -7,29 +7,31 @@ from otoasobi.cv_edge import refine_cv_boundary
 from otoasobi.features import FrameTrack
 from otoasobi.parser import Token, rest_layout, speech_group_chunks
 from otoasobi.phones import SILENCE_LABEL, MmsUnit, phone_name, token_mms_units
+from otoasobi.praat_refine import voicing_onset
 from otoasobi.segment import (
     Span,
-    _clean,
-    _cv_cut,
+    affricate_onset,
     chunk_time_bounds,
+    clean_spans,
+    cv_cut,
     flap_onset,
     flap_vowel_start,
+    label_grouped_mora,
     labial_onset,
     labial_vowel_start,
-    weak_fricative_onset,
-    weak_fricative_vowel_start,
-    label_grouped_mora,
     nasal_onset,
     nasal_vowel_start,
-    affricate_onset,
+    refine_vowel_hiatus,
     sibilant_release,
     sibilant_vowel_start,
+    sonorant_join,
+    speech_threshold,
+    split_leading_breath,
     stop_closure_start,
     stop_vowel_start,
-    refine_vowel_hiatus,
-    split_leading_breath,
     vowel_hiatus_onsets,
-    _sonorant_join,
+    weak_fricative_onset,
+    weak_fricative_vowel_start,
 )
 
 
@@ -70,7 +72,7 @@ def _mora_onset(
         rms = track.rms[sel]
         ratio = track.ratio[sel]
         peak_i = int(np.argmin(np.abs(times - peak)))
-        speech_thr = max(float(np.max(track.rms)) * 0.08, 1e-4)
+        speech_thr = speech_threshold(track)
         mask = (ratio > 1.25) & (rms > speech_thr * 0.2)
         i = peak_i
         while i > 0 and bool(mask[i - 1]):
@@ -88,7 +90,7 @@ def _mora_onset(
     times = track.times[sel]
     rms = track.rms[sel]
     peak_i = int(np.argmin(np.abs(times - peak)))
-    speech_thr = max(float(np.max(track.rms)) * 0.08, 1e-4)
+    speech_thr = speech_threshold(track)
     i = peak_i
     while i > 0 and rms[i - 1] > speech_thr * 0.35:
         i -= 1
@@ -165,8 +167,6 @@ def _coarse_cv(
             # before the release, and let a voiced vowel pull a late cut.
             cut = max(cut, release + 0.012)
             if harm is not None:
-                from otoasobi.praat_refine import voicing_onset
-
                 voiced = voicing_onset(
                     harm[0], harm[1], release, min(end, vowel_peak or end), cut
                 )
@@ -176,7 +176,7 @@ def _coarse_cv(
                 cut = 0.6 * cut + 0.4 * vowel_peak
         return min(max(cut, start + 0.02), end - 0.02)
     if mora.is_fricative:
-        return _cv_cut(track, mora, start, end)
+        return cv_cut(track, mora, start, end)
     if mora.is_stop:
         burst = c_peak if c_peak is not None else start
         cut = stop_vowel_start(track, start, end)
@@ -184,8 +184,6 @@ def _coarse_cv(
         if vowel_peak is not None and vowel_peak > burst:
             cut = min(cut, 0.55 * burst + 0.45 * vowel_peak)
         if harm is not None:
-            from otoasobi.praat_refine import voicing_onset
-
             voiced = voicing_onset(harm[0], harm[1], burst, min(end, (vowel_peak or end)), cut)
             if burst + 0.01 <= voiced <= min(cut + 0.04, end - 0.015):
                 cut = voiced
@@ -203,7 +201,7 @@ def _coarse_cv(
         return min(max(cut, start + 0.018), min(end - 0.02, start + 0.06))
     if vowel_peak is not None:
         return min(max(vowel_peak, start + 0.015), end - 0.015)
-    return _cv_cut(track, mora, start, end)
+    return cv_cut(track, mora, start, end)
 
 
 def _mora_bounds_from_align(
@@ -310,7 +308,7 @@ def _mora_bounds_from_align(
         prev_mora = tokens[prev_i]
         mora = tokens[i]
         # 「あお」「かお」「あん」「んあ」。子音が間に入る「んか」はここを通らない。
-        if _sonorant_join(prev_mora, mora):
+        if sonorant_join(prev_mora, mora):
             span_a = nucleus_spans.get(prev_i)
             span_b = nucleus_spans.get(i)
             if span_a is not None and span_b is not None:
@@ -565,7 +563,7 @@ def segment_precision(
         if speech_end < duration:
             spans.append(Span(speech_start, duration, SILENCE_LABEL, tokens[-1].text if trailing_rest else ""))
         engine = "mms+praat" if "praat" in bits else "mms"
-        return _clean(spans, duration), engine
+        return clean_spans(spans, duration), engine
 
     for i, groups in enumerate(group_chunks):
         for group in groups:
@@ -605,4 +603,4 @@ def segment_precision(
         spans.append(Span(last_end, duration, SILENCE_LABEL, rest_text))
 
     engine = "mms+praat" if "praat" in bits else "mms"
-    return _clean(spans, duration), engine
+    return clean_spans(spans, duration), engine

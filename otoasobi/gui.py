@@ -30,7 +30,7 @@ import pyqtgraph as pg
 from otoasobi.analyze import Analysis, analyze_wav, default_txt_path, write_label_txt
 from otoasobi.features import mel_spectrogram
 from otoasobi.parser import FilenameError
-from otoasobi.phones import phone_kind
+from otoasobi.phones import KIND_RGB, phone_kind
 from otoasobi.segment import Span
 
 LEFT_AXIS_WIDTH = 52
@@ -42,12 +42,7 @@ ENGINE_LABEL = {
     "acoustic": "音響",
 }
 
-LABEL_COLORS = {
-    "無音": (154, 160, 166),
-    "息": (96, 165, 250),
-    "子音": (217, 119, 6),
-    "母音": (15, 157, 142),
-}
+LABEL_COLORS = KIND_RGB
 
 STYLESHEET = """
 QMainWindow, QWidget {

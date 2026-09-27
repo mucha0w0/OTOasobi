@@ -1,5 +1,5 @@
-from pathlib import Path
 import sys
+from pathlib import Path
 
 from otoasobi.analyze import analyze_wav, default_txt_path, spans_to_txt, write_label_txt
 

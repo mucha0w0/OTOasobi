@@ -6,10 +6,6 @@ from dataclasses import dataclass
 SMALL_YOON = set("ゃゅょャュョ")
 SMALL_VOWEL = set("ぁぃぅぇぉァィゥェォ")
 SMALL_KANA = SMALL_YOON | SMALL_VOWEL
-HIRAGANA = set("あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわゐゑをんがぎぐげござじずぜぞだぢづでどばびぶべぼぱぴぷぺぽぁぃぅぇぉゃゅょっゎゔ")
-KATAKANA = set("アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヰヱヲンガギグゲゴザジズゼゾダヂヅデドバビブベボパピプペポァィゥェォャュョッヮヴ")
-
-VOWELS = set("あいうえおをアイウエオ")
 
 _KATA2HIRA = str.maketrans(
     "ァアィイゥウェエォオカガキギクグケゲコゴサザシジスズセゼソゾタダチヂッツヅテデトドナニヌネノハバパヒビピフブプヘベペホボポマミムメモャヤュユョヨラリルレロヮワヰヱヲンヴヵヶ",
@@ -427,19 +423,24 @@ def _label_moraic_nasal(tokens: list[Token]) -> list[Token]:
     return out
 
 
-def speech_chunks(tokens: list[Token]) -> list[list[Token]]:
-    chunks: list[list[Token]] = []
-    current: list[Token] = []
-    for token in tokens:
-        if token.is_rest:
+def _split_on_rest(items: list, is_rest) -> list:
+    """Drop rest markers and return the runs between them."""
+    chunks: list = []
+    current: list = []
+    for item in items:
+        if is_rest(item):
             if current:
                 chunks.append(current)
                 current = []
         else:
-            current.append(token)
+            current.append(item)
     if current:
         chunks.append(current)
     return chunks
+
+
+def speech_chunks(tokens: list[Token]) -> list[list[Token]]:
+    return _split_on_rest(tokens, lambda token: token.is_rest)
 
 
 @dataclass(frozen=True)
@@ -484,18 +485,7 @@ def group_moras(tokens: list[Token]) -> list[MoraGroup]:
 
 
 def speech_group_chunks(tokens: list[Token]) -> list[list[MoraGroup]]:
-    chunks: list[list[MoraGroup]] = []
-    current: list[MoraGroup] = []
-    for group in group_moras(tokens):
-        if group.head.is_rest:
-            if current:
-                chunks.append(current)
-                current = []
-        else:
-            current.append(group)
-    if current:
-        chunks.append(current)
-    return chunks
+    return _split_on_rest(group_moras(tokens), lambda group: group.head.is_rest)
 
 
 def rest_layout(tokens: list[Token]) -> tuple[bool, bool, list[Token]]:

@@ -5,14 +5,11 @@ import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 import numpy as np
 
-from otoasobi.phones import phone_kind
+from otoasobi.phones import KIND_RGB, phone_kind
 from otoasobi.segment import Span
 
 LABEL_COLORS = {
-    "無音": "#9AA0A6",
-    "息": "#60A5FA",
-    "子音": "#D97706",
-    "母音": "#0F9D8E",
+    kind: "#{:02X}{:02X}{:02X}".format(*rgb) for kind, rgb in KIND_RGB.items()
 }
 
 
