@@ -4,8 +4,10 @@ The coarse cut only has to land in the right mora. This search then walks
 backward from the vowel, on a 2 ms grid, and stops at the first stretch that
 is no longer the vowel. Obstruents end where voicing and the low spectrum
 begin, after the burst. Nasals end where F1 or the band shape leaves the
-vowel nucleus. Weak fricatives and flaps end where the level rises. A cue
-that never fails leaves the coarse time alone.
+vowel nucleus. A palatal glide (じゃ, きゃ) counts as already past the
+consonant: the cut is j → y, not the later change from y into the vowel.
+Weak fricatives and flaps end where the level rises. A cue that never
+fails leaves the coarse time alone.
 """
 
 from __future__ import annotations
@@ -18,6 +20,9 @@ from otoasobi.segment import sibilant_release
 
 _STEP = 0.002
 _SLACK = 0.04
+# じゃ is j → y → a. The y glide is already past the consonant, and it can
+# last longer than the usual 40 ms search.
+_GLIDE_SLACK = 0.07
 _MIN_RUN = 4
 _HNR_ON = 2.0
 _RATIO_ON = 1.2
@@ -26,6 +31,8 @@ _RMS_LEVEL = 0.62
 _F1_LO = 180.0
 _F1_HI = 1200.0
 _SHAPE_ON = 0.10
+# Nasal murmur sits in the lowest band. The glide and the vowel target both leave it.
+_NASAL_LOW = 0.55
 
 
 def refine_cv_boundary(
@@ -43,9 +50,11 @@ def refine_cv_boundary(
     kind = _edge_kind(mora)
     if kind is None or end <= start + 0.04:
         return coarse
+    glide = _palatal_glide(mora)
+    slack = _GLIDE_SLACK if glide else _SLACK
     floor, ceiling = _limits(mora, kind, coarse, start, end, track, c_peak)
-    search_lo = max(floor, coarse - _SLACK)
-    search_hi = min(ceiling, coarse + _SLACK)
+    search_lo = max(floor, coarse - slack)
+    search_hi = min(ceiling, coarse + slack)
     if search_hi < search_lo + 0.012:
         return coarse
     times, rms, ratio, bands = local_edge_cues(y, sr, search_lo, search_hi)
@@ -55,9 +64,9 @@ def refine_cv_boundary(
     f1 = _nearest(formants[0], formants[1], times, 0.004) if formants is not None else None
     nucleus = _nucleus_mask(times, coarse)
     if kind == "obstruent":
-        mask = _obstruent_mask(mora, rms, ratio, hnr, f1, nucleus)
+        mask = _obstruent_mask(mora, rms, ratio, hnr, f1, nucleus, times, coarse, glide)
     elif kind == "nasal":
-        mask = _nasal_mask(f1, bands, nucleus)
+        mask = _glide_nasal_mask(bands) if glide else _nasal_mask(f1, bands, nucleus)
     else:
         mask = _level_mask(rms, nucleus)
     if mask is None:
@@ -65,11 +74,23 @@ def refine_cv_boundary(
     edge = _left_edge(times, mask, coarse)
     if edge is None:
         return coarse
-    lo = max(floor, coarse - _SLACK)
-    hi = min(ceiling, coarse + _SLACK)
+    lo = max(floor, coarse - slack)
+    hi = min(ceiling, coarse + slack)
     if hi <= lo:
         return coarse
     return float(min(max(edge, lo), hi))
+
+
+def _palatal_glide(mora: Token) -> bool:
+    """True when a y-glide sits between the consonant and the vowel target.
+
+    しゃ・じゃ・きゃ are consonant, then y, then the vowel. し・ち・じ land on
+    /i/, which is already the palatal target, so they are not this case.
+    """
+    cons = mora.consonant or ""
+    if cons.endswith("y"):
+        return True
+    return cons in {"sh", "ch", "j"} and mora.vowel != "i"
 
 
 def _edge_kind(mora: Token) -> str | None:
@@ -169,6 +190,9 @@ def _obstruent_mask(
     hnr: np.ndarray | None,
     f1: np.ndarray | None,
     nucleus: np.ndarray,
+    times: np.ndarray,
+    coarse: float,
+    glide: bool,
 ) -> np.ndarray | None:
     if mora.is_stop and (hnr is None or not np.any(np.isfinite(hnr))):
         return None
@@ -180,11 +204,44 @@ def _obstruent_mask(
         voiced = np.isfinite(hnr) & (hnr > _HNR_ON)
     elif mora.is_stop:
         return None
-    f1_ok = np.ones(len(rms), dtype=bool)
-    if f1 is not None:
-        finite = np.isfinite(f1)
-        f1_ok = ~finite | ((f1 >= _F1_LO) & (f1 <= _F1_HI))
-    return voiced & (ratio < _RATIO_ON) & (rms > _RMS_VOWEL * nuc) & f1_ok
+    # The glide is brighter than /a/ and its tracked F1 often sits on F2.
+    # Gating on the vowel target waits until y becomes a. Full frication is
+    # still brighter than the glide, so the fall off that peak is j → y.
+    if glide:
+        ratio_ok = ratio < _glide_ratio_limit(ratio, times, coarse)
+        f1_ok = np.ones(len(rms), dtype=bool)
+    else:
+        ratio_ok = ratio < _RATIO_ON
+        f1_ok = np.ones(len(rms), dtype=bool)
+        if f1 is not None:
+            finite = np.isfinite(f1)
+            f1_ok = ~finite | ((f1 >= _F1_LO) & (f1 <= _F1_HI))
+    return voiced & ratio_ok & (rms > _RMS_VOWEL * nuc) & f1_ok
+
+
+def _glide_ratio_limit(ratio: np.ndarray, times: np.ndarray, coarse: float) -> float:
+    """Ratio still accepted as the glide, above the vowel and below full frication.
+
+    The window is mostly the glide when the coarse cut sits on y → a, so a
+    median would describe y, not j. The top of the left side is the frication
+    when it is actually in view. Without that bright peak, ratio is not used.
+    """
+    left = times < coarse - 0.005
+    if int(np.count_nonzero(left)) < 3:
+        return 1e6
+    peak = float(np.percentile(ratio[left], 90))
+    if peak < 2.2:
+        return 1e6
+    # No fixed ceiling. The glide can sit well above the 1.2 vowel line and
+    # still be several times quieter, in the high band, than the frication.
+    return float(max(_RATIO_ON, 0.70 * peak))
+
+
+def _glide_nasal_mask(bands: np.ndarray) -> np.ndarray | None:
+    """Oral onset, including the y glide. Matching the vowel target would cut at y → a."""
+    if bands.ndim != 2 or len(bands) < _MIN_RUN or bands.shape[1] < 1:
+        return None
+    return bands[:, 0] <= _NASAL_LOW
 
 
 def _nasal_mask(
