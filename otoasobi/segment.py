@@ -246,7 +246,7 @@ def chunk_time_bounds(tokens: list[Token], track: FrameTrack, duration: float) -
                 breath_end, speech_start = split
                 lo = max(lo, breath_end)
                 islands[i] = (max(islands[i][0], speech_start), islands[i][1])
-        if moras[0].is_stop:
+        if moras[0].is_stop or moras[0].is_affricate:
             islands[i] = (stop_closure_start(track, islands[i][0], lo), islands[i][1])
         elif moras[0].is_weak_fricative:
             islands[i] = (weak_fricative_onset(track, islands[i][0], lo), islands[i][1])
@@ -261,7 +261,9 @@ def chunk_time_bounds(tokens: list[Token], track: FrameTrack, duration: float) -
     return islands
 
 
-def _fricative_onsets(track: FrameTrack, start: float, end: float, count: int) -> list[float] | None:
+def _fricative_onsets(
+    track: FrameTrack, start: float, end: float, count: int, ratio_thr: float = 1.8
+) -> list[float] | None:
     if count <= 0:
         return []
     t0 = start
@@ -273,7 +275,7 @@ def _fricative_onsets(track: FrameTrack, start: float, end: float, count: int) -
     ratio = track.ratio[in_span]
     times = track.times[in_span]
     speech_thr = max(float(np.max(rms)) * 0.08, 1e-4)
-    fric = (ratio > 1.8) & (rms > speech_thr * 0.25)
+    fric = (ratio > ratio_thr) & (rms > speech_thr * 0.25)
     islands = runs(fric)
     # merge islands closer than 40ms
     merged: list[tuple[int, int]] = []
@@ -326,6 +328,114 @@ def stop_closure_start(track: FrameTrack, burst: float, t_lo: float, max_closure
     while i > 0 and rms[i - 1] < vowel_thr:
         i -= 1
     return max(min_t, float(times[i]))
+
+
+def _scan_sibilant(track: FrameTrack, start: float, end: float) -> tuple[float | None, float | None]:
+    """Frication start and the following vowel onset, skipping a leading closure.
+
+    Returns ``(release, fall)``. ``fall`` is None when the high band never
+    drops. A quiet closure can sit under the 1.2 ratio line, or sit on the
+    noise floor with an unstable ratio; either way it is not the vowel.
+    """
+    sel = (track.times >= start) & (track.times <= end)
+    if int(np.count_nonzero(sel)) < 4:
+        return None, None
+    times = track.times[sel]
+    ratio = track.ratio[sel]
+    rms = track.rms[sel]
+    audible = rms > _speech_thr(track) * 0.2
+    fric = audible & (ratio >= 1.2)
+    seen = False
+    hi_run = 0
+    lo_run = 0
+    release_i: int | None = None
+    first_low: int | None = None
+    run_start = 0
+    for i in range(len(times)):
+        if bool(fric[i]):
+            if hi_run == 0:
+                run_start = i
+            hi_run += 1
+            lo_run = 0
+            first_low = None
+            if hi_run >= 2 and release_i is None:
+                seen = True
+                release_i = run_start
+            continue
+        hi_run = 0
+        if not seen:
+            continue
+        lo_run += 1
+        if first_low is None:
+            first_low = i
+        if lo_run >= 2 and release_i is not None:
+            return float(times[release_i]), float(times[i - lo_run + 1])
+    release_t = float(times[release_i]) if release_i is not None else None
+    if first_low is not None and float(np.median(ratio[first_low:])) < 1.2:
+        return release_t, float(times[first_low])
+    return release_t, None
+
+
+def sibilant_release(track: FrameTrack, start: float, end: float) -> float | None:
+    """First audible frame of the high band above 3.5 kHz."""
+    release, _fall = _scan_sibilant(track, start, end)
+    return release
+
+
+def sibilant_vowel_start(track: FrameTrack, start: float, end: float) -> float:
+    """Vowel onset after [s]/[ts]/[tɕ]. The cut is the fall after the release.
+
+    The 25 ms analysis window starts losing the high band before a short
+    affricate burst has actually ended, so a release shorter than 50 ms
+    keeps one extra frame.
+    """
+    span = end - start
+    if span < 0.04:
+        return start + span * 0.35
+    release, fall = _scan_sibilant(track, start, end)
+    if fall is None:
+        cut = start + span * 0.28
+        if release is not None:
+            cut = max(cut, min(end - 0.015, release + 0.02))
+        return cut
+    cut = fall
+    if release is not None and fall - release <= 0.05:
+        cut = min(end - 0.015, fall + 0.01)
+    return cut
+
+
+def affricate_onset(track: FrameTrack, peak: float, t_lo: float, t_hi: float) -> float:
+    """Start of [ts]/[tɕ]/[dʑ], including the closure in front of the release.
+
+    ``peak`` is an aligned consonant time. For つ that is the [t] letter,
+    which can fall inside the closure, before any energy above 3.5 kHz.
+    """
+    t_lo = max(0.0, t_lo)
+    hi = min(t_hi, max(peak, t_lo) + 0.15)
+    lo = max(t_lo, peak - 0.04)
+    release, _fall = _scan_sibilant(track, lo, hi)
+    burst = release if release is not None else max(peak, t_lo + 0.012)
+    burst = max(burst, t_lo + 0.012)
+    return stop_closure_start(track, burst, t_lo, max_closure=0.12)
+
+
+def _affricate_onsets(track: FrameTrack, start: float, end: float, count: int) -> list[float] | None:
+    """Mora onsets for a つ/ち/じ run. Each onset includes that mora’s closure."""
+    releases = _fricative_onsets(track, start, end, count)
+    if releases is None:
+        releases = _fricative_onsets(track, start, end, count, ratio_thr=1.25)
+    if releases is None:
+        return None
+    onsets: list[float] = []
+    for i, release in enumerate(releases):
+        t_lo = start if i == 0 else onsets[-1] + 0.045
+        if release <= t_lo + 0.012:
+            onsets.append(max(t_lo, release))
+        else:
+            onsets.append(stop_closure_start(track, release, t_lo, 0.12))
+    if onsets:
+        onsets[0] = start
+    return onsets
 
 
 def nasal_onset(track: FrameTrack, peak: float, t_lo: float, t_hi: float) -> float:
@@ -1029,6 +1139,10 @@ def _mora_bounds(track: FrameTrack, moras: list[Token], start: float, end: float
         onsets = _weak_fricative_onsets(track, start, end, n)
         if onsets is not None:
             return _onsets_to_bounds(onsets, start, end)
+    if all(m.is_affricate and m.needs_cv_split for m in moras):
+        onsets = _affricate_onsets(track, start, end, n)
+        if onsets is not None:
+            return _onsets_to_bounds(onsets, start, end)
     if all(m.is_fricative and m.needs_cv_split for m in moras):
         onsets = _fricative_onsets(track, start, end, n)
         if onsets is not None:
@@ -1111,19 +1225,7 @@ def _cv_cut(track: FrameTrack, mora: Token, start: float, end: float) -> float:
     if mora.is_weak_fricative:
         cut = weak_fricative_vowel_start(track, start, end)
     elif mora.is_fricative:
-        sel = (track.times >= start) & (track.times <= end)
-        if not np.any(sel):
-            return start + (end - start) * 0.3
-        times = track.times[sel]
-        ratio = track.ratio[sel]
-        inner = slice(1, max(2, len(times) - 1))
-        times_i = times[inner]
-        score = ratio[inner]
-        vowelish = score < 1.2
-        if np.any(vowelish):
-            cut = float(times_i[int(np.argmax(vowelish))])
-        else:
-            cut = start + (end - start) * 0.28
+        cut = sibilant_vowel_start(track, start, end)
     elif mora.is_labial_fricative:
         cut = labial_vowel_start(track, start, end)
     elif mora.is_stop:

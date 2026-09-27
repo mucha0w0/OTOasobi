@@ -207,8 +207,12 @@ _EXTRAS = {
 for _text, (_c, _v) in _EXTRAS.items():
     _add_extra(_text, _c, _v)
 
-# Sibilants. The CV cut is the drop in energy above 3.5 kHz.
+# Sibilants. The CV cut is the drop in energy above 3.5 kHz, after the
+# frication. An affricate also has a quiet closure in front of that noise.
 SIBILANT = {"s", "sh", "z", "j", "ts", "ch"}
+# [ts] (つ・つぁ), [tɕ] (ち), [dʑ] (じ・じゃ). The closure is part of the
+# consonant; the vowel begins when the release falls away.
+AFFRICATE = {"ts", "ch", "j"}
 # [h]/[ç] (はひへほ・ひゃ行) and [ɸ] (ふ・ふゃ行). That high band is weak or
 # missing, and the consonant is often quieter than the vowel, so the sibilant
 # ratio test marks one frame or finds no island and skips the row.
@@ -319,6 +323,10 @@ class Token:
     @property
     def is_fricative(self) -> bool:
         return self.consonant in SIBILANT
+
+    @property
+    def is_affricate(self) -> bool:
+        return self.consonant in AFFRICATE
 
     @property
     def is_weak_fricative(self) -> bool:

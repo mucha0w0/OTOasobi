@@ -20,6 +20,9 @@ from otoasobi.segment import (
     label_grouped_mora,
     nasal_onset,
     nasal_vowel_start,
+    affricate_onset,
+    sibilant_release,
+    sibilant_vowel_start,
     stop_closure_start,
     stop_vowel_start,
     refine_vowel_hiatus,
@@ -56,6 +59,8 @@ def _mora_onset(
         return labial_onset(track, peak, t_lo, t_hi)
     if mora.is_weak_fricative:
         return weak_fricative_onset(track, peak, t_lo, t_hi)
+    if mora.is_affricate:
+        return affricate_onset(track, peak, t_lo, t_hi)
     if mora.is_fricative:
         sel = (track.times >= t_lo) & (track.times <= peak + 0.02)
         if int(np.count_nonzero(sel)) < 3:
@@ -118,6 +123,24 @@ def _refine_cv(
         if hi <= lo:
             return start + (end - start) * 0.4
         return min(max(cut, lo), hi)
+    if mora.is_affricate:
+        cut = sibilant_vowel_start(track, start, end)
+        release = sibilant_release(track, start, end)
+        if release is not None:
+            # The ratio window leads a short burst. Do not end the consonant
+            # before the release, and let a voiced vowel pull a late cut.
+            cut = max(cut, release + 0.012)
+            if harm is not None:
+                from otoasobi.praat_refine import voicing_onset
+
+                voiced = voicing_onset(
+                    harm[0], harm[1], release, min(end, vowel_peak or end), cut
+                )
+                if cut < voiced <= min(end - 0.02, cut + 0.04):
+                    cut = 0.4 * cut + 0.6 * voiced
+            if vowel_peak is not None and cut < vowel_peak <= min(end - 0.02, cut + 0.03):
+                cut = 0.6 * cut + 0.4 * vowel_peak
+        return min(max(cut, start + 0.02), end - 0.02)
     if mora.is_fricative:
         return _cv_cut(track, mora, start, end)
     if mora.is_stop:
@@ -229,7 +252,7 @@ def _mora_bounds_from_align(
 
     first = speech_indices[0]
     first_mora = tokens[first]
-    if first_mora.is_stop:
+    if first_mora.is_stop or first_mora.is_affricate:
         speech_start = raw_onsets[first]
         if leading_rest:
             speech_start = max(speech_start, min(0.04, peaks[first] * 0.3))
@@ -403,7 +426,7 @@ def segment_precision(
                 split = split_leading_breath(track, 0.0, chunk_bounds[0][1])
                 if split is not None and start < split[0] - 0.01:
                     start = c0
-                elif first_speech is not None and first_speech.is_stop:
+                elif first_speech is not None and (first_speech.is_stop or first_speech.is_affricate):
                     start = stop_closure_start(track, start, 0.0)
                 chunk_bounds[0] = (start, chunk_bounds[0][1])
             _cl0, cl1 = chunk_bounds[-1]
