@@ -98,6 +98,38 @@ def _split_island_with_gap(track: FrameTrack, start: float, end: float) -> list[
     return [(start, c1), (c2, end)]
 
 
+def _drop_stray_island(islands: list[tuple[float, float]]) -> bool:
+    """Drop a click that is not a mora, instead of closing a real rest.
+
+    Extra islands used to be removed by merging the smallest gap. That gap is
+    often the underscore between two moras, so one vowel ran through the rest
+    into the next mora and the click was labeled as the missing one.
+    """
+    if len(islands) < 2:
+        return False
+    durations = [end - start for start, end in islands]
+    short_i = min(range(len(durations)), key=lambda i: (durations[i], i))
+    gaps = [islands[i + 1][0] - islands[i][1] for i in range(len(islands) - 1)]
+    nearest: list[float] = []
+    if short_i > 0:
+        nearest.append(gaps[short_i - 1])
+    if short_i < len(islands) - 1:
+        nearest.append(gaps[short_i])
+    if not nearest:
+        return False
+    nearest_gap = min(nearest)
+    duration = durations[short_i]
+    smallest = min(gaps)
+    # A few frames across a rest is a click. A slightly longer blip is stray
+    # only when some other gap is the one that would be closed.
+    click = duration < 0.03 and nearest_gap >= 0.12
+    isolated = duration < 0.06 and nearest_gap >= 0.08 and nearest_gap > smallest + 1e-4
+    if not click and not isolated:
+        return False
+    del islands[short_i]
+    return True
+
+
 def _match_islands(track: FrameTrack, duration: float, n: int) -> list[tuple[float, float]]:
     """Keep n speech islands. Extra fragments merge; missing islands are split at valleys."""
     if n <= 0:
@@ -107,6 +139,8 @@ def _match_islands(track: FrameTrack, duration: float, n: int) -> list[tuple[flo
         return []
     islands = list(islands)
     while len(islands) > n:
+        if _drop_stray_island(islands):
+            continue
         gap_i = min(range(len(islands) - 1), key=lambda i: islands[i + 1][0] - islands[i][1])
         islands[gap_i] = (islands[gap_i][0], islands[gap_i + 1][1])
         del islands[gap_i + 1]
