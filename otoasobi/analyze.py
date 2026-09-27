@@ -158,6 +158,14 @@ def format_batch_log(entries: list[tuple[str, list[Span]]]) -> str:
 
 
 @dataclass
+class AnalyzedFile:
+    name: str
+    duration: float
+    spans: list[Span]
+    engine: str = "acoustic"
+
+
+@dataclass
 class FolderResult:
     txt: Path | None
     skipped: list[str]
@@ -168,10 +176,11 @@ def skipped_notice(skipped: list[str]) -> str:
     return f"{len(skipped)}個の解析できないファイルをスキップしました。スキップしたファイル↓\n{names}"
 
 
-def analyze_folder(
+def analyze_folder_files(
     folder: str | Path,
     on_progress: Callable[[int, int], None] | None = None,
-) -> FolderResult:
+) -> tuple[list[AnalyzedFile], list[str]]:
+    """フォルダ内の WAV を解析する。ファイルはまだ書かない。"""
     folder = Path(folder)
     if not folder.is_dir():
         raise RuntimeError("フォルダが見つかりません。")
@@ -181,7 +190,7 @@ def analyze_folder(
     total = len(wavs)
     if on_progress is not None:
         on_progress(0, total)
-    entries: list[tuple[str, list[Span], float]] = []
+    files: list[AnalyzedFile] = []
     skipped: list[str] = []
     for index, wav in enumerate(wavs, start=1):
         try:
@@ -189,19 +198,44 @@ def analyze_folder(
         except Exception:
             skipped.append(wav.name)
         else:
-            entries.append((wav.name, analysis.spans, analysis.duration))
+            files.append(
+                AnalyzedFile(
+                    name=wav.name,
+                    duration=analysis.duration,
+                    spans=analysis.spans,
+                    engine=analysis.engine,
+                )
+            )
         if on_progress is not None:
             on_progress(index, total)
-    if not entries:
-        return FolderResult(txt=None, skipped=skipped)
-    span_entries = [(name, spans) for name, spans, _duration in entries]
+    return files, skipped
+
+
+def export_folder(folder: str | Path, files: list[AnalyzedFile]) -> Path:
+    """直した区間から oto.ini とラベルを書く。"""
+    folder = Path(folder)
+    if not folder.is_dir():
+        raise RuntimeError("フォルダが見つかりません。")
+    if not files:
+        raise RuntimeError("書き出す解析結果がありません。")
+    span_entries = [(item.name, item.spans) for item in files]
     oto_lines: list[str] = []
-    for name, spans, duration in entries:
-        oto_lines.extend(mono_oto_lines(name, spans, duration))
+    for item in files:
+        oto_lines.extend(mono_oto_lines(item.name, item.spans, item.duration))
     out = folder / OTO_INI_NAME
     log = folder / BATCH_LOG_NAME
     onset = folder / BATCH_TXT_NAME
-    write_oto_ini(out, oto_lines)
     log.write_text(format_batch_log(span_entries), encoding="utf-8")
     onset.write_text(format_batch_txt(span_entries), encoding="utf-8")
-    return FolderResult(txt=out, skipped=skipped)
+    write_oto_ini(out, oto_lines)
+    return out
+
+
+def analyze_folder(
+    folder: str | Path,
+    on_progress: Callable[[int, int], None] | None = None,
+) -> FolderResult:
+    files, skipped = analyze_folder_files(folder, on_progress=on_progress)
+    if not files:
+        return FolderResult(txt=None, skipped=skipped)
+    return FolderResult(txt=export_folder(folder, files), skipped=skipped)

@@ -108,7 +108,24 @@ def render_oto_ini(lines: list[str]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _rename_existing_as_log(path: Path) -> None:
+    """同名ファイルがあるときはログ名へ退避する。oto.ini は oto.log.ini、重複時は oto.log.2.ini。"""
+    if not path.is_file():
+        return
+    stem = path.stem
+    suffix = path.suffix
+    index = 1
+    while True:
+        name = f"{stem}.log{suffix}" if index == 1 else f"{stem}.log.{index}{suffix}"
+        candidate = path.with_name(name)
+        if not candidate.exists():
+            path.rename(candidate)
+            return
+        index += 1
+
+
 def write_oto_ini(path: str | Path, lines: list[str]) -> Path:
     path = Path(path)
+    _rename_existing_as_log(path)
     path.write_text(render_oto_ini(lines), encoding=ANSI, newline="\r\n")
     return path

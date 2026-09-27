@@ -1,0 +1,897 @@
+using Microsoft.UI.Input;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Imaging;
+using Microsoft.UI.Xaml.Shapes;
+using Windows.Foundation;
+using Windows.UI;
+
+namespace Otoasobi;
+
+public sealed class SpanEditor : UserControl
+{
+    const double Pad = 10;
+    const double Ruler = 18;
+    const double MinSpan = 0.005;
+    const double LinkGap = 0.0005;
+    const double HitPx = 8;
+
+    enum DragKind
+    {
+        None,
+        Boundary,
+        Span,
+        Pan,
+    }
+
+    readonly Canvas _plot = new();
+    readonly TextBlock _readout = new();
+    readonly Border _badge;
+    readonly RectangleGeometry _clip = new();
+    readonly InputCursor _cursorArrow = InputSystemCursor.Create(InputSystemCursorShape.Arrow);
+    readonly InputCursor _cursorEw = InputSystemCursor.Create(InputSystemCursorShape.SizeWestEast);
+    readonly InputCursor _cursorMove = InputSystemCursor.Create(InputSystemCursorShape.SizeAll);
+    readonly InputCursor _cursorHand = InputSystemCursor.Create(InputSystemCursorShape.Hand);
+
+    static readonly SolidColorBrush WaveBrush = BrushOf(170, 230, 230, 230);
+    static readonly SolidColorBrush ZeroBrush = BrushOf(80, 255, 255, 255);
+    static readonly SolidColorBrush LineBrush = BrushOf(230, 255, 255, 255);
+    static readonly SolidColorBrush HotBrush = BrushOf(255, 251, 191, 36);
+    static readonly SolidColorBrush TickBrush = BrushOf(255, 209, 213, 219);
+    static readonly SolidColorBrush SepBrush = BrushOf(255, 42, 42, 42);
+    static readonly SolidColorBrush TextBrush = BrushOf(255, 249, 250, 251);
+    static readonly Dictionary<string, SolidColorBrush> WaveFills = [];
+    static readonly Dictionary<string, SolidColorBrush> SpecFills = [];
+
+    WavFile? _file;
+    ImageSource? _spec;
+    double _specT0;
+    double _specT1;
+    double[] _lo = [];
+    double[] _hi = [];
+    double _view0;
+    double _view1 = 1;
+
+    Image? _specImage;
+    Polygon? _wave;
+    Line? _zero;
+    Rectangle? _separator;
+    readonly List<Rectangle> _waveRects = [];
+    readonly List<Rectangle> _specRects = [];
+    readonly List<TextBlock> _waveTexts = [];
+    readonly List<TextBlock> _specTexts = [];
+    readonly List<Line> _lines = [];
+    readonly List<TextBlock> _ticks = [];
+    List<List<(int Index, bool IsStart)>> _groups = [];
+
+    DragKind _drag = DragKind.None;
+    int _dragIndex = -1;
+    double _grabTime;
+    double _panX;
+    double _panView0;
+    double _panView1;
+    List<(double Start, double End)> _origin = [];
+    bool _changed;
+    Pointer? _pointer;
+
+    public SpanEditor()
+    {
+        var root = new Grid();
+        _plot.Clip = _clip;
+        _readout.IsHitTestVisible = false;
+        _readout.FontSize = 13;
+        _readout.Foreground = TextBrush;
+        _badge = new Border
+        {
+            HorizontalAlignment = HorizontalAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Top,
+            Margin = new Thickness(12),
+            Padding = new Thickness(8, 4, 8, 4),
+            Background = BrushOf(190, 22, 22, 22),
+            IsHitTestVisible = false,
+            Visibility = Visibility.Collapsed,
+            Child = _readout,
+        };
+        root.Children.Add(_plot);
+        root.Children.Add(_badge);
+        Content = root;
+        Background = BrushOf(255, 22, 22, 22);
+
+        SizeChanged += (_, e) =>
+        {
+            _plot.Width = e.NewSize.Width;
+            _plot.Height = e.NewSize.Height;
+            _clip.Rect = new Rect(0, 0, Math.Max(0, e.NewSize.Width), Math.Max(0, e.NewSize.Height));
+            ArrangeAll();
+        };
+        PointerPressed += OnPointerPressed;
+        PointerMoved += OnPointerMoved;
+        PointerReleased += OnPointerReleased;
+        PointerCanceled += OnPointerReleased;
+        PointerCaptureLost += (_, _) => FinishDrag();
+        PointerWheelChanged += OnWheel;
+        DoubleTapped += (_, e) =>
+        {
+            if (_file == null)
+                return;
+            FinishDrag();
+            SetFullView();
+            ArrangeAll();
+            e.Handled = true;
+        };
+        PointerExited += (_, _) =>
+        {
+            if (_drag == DragKind.None)
+                SetReadout("");
+        };
+    }
+
+    public event EventHandler? Edited;
+
+    public void Clear(string message)
+    {
+        FinishDrag();
+        _file = null;
+        _spec = null;
+        _lo = [];
+        _hi = [];
+        _plot.Children.Clear();
+        _waveRects.Clear();
+        _specRects.Clear();
+        _waveTexts.Clear();
+        _specTexts.Clear();
+        _lines.Clear();
+        _ticks.Clear();
+        _groups.Clear();
+        _specImage = null;
+        _wave = null;
+        _zero = null;
+        _separator = null;
+        SetReadout(message);
+        ProtectedCursor = _cursorArrow;
+    }
+
+    public void SetFile(
+        WavFile file,
+        ImageSource? spectrogram,
+        double specT0,
+        double specT1,
+        double[] waveLo,
+        double[] waveHi)
+    {
+        FinishDrag();
+        _file = file;
+        _spec = spectrogram;
+        _specT0 = specT0;
+        _specT1 = specT1;
+        _lo = waveLo;
+        _hi = waveHi;
+        SetFullView();
+        Rebuild();
+        SetReadout("");
+    }
+
+    void Rebuild()
+    {
+        _plot.Children.Clear();
+        _waveRects.Clear();
+        _specRects.Clear();
+        _waveTexts.Clear();
+        _specTexts.Clear();
+        _lines.Clear();
+        _ticks.Clear();
+        if (_file == null)
+            return;
+
+        _specImage = new Image
+        {
+            Source = _spec,
+            Stretch = Stretch.Fill,
+            IsHitTestVisible = false,
+        };
+        _plot.Children.Add(_specImage);
+
+        _wave = new Polygon
+        {
+            Fill = WaveBrush,
+            IsHitTestVisible = false,
+        };
+        _plot.Children.Add(_wave);
+
+        _zero = new Line
+        {
+            Stroke = ZeroBrush,
+            StrokeThickness = 1,
+            IsHitTestVisible = false,
+        };
+        _plot.Children.Add(_zero);
+
+        _separator = new Rectangle
+        {
+            Height = 1,
+            Fill = SepBrush,
+            IsHitTestVisible = false,
+        };
+        _plot.Children.Add(_separator);
+
+        foreach (var span in _file.Spans)
+        {
+            var waveRect = new Rectangle { Fill = FillBrush(span.Label, wave: true), IsHitTestVisible = false };
+            var specRect = new Rectangle { Fill = FillBrush(span.Label, wave: false), IsHitTestVisible = false };
+            var waveText = MakeLabel(span);
+            var specText = MakeLabel(span);
+            _waveRects.Add(waveRect);
+            _specRects.Add(specRect);
+            _waveTexts.Add(waveText);
+            _specTexts.Add(specText);
+            _plot.Children.Add(waveRect);
+            _plot.Children.Add(specRect);
+        }
+
+        _groups = BuildGroups(_file.Spans);
+        foreach (var _ in _groups)
+        {
+            var line = new Line
+            {
+                Stroke = LineBrush,
+                StrokeThickness = 1.5,
+                IsHitTestVisible = false,
+            };
+            _lines.Add(line);
+            _plot.Children.Add(line);
+        }
+
+        foreach (var text in _waveTexts)
+            _plot.Children.Add(text);
+        foreach (var text in _specTexts)
+            _plot.Children.Add(text);
+
+        ArrangeAll();
+    }
+
+    void OnPointerPressed(object sender, PointerRoutedEventArgs e)
+    {
+        if (_file == null || _plot.Width < 2)
+            return;
+        var point = e.GetCurrentPoint(this);
+        var x = point.Position.X;
+        _pointer = e.Pointer;
+        if (point.Properties.IsRightButtonPressed || point.Properties.IsMiddleButtonPressed)
+        {
+            _drag = DragKind.Pan;
+            _panX = x;
+            _panView0 = _view0;
+            _panView1 = _view1;
+            _changed = false;
+            CapturePointer(e.Pointer);
+            ProtectedCursor = _cursorHand;
+            e.Handled = true;
+            return;
+        }
+
+        if (!point.Properties.IsLeftButtonPressed)
+            return;
+
+        var group = HitGroup(x);
+        if (group >= 0)
+        {
+            _drag = DragKind.Boundary;
+            _dragIndex = group;
+            _origin = Snapshot();
+            _changed = false;
+            CapturePointer(e.Pointer);
+            ProtectedCursor = _cursorEw;
+            Highlight(group);
+            ShowBoundary(group);
+            e.Handled = true;
+            return;
+        }
+
+        var span = HitSpan(XToTime(x));
+        if (span >= 0)
+        {
+            _drag = DragKind.Span;
+            _dragIndex = span;
+            _grabTime = XToTime(x);
+            _origin = Snapshot();
+            _changed = false;
+            CapturePointer(e.Pointer);
+            ProtectedCursor = _cursorMove;
+            ShowSpan(span);
+            e.Handled = true;
+        }
+    }
+
+    void OnPointerMoved(object sender, PointerRoutedEventArgs e)
+    {
+        if (_file == null)
+            return;
+        var point = e.GetCurrentPoint(this);
+        var x = point.Position.X;
+        if (_drag == DragKind.Pan)
+        {
+            Pan(x);
+            e.Handled = true;
+            return;
+        }
+
+        if (_drag == DragKind.Boundary && point.Properties.IsLeftButtonPressed)
+        {
+            ApplyBoundary(XToTime(x));
+            e.Handled = true;
+            return;
+        }
+
+        if (_drag == DragKind.Span && point.Properties.IsLeftButtonPressed)
+        {
+            ApplySpan(XToTime(x));
+            e.Handled = true;
+            return;
+        }
+
+        var group = HitGroup(x);
+        if (group >= 0)
+        {
+            ProtectedCursor = _cursorEw;
+            Highlight(group);
+            ShowBoundary(group);
+            return;
+        }
+
+        Highlight(-1);
+        var span = HitSpan(XToTime(x));
+        if (span >= 0)
+        {
+            ProtectedCursor = _cursorMove;
+            ShowSpan(span);
+            return;
+        }
+
+        ProtectedCursor = _cursorArrow;
+        SetReadout("");
+    }
+
+    void SetReadout(string text)
+    {
+        _readout.Text = text;
+        _badge.Visibility = string.IsNullOrEmpty(text) ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    void OnPointerReleased(object sender, PointerRoutedEventArgs e)
+    {
+        _pointer = e.Pointer;
+        FinishDrag();
+        e.Handled = true;
+    }
+
+    void FinishDrag()
+    {
+        if (_drag == DragKind.None)
+            return;
+        var changed = _changed;
+        _drag = DragKind.None;
+        _origin = [];
+        if (_pointer != null)
+        {
+            var pointer = _pointer;
+            _pointer = null;
+            if (PointerCaptures != null)
+            {
+                foreach (var captured in PointerCaptures)
+                {
+                    if (captured.PointerId == pointer.PointerId)
+                    {
+                        ReleasePointerCapture(pointer);
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (changed)
+            Edited?.Invoke(this, EventArgs.Empty);
+    }
+
+    void OnWheel(object sender, PointerRoutedEventArgs e)
+    {
+        if (_file == null || _drag != DragKind.None)
+            return;
+        var point = e.GetCurrentPoint(this);
+        var delta = point.Properties.MouseWheelDelta;
+        if (delta == 0)
+            return;
+        var factor = delta > 0 ? 0.8 : 1.25;
+        var anchor = XToTime(point.Position.X);
+        var span = Math.Clamp((_view1 - _view0) * factor, Math.Min(0.02, Duration), Duration);
+        var ratio = (anchor - _view0) / Math.Max(1e-9, _view1 - _view0);
+        SetView(anchor - span * ratio, anchor - span * ratio + span);
+        ArrangeAll();
+        e.Handled = true;
+    }
+
+    void ApplyBoundary(double time)
+    {
+        if (_file == null || _dragIndex < 0 || _dragIndex >= _groups.Count)
+            return;
+        Restore(_origin);
+        if (_dragIndex >= _groups.Count)
+            return;
+        var (lo, hi) = Limits(_origin, _groups, _dragIndex, Duration);
+        if (hi < lo)
+            hi = lo;
+        time = Math.Clamp(time, lo, hi);
+        foreach (var (index, isStart) in _groups[_dragIndex])
+        {
+            if (isStart)
+                _file.Spans[index].Start = time;
+            else
+                _file.Spans[index].End = time;
+        }
+
+        _changed = Changed();
+        ArrangeSpans();
+        Highlight(_dragIndex);
+        ShowBoundary(_dragIndex);
+    }
+
+    void ApplySpan(double time)
+    {
+        if (_file == null || _dragIndex < 0 || _dragIndex >= _origin.Count)
+            return;
+        Restore(_origin);
+        var index = _dragIndex;
+        var start = _origin[index].Start;
+        var end = _origin[index].End;
+        var linkLeft = index > 0 && Math.Abs(_origin[index - 1].End - start) <= LinkGap;
+        var linkRight = index + 1 < _origin.Count && Math.Abs(_origin[index + 1].Start - end) <= LinkGap;
+        var startLo = 0.0;
+        if (linkLeft)
+            startLo = _origin[index - 1].Start + MinSpan;
+        else if (index > 0)
+            startLo = _origin[index - 1].End;
+        var endHi = Duration;
+        if (linkRight)
+            endHi = _origin[index + 1].End - MinSpan;
+        else if (index + 1 < _origin.Count)
+            endHi = _origin[index + 1].Start;
+        var dtMin = startLo - start;
+        var dtMax = endHi - end;
+        var dt = dtMax < dtMin ? 0 : Math.Clamp(time - _grabTime, dtMin, dtMax);
+        var spans = _file.Spans;
+        spans[index].Start = start + dt;
+        spans[index].End = end + dt;
+        if (linkLeft)
+            spans[index - 1].End = spans[index].Start;
+        if (linkRight)
+            spans[index + 1].Start = spans[index].End;
+        _changed = Changed();
+        ArrangeSpans();
+        ShowSpan(index);
+    }
+
+    void Pan(double x)
+    {
+        var span = _panView1 - _panView0;
+        var dt = (x - _panX) / Math.Max(1, PlotWidth) * span;
+        SetView(_panView0 - dt, _panView1 - dt);
+        ArrangeAll();
+    }
+
+    void ArrangeAll()
+    {
+        if (_file == null || _plot.Width < 2 || _plot.Height < 2)
+            return;
+        ArrangeWave();
+        ArrangeSpans();
+        ArrangeTicks();
+    }
+
+    void ArrangeWave()
+    {
+        if (_specImage != null)
+        {
+            Canvas.SetLeft(_specImage, X(_specT0));
+            Canvas.SetTop(_specImage, SpecTop);
+            _specImage.Width = Math.Max(1, X(_specT1) - X(_specT0));
+            _specImage.Height = Math.Max(1, SpecHeight);
+        }
+
+        if (_wave != null)
+            _wave.Points = WavePoints();
+
+        if (_zero != null)
+        {
+            var y = WaveHeight * 0.5;
+            _zero.X1 = Pad;
+            _zero.X2 = Math.Max(Pad, _plot.Width - Pad);
+            _zero.Y1 = y;
+            _zero.Y2 = y;
+        }
+
+        if (_separator != null)
+        {
+            Canvas.SetLeft(_separator, 0);
+            Canvas.SetTop(_separator, WaveHeight);
+            _separator.Width = _plot.Width;
+        }
+    }
+
+    void ArrangeSpans()
+    {
+        if (_file == null)
+            return;
+        var waveTop = 0.0;
+        var waveHeight = WaveHeight;
+        var specTop = SpecTop;
+        var specHeight = SpecHeight;
+        var spans = _file.Spans;
+        for (var i = 0; i < spans.Count; i++)
+        {
+            var left = X(spans[i].Start);
+            var right = X(spans[i].End);
+            var width = Math.Max(0, right - left);
+            PlaceRect(_waveRects, i, left, waveTop, width, waveHeight);
+            PlaceRect(_specRects, i, left, specTop, width, specHeight);
+            PlaceText(_waveTexts, i, left, waveTop + 8, width);
+            PlaceText(_specTexts, i, left, specTop + 8, width);
+        }
+
+        for (var i = 0; i < _lines.Count && i < _groups.Count; i++)
+        {
+            var x = X(GroupTime(i));
+            _lines[i].X1 = x;
+            _lines[i].X2 = x;
+            _lines[i].Y1 = 0;
+            _lines[i].Y2 = Math.Max(0, _plot.Height - Ruler);
+        }
+    }
+
+    void ArrangeTicks()
+    {
+        foreach (var tick in _ticks)
+            _plot.Children.Remove(tick);
+        _ticks.Clear();
+        var span = Math.Max(1e-6, _view1 - _view0);
+        var step = NiceStep(span / Math.Max(1, PlotWidth / 90));
+        var first = Math.Ceiling(_view0 / step) * step;
+        var y = _plot.Height - Ruler + 1;
+        for (var t = first; t <= _view1 + step * 0.001; t += step)
+        {
+            var tick = new TextBlock
+            {
+                Text = t.ToString("0.00"),
+                Foreground = TickBrush,
+                FontSize = 11,
+                IsHitTestVisible = false,
+            };
+            _ticks.Add(tick);
+            _plot.Children.Add(tick);
+            Canvas.SetLeft(tick, X(t) + 4);
+            Canvas.SetTop(tick, y);
+        }
+    }
+
+    PointCollection WavePoints()
+    {
+        var points = new PointCollection();
+        var count = Math.Min(_lo.Length, _hi.Length);
+        if (count == 0 || _file == null)
+            return points;
+        var peak = 0.2;
+        for (var i = 0; i < count; i++)
+            peak = Math.Max(peak, Math.Max(Math.Abs(_lo[i]), Math.Abs(_hi[i])));
+        for (var i = 0; i < count; i++)
+        {
+            var t = Duration * (i + 0.5) / count;
+            points.Add(new Point(X(t), WaveY(_hi[i], peak)));
+        }
+
+        for (var i = count - 1; i >= 0; i--)
+        {
+            var t = Duration * (i + 0.5) / count;
+            points.Add(new Point(X(t), WaveY(_lo[i], peak)));
+        }
+
+        return points;
+    }
+
+    void ShowBoundary(int group)
+    {
+        if (group < 0 || group >= _groups.Count)
+            return;
+        SetReadout($"{GroupTime(group):0.000} 秒");
+    }
+
+    void ShowSpan(int index)
+    {
+        if (_file == null || index < 0 || index >= _file.Spans.Count)
+            return;
+        var span = _file.Spans[index];
+        SetReadout($"{Caption(span)}   {span.Start:0.000}–{span.End:0.000}");
+    }
+
+    void Highlight(int group)
+    {
+        for (var i = 0; i < _lines.Count; i++)
+            _lines[i].Stroke = i == group ? HotBrush : LineBrush;
+    }
+
+    int HitGroup(double x)
+    {
+        var best = -1;
+        var bestDist = HitPx;
+        for (var i = 0; i < _groups.Count; i++)
+        {
+            var dist = Math.Abs(X(GroupTime(i)) - x);
+            if (dist <= bestDist)
+            {
+                bestDist = dist;
+                best = i;
+            }
+        }
+
+        return best;
+    }
+
+    int HitSpan(double time)
+    {
+        if (_file == null)
+            return -1;
+        var best = -1;
+        var bestWidth = double.MaxValue;
+        var spans = _file.Spans;
+        for (var i = 0; i < spans.Count; i++)
+        {
+            if (time < spans[i].Start - 1e-9 || time > spans[i].End + 1e-9)
+                continue;
+            var width = spans[i].End - spans[i].Start;
+            if (width < bestWidth)
+            {
+                bestWidth = width;
+                best = i;
+            }
+        }
+
+        return best;
+    }
+
+    double GroupTime(int group)
+    {
+        if (_file == null || group < 0 || group >= _groups.Count || _groups[group].Count == 0)
+            return 0;
+        var (index, isStart) = _groups[group][0];
+        var span = _file.Spans[index];
+        return isStart ? span.Start : span.End;
+    }
+
+    List<(double Start, double End)> Snapshot()
+    {
+        var copy = new List<(double Start, double End)>();
+        if (_file == null)
+            return copy;
+        foreach (var span in _file.Spans)
+            copy.Add((span.Start, span.End));
+        return copy;
+    }
+
+    void Restore(List<(double Start, double End)> origin)
+    {
+        if (_file == null)
+            return;
+        var count = Math.Min(origin.Count, _file.Spans.Count);
+        for (var i = 0; i < count; i++)
+        {
+            _file.Spans[i].Start = origin[i].Start;
+            _file.Spans[i].End = origin[i].End;
+        }
+    }
+
+    bool Changed()
+    {
+        if (_file == null || _origin.Count != _file.Spans.Count)
+            return false;
+        for (var i = 0; i < _origin.Count; i++)
+        {
+            if (Math.Abs(_file.Spans[i].Start - _origin[i].Start) > 1e-6)
+                return true;
+            if (Math.Abs(_file.Spans[i].End - _origin[i].End) > 1e-6)
+                return true;
+        }
+
+        return false;
+    }
+
+    double Duration => _file == null || _file.Duration <= 0 ? 1e-3 : _file.Duration;
+
+    double PlotWidth => Math.Max(1, _plot.Width - Pad * 2);
+
+    double ContentBottom => Math.Max(0, _plot.Height - Ruler);
+
+    double WaveHeight => ContentBottom * 0.40;
+
+    double SpecTop => WaveHeight;
+
+    double SpecHeight => Math.Max(1, ContentBottom - SpecTop);
+
+    double X(double time)
+    {
+        return Pad + (time - _view0) / Math.Max(1e-9, _view1 - _view0) * PlotWidth;
+    }
+
+    double XToTime(double x)
+    {
+        return _view0 + (x - Pad) / PlotWidth * (_view1 - _view0);
+    }
+
+    double WaveY(double sample, double peak)
+    {
+        var mid = WaveHeight * 0.5;
+        var amp = Math.Max(1, mid - 6);
+        return mid - sample / peak * amp;
+    }
+
+    void SetFullView()
+    {
+        _view0 = 0;
+        _view1 = Duration;
+    }
+
+    void SetView(double start, double end)
+    {
+        var duration = Duration;
+        var span = Math.Clamp(end - start, Math.Min(0.02, duration), duration);
+        start = Math.Clamp(start, 0, Math.Max(0, duration - span));
+        _view0 = start;
+        _view1 = start + span;
+    }
+
+    static void PlaceRect(List<Rectangle> rects, int index, double left, double top, double width, double height)
+    {
+        if (index >= rects.Count)
+            return;
+        var rect = rects[index];
+        Canvas.SetLeft(rect, left);
+        Canvas.SetTop(rect, top);
+        rect.Width = width;
+        rect.Height = Math.Max(0, height);
+    }
+
+    static void PlaceText(List<TextBlock> texts, int index, double left, double top, double width)
+    {
+        if (index >= texts.Count)
+            return;
+        var text = texts[index];
+        text.Width = Math.Max(0, width);
+        text.Visibility = width < 28 ? Visibility.Collapsed : Visibility.Visible;
+        Canvas.SetLeft(text, left);
+        Canvas.SetTop(text, top);
+    }
+
+    static TextBlock MakeLabel(PhoneSpan span)
+    {
+        return new TextBlock
+        {
+            Text = Caption(span),
+            Foreground = TextBrush,
+            FontSize = 12,
+            TextAlignment = TextAlignment.Center,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            IsHitTestVisible = false,
+        };
+    }
+
+    static string Caption(PhoneSpan span)
+    {
+        if (string.IsNullOrEmpty(span.Token) || span.Token == "_" || span.Token == span.Label)
+            return span.Label;
+        return span.Token + "  " + span.Label;
+    }
+
+    static List<List<(int Index, bool IsStart)>> BuildGroups(List<PhoneSpan> spans)
+    {
+        var edges = new List<(double Time, int Index, bool IsStart)>(spans.Count * 2);
+        for (var i = 0; i < spans.Count; i++)
+        {
+            edges.Add((spans[i].Start, i, true));
+            edges.Add((spans[i].End, i, false));
+        }
+
+        return Cluster(edges);
+    }
+
+    static List<List<(int Index, bool IsStart)>> Cluster(List<(double Time, int Index, bool IsStart)> edges)
+    {
+        edges.Sort((a, b) => a.Time.CompareTo(b.Time));
+        var groups = new List<List<(int Index, bool IsStart)>>();
+        var groupTime = double.NegativeInfinity;
+        foreach (var edge in edges)
+        {
+            if (groups.Count > 0 && edge.Time - groupTime <= LinkGap)
+            {
+                groups[^1].Add((edge.Index, edge.IsStart));
+                continue;
+            }
+
+            groupTime = edge.Time;
+            groups.Add([(edge.Index, edge.IsStart)]);
+        }
+
+        return groups;
+    }
+
+    static (double Lo, double Hi) Limits(
+        List<(double Start, double End)> spans,
+        List<List<(int Index, bool IsStart)>> groups,
+        int index,
+        double duration)
+    {
+        var group = groups[index];
+        var time = spans[group[0].Index].Start;
+        if (!group[0].IsStart)
+            time = spans[group[0].Index].End;
+        var lo = 0.0;
+        var hi = duration;
+        foreach (var (spanIndex, isStart) in group)
+        {
+            if (isStart)
+                hi = Math.Min(hi, spans[spanIndex].End - MinSpan);
+            else
+                lo = Math.Max(lo, spans[spanIndex].Start + MinSpan);
+        }
+
+        for (var other = 0; other < groups.Count; other++)
+        {
+            if (other == index || groups[other].Count == 0)
+                continue;
+            var (spanIndex, isStart) = groups[other][0];
+            var otherTime = isStart ? spans[spanIndex].Start : spans[spanIndex].End;
+            if (otherTime < time)
+                lo = Math.Max(lo, otherTime + MinSpan);
+            else if (otherTime > time)
+                hi = Math.Min(hi, otherTime - MinSpan);
+        }
+
+        return (lo, hi);
+    }
+
+    static double NiceStep(double target)
+    {
+        double[] steps = [0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10];
+        foreach (var step in steps)
+        {
+            if (step >= target)
+                return step;
+        }
+
+        return 10;
+    }
+
+    static SolidColorBrush FillBrush(string label, bool wave)
+    {
+        var cache = wave ? WaveFills : SpecFills;
+        if (cache.TryGetValue(label, out var brush))
+            return brush;
+        var color = KindColor(label);
+        brush = new SolidColorBrush(Color.FromArgb(wave ? (byte)70 : (byte)88, color.R, color.G, color.B));
+        cache[label] = brush;
+        return brush;
+    }
+
+    static Color KindColor(string label)
+    {
+        if (label == "無音")
+            return Color.FromArgb(255, 154, 160, 166);
+        if (label == "息")
+            return Color.FromArgb(255, 96, 165, 250);
+        if (label is "a" or "i" or "u" or "e" or "o" or "N" or "M")
+            return Color.FromArgb(255, 15, 157, 142);
+        return Color.FromArgb(255, 217, 119, 6);
+    }
+
+    static SolidColorBrush BrushOf(byte a, byte r, byte g, byte b)
+    {
+        return new SolidColorBrush(Color.FromArgb(a, r, g, b));
+    }
+}

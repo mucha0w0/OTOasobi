@@ -46,7 +46,49 @@ sealed class AnalysisClient : IDisposable
         _ = Task.Run(ReadLoop);
     }
 
-    public async Task<AnalyzeResult> AnalyzeAsync(string path, Action<int, int>? onProgress = null)
+    public async Task<FolderData> AnalyzeFolderAsync(string path, Action<int, int>? onProgress = null)
+    {
+        using var doc = await SendAsync(id => JsonSerializer.Serialize(new { id, cmd = "analyze", path }), onProgress)
+            .ConfigureAwait(true);
+        return ReadFolder(doc.RootElement);
+    }
+
+    public async Task<PreviewData> PreviewAsync(string path)
+    {
+        using var doc = await SendAsync(id => JsonSerializer.Serialize(new { id, cmd = "preview", path }), null)
+            .ConfigureAwait(true);
+        return ReadPreview(doc.RootElement);
+    }
+
+    public async Task<AnalyzeResult> WriteAsync(string folder, IReadOnlyList<WavFile> files)
+    {
+        using var doc = await SendAsync(id => JsonSerializer.Serialize(new
+        {
+            id,
+            cmd = "write",
+            folder,
+            files = files.Select(file => new
+            {
+                name = file.Name,
+                duration = file.Duration,
+                spans = file.Spans.Select(span => new
+                {
+                    start = span.Start,
+                    end = span.End,
+                    label = span.Label,
+                    token = span.Token,
+                }).ToArray(),
+            }).ToArray(),
+        }), null).ConfigureAwait(true);
+        var root = doc.RootElement;
+        var ok = root.TryGetProperty("ok", out var okValue) && okValue.GetBoolean();
+        string? txt = root.TryGetProperty("txt", out var txtValue) ? txtValue.GetString() : null;
+        string? error = root.TryGetProperty("error", out var errorValue) ? errorValue.GetString() : null;
+        string? notice = root.TryGetProperty("notice", out var noticeValue) ? noticeValue.GetString() : null;
+        return new AnalyzeResult(ok, txt, error, notice);
+    }
+
+    async Task<JsonDocument> SendAsync(Func<int, string> build, Action<int, int>? onProgress)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (_process.HasExited)
@@ -57,29 +99,89 @@ sealed class AnalysisClient : IDisposable
         _pending[id] = done;
         if (onProgress != null)
             _progress[id] = onProgress;
-        var request = JsonSerializer.Serialize(new { id, cmd = "analyze", path });
+        var request = build(id);
         lock (_writeLock)
         {
             _input.WriteLine(request);
             _input.Flush();
         }
 
-        string line;
         try
         {
-            line = await done.Task.ConfigureAwait(true);
+            var line = await done.Task.ConfigureAwait(true);
+            return JsonDocument.Parse(line);
         }
         finally
         {
             _progress.TryRemove(id, out _);
         }
-        using var doc = JsonDocument.Parse(line);
-        var root = doc.RootElement;
+    }
+
+    static FolderData ReadFolder(JsonElement root)
+    {
         var ok = root.TryGetProperty("ok", out var okValue) && okValue.GetBoolean();
-        string? txt = root.TryGetProperty("txt", out var txtValue) ? txtValue.GetString() : null;
         string? error = root.TryGetProperty("error", out var errorValue) ? errorValue.GetString() : null;
         string? notice = root.TryGetProperty("notice", out var noticeValue) ? noticeValue.GetString() : null;
-        return new AnalyzeResult(ok, txt, error, notice);
+        var files = new List<WavFile>();
+        if (root.TryGetProperty("files", out var filesValue) && filesValue.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in filesValue.EnumerateArray())
+            {
+                var file = new WavFile
+                {
+                    Name = item.TryGetProperty("name", out var name) ? name.GetString() ?? "" : "",
+                    Duration = item.TryGetProperty("duration", out var duration) ? duration.GetDouble() : 0,
+                    Engine = item.TryGetProperty("engine", out var engine) ? engine.GetString() ?? "" : "",
+                };
+                if (item.TryGetProperty("spans", out var spans) && spans.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var span in spans.EnumerateArray())
+                    {
+                        file.Spans.Add(new PhoneSpan
+                        {
+                            Start = span.TryGetProperty("start", out var start) ? start.GetDouble() : 0,
+                            End = span.TryGetProperty("end", out var end) ? end.GetDouble() : 0,
+                            Label = span.TryGetProperty("label", out var label) ? label.GetString() ?? "" : "",
+                            Token = span.TryGetProperty("token", out var token) ? token.GetString() ?? "" : "",
+                        });
+                    }
+                }
+
+                files.Add(file);
+            }
+        }
+
+        return new FolderData(ok, error, notice, files);
+    }
+
+    static PreviewData ReadPreview(JsonElement root)
+    {
+        var ok = root.TryGetProperty("ok", out var okValue) && okValue.GetBoolean();
+        string? error = root.TryGetProperty("error", out var errorValue) ? errorValue.GetString() : null;
+        var lo = ReadDoubles(root, "wave_lo");
+        var hi = ReadDoubles(root, "wave_hi");
+        var png = Array.Empty<byte>();
+        if (root.TryGetProperty("spec_png", out var pngValue) && pngValue.ValueKind == JsonValueKind.String)
+        {
+            var text = pngValue.GetString();
+            if (!string.IsNullOrEmpty(text))
+                png = Convert.FromBase64String(text);
+        }
+
+        var t0 = root.TryGetProperty("spec_t0", out var t0Value) ? t0Value.GetDouble() : 0;
+        var t1 = root.TryGetProperty("spec_t1", out var t1Value) ? t1Value.GetDouble() : 0;
+        return new PreviewData(ok, error, lo, hi, png, t0, t1);
+    }
+
+    static double[] ReadDoubles(JsonElement root, string name)
+    {
+        if (!root.TryGetProperty(name, out var value) || value.ValueKind != JsonValueKind.Array)
+            return [];
+        var values = new double[value.GetArrayLength()];
+        var index = 0;
+        foreach (var item in value.EnumerateArray())
+            values[index++] = item.GetDouble();
+        return values;
     }
 
     public void Dispose()
