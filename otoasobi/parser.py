@@ -222,6 +222,8 @@ FRICATIVE = SIBILANT | WEAK_FRICATIVE
 LABIAL_FRICATIVE = {"v", "vy"}
 STOP = {"k", "t", "p", "b", "d", "g", "ky", "gy", "py", "by", "ty", "dy", "kw", "gw"}
 NASAL = {"n", "ny", "m", "my"}
+# ん before these onsets is [m]. The mora kind stays N; only the label becomes M.
+_BILABIAL_NASAL = {"m", "my", "b", "by", "p", "py"}
 # r/ry are flaps. y (や行) and w (わ行) share the same short-consonant boundary.
 FLAP = {"r", "ry", "y", "w"}
 
@@ -407,7 +409,22 @@ def parse_stem(stem: str) -> list[Token]:
         raise FilenameError(f"使えない文字です: {ch!r}")
     if not tokens:
         raise FilenameError("トークンがありません")
-    return tokens
+    return _label_moraic_nasal(tokens)
+
+
+def _label_moraic_nasal(tokens: list[Token]) -> list[Token]:
+    """ん immediately before ま・ば・ぱ行 is labeled M."""
+    out: list[Token] = []
+    for i, token in enumerate(tokens):
+        if token.kind != "N":
+            out.append(token)
+            continue
+        nxt = tokens[i + 1] if i + 1 < len(tokens) else None
+        if nxt is not None and not nxt.is_rest and nxt.consonant in _BILABIAL_NASAL:
+            out.append(Token(token.kind, token.text, "M", token.vowel))
+        else:
+            out.append(token)
+    return out
 
 
 def speech_chunks(tokens: list[Token]) -> list[list[Token]]:
