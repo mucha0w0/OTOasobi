@@ -404,11 +404,45 @@ def sibilant_vowel_start(track: FrameTrack, start: float, end: float) -> float:
     return cut
 
 
+def affricate_closure_start(track: FrameTrack, burst: float, t_lo: float, max_closure: float = 0.12) -> float:
+    """Start of the silent closure before an affricate release.
+
+    The stop walker treats anything quieter than a vowel as closure. Mora
+    nasal ん is quieter than that, so its tail was labeled ts. Only frames
+    near the noise floor belong to the closure; audible low-frequency energy
+    is still the nasal.
+    """
+    t_lo = max(0.0, t_lo)
+    burst = max(burst, t_lo + 0.01)
+    min_t = max(t_lo, burst - max_closure)
+    sel = (track.times >= min_t) & (track.times <= burst + 0.01)
+    if int(np.count_nonzero(sel)) < 3:
+        return min_t
+    times = track.times[sel]
+    rms = track.rms[sel]
+    centroid = track.centroid[sel]
+    ratio = track.ratio[sel]
+    peak_i = int(np.argmin(np.abs(times - burst)))
+    speech_thr = _speech_thr(track)
+    quiet = speech_thr * 1.15
+    nasal_floor = speech_thr * 0.55
+    i = peak_i
+    while i > 0:
+        prev_rms = float(rms[i - 1])
+        if prev_rms >= quiet:
+            break
+        if prev_rms >= nasal_floor and float(centroid[i - 1]) < 1500.0 and float(ratio[i - 1]) < 1.2:
+            break
+        i -= 1
+    return max(min_t, float(times[i]))
+
+
 def affricate_onset(track: FrameTrack, peak: float, t_lo: float, t_hi: float) -> float:
     """Start of [ts]/[tɕ]/[dʑ], including the closure in front of the release.
 
     ``peak`` is an aligned consonant time. For つ that is the [t] letter,
     which can fall inside the closure, before any energy above 3.5 kHz.
+    The walk stops at ん: the nasal is voiced and low-frequency, not silence.
     """
     t_lo = max(0.0, t_lo)
     hi = min(t_hi, max(peak, t_lo) + 0.15)
@@ -416,7 +450,7 @@ def affricate_onset(track: FrameTrack, peak: float, t_lo: float, t_hi: float) ->
     release, _fall = _scan_sibilant(track, lo, hi)
     burst = release if release is not None else max(peak, t_lo + 0.012)
     burst = max(burst, t_lo + 0.012)
-    return stop_closure_start(track, burst, t_lo, max_closure=0.12)
+    return affricate_closure_start(track, burst, t_lo, max_closure=0.12)
 
 
 def _affricate_onsets(track: FrameTrack, start: float, end: float, count: int) -> list[float] | None:
@@ -432,7 +466,7 @@ def _affricate_onsets(track: FrameTrack, start: float, end: float, count: int) -
         if release <= t_lo + 0.012:
             onsets.append(max(t_lo, release))
         else:
-            onsets.append(stop_closure_start(track, release, t_lo, 0.12))
+            onsets.append(affricate_closure_start(track, release, t_lo, 0.12))
     if onsets:
         onsets[0] = start
     return onsets
