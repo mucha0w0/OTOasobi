@@ -19,7 +19,18 @@ public sealed partial class MainWindow : Window
         if (RootFrame.Content is MainPage page)
         {
             DispatcherQueue queue = DispatcherQueue;
-            FileDrop.Attach(this, paths => queue.TryEnqueue(() => page.OpenAudio(paths)));
+            FileDrop.Attach(this, paths => queue.TryEnqueue(() => page.OpenFolder(paths)));
+            Activated += OnFirstActivated;
         }
+    }
+
+    void OnFirstActivated(object sender, WindowActivatedEventArgs e)
+    {
+        if (e.WindowActivationState == WindowActivationState.Deactivated)
+            return;
+        Activated -= OnFirstActivated;
+        if (RootFrame.Content is not MainPage page)
+            return;
+        DispatcherQueue.TryEnqueue(page.ChooseFolder);
     }
 }

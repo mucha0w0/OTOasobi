@@ -24,38 +24,43 @@ public sealed partial class MainPage : Page
         _analysis = null;
     }
 
-    public void OpenAudio(IReadOnlyList<string> paths)
+    public void OpenFolder(IReadOnlyList<string> paths)
     {
         if (_busy)
             return;
-        var wav = paths.FirstOrDefault(IsWav);
-        if (wav == null)
+        var folder = FolderFrom(paths);
+        if (folder == null)
         {
-            ShowError("WAVファイルを選んでください。");
+            ShowError("フォルダを選んでください。");
             return;
         }
 
-        _ = RunAsync(wav);
+        _ = RunAsync(folder);
+    }
+
+    public void ChooseFolder()
+    {
+        _ = PickFolderAsync();
     }
 
     void IdleView_Click(object sender, RoutedEventArgs e)
     {
-        _ = PickFileAsync();
+        _ = PickFolderAsync();
     }
 
     void ErrorView_Tapped(object sender, TappedRoutedEventArgs e)
     {
-        _ = PickFileAsync();
+        _ = PickFolderAsync();
     }
 
-    async Task PickFileAsync()
+    async Task PickFolderAsync()
     {
         if (_busy || App.MainWindow == null)
             return;
         var hwnd = WindowNative.GetWindowHandle(App.MainWindow);
         var path = await WavPicker.PickAsync(hwnd);
         if (path != null)
-            OpenAudio([path]);
+            OpenFolder([path]);
     }
 
     void OpenTxt_Click(object sender, RoutedEventArgs e)
@@ -65,14 +70,14 @@ public sealed partial class MainPage : Page
         Process.Start(new ProcessStartInfo(_txtPath) { UseShellExecute = true });
     }
 
-    async Task RunAsync(string wavPath)
+    async Task RunAsync(string folderPath)
     {
         _busy = true;
         ShowBusy();
         try
         {
             _analysis ??= new AnalysisClient();
-            var result = await _analysis.AnalyzeAsync(wavPath);
+            var result = await _analysis.AnalyzeAsync(folderPath);
             if (!result.Ok || string.IsNullOrEmpty(result.Txt))
             {
                 ShowError(string.IsNullOrEmpty(result.Error) ? "解析に失敗しました。" : result.Error);
@@ -117,8 +122,12 @@ public sealed partial class MainPage : Page
         ErrorView.Visibility = Visibility.Visible;
     }
 
-    static bool IsWav(string path)
+    static string? FolderFrom(IReadOnlyList<string> paths)
     {
-        return path.EndsWith(".wav", StringComparison.OrdinalIgnoreCase);
+        var folder = paths.FirstOrDefault(Directory.Exists);
+        if (folder != null)
+            return folder;
+        var file = paths.FirstOrDefault(File.Exists);
+        return file == null ? null : Path.GetDirectoryName(file);
     }
 }

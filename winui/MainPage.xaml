@@ -11,7 +11,7 @@
     <Grid Padding="48">
         <Button
             x:Name="IdleView"
-            Content="ファイルを選択またはドラッグ＆ドロップ"
+            Content="フォルダを選択またはドラッグ＆ドロップ"
             FontSize="20"
             Padding="28,16"
             HorizontalAlignment="Center"

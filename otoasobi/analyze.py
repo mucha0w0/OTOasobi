@@ -8,7 +8,7 @@ import soundfile as sf
 
 from otoasobi.breath import apply_leading_breath
 from otoasobi.features import compute_features
-from otoasobi.parser import Token, parse_stem, stem_from_path
+from otoasobi.parser import FilenameError, Token, parse_stem, stem_from_path
 from otoasobi.segment import Span, segment_tokens
 
 
@@ -94,3 +94,41 @@ def write_label_txt(path: str | Path, spans: list[Span], *, include_token: bool 
 def default_txt_path(wav_path: str | Path) -> Path:
     wav_path = Path(wav_path)
     return wav_path.with_suffix(".txt")
+
+
+BATCH_TXT_NAME = "OTOasibi_out.txt"
+
+
+def list_wavs(folder: str | Path) -> list[Path]:
+    folder = Path(folder)
+    wavs = [path for path in folder.iterdir() if path.is_file() and path.suffix.lower() == ".wav"]
+    return sorted(wavs, key=lambda path: path.name.casefold())
+
+
+def format_batch_txt(entries: list[tuple[str, list[Span]]]) -> str:
+    blocks = []
+    for name, spans in entries:
+        body = spans_to_txt(spans).rstrip("\n")
+        blocks.append(f"[{name}]\n{body}")
+    return "\n\n".join(blocks) + "\n"
+
+
+def analyze_folder(folder: str | Path) -> Path:
+    folder = Path(folder)
+    if not folder.is_dir():
+        raise RuntimeError("フォルダが見つかりません。")
+    wavs = list_wavs(folder)
+    if not wavs:
+        raise RuntimeError("フォルダ内にWAVファイルがありません。")
+    entries: list[tuple[str, list[Span]]] = []
+    for wav in wavs:
+        try:
+            analysis = analyze_wav(wav)
+        except FilenameError as exc:
+            raise FilenameError(f"{wav.name}: {exc}") from exc
+        except Exception as exc:
+            raise RuntimeError(f"{wav.name}: {exc}") from exc
+        entries.append((wav.name, analysis.spans))
+    out = folder / BATCH_TXT_NAME
+    out.write_text(format_batch_txt(entries), encoding="utf-8")
+    return out

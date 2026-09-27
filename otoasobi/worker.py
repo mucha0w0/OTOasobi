@@ -1,8 +1,8 @@
 """常駐の解析プロセス。WinUI アプリが標準入出力の JSON で呼び出す。
 
 1行に1オブジェクト。
-要求: {"id": 1, "cmd": "analyze", "path": "C:/音.wav"}
-応答: {"id": 1, "ok": true, "txt": "C:/音.txt"}
+要求: {"id": 1, "cmd": "analyze", "path": "C:/音声フォルダ"}
+応答: {"id": 1, "ok": true, "txt": "C:/音声フォルダ/OTOasibi_out.txt"}
       {"id": 1, "ok": false, "error": "..."}
 """
 
@@ -12,7 +12,7 @@ import json
 import sys
 import traceback
 
-from otoasobi.analyze import analyze_wav, default_txt_path, write_label_txt
+from otoasobi.analyze import analyze_folder
 from otoasobi.parser import FilenameError
 
 
@@ -22,10 +22,7 @@ def _respond(payload: dict) -> None:
 
 
 def _analyze(path: str) -> str:
-    analysis = analyze_wav(path)
-    out = default_txt_path(path)
-    write_label_txt(out, analysis.spans)
-    return str(out)
+    return str(analyze_folder(path))
 
 
 def main() -> None:
