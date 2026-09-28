@@ -98,10 +98,9 @@ public sealed partial class MainPage : Page
         _ = PickFolderAsync();
     }
 
-    void OpenFolder_Accelerator(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+    void Exit_Click(object sender, RoutedEventArgs e)
     {
-        args.Handled = true;
-        _ = PickFolderAsync();
+        App.MainWindow?.Close();
     }
 
     void NoticeBar_Closed(InfoBar sender, InfoBarClosedEventArgs args)
@@ -176,6 +175,7 @@ public sealed partial class MainPage : Page
         finally
         {
             _busy = false;
+            UpdateCommands();
         }
     }
 
@@ -304,7 +304,7 @@ public sealed partial class MainPage : Page
         if (_busy || _folder == null || _files.Count == 0)
             return;
         _busy = true;
-        WriteButton.IsEnabled = false;
+        UpdateCommands();
         Editor.IsEnabled = false;
         ShowStatus("oto.iniを計算しています");
         try
@@ -341,7 +341,7 @@ public sealed partial class MainPage : Page
         {
             _busy = false;
             Editor.IsEnabled = true;
-            WriteButton.IsEnabled = _files.Count > 0;
+            UpdateCommands();
             HideStatus();
         }
     }
@@ -425,7 +425,6 @@ public sealed partial class MainPage : Page
         FolderLabel.Text = folder;
         ToolTipService.SetToolTip(FolderLabel, folder);
         FileCount.Text = $"{_files.Count} 件";
-        WriteButton.IsEnabled = true;
         var severity = string.IsNullOrWhiteSpace(_notice)
             ? InfoBarSeverity.Informational
             : InfoBarSeverity.Warning;
@@ -461,6 +460,19 @@ public sealed partial class MainPage : Page
         EditorView.Visibility = view == "editor" ? Visibility.Visible : Visibility.Collapsed;
         ErrorView.Visibility = view == "error" ? Visibility.Visible : Visibility.Collapsed;
         BusyRing.IsActive = view == "busy";
+        UpdateCommands();
+    }
+
+    void UpdateCommands()
+    {
+        var idle = !_busy;
+        var ready = idle && EditorView.Visibility == Visibility.Visible && _files.Count > 0;
+        OpenMenuItem.IsEnabled = idle;
+        OpenButton.IsEnabled = idle;
+        WriteMenuItem.IsEnabled = ready;
+        WriteButton.IsEnabled = ready;
+        ReanalyzeMenuItem.IsEnabled = ready;
+        ReanalyzeButton.IsEnabled = ready;
     }
 
     void ShowStatus(string text)

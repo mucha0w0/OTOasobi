@@ -23,17 +23,50 @@
         </Style>
     </Page.Resources>
 
-    <Page.KeyboardAccelerators>
-        <KeyboardAccelerator Modifiers="Control" Key="O" Invoked="OpenFolder_Accelerator" />
-    </Page.KeyboardAccelerators>
-
     <Grid>
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <Grid>
+        <Border
+            Background="{ThemeResource LayerFillColorDefaultBrush}"
+            BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+            BorderThickness="0,0,0,1">
+            <MenuBar VerticalAlignment="Center" Padding="4,0">
+                <MenuBarItem Title="ファイル">
+                    <MenuFlyoutItem
+                        x:Name="OpenMenuItem"
+                        Text="フォルダを開く"
+                        Click="IdleView_Click">
+                        <MenuFlyoutItem.KeyboardAccelerators>
+                            <KeyboardAccelerator Modifiers="Control" Key="O" />
+                        </MenuFlyoutItem.KeyboardAccelerators>
+                    </MenuFlyoutItem>
+                    <MenuFlyoutItem
+                        x:Name="WriteMenuItem"
+                        Text="oto.iniを作成"
+                        Click="WriteOto_Click"
+                        IsEnabled="False">
+                        <MenuFlyoutItem.KeyboardAccelerators>
+                            <KeyboardAccelerator Modifiers="Control" Key="S" />
+                        </MenuFlyoutItem.KeyboardAccelerators>
+                    </MenuFlyoutItem>
+                    <MenuFlyoutSeparator />
+                    <MenuFlyoutItem Text="終了" Click="Exit_Click" />
+                </MenuBarItem>
+                <MenuBarItem Title="解析">
+                    <MenuFlyoutItem
+                        x:Name="ReanalyzeMenuItem"
+                        Text="再解析"
+                        Click="Reanalyze_Click"
+                        IsEnabled="False" />
+                </MenuBarItem>
+            </MenuBar>
+        </Border>
+
+        <Grid Grid.Row="1">
             <StackPanel
                 x:Name="IdleView"
                 MaxWidth="440"
@@ -115,6 +148,7 @@
                         </Grid.ColumnDefinitions>
                         <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                             <Button
+                                x:Name="OpenButton"
                                 Margin="4,0,0,0"
                                 VerticalAlignment="Center"
                                 Click="IdleView_Click"
@@ -126,6 +160,7 @@
                                 </StackPanel>
                             </Button>
                             <Button
+                                x:Name="ReanalyzeButton"
                                 VerticalAlignment="Center"
                                 Click="Reanalyze_Click"
                                 Style="{StaticResource ToolbarButtonStyle}"
@@ -143,9 +178,6 @@
                             Click="WriteOto_Click"
                             Style="{StaticResource ToolbarAccentButtonStyle}"
                             ToolTipService.ToolTip="直した区間から oto.ini を計算して、フォルダに保存します（Ctrl+S）">
-                            <Button.KeyboardAccelerators>
-                                <KeyboardAccelerator Modifiers="Control" Key="S" />
-                            </Button.KeyboardAccelerators>
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <SymbolIcon Symbol="Save" />
                                 <TextBlock Text="oto.iniを作成" />
@@ -281,7 +313,7 @@
 
         <Border
             x:Name="StatusBar"
-            Grid.Row="1"
+            Grid.Row="2"
             Padding="16,10"
             BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
             BorderThickness="0,1,0,0"
