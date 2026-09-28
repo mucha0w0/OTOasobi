@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -15,12 +14,12 @@ public sealed partial class MainPage : Page
 
     readonly List<WavFile> _files = [];
     string? _folder;
-    string? _txtPath;
     string? _notice;
     bool _busy;
     bool _wrote;
     bool _suppressSelection;
     int _previewGen;
+    int _saveGen;
     IDisposable? _previewStream;
 
     public MainPage()
@@ -28,25 +27,7 @@ public sealed partial class MainPage : Page
         InitializeComponent();
         Editor.Edited += (_, _) => OnEdited();
         AddHandler(PointerWheelChangedEvent, new PointerEventHandler(OnPageWheel), true);
-        // メインキーボードの - と +。この SDK の VirtualKey には名前が無い。
-        ZoomOutButton.KeyboardAccelerators.Add(Key((Windows.System.VirtualKey)189));
-        ZoomInButton.KeyboardAccelerators.Add(Key((Windows.System.VirtualKey)187));
     }
-
-    static KeyboardAccelerator Key(Windows.System.VirtualKey key)
-    {
-        return new KeyboardAccelerator
-        {
-            Key = key,
-            Modifiers = Windows.System.VirtualKeyModifiers.Control,
-        };
-    }
-
-    void ZoomIn_Click(object sender, RoutedEventArgs e) => Editor.ZoomIn();
-
-    void ZoomOut_Click(object sender, RoutedEventArgs e) => Editor.ZoomOut();
-
-    void ZoomReset_Click(object sender, RoutedEventArgs e) => Editor.ZoomReset();
 
     void OnPageWheel(object sender, PointerRoutedEventArgs e)
     {
@@ -81,7 +62,25 @@ public sealed partial class MainPage : Page
             return;
         }
 
-        _ = RunAsync(folder);
+        _ = RunAsync(folder, force: false);
+    }
+
+    async Task ConfirmReanalyzeAsync()
+    {
+        if (_busy || _folder == null)
+            return;
+        var dialog = new ContentDialog
+        {
+            Title = "再解析しますか？",
+            Content = "保存データを使わず、フォルダの WAV を解析し直します。いまの区間は置き換わります。",
+            PrimaryButtonText = "再解析する",
+            CloseButtonText = "キャンセル",
+            DefaultButton = ContentDialogButton.Close,
+            XamlRoot = XamlRoot,
+        };
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary || _busy || _folder == null)
+            return;
+        await RunAsync(_folder, force: true);
     }
 
     public void ChooseFolder()
@@ -115,16 +114,14 @@ public sealed partial class MainPage : Page
             OpenFolder([path]);
     }
 
-    void OpenTxt_Click(object sender, RoutedEventArgs e)
-    {
-        if (string.IsNullOrEmpty(_txtPath))
-            return;
-        Process.Start(new ProcessStartInfo(_txtPath) { UseShellExecute = true });
-    }
-
     void WriteOto_Click(object sender, RoutedEventArgs e)
     {
         _ = WriteAsync();
+    }
+
+    void Reanalyze_Click(object sender, RoutedEventArgs e)
+    {
+        _ = ConfirmReanalyzeAsync();
     }
 
     void FileList_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -136,12 +133,11 @@ public sealed partial class MainPage : Page
         _ = LoadPreviewAsync(file);
     }
 
-    async Task RunAsync(string folderPath)
+    async Task RunAsync(string folderPath, bool force)
     {
         _busy = true;
         _folder = folderPath;
         _files.Clear();
-        _txtPath = null;
         _notice = null;
         _wrote = false;
         var total = CountTargets(folderPath);
@@ -157,7 +153,7 @@ public sealed partial class MainPage : Page
                     if (_busy)
                         UpdateStatus(done, count);
                 });
-            });
+            }, force);
             if (!result.Ok || result.Files.Count == 0)
             {
                 ShowError(string.IsNullOrEmpty(result.Error) ? "解析に失敗しました。" : result.Error);
@@ -166,7 +162,7 @@ public sealed partial class MainPage : Page
 
             _notice = result.Notice;
             _files.AddRange(result.Files);
-            ShowEditor(folderPath);
+            ShowEditor(folderPath, result.Cached);
         }
         catch (Exception ex)
         {
@@ -215,7 +211,6 @@ public sealed partial class MainPage : Page
             return;
         _busy = true;
         WriteButton.IsEnabled = false;
-        SetOpenEnabled(false);
         Editor.IsEnabled = false;
         ShowStatus("oto.iniを計算しています");
         try
@@ -231,9 +226,14 @@ public sealed partial class MainPage : Page
                 return;
             }
 
-            _txtPath = result.Txt;
             _wrote = true;
-            SetOpenEnabled(true);
+            if (!string.IsNullOrWhiteSpace(result.Notice))
+            {
+                _notice = string.IsNullOrWhiteSpace(_notice)
+                    ? result.Notice
+                    : _notice + "\n" + result.Notice;
+            }
+
             var severity = string.IsNullOrWhiteSpace(_notice)
                 ? InfoBarSeverity.Success
                 : InfoBarSeverity.Warning;
@@ -254,15 +254,33 @@ public sealed partial class MainPage : Page
 
     void OnEdited()
     {
+        _ = SaveCacheAsync();
         if (!_wrote)
             return;
         _wrote = false;
-        SetOpenEnabled(false);
-        _txtPath = null;
         ShowNotice(
             "修正はまだファイルに入っていません",
             WithSkip("もう一度「oto.iniを作成」を押すと、oto.ini に反映されます。"),
             InfoBarSeverity.Warning);
+    }
+
+    async Task SaveCacheAsync()
+    {
+        var folder = _folder;
+        if (folder == null || _files.Count == 0)
+            return;
+        var gen = ++_saveGen;
+        try
+        {
+            _analysis ??= new AnalysisClient();
+            await _analysis.SaveCacheAsync(folder, _files);
+        }
+        catch (Exception ex)
+        {
+            if (gen != _saveGen || folder != _folder)
+                return;
+            ShowNotice("保存データを更新できませんでした", ex.Message, InfoBarSeverity.Error);
+        }
     }
 
     async Task<BitmapImage?> DecodePngAsync(byte[] png)
@@ -288,10 +306,17 @@ public sealed partial class MainPage : Page
         ShowOnly("busy");
         HideStatus();
         ClearNotice();
-        UpdateStatus(done, total);
+        BusyTitle.Text = "読み込んでいます";
+        SetProgress(done, total);
     }
 
     void UpdateStatus(int done, int total)
+    {
+        BusyTitle.Text = "解析しています";
+        SetProgress(done, total);
+    }
+
+    void SetProgress(int done, int total)
     {
         BusyCount.Text = $"{done} / {total} ファイル";
         BusyProgress.IsIndeterminate = false;
@@ -299,7 +324,7 @@ public sealed partial class MainPage : Page
         BusyProgress.Value = done;
     }
 
-    void ShowEditor(string folder)
+    void ShowEditor(string folder, bool cached)
     {
         ShowOnly("editor");
         HideStatus();
@@ -307,14 +332,14 @@ public sealed partial class MainPage : Page
         ToolTipService.SetToolTip(FolderLabel, folder);
         FileCount.Text = $"{_files.Count} 件";
         WriteButton.IsEnabled = true;
-        SetOpenEnabled(false);
         var severity = string.IsNullOrWhiteSpace(_notice)
             ? InfoBarSeverity.Informational
             : InfoBarSeverity.Warning;
-        ShowNotice(
-            "区間を確認してください",
-            WithSkip("直した区間から計算します。位置を直したら「oto.iniを作成」を押してください。"),
-            severity);
+        var title = cached ? "保存データから読み込みました" : "区間を確認してください";
+        var body = cached
+            ? "前回の区間を開きました。直すと保存データへ書き戻します。oto.ini へ反映するには「oto.iniを作成」を押してください。"
+            : "位置を直したら「oto.iniを作成」を押してください。区間は OTOasibi_cache.json に保存してあり、次に開くときは再解析しません。";
+        ShowNotice(title, WithSkip(body), severity);
         Widen();
         _suppressSelection = true;
         FileList.ItemsSource = null;
@@ -372,14 +397,6 @@ public sealed partial class MainPage : Page
         NoticeHost.Visibility = Visibility.Collapsed;
     }
 
-    void SetOpenEnabled(bool enabled)
-    {
-        OpenButton.IsEnabled = enabled;
-        ToolTipService.SetToolTip(
-            OpenButton,
-            enabled ? "作成した oto.ini を開きます。" : "「oto.iniを作成」を押すと開きます。");
-    }
-
     string WithSkip(string? body)
     {
         if (string.IsNullOrWhiteSpace(_notice))
@@ -393,7 +410,6 @@ public sealed partial class MainPage : Page
     {
         FileTitle.Text = file.Name;
         ToolTipService.SetToolTip(FileTitle, file.Name);
-        FileMeta.Text = $"{EngineLabel(file.Engine)}  ·  {file.Duration:0.00} 秒";
     }
 
     void Widen()
@@ -405,18 +421,6 @@ public sealed partial class MainPage : Page
         var height = Math.Max(size.Height, 840);
         if (width != size.Width || height != size.Height)
             App.MainWindow.AppWindow.Resize(new SizeInt32(width, height));
-    }
-
-    static string EngineLabel(string engine)
-    {
-        return engine switch
-        {
-            "mms+praat" => "高精度 (MMS+Praat)",
-            "mms" => "高精度 (MMS)",
-            "praat" => "Praat+音響",
-            "acoustic" => "音響",
-            _ => engine,
-        };
     }
 
     static int CountTargets(string folder)

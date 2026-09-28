@@ -51,7 +51,7 @@
                     TextAlignment="Center" />
                 <TextBlock
                     Margin="0,0,0,8"
-                    Text="フォルダ内の WAV を解析し、区間を直してから oto.ini を作ります。フォルダをこのウィンドウへドロップしても開けます。"
+                    Text="フォルダ内の WAV を解析し、区間を直してから oto.ini を作ります。保存データがあるフォルダは、再解析せずに開きます。フォルダをこのウィンドウへドロップしても開けます。"
                     Style="{StaticResource BodyTextBlockStyle}"
                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                     TextAlignment="Center"
@@ -80,7 +80,8 @@
                     AutomationProperties.Name="解析しています"
                     IsActive="False" />
                 <TextBlock
-                    Text="解析しています"
+                    x:Name="BusyTitle"
+                    Text="読み込んでいます"
                     Style="{StaticResource SubtitleTextBlockStyle}"
                     HorizontalAlignment="Center" />
                 <ProgressBar
@@ -112,64 +113,29 @@
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <CommandBar
-                            Background="Transparent"
-                            DefaultLabelPosition="Right"
-                            OverflowButtonVisibility="Auto"
-                            VerticalAlignment="Center">
-                            <CommandBar.Content>
-                                <Button
-                                    Margin="4,0,0,0"
-                                    VerticalAlignment="Center"
-                                    Click="IdleView_Click"
-                                    Style="{StaticResource ToolbarButtonStyle}"
-                                    ToolTipService.ToolTip="音源フォルダを開きます（Ctrl+O）。ドロップしても開けます。">
-                                    <StackPanel Orientation="Horizontal" Spacing="8">
-                                        <SymbolIcon Symbol="Folder" />
-                                        <TextBlock Text="フォルダを開く" />
-                                    </StackPanel>
-                                </Button>
-                            </CommandBar.Content>
-                            <AppBarButton
-                                x:Name="ZoomOutButton"
-                                Click="ZoomOut_Click"
-                                Icon="ZoomOut"
-                                Label="縮小"
-                                ToolTipService.ToolTip="表示を縮小して、より長い時間を見ます（Ctrl+-、ホイール下）">
-                                <AppBarButton.KeyboardAccelerators>
-                                    <KeyboardAccelerator Modifiers="Control" Key="Subtract" />
-                                </AppBarButton.KeyboardAccelerators>
-                            </AppBarButton>
-                            <AppBarButton
-                                x:Name="ZoomInButton"
-                                Click="ZoomIn_Click"
-                                Icon="ZoomIn"
-                                Label="拡大"
-                                ToolTipService.ToolTip="表示を拡大して、境界を細かく見ます（Ctrl++、ホイール上）">
-                                <AppBarButton.KeyboardAccelerators>
-                                    <KeyboardAccelerator Modifiers="Control" Key="Add" />
-                                </AppBarButton.KeyboardAccelerators>
-                            </AppBarButton>
-                            <AppBarButton
-                                Click="ZoomReset_Click"
-                                Label="全体表示"
-                                ToolTipService.ToolTip="ファイル全体を表示します（Ctrl+0、ダブルクリック）">
-                                <AppBarButton.Icon>
-                                    <FontIcon Glyph="&#xE9A6;" />
-                                </AppBarButton.Icon>
-                                <AppBarButton.KeyboardAccelerators>
-                                    <KeyboardAccelerator Modifiers="Control" Key="Number0" />
-                                    <KeyboardAccelerator Modifiers="Control" Key="NumberPad0" />
-                                </AppBarButton.KeyboardAccelerators>
-                            </AppBarButton>
-                            <AppBarSeparator />
-                            <AppBarButton
-                                x:Name="OpenButton"
-                                Click="OpenTxt_Click"
-                                Icon="OpenFile"
-                                IsEnabled="False"
-                                Label="oto.iniを開く" />
-                        </CommandBar>
+                        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <Button
+                                Margin="4,0,0,0"
+                                VerticalAlignment="Center"
+                                Click="IdleView_Click"
+                                Style="{StaticResource ToolbarButtonStyle}"
+                                ToolTipService.ToolTip="音源フォルダを開きます（Ctrl+O）。ドロップしても開けます。">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <SymbolIcon Symbol="Folder" />
+                                    <TextBlock Text="フォルダを開く" />
+                                </StackPanel>
+                            </Button>
+                            <Button
+                                VerticalAlignment="Center"
+                                Click="Reanalyze_Click"
+                                Style="{StaticResource ToolbarButtonStyle}"
+                                ToolTipService.ToolTip="保存データを使わず、WAV を解析し直します。いまの区間は置き換わります。">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <SymbolIcon Symbol="Refresh" />
+                                    <TextBlock Text="再解析" />
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
                         <Button
                             x:Name="WriteButton"
                             Grid.Column="1"
@@ -264,91 +230,16 @@
                     <Grid Grid.Column="1" Margin="0,0,0,8">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
                             <RowDefinition Height="*" />
                         </Grid.RowDefinitions>
-                        <Grid Padding="16,4,16,0" ColumnSpacing="16">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" MinWidth="120" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <StackPanel VerticalAlignment="Center" Spacing="2">
-                                <TextBlock
-                                    x:Name="FileTitle"
-                                    Style="{StaticResource BodyStrongTextBlockStyle}"
-                                    TextTrimming="CharacterEllipsis" />
-                                <TextBlock
-                                    x:Name="FileMeta"
-                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                    Style="{StaticResource CaptionTextBlockStyle}"
-                                    TextTrimming="CharacterEllipsis" />
-                            </StackPanel>
-                            <StackPanel
-                                Grid.Column="1"
-                                Orientation="Horizontal"
-                                Spacing="16"
-                                VerticalAlignment="Center"
-                                AutomationProperties.Name="区間の色">
-                                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                                    <Border
-                                        Width="14"
-                                        Height="14"
-                                        VerticalAlignment="Center"
-                                        Background="#FF9AA0A6"
-                                        BorderBrush="{ThemeResource ControlStrokeColorSecondaryBrush}"
-                                        BorderThickness="1"
-                                        CornerRadius="2"
-                                        AutomationProperties.AccessibilityView="Raw" />
-                                    <TextBlock VerticalAlignment="Center" Text="無音" />
-                                </StackPanel>
-                                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                                    <Border
-                                        Width="14"
-                                        Height="14"
-                                        VerticalAlignment="Center"
-                                        Background="#FF60A5FA"
-                                        BorderBrush="{ThemeResource ControlStrokeColorSecondaryBrush}"
-                                        BorderThickness="1"
-                                        CornerRadius="2"
-                                        AutomationProperties.AccessibilityView="Raw" />
-                                    <TextBlock VerticalAlignment="Center" Text="息" />
-                                </StackPanel>
-                                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                                    <Border
-                                        Width="14"
-                                        Height="14"
-                                        VerticalAlignment="Center"
-                                        Background="#FFD97706"
-                                        BorderBrush="{ThemeResource ControlStrokeColorSecondaryBrush}"
-                                        BorderThickness="1"
-                                        CornerRadius="2"
-                                        AutomationProperties.AccessibilityView="Raw" />
-                                    <TextBlock VerticalAlignment="Center" Text="子音" />
-                                </StackPanel>
-                                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                                    <Border
-                                        Width="14"
-                                        Height="14"
-                                        VerticalAlignment="Center"
-                                        Background="#FF0F9D8E"
-                                        BorderBrush="{ThemeResource ControlStrokeColorSecondaryBrush}"
-                                        BorderThickness="1"
-                                        CornerRadius="2"
-                                        AutomationProperties.AccessibilityView="Raw" />
-                                    <TextBlock VerticalAlignment="Center" Text="母音" />
-                                </StackPanel>
-                            </StackPanel>
-                        </Grid>
                         <TextBlock
-                            Grid.Row="1"
-                            Margin="16,4,16,8"
-                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                            Style="{StaticResource CaptionTextBlockStyle}"
-                            Text="{StaticResource EditorHelp}"
-                            TextWrapping="Wrap" />
+                            x:Name="FileTitle"
+                            Margin="16,8,16,8"
+                            Style="{StaticResource BodyStrongTextBlockStyle}"
+                            TextTrimming="CharacterEllipsis" />
                         <local:SpanEditor
                             x:Name="Editor"
-                            Grid.Row="2"
+                            Grid.Row="1"
                             Margin="12,0,12,4"
                             AutomationProperties.Name="波形と区間"
                             AutomationProperties.HelpText="{StaticResource EditorHelp}" />

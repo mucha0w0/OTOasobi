@@ -46,10 +46,11 @@ sealed class AnalysisClient : IDisposable
         _ = Task.Run(ReadLoop);
     }
 
-    public async Task<FolderData> AnalyzeFolderAsync(string path, Action<int, int>? onProgress = null)
+    public async Task<FolderData> AnalyzeFolderAsync(string path, Action<int, int>? onProgress = null, bool force = false)
     {
-        using var doc = await SendAsync(id => JsonSerializer.Serialize(new { id, cmd = "analyze", path }), onProgress)
-            .ConfigureAwait(true);
+        using var doc = await SendAsync(
+            id => JsonSerializer.Serialize(new { id, cmd = "analyze", path, force }),
+            onProgress).ConfigureAwait(true);
         return ReadFolder(doc.RootElement);
     }
 
@@ -60,6 +61,23 @@ sealed class AnalysisClient : IDisposable
         return ReadPreview(doc.RootElement);
     }
 
+    public async Task SaveCacheAsync(string folder, IReadOnlyList<WavFile> files)
+    {
+        using var doc = await SendAsync(id => JsonSerializer.Serialize(new
+        {
+            id,
+            cmd = "save",
+            folder,
+            files = FilePayload(files),
+        }), null).ConfigureAwait(true);
+        var root = doc.RootElement;
+        var ok = root.TryGetProperty("ok", out var okValue) && okValue.GetBoolean();
+        if (ok)
+            return;
+        string? error = root.TryGetProperty("error", out var errorValue) ? errorValue.GetString() : null;
+        throw new IOException(string.IsNullOrEmpty(error) ? "保存データを書けませんでした。" : error);
+    }
+
     public async Task<AnalyzeResult> WriteAsync(string folder, IReadOnlyList<WavFile> files)
     {
         using var doc = await SendAsync(id => JsonSerializer.Serialize(new
@@ -67,18 +85,7 @@ sealed class AnalysisClient : IDisposable
             id,
             cmd = "write",
             folder,
-            files = files.Select(file => new
-            {
-                name = file.Name,
-                duration = file.Duration,
-                spans = file.Spans.Select(span => new
-                {
-                    start = span.Start,
-                    end = span.End,
-                    label = span.Label,
-                    token = span.Token,
-                }).ToArray(),
-            }).ToArray(),
+            files = FilePayload(files),
         }), null).ConfigureAwait(true);
         var root = doc.RootElement;
         var ok = root.TryGetProperty("ok", out var okValue) && okValue.GetBoolean();
@@ -151,7 +158,25 @@ sealed class AnalysisClient : IDisposable
             }
         }
 
-        return new FolderData(ok, error, notice, files);
+        var cached = root.TryGetProperty("cached", out var cachedValue) && cachedValue.ValueKind == JsonValueKind.True;
+        return new FolderData(ok, error, notice, files, cached);
+    }
+
+    static object[] FilePayload(IReadOnlyList<WavFile> files)
+    {
+        return files.Select(file => new
+        {
+            name = file.Name,
+            duration = file.Duration,
+            engine = file.Engine,
+            spans = file.Spans.Select(span => new
+            {
+                start = span.Start,
+                end = span.End,
+                label = span.Label,
+                token = span.Token,
+            }).ToArray(),
+        }).ToArray();
     }
 
     static PreviewData ReadPreview(JsonElement root)

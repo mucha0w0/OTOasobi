@@ -6,10 +6,14 @@
 応答: {"id": 1, "ok": true, "files": [...], "notice": "..."}
       {"id": 1, "ok": false, "error": "..."}
 
-analyze は oto.ini を書かない。画面で区間を直したあと、write が計算して書く。
+analyze は oto.ini を書かない。区間は OTOasibi_cache.json に残す。
+同じフォルダに保存データがあるときは再解析せず、そのファイルを返す。
+"force": true のときだけ解析し直し、保存データを上書きする。
 要求: {"id": 2, "cmd": "preview", "path": "C:/音声フォルダ/あ.wav"}
-要求: {"id": 3, "cmd": "write", "folder": "C:/音声フォルダ", "files": [...]}
+要求: {"id": 3, "cmd": "save", "folder": "C:/音声フォルダ", "files": [...]}
+要求: {"id": 4, "cmd": "write", "folder": "C:/音声フォルダ", "files": [...]}
 応答の txt は単独音モードの oto.ini。全区間は OTOasibi_log.txt、母音始まりは OTOasibi_out.txt。
+画面で区間を直したあとは save が保存データを更新し、write が oto.ini を計算して書く。
 """
 
 from __future__ import annotations
@@ -26,9 +30,9 @@ from otoasobi.analyze import (
     load_wav,
     skipped_notice,
 )
+from otoasobi.cache import file_from_mapping, file_to_mapping, read_cache, save_cache
 from otoasobi.parser import FilenameError
 from otoasobi.preview import render_preview
-from otoasobi.segment import Span
 
 
 def _respond(payload: dict) -> None:
@@ -36,32 +40,40 @@ def _respond(payload: dict) -> None:
     sys.stdout.flush()
 
 
-def _file_payload(item: AnalyzedFile) -> dict:
-    return {
-        "name": item.name,
-        "duration": item.duration,
-        "engine": item.engine,
-        "spans": [
-            {"start": span.start, "end": span.end, "label": span.label, "token": span.token}
-            for span in item.spans
-        ],
-    }
+def _analyze(request_id: object, path: str, force: bool) -> dict:
+    if not force:
+        loaded = read_cache(path)
+        if loaded is not None:
+            payload: dict = {
+                "id": request_id,
+                "ok": True,
+                "cached": True,
+                "files": [file_to_mapping(item) for item in loaded.files],
+            }
+            if loaded.notice:
+                payload["notice"] = loaded.notice
+            return payload
 
-
-def _analyze(request_id: object, path: str) -> dict:
     def on_progress(done: int, total: int) -> None:
         _respond({"id": request_id, "event": "progress", "done": done, "total": total})
 
     files, skipped = analyze_folder_files(path, on_progress=on_progress)
     if not files:
         return {"id": request_id, "ok": False, "error": skipped_notice(skipped)}
-    payload: dict = {
+    notes: list[str] = []
+    if skipped:
+        notes.append(skipped_notice(skipped))
+    try:
+        save_cache(path, files)
+    except Exception as exc:
+        notes.append(f"保存データを書けませんでした。{exc}")
+    payload = {
         "id": request_id,
         "ok": True,
-        "files": [_file_payload(item) for item in files],
+        "files": [file_to_mapping(item) for item in files],
     }
-    if skipped:
-        payload["notice"] = skipped_notice(skipped)
+    if notes:
+        payload["notice"] = "\n".join(notes)
     return payload
 
 
@@ -79,56 +91,29 @@ def _preview(path: str) -> dict:
     }
 
 
-def _span_from_json(row: object, duration: float) -> Span:
-    if not isinstance(row, dict):
-        raise RuntimeError("区間の形式が違います。")
-    try:
-        start = float(row["start"])
-        end = float(row["end"])
-    except (KeyError, TypeError, ValueError) as exc:
-        raise RuntimeError("区間の時刻が不正です。") from exc
-    label = row.get("label")
-    token = row.get("token", "")
-    if not isinstance(label, str) or not isinstance(token, str):
-        raise RuntimeError("区間のラベルが不正です。")
-    if duration > 0:
-        start = min(max(0.0, start), duration)
-        end = min(max(0.0, end), duration)
-    if end < start:
-        start, end = end, start
-    if end <= start:
-        end = min(duration, start + 0.001) if duration > 0 else start + 0.001
-        if end <= start:
-            start = max(0.0, end - 0.001)
-    return Span(start=start, end=end, label=label, token=token)
+def _parsed_files(files: object) -> list[AnalyzedFile]:
+    if not isinstance(files, list) or not files:
+        raise RuntimeError("修正データがありません。")
+    return [file_from_mapping(item) for item in files]
 
 
-def _file_from_json(item: object) -> AnalyzedFile:
-    if not isinstance(item, dict):
-        raise RuntimeError("修正データの形式が違います。")
-    name = item.get("name")
-    if not isinstance(name, str) or not name or "/" in name or "\\" in name or name.startswith("."):
-        raise RuntimeError("ファイル名が不正です。")
-    try:
-        duration = float(item.get("duration", 0))
-    except (TypeError, ValueError) as exc:
-        raise RuntimeError(f"{name} の長さが不正です。") from exc
-    raw = item.get("spans")
-    if not isinstance(raw, list) or not raw:
-        raise RuntimeError(f"{name} の区間がありません。")
-    if duration < 0:
-        duration = 0.0
-    spans = [_span_from_json(row, duration) for row in raw]
-    if duration <= 0:
-        duration = max(span.end for span in spans)
-    return AnalyzedFile(name=name, duration=duration, spans=spans)
+def _save(folder: str, files: object) -> dict:
+    parsed = _parsed_files(files)
+    save_cache(folder, parsed)
+    return {"ok": True}
 
 
 def _write(folder: str, files: object) -> dict:
-    if not isinstance(files, list) or not files:
-        raise RuntimeError("修正データがありません。")
-    parsed = [_file_from_json(item) for item in files]
+    parsed = _parsed_files(files)
     out = export_folder(folder, parsed)
+    try:
+        save_cache(folder, parsed)
+    except Exception as exc:
+        return {
+            "ok": True,
+            "txt": str(out),
+            "notice": f"oto.ini は作成しましたが、保存データを更新できませんでした。{exc}",
+        }
     return {"ok": True, "txt": str(out)}
 
 
@@ -151,12 +136,17 @@ def main() -> None:
                 path = request.get("path")
                 if not isinstance(path, str) or not path:
                     raise RuntimeError("path がありません")
-                payload = _analyze(request_id, path)
+                payload = _analyze(request_id, path, request.get("force") is True)
             elif command == "preview":
                 path = request.get("path")
                 if not isinstance(path, str) or not path:
                     raise RuntimeError("path がありません")
                 payload = _preview(path)
+            elif command == "save":
+                folder = request.get("folder")
+                if not isinstance(folder, str) or not folder:
+                    raise RuntimeError("folder がありません")
+                payload = _save(folder, request.get("files"))
             elif command == "write":
                 folder = request.get("folder")
                 if not isinstance(folder, str) or not folder:

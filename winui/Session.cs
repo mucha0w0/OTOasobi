@@ -16,7 +16,7 @@ public sealed class WavFile
     public List<PhoneSpan> Spans { get; } = [];
 }
 
-sealed record FolderData(bool Ok, string? Error, string? Notice, IReadOnlyList<WavFile> Files);
+sealed record FolderData(bool Ok, string? Error, string? Notice, IReadOnlyList<WavFile> Files, bool Cached);
 
 sealed record PreviewData(
     bool Ok,
