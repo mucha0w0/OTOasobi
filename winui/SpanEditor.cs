@@ -411,18 +411,26 @@ public sealed class SpanEditor : UserControl
         };
         foreach (var span in _file.Spans)
         {
+            var silence = span.Label == "無音";
             var waveRect = new Rectangle
             {
-                Fill = FillBrush(span.Label, wave: true),
+                Fill = silence ? null : FillBrush(span.Label, wave: true),
                 ManipulationMode = ManipulationModes.None,
+                Visibility = silence ? Visibility.Collapsed : Visibility.Visible,
             };
             var specRect = new Rectangle
             {
-                Fill = FillBrush(span.Label, wave: false),
+                Fill = silence ? null : FillBrush(span.Label, wave: false),
                 ManipulationMode = ManipulationModes.None,
+                Visibility = silence ? Visibility.Collapsed : Visibility.Visible,
             };
             var waveText = MakeLabel(span);
             var specText = MakeLabel(span);
+            if (silence)
+            {
+                waveText.Visibility = Visibility.Collapsed;
+                specText.Visibility = Visibility.Collapsed;
+            }
             _waveRects.Add(waveRect);
             _specRects.Add(specRect);
             _waveTexts.Add(waveText);
@@ -737,6 +745,13 @@ public sealed class SpanEditor : UserControl
         var spans = _file.Spans;
         for (var i = 0; i < spans.Count; i++)
         {
+            if (spans[i].Label == "無音")
+            {
+                HideSpanChrome(_waveRects, _waveTexts, i);
+                HideSpanChrome(_specRects, _specTexts, i);
+                continue;
+            }
+
             var left = X(spans[i].Start);
             var right = X(spans[i].End);
             var width = Math.Max(0, right - left);
@@ -1108,6 +1123,14 @@ public sealed class SpanEditor : UserControl
         _viewportArmed = true;
         _notified = query;
         ViewportChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    static void HideSpanChrome(List<Rectangle> rects, List<TextBlock> texts, int index)
+    {
+        if (index < rects.Count)
+            rects[index].Visibility = Visibility.Collapsed;
+        if (index < texts.Count)
+            texts[index].Visibility = Visibility.Collapsed;
     }
 
     static void PlaceRect(List<Rectangle> rects, int index, double left, double top, double width, double height)
