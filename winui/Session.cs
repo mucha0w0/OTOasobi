@@ -26,4 +26,8 @@ sealed record PreviewData(
     double[] Loudness,
     byte[] Png,
     double SpecT0,
-    double SpecT1);
+    double SpecT1,
+    double WaveT0,
+    double WaveT1,
+    bool Samples,
+    int SampleRate);

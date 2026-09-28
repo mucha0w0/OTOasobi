@@ -1,3 +1,5 @@
+using System.Globalization;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -21,11 +23,14 @@ public sealed partial class MainPage : Page
     int _previewGen;
     int _saveGen;
     IDisposable? _previewStream;
+    DispatcherQueueTimer? _viewportTimer;
+    string _appliedKey = "";
 
     public MainPage()
     {
         InitializeComponent();
         Editor.Edited += (_, _) => OnEdited();
+        Editor.ViewportChanged += (_, _) => ScheduleViewport();
         AddHandler(PointerWheelChangedEvent, new PointerEventHandler(OnPageWheel), true);
     }
 
@@ -174,17 +179,35 @@ public sealed partial class MainPage : Page
         }
     }
 
+    void ScheduleViewport()
+    {
+        if (_viewportTimer == null)
+        {
+            _viewportTimer = DispatcherQueue.CreateTimer();
+            _viewportTimer.Interval = TimeSpan.FromMilliseconds(40);
+            _viewportTimer.IsRepeating = false;
+            _viewportTimer.Tick += (_, _) => _ = LoadViewportAsync();
+        }
+
+        _viewportTimer.Stop();
+        _viewportTimer.Start();
+    }
+
     async Task LoadPreviewAsync(WavFile file)
     {
         if (_folder == null)
             return;
+        _viewportTimer?.Stop();
         var gen = ++_previewGen;
+        _appliedKey = "";
         ShowFile(file);
         Editor.Clear("波形を読み込んでいます…");
         try
         {
             _analysis ??= new AnalysisClient();
-            var preview = await _analysis.PreviewAsync(Path.Combine(_folder, file.Name));
+            var (columns, rows) = Editor.RasterSize();
+            var preview = await _analysis.PreviewAsync(
+                Path.Combine(_folder, file.Name), 0, file.Duration, columns, rows);
             if (gen != _previewGen)
                 return;
             if (!preview.Ok)
@@ -196,13 +219,84 @@ public sealed partial class MainPage : Page
             var image = await DecodePngAsync(preview.Png);
             if (gen != _previewGen)
                 return;
-            Editor.SetFile(file, image, preview.SpecT0, preview.SpecT1, preview.Lo, preview.Hi, preview.Loudness);
+            Editor.SetFile(
+                file,
+                image,
+                preview.SpecT0,
+                preview.SpecT1,
+                preview.Lo,
+                preview.Hi,
+                preview.Loudness,
+                preview.WaveT0,
+                preview.WaveT1,
+                preview.Samples,
+                preview.SampleRate);
+            var current = Editor.ViewportQuery();
+            if (current.Columns == columns && current.Rows == rows
+                && Math.Abs(current.T0) < 1e-6
+                && Math.Abs(current.T1 - file.Duration) < 1e-4)
+            {
+                _appliedKey = ViewportKey(file.Name, current.T0, current.T1, current.Columns, current.Rows);
+            }
         }
         catch (Exception ex)
         {
             if (gen == _previewGen)
                 Editor.Clear(ex.Message);
         }
+    }
+
+    async Task LoadViewportAsync()
+    {
+        if (_folder == null || FileList.SelectedItem is not WavFile file || !Editor.HasContent)
+            return;
+        var query = Editor.ViewportQuery();
+        var key = ViewportKey(file.Name, query.T0, query.T1, query.Columns, query.Rows);
+        if (key == _appliedKey)
+            return;
+        var gen = ++_previewGen;
+        try
+        {
+            _analysis ??= new AnalysisClient();
+            var preview = await _analysis.PreviewAsync(
+                Path.Combine(_folder, file.Name), query.T0, query.T1, query.Columns, query.Rows);
+            if (gen != _previewGen || FileList.SelectedItem != file || !Editor.HasContent || !preview.Ok)
+                return;
+            var image = await DecodePngAsync(preview.Png);
+            if (gen != _previewGen || FileList.SelectedItem != file || !Editor.HasContent)
+                return;
+            var latest = Editor.ViewportQuery();
+            if (ViewportKey(file.Name, latest.T0, latest.T1, latest.Columns, latest.Rows) != key)
+                return;
+            Editor.ShowDetail(
+                image,
+                preview.SpecT0,
+                preview.SpecT1,
+                preview.Lo,
+                preview.Hi,
+                preview.WaveT0,
+                preview.WaveT1,
+                preview.Samples,
+                preview.SampleRate);
+            _appliedKey = key;
+        }
+        catch (Exception)
+        {
+            if (gen == _previewGen)
+                _appliedKey = "";
+        }
+    }
+
+    static string ViewportKey(string name, double t0, double t1, int columns, int rows)
+    {
+        var culture = CultureInfo.InvariantCulture;
+        return string.Join(
+            "|",
+            name,
+            t0.ToString("R", culture),
+            t1.ToString("R", culture),
+            columns.ToString(culture),
+            rows.ToString(culture));
     }
 
     async Task WriteAsync()

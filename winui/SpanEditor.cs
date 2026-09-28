@@ -35,6 +35,8 @@ public sealed class SpanEditor : UserControl
     readonly InputCursor _cursorHand = InputSystemCursor.Create(InputSystemCursorShape.Hand);
 
     static readonly SolidColorBrush WaveBrush = BrushOf(170, 230, 230, 230);
+    static readonly SolidColorBrush WaveLineBrush = BrushOf(255, 236, 236, 236);
+    static readonly SolidColorBrush SampleBrush = BrushOf(255, 255, 255, 255);
     static readonly SolidColorBrush ZeroBrush = BrushOf(80, 255, 255, 255);
     static readonly SolidColorBrush LineBrush = BrushOf(230, 255, 255, 255);
     static readonly SolidColorBrush HotBrush = BrushOf(255, 251, 191, 36);
@@ -54,11 +56,20 @@ public sealed class SpanEditor : UserControl
     double[] _hi = [];
     double[] _loudness = [];
     double _loudPeak;
+    double _wavePeak = 0.2;
+    double _waveT0;
+    double _waveT1 = 1;
+    bool _samples;
+    int _sampleRate;
     double _view0;
     double _view1 = 1;
+    bool _viewportArmed;
+    (double T0, double T1, int Columns, int Rows) _notified;
 
     Image? _specImage;
     Polygon? _wave;
+    Polyline? _waveLine;
+    readonly List<Ellipse> _dots = [];
     Line? _zero;
     Rectangle? _separator;
     Rectangle? _loudnessBack;
@@ -189,6 +200,10 @@ public sealed class SpanEditor : UserControl
 
     public event EventHandler? Edited;
 
+    public event EventHandler? ViewportChanged;
+
+    public bool HasContent => _file != null;
+
     public void Clear(string message)
     {
         FinishDrag();
@@ -197,6 +212,11 @@ public sealed class SpanEditor : UserControl
         _lo = [];
         _hi = [];
         _loudness = [];
+        _samples = false;
+        _sampleRate = 0;
+        _wavePeak = 0.2;
+        _viewportArmed = false;
+        _dots.Clear();
         _plot.Children.Clear();
         _waveRects.Clear();
         _specRects.Clear();
@@ -207,6 +227,7 @@ public sealed class SpanEditor : UserControl
         _groups.Clear();
         _specImage = null;
         _wave = null;
+        _waveLine = null;
         _zero = null;
         _separator = null;
         _loudnessBack = null;
@@ -224,7 +245,11 @@ public sealed class SpanEditor : UserControl
         double specT1,
         double[] waveLo,
         double[] waveHi,
-        double[] loudness)
+        double[] loudness,
+        double waveT0,
+        double waveT1,
+        bool samples,
+        int sampleRate)
     {
         FinishDrag();
         _file = file;
@@ -240,14 +265,64 @@ public sealed class SpanEditor : UserControl
             if (value > _loudPeak)
                 _loudPeak = value;
         }
+
+        _wavePeak = 0.2;
+        var count = Math.Min(waveLo.Length, waveHi.Length);
+        for (var i = 0; i < count; i++)
+            _wavePeak = Math.Max(_wavePeak, Math.Max(Math.Abs(waveLo[i]), Math.Abs(waveHi[i])));
+        AdoptWave(waveT0, waveT1, samples, sampleRate);
+        _viewportArmed = false;
         SetFullView();
         Rebuild();
         SetReadout("");
     }
 
+    public void ShowDetail(
+        ImageSource? spectrogram,
+        double specT0,
+        double specT1,
+        double[] waveLo,
+        double[] waveHi,
+        double waveT0,
+        double waveT1,
+        bool samples,
+        int sampleRate)
+    {
+        if (_file == null)
+            return;
+        _spec = spectrogram;
+        _specT0 = specT0;
+        _specT1 = specT1;
+        if (_specImage != null)
+            _specImage.Source = spectrogram;
+        _lo = waveLo;
+        _hi = waveHi;
+        AdoptWave(waveT0, waveT1, samples, sampleRate);
+        ArrangeAll();
+    }
+
+    void AdoptWave(double waveT0, double waveT1, bool samples, int sampleRate)
+    {
+        if (waveT1 > waveT0 + 1e-9)
+        {
+            _waveT0 = waveT0;
+            _waveT1 = waveT1;
+        }
+        else
+        {
+            _waveT0 = 0;
+            _waveT1 = Duration;
+        }
+
+        _samples = samples;
+        if (sampleRate > 0)
+            _sampleRate = sampleRate;
+    }
+
     void Rebuild()
     {
         _plot.Children.Clear();
+        _dots.Clear();
         _waveRects.Clear();
         _specRects.Clear();
         _waveTexts.Clear();
@@ -261,6 +336,7 @@ public sealed class SpanEditor : UserControl
         {
             Source = _spec,
             Stretch = Stretch.Fill,
+            UseLayoutRounding = true,
             IsHitTestVisible = false,
         };
         _plot.Children.Add(_specImage);
@@ -271,6 +347,14 @@ public sealed class SpanEditor : UserControl
             IsHitTestVisible = false,
         };
         _plot.Children.Add(_wave);
+        _waveLine = new Polyline
+        {
+            Stroke = WaveLineBrush,
+            StrokeThickness = 1.25,
+            StrokeLineJoin = PenLineJoin.Round,
+            IsHitTestVisible = false,
+        };
+        _plot.Children.Add(_waveLine);
 
         _zero = new Line
         {
@@ -500,9 +584,14 @@ public sealed class SpanEditor : UserControl
             return;
         var x = anchorX ?? _plot.Width / 2;
         var anchor = XToTime(x);
-        var span = Math.Clamp((_view1 - _view0) * factor, Math.Min(0.05, Duration), Duration);
-        var ratio = (anchor - _view0) / Math.Max(1e-9, _view1 - _view0);
+        var current = Math.Max(1e-12, _view1 - _view0);
+        var span = current * factor;
+        var ratio = (anchor - _view0) / current;
+        var before0 = _view0;
+        var before1 = _view1;
         SetView(anchor - span * ratio, anchor - span * ratio + span);
+        if (Math.Abs(_view0 - before0) < 1e-9 && Math.Abs(_view1 - before1) < 1e-9)
+            return;
         ArrangeAll();
     }
 
@@ -546,6 +635,7 @@ public sealed class SpanEditor : UserControl
         ArrangeWave();
         ArrangeSpans();
         ArrangeTicks();
+        NotifyViewport();
     }
 
     void ArrangeWave()
@@ -558,8 +648,7 @@ public sealed class SpanEditor : UserControl
             _specImage.Height = Math.Max(1, SpecHeight);
         }
 
-        if (_wave != null)
-            _wave.Points = WavePoints();
+        ArrangeWaveform();
 
         if (_zero != null)
         {
@@ -671,7 +760,7 @@ public sealed class SpanEditor : UserControl
         {
             var tick = new TextBlock
             {
-                Text = t.ToString("0.00"),
+                Text = t.ToString(step >= 0.01 ? "0.00" : step >= 0.001 ? "0.000" : "0.0000"),
                 Foreground = TickBrush,
                 FontSize = 11,
                 IsHitTestVisible = false,
@@ -683,28 +772,120 @@ public sealed class SpanEditor : UserControl
         }
     }
 
+    void ArrangeWaveform()
+    {
+        var count = Math.Min(_lo.Length, _hi.Length);
+        if (_wave == null || count == 0 || _file == null)
+        {
+            ClearDots();
+            if (_wave != null)
+                _wave.Points = new PointCollection();
+            if (_waveLine != null)
+                _waveLine.Points = new PointCollection();
+            return;
+        }
+
+        if (_samples)
+        {
+            _wave.Points = new PointCollection();
+            var points = new PointCollection();
+            for (var i = 0; i < count; i++)
+                points.Add(new Point(X(BinTime(i, count)), WaveY(_hi[i])));
+            if (_waveLine != null)
+            {
+                _waveLine.Points = points;
+                _waveLine.Visibility = Visibility.Visible;
+            }
+
+            PlaceDots(points);
+            return;
+        }
+
+        ClearDots();
+        if (_waveLine != null)
+        {
+            _waveLine.Points = new PointCollection();
+            _waveLine.Visibility = Visibility.Collapsed;
+        }
+
+        _wave.Points = WavePoints();
+    }
+
+    void PlaceDots(PointCollection points)
+    {
+        if (_waveLine == null || points.Count == 0)
+        {
+            ClearDots();
+            return;
+        }
+
+        var spacing = points.Count >= 2 ? Math.Abs(points[1].X - points[0].X) : 12;
+        if (spacing < 4 || points.Count > 2500)
+        {
+            ClearDots();
+            return;
+        }
+
+        var diameter = Math.Clamp(spacing * 0.42, 3.5, 10);
+        while (_dots.Count > points.Count)
+        {
+            var extra = _dots[^1];
+            _dots.RemoveAt(_dots.Count - 1);
+            _plot.Children.Remove(extra);
+        }
+
+        var insertAt = _plot.Children.IndexOf(_waveLine) + 1;
+        if (insertAt <= 0)
+            insertAt = _plot.Children.Count;
+        while (_dots.Count < points.Count)
+        {
+            var dot = new Ellipse
+            {
+                Fill = SampleBrush,
+                IsHitTestVisible = false,
+            };
+            _dots.Add(dot);
+            _plot.Children.Insert(insertAt + _dots.Count - 1, dot);
+        }
+
+        for (var i = 0; i < points.Count; i++)
+        {
+            var dot = _dots[i];
+            dot.Width = diameter;
+            dot.Height = diameter;
+            Canvas.SetLeft(dot, points[i].X - diameter / 2);
+            Canvas.SetTop(dot, points[i].Y - diameter / 2);
+        }
+    }
+
+    void ClearDots()
+    {
+        foreach (var dot in _dots)
+            _plot.Children.Remove(dot);
+        _dots.Clear();
+    }
+
     PointCollection WavePoints()
     {
         var points = new PointCollection();
         var count = Math.Min(_lo.Length, _hi.Length);
         if (count == 0 || _file == null)
             return points;
-        var peak = 0.2;
         for (var i = 0; i < count; i++)
-            peak = Math.Max(peak, Math.Max(Math.Abs(_lo[i]), Math.Abs(_hi[i])));
-        for (var i = 0; i < count; i++)
-        {
-            var t = Duration * (i + 0.5) / count;
-            points.Add(new Point(X(t), WaveY(_hi[i], peak)));
-        }
-
+            points.Add(new Point(X(BinTime(i, count)), WaveY(_hi[i])));
         for (var i = count - 1; i >= 0; i--)
-        {
-            var t = Duration * (i + 0.5) / count;
-            points.Add(new Point(X(t), WaveY(_lo[i], peak)));
-        }
-
+            points.Add(new Point(X(BinTime(i, count)), WaveY(_lo[i])));
         return points;
+    }
+
+    double BinTime(int index, int count)
+    {
+        if (count <= 0)
+            return _waveT0;
+        var span = _waveT1 - _waveT0;
+        if (span <= 0)
+            return _waveT0;
+        return _waveT0 + (index + 0.5) / count * span;
     }
 
     void ShowBoundary(int group)
@@ -850,10 +1031,11 @@ public sealed class SpanEditor : UserControl
         return _view0 + (x - Pad) / PlotWidth * (_view1 - _view0);
     }
 
-    double WaveY(double sample, double peak)
+    double WaveY(double sample)
     {
         var mid = WaveHeight * 0.5;
         var amp = Math.Max(1, mid - 6);
+        var peak = _wavePeak > 1e-9 ? _wavePeak : 0.2;
         return mid - sample / peak * amp;
     }
 
@@ -874,10 +1056,49 @@ public sealed class SpanEditor : UserControl
     void SetView(double start, double end)
     {
         var duration = Duration;
-        var span = Math.Clamp(end - start, Math.Min(0.02, duration), duration);
+        var minSpan = Math.Min(MinViewSpan(), duration);
+        var span = Math.Clamp(end - start, minSpan, duration);
         start = Math.Clamp(start, 0, Math.Max(0, duration - span));
         _view0 = start;
         _view1 = start + span;
+    }
+
+    double MinViewSpan()
+    {
+        var sr = _sampleRate > 0 ? _sampleRate : 44100.0;
+        var samples = Math.Max(8, PlotWidth / 8.0);
+        return Math.Min(Duration, samples / sr);
+    }
+
+    public (double T0, double T1, int Columns, int Rows) ViewportQuery()
+    {
+        var (columns, rows) = RasterSize();
+        var t1 = _file == null ? 0 : _view1;
+        return (_view0, t1, columns, rows);
+    }
+
+    public (int Columns, int Rows) RasterSize()
+    {
+        var scale = 1.0;
+        if (XamlRoot != null && XamlRoot.RasterizationScale > 0)
+            scale = XamlRoot.RasterizationScale;
+        var plot = _plot.Width >= 2 ? PlotWidth : 1400;
+        var spec = _plot.Height >= 2 ? SpecHeight : 360;
+        var columns = (int)Math.Clamp(Math.Ceiling(Math.Max(1, plot) * scale), 64, 4096);
+        var rows = (int)Math.Clamp(Math.Ceiling(Math.Max(1, spec) * scale), 64, 1200);
+        return (columns, rows);
+    }
+
+    void NotifyViewport()
+    {
+        if (_file == null)
+            return;
+        var query = ViewportQuery();
+        if (_viewportArmed && query == _notified)
+            return;
+        _viewportArmed = true;
+        _notified = query;
+        ViewportChanged?.Invoke(this, EventArgs.Empty);
     }
 
     static void PlaceRect(List<Rectangle> rects, int index, double left, double top, double width, double height)
@@ -991,7 +1212,7 @@ public sealed class SpanEditor : UserControl
 
     static double NiceStep(double target)
     {
-        double[] steps = [0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10];
+        double[] steps = [0.0001, 0.0002, 0.0005, 0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10];
         foreach (var step in steps)
         {
             if (step >= target)

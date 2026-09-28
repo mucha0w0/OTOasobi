@@ -1,4 +1,9 @@
-"""波形の包絡、声の大きさ、メルスペクトログラム。補正画面がこれを描く。"""
+"""波形の包絡、声の大きさ、メルスペクトログラム。補正画面がこれを描く。
+
+表示範囲とピクセル数を受け取り、その画面にちょうど合う解像度で描く。
+波形は 1 列が 1 ピクセルの最小最大で、サンプル数が列数以下なら全サンプルを返す。
+スペクトラムは同じ範囲を指定ピクセルへ最近傍で置く。拡大で画像を引き伸ばさない。
+"""
 
 from __future__ import annotations
 
@@ -8,7 +13,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from otoasobi.features import loudness_db, mel_spectrogram
+from otoasobi.features import _mel_filterbank, loudness_db
 
 _STOPS = np.array(
     [
@@ -46,32 +51,115 @@ class Preview:
     png: bytes
     spec_t0: float
     spec_t1: float
+    wave_t0: float
+    wave_t1: float
+    samples: bool
+    sr: int
+
+
+_FB: dict[tuple[int, int, int], np.ndarray] = {}
 
 
 def _nums(values: np.ndarray) -> list[float]:
     return [round(float(value), 5) for value in values]
 
 
-def waveform_envelope(y: np.ndarray, sr: int, bins: int = 1600) -> tuple[np.ndarray, np.ndarray]:
-    """ファイル全体を等間隔に分け、各区間の最小と最大を返す。"""
+def _bounds(n: int, sr: int, t0: float, t1: float) -> tuple[float, float, int, int]:
+    duration = n / float(sr) if sr > 0 else 0.0
+    view0 = float(np.clip(t0, 0.0, duration))
+    view1 = float(np.clip(t1, view0, duration))
+    if view1 <= view0 and sr > 0 and n > 0:
+        view1 = min(duration, view0 + 1.0 / sr)
+    i0 = int(np.clip(np.floor(view0 * sr + 1e-9), 0, n)) if sr > 0 else 0
+    i1 = int(np.clip(np.ceil(view1 * sr - 1e-9), 0, n)) if sr > 0 else 0
+    if n > 0 and i1 <= i0:
+        i1 = min(n, i0 + 1)
+    return view0, view1, i0, i1
+
+
+def waveform_view(
+    y: np.ndarray, sr: int, t0: float, t1: float, columns: int
+) -> tuple[np.ndarray, np.ndarray, float, float, bool]:
+    """表示範囲の波形。列よりサンプルが少なければ 1 点が 1 サンプル。"""
     y = np.asarray(y, dtype=np.float64).reshape(-1)
-    if sr <= 0 or len(y) == 0:
-        return np.zeros(1), np.zeros(1)
-    bins = max(1, min(bins, len(y)))
-    edges = np.linspace(0, len(y), bins + 1).astype(int)
-    lo = np.zeros(bins)
-    hi = np.zeros(bins)
-    for index in range(bins):
+    n = int(y.shape[0])
+    if sr <= 0 or n == 0:
+        return np.zeros(1), np.zeros(1), 0.0, 1.0, False
+    _view0, _view1, i0, i1 = _bounds(n, sr, t0, t1)
+    segment = y[i0:i1]
+    count = int(segment.shape[0])
+    wt0 = i0 / float(sr)
+    wt1 = i1 / float(sr)
+    columns = max(1, int(columns))
+    if count <= columns:
+        values = np.array(segment, dtype=np.float64, copy=True)
+        return values, values.copy(), wt0, wt1, True
+    edges = np.linspace(0, count, columns + 1).astype(np.int64)
+    edges[-1] = count
+    lo = np.zeros(columns)
+    hi = np.zeros(columns)
+    for index in range(columns):
         start = int(edges[index])
         end = int(edges[index + 1])
         if end <= start:
-            end = min(len(y), start + 1)
-        chunk = y[start:end]
-        if len(chunk) == 0:
-            continue
+            end = min(count, start + 1)
+            start = end - 1
+        chunk = segment[start:end]
         lo[index] = float(chunk.min())
         hi[index] = float(chunk.max())
-    return lo, hi
+    return lo, hi, wt0, wt1, False
+
+
+def _fft_size(sr: int) -> int:
+    target = max(64, int(round(0.025 * sr)))
+    n_fft = 256
+    while n_fft < target and n_fft < 2048:
+        n_fft *= 2
+    return n_fft
+
+
+def _filterbank(sr: int, n_fft: int, n_mels: int) -> np.ndarray:
+    key = (sr, n_fft, n_mels)
+    cached = _FB.get(key)
+    if cached is not None:
+        return cached
+    fmax = min(8000.0, sr / 2.0)
+    fmin = min(40.0, fmax * 0.25)
+    bank, _centers = _mel_filterbank(sr, n_fft, n_mels, fmin, fmax)
+    _FB[key] = bank
+    return bank
+
+
+def _mel_db(y: np.ndarray, sr: int, i0: int, i1: int, max_frames: int, n_mels: int = 96) -> np.ndarray:
+    """[i0, i1) に中心があるフレーム。窓は範囲の外のサンプルも使う。"""
+    n = int(y.shape[0])
+    n_fft = _fft_size(sr)
+    n_mels = min(n_mels, max(16, n_fft // 2))
+    if n == 0 or i1 <= i0:
+        return np.zeros((n_mels, 1))
+    span = max(1, i1 - i0)
+    max_frames = max(1, int(max_frames))
+    hop = max(1, int(np.ceil(span / max_frames)))
+    centers = np.arange(i0, i1, hop, dtype=np.int64)
+    if len(centers) == 0:
+        centers = np.array([i0], dtype=np.int64)
+    half = n_fft // 2
+    padded = np.pad(y, (half, half))
+    n_frames = int(len(centers))
+    hop = int(centers[1] - centers[0]) if n_frames > 1 else 1
+    base = int(centers[0])
+    needed = (n_frames - 1) * hop + n_fft
+    view = np.lib.stride_tricks.as_strided(
+        padded[base : base + needed],
+        shape=(n_frames, n_fft),
+        strides=(hop * padded.strides[0], padded.strides[0]),
+        writeable=False,
+    )
+    power = np.abs(np.fft.rfft(view * np.hanning(n_fft), axis=1)) ** 2
+    db = 10.0 * np.log10(np.maximum(power @ _filterbank(sr, n_fft, n_mels).T, 1e-10))
+    peak = float(np.max(db))
+    db = np.clip(db, peak - 80.0, peak)
+    return np.ascontiguousarray(db.T)
 
 
 def _png_rgb(rgb: np.ndarray) -> bytes:
@@ -87,33 +175,62 @@ def _png_rgb(rgb: np.ndarray) -> bytes:
     return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", ihdr) + chunk(b"IDAT", zlib.compress(raw, 3)) + chunk(b"IEND", b"")
 
 
-def spectrogram_png(y: np.ndarray, sr: int, max_cols: int = 1400) -> tuple[bytes, float, float]:
-    """低域が下になるメルスペクトログラムの PNG と、その時間範囲。"""
-    mel = mel_spectrogram(y, sr)
-    db = np.asarray(mel.db, dtype=np.float64)
-    if db.size == 0:
-        db = np.zeros((1, 1))
-    cols = int(db.shape[1])
-    if cols > max_cols:
-        index = np.linspace(0, cols - 1, max_cols).astype(np.int64)
-        db = db[:, index]
+def spectrogram_png(
+    y: np.ndarray,
+    sr: int,
+    t0: float,
+    t1: float,
+    width: int,
+    height: int,
+) -> tuple[bytes, float, float]:
+    """表示範囲を width×height へ最近傍で描く。低域が下。"""
+    y = np.asarray(y, dtype=np.float64).reshape(-1)
+    n = int(y.shape[0])
+    width = max(1, int(width))
+    height = max(1, int(height))
+    if sr <= 0 or n == 0:
+        return _png_rgb(np.zeros((height, width, 3), dtype=np.uint8)), 0.0, 1.0
+    view0, view1, i0, i1 = _bounds(n, sr, t0, t1)
+    db = _mel_db(y, sr, i0, i1, width)
+    n_mels, n_frames = int(db.shape[0]), int(db.shape[1])
     lo = float(np.min(db))
     hi = float(np.max(db))
-    norm = (db - lo) / (hi - lo + 1e-9)
-    color_index = np.clip(np.rint(norm * 255.0), 0, 255).astype(np.int32)
-    rgb = _LUT[color_index]
-    rgb = np.ascontiguousarray(rgb[::-1])
-    return _png_rgb(rgb), float(mel.t0), float(mel.t1)
+    color_index = np.clip(np.rint((db - lo) / (hi - lo + 1e-9) * 255.0), 0, 255).astype(np.int32)
+    cols = np.minimum((np.arange(width) * n_frames) // width, n_frames - 1)
+    rows = (np.arange(height) * n_mels) // height
+    rows = n_mels - 1 - np.minimum(rows, n_mels - 1)
+    rgb = np.ascontiguousarray(_LUT[color_index[rows][:, cols]])
+    return _png_rgb(rgb), view0, view1
 
 
-def render_preview(y: np.ndarray, sr: int) -> Preview:
-    lo, hi = waveform_envelope(y, sr)
-    png, t0, t1 = spectrogram_png(y, sr)
+def render_preview(
+    y: np.ndarray,
+    sr: int,
+    t0: float | None = None,
+    t1: float | None = None,
+    columns: int = 1600,
+    rows: int = 320,
+) -> Preview:
+    y = np.asarray(y, dtype=np.float64).reshape(-1)
+    n = int(y.shape[0])
+    duration = n / float(sr) if sr > 0 and n else 0.0
+    if t0 is None:
+        t0 = 0.0
+    if t1 is None:
+        t1 = duration
+    lo, hi, wt0, wt1, samples = waveform_view(y, sr, t0, t1, columns)
+    png, spec_t0, spec_t1 = spectrogram_png(y, sr, t0, t1, columns, rows)
+    full = duration <= 0 or (t1 - t0) >= duration * 0.999
+    loud = loudness_db(y, sr) if full else np.zeros(0)
     return Preview(
         wave_lo=_nums(lo),
         wave_hi=_nums(hi),
-        loudness=_nums(loudness_db(y, sr)),
+        loudness=_nums(loud),
         png=png,
-        spec_t0=t0,
-        spec_t1=t1,
+        spec_t0=spec_t0,
+        spec_t1=spec_t1,
+        wave_t0=wt0,
+        wave_t1=wt1,
+        samples=samples,
+        sr=int(sr),
     )

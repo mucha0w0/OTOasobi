@@ -9,7 +9,10 @@
 analyze は oto.ini を書かない。区間は OTOasibi_cache.json に残す。
 同じフォルダに保存データがあるときは再解析せず、そのファイルを返す。
 "force": true のときだけ解析し直し、保存データを上書きする。
-要求: {"id": 2, "cmd": "preview", "path": "C:/音声フォルダ/あ.wav"}
+要求: {"id": 2, "cmd": "preview", "path": "C:/音声フォルダ/あ.wav", "t0": 0, "t1": 1.2, "columns": 1600, "rows": 400}
+preview の t0/t1 は表示中の秒。columns/rows は画面のピクセル数。
+波形はその幅の最小最大で、サンプルの方が少なければ 1 点ずつ返す。
+スペクトラムは同じ範囲をそのピクセル数へ最近傍で描き、拡大しても引き伸ばさない。
 要求: {"id": 3, "cmd": "save", "folder": "C:/音声フォルダ", "files": [...]}
 要求: {"id": 4, "cmd": "write", "folder": "C:/音声フォルダ", "files": [...]}
 応答の txt は単独音モードの oto.ini。全区間は OTOasibi_log.txt、母音始まりは OTOasibi_out.txt。
@@ -20,6 +23,7 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 import sys
 import traceback
 
@@ -77,18 +81,59 @@ def _analyze(request_id: object, path: str, force: bool) -> dict:
     return payload
 
 
-def _preview(path: str) -> dict:
+_wav_cache: tuple[str, int, int, object, int] | None = None
+
+
+def _load_cached(path: str) -> tuple[np.ndarray, int]:
+    global _wav_cache
+    st = os.stat(path)
+    key = (path, st.st_mtime_ns, st.st_size)
+    if _wav_cache is not None and _wav_cache[0] == key[0] and _wav_cache[1] == key[1] and _wav_cache[2] == key[2]:
+        return _wav_cache[3], _wav_cache[4]
     y, sr = load_wav(path)
-    preview = render_preview(y, sr)
-    return {
+    _wav_cache = (key[0], key[1], key[2], y, sr)
+    return y, sr
+
+
+def _optional_float(value: object) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return float(value)
+
+
+def _optional_int(value: object, default: int, lo: int, hi: int) -> int:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return default
+    return max(lo, min(hi, int(value)))
+
+
+def _preview(path: str, request: dict) -> dict:
+    y, sr = _load_cached(path)
+    duration = len(y) / float(sr) if sr else 0.0
+    t0 = _optional_float(request.get("t0"))
+    t1 = _optional_float(request.get("t1"))
+    if t0 is None:
+        t0 = 0.0
+    if t1 is None or t1 <= t0:
+        t1 = duration
+    columns = _optional_int(request.get("columns"), 1600, 32, 4096)
+    rows = _optional_int(request.get("rows"), 320, 32, 1200)
+    preview = render_preview(y, sr, t0, t1, columns, rows)
+    payload = {
         "ok": True,
         "wave_lo": preview.wave_lo,
         "wave_hi": preview.wave_hi,
-        "loudness": preview.loudness,
+        "wave_t0": preview.wave_t0,
+        "wave_t1": preview.wave_t1,
+        "wave_samples": preview.samples,
+        "sr": preview.sr,
         "spec_png": base64.b64encode(preview.png).decode("ascii"),
         "spec_t0": preview.spec_t0,
         "spec_t1": preview.spec_t1,
     }
+    if preview.loudness:
+        payload["loudness"] = preview.loudness
+    return payload
 
 
 def _parsed_files(files: object) -> list[AnalyzedFile]:
@@ -141,7 +186,7 @@ def main() -> None:
                 path = request.get("path")
                 if not isinstance(path, str) or not path:
                     raise RuntimeError("path がありません")
-                payload = _preview(path)
+                payload = _preview(path, request)
             elif command == "save":
                 folder = request.get("folder")
                 if not isinstance(folder, str) or not folder:

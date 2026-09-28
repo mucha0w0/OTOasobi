@@ -54,10 +54,11 @@ sealed class AnalysisClient : IDisposable
         return ReadFolder(doc.RootElement);
     }
 
-    public async Task<PreviewData> PreviewAsync(string path)
+    public async Task<PreviewData> PreviewAsync(string path, double t0, double t1, int columns, int rows)
     {
-        using var doc = await SendAsync(id => JsonSerializer.Serialize(new { id, cmd = "preview", path }), null)
-            .ConfigureAwait(true);
+        using var doc = await SendAsync(
+            id => JsonSerializer.Serialize(new { id, cmd = "preview", path, t0, t1, columns, rows }),
+            null).ConfigureAwait(true);
         return ReadPreview(doc.RootElement);
     }
 
@@ -196,7 +197,14 @@ sealed class AnalysisClient : IDisposable
 
         var t0 = root.TryGetProperty("spec_t0", out var t0Value) ? t0Value.GetDouble() : 0;
         var t1 = root.TryGetProperty("spec_t1", out var t1Value) ? t1Value.GetDouble() : 0;
-        return new PreviewData(ok, error, lo, hi, loudness, png, t0, t1);
+        var waveT0 = root.TryGetProperty("wave_t0", out var waveT0Value) ? waveT0Value.GetDouble() : 0;
+        var waveT1 = root.TryGetProperty("wave_t1", out var waveT1Value) ? waveT1Value.GetDouble() : 0;
+        var samples = root.TryGetProperty("wave_samples", out var samplesValue)
+            && samplesValue.ValueKind == JsonValueKind.True;
+        var sampleRate = 0;
+        if (root.TryGetProperty("sr", out var srValue) && srValue.TryGetInt32(out var parsedRate))
+            sampleRate = parsedRate;
+        return new PreviewData(ok, error, lo, hi, loudness, png, t0, t1, waveT0, waveT1, samples, sampleRate);
     }
 
     static double[] ReadDoubles(JsonElement root, string name)
