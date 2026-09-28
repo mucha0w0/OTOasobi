@@ -17,6 +17,7 @@ public sealed class SpanEditor : UserControl
     const double MinSpan = 0.005;
     const double LinkGap = 0.0005;
     const double HitPx = 18;
+    const double LoudnessRangeDb = 40;
 
     enum DragKind
     {
@@ -42,6 +43,8 @@ public sealed class SpanEditor : UserControl
     static readonly SolidColorBrush TickBrush = BrushOf(255, 209, 213, 219);
     static readonly SolidColorBrush SepBrush = BrushOf(255, 42, 42, 42);
     static readonly SolidColorBrush TextBrush = BrushOf(255, 249, 250, 251);
+    static readonly SolidColorBrush LoudBrush = BrushOf(255, 153, 246, 228);
+    static readonly SolidColorBrush LoudBackBrush = BrushOf(255, 14, 14, 14);
     static readonly Dictionary<string, SolidColorBrush> WaveFills = [];
     static readonly Dictionary<string, SolidColorBrush> SpecFills = [];
 
@@ -51,6 +54,8 @@ public sealed class SpanEditor : UserControl
     double _specT1;
     double[] _lo = [];
     double[] _hi = [];
+    double[] _loudness = [];
+    double _loudPeak;
     double _view0;
     double _view1 = 1;
 
@@ -58,6 +63,10 @@ public sealed class SpanEditor : UserControl
     Polygon? _wave;
     Line? _zero;
     Rectangle? _separator;
+    Rectangle? _loudnessBack;
+    Rectangle? _loudnessSep;
+    Polyline? _loudnessLine;
+    Border? _loudnessLabel;
     readonly List<Rectangle> _waveRects = [];
     readonly List<Rectangle> _specRects = [];
     readonly List<TextBlock> _waveTexts = [];
@@ -166,6 +175,7 @@ public sealed class SpanEditor : UserControl
         _spec = null;
         _lo = [];
         _hi = [];
+        _loudness = [];
         _plot.Children.Clear();
         _waveRects.Clear();
         _specRects.Clear();
@@ -178,6 +188,10 @@ public sealed class SpanEditor : UserControl
         _wave = null;
         _zero = null;
         _separator = null;
+        _loudnessBack = null;
+        _loudnessSep = null;
+        _loudnessLine = null;
+        _loudnessLabel = null;
         SetReadout(message);
         ProtectedCursor = _cursorArrow;
     }
@@ -188,7 +202,8 @@ public sealed class SpanEditor : UserControl
         double specT0,
         double specT1,
         double[] waveLo,
-        double[] waveHi)
+        double[] waveHi,
+        double[] loudness)
     {
         FinishDrag();
         _file = file;
@@ -197,6 +212,13 @@ public sealed class SpanEditor : UserControl
         _specT1 = specT1;
         _lo = waveLo;
         _hi = waveHi;
+        _loudness = loudness;
+        _loudPeak = -80;
+        foreach (var value in loudness)
+        {
+            if (value > _loudPeak)
+                _loudPeak = value;
+        }
         SetFullView();
         Rebuild();
         SetReadout("");
@@ -245,6 +267,42 @@ public sealed class SpanEditor : UserControl
         };
         _plot.Children.Add(_separator);
 
+        _loudnessBack = new Rectangle
+        {
+            Fill = LoudBackBrush,
+            IsHitTestVisible = false,
+        };
+        _plot.Children.Add(_loudnessBack);
+
+        _loudnessSep = new Rectangle
+        {
+            Height = 1,
+            Fill = SepBrush,
+            IsHitTestVisible = false,
+        };
+        _plot.Children.Add(_loudnessSep);
+
+        _loudnessLine = new Polyline
+        {
+            Stroke = LoudBrush,
+            StrokeThickness = 1.5,
+            StrokeLineJoin = PenLineJoin.Round,
+            IsHitTestVisible = false,
+        };
+        _plot.Children.Add(_loudnessLine);
+
+        _loudnessLabel = new Border
+        {
+            Background = BrushOf(200, 14, 14, 14),
+            Padding = new Thickness(4, 0, 4, 0),
+            IsHitTestVisible = false,
+            Child = new TextBlock
+            {
+                Text = "大きさ",
+                FontSize = 11,
+                Foreground = TickBrush,
+            },
+        };
         foreach (var span in _file.Spans)
         {
             var waveRect = new Rectangle
@@ -284,6 +342,7 @@ public sealed class SpanEditor : UserControl
             _plot.Children.Add(text);
         foreach (var text in _specTexts)
             _plot.Children.Add(text);
+        _plot.Children.Add(_loudnessLabel);
 
         ArrangeAll();
     }
@@ -557,6 +616,56 @@ public sealed class SpanEditor : UserControl
             Canvas.SetTop(_separator, WaveHeight);
             _separator.Width = _plot.Width;
         }
+
+        ArrangeLoudness();
+    }
+
+    void ArrangeLoudness()
+    {
+        var height = LoudnessHeight;
+        var top = LoudnessTop;
+        var visible = height > 1;
+        if (_loudnessBack != null)
+        {
+            Canvas.SetLeft(_loudnessBack, 0);
+            Canvas.SetTop(_loudnessBack, top);
+            _loudnessBack.Width = _plot.Width;
+            _loudnessBack.Height = Math.Max(0, height);
+            _loudnessBack.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        if (_loudnessSep != null)
+        {
+            Canvas.SetLeft(_loudnessSep, 0);
+            Canvas.SetTop(_loudnessSep, top);
+            _loudnessSep.Width = _plot.Width;
+            _loudnessSep.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        if (_loudnessLabel != null)
+        {
+            Canvas.SetLeft(_loudnessLabel, Pad + 2);
+            Canvas.SetTop(_loudnessLabel, top + 3);
+            _loudnessLabel.Visibility = height > 22 ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        if (_loudnessLine == null)
+            return;
+        var count = _loudness.Length;
+        if (!visible || count < 2 || _file == null)
+        {
+            _loudnessLine.Points = new PointCollection();
+            return;
+        }
+
+        var points = new PointCollection();
+        for (var i = 0; i < count; i++)
+        {
+            var t = Duration * (i + 0.5) / count;
+            points.Add(new Point(X(t), LoudnessY(_loudness[i])));
+        }
+
+        _loudnessLine.Points = points;
     }
 
     void ArrangeSpans()
@@ -754,7 +863,22 @@ public sealed class SpanEditor : UserControl
 
     double SpecTop => WaveHeight;
 
-    double SpecHeight => Math.Max(1, ContentBottom - SpecTop);
+    double SpecBlockHeight => Math.Max(1, ContentBottom - SpecTop);
+
+    double LoudnessHeight
+    {
+        get
+        {
+            if (_loudness.Length < 2)
+                return 0;
+            var wanted = Math.Clamp(SpecBlockHeight * 0.28, 44, 110);
+            return Math.Min(wanted, SpecBlockHeight * 0.42);
+        }
+    }
+
+    double LoudnessTop => SpecTop + SpecHeight;
+
+    double SpecHeight => Math.Max(1, SpecBlockHeight - LoudnessHeight);
 
     double X(double time)
     {
@@ -771,6 +895,14 @@ public sealed class SpanEditor : UserControl
         var mid = WaveHeight * 0.5;
         var amp = Math.Max(1, mid - 6);
         return mid - sample / peak * amp;
+    }
+
+    double LoudnessY(double db)
+    {
+        var top = LoudnessTop + 5;
+        var bottom = LoudnessTop + LoudnessHeight - 3;
+        var level = Math.Clamp((db - (_loudPeak - LoudnessRangeDb)) / LoudnessRangeDb, 0, 1);
+        return bottom - level * Math.Max(1, bottom - top);
     }
 
     void SetFullView()

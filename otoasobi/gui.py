@@ -35,7 +35,7 @@ from otoasobi.analyze import (
     write_label_txt,
     write_log_txt,
 )
-from otoasobi.features import mel_spectrogram
+from otoasobi.features import LOUDNESS_RANGE_DB, loudness_db, mel_spectrogram
 from otoasobi.parser import FilenameError
 from otoasobi.phones import KIND_RGB, phone_kind
 from otoasobi.segment import Span
@@ -200,7 +200,7 @@ def _reserve_left_axis(plot: pg.PlotItem, *, show_values: bool) -> None:
     axis.setPen(pg.mkPen("#161616"))
 
 
-def _hz_ticks(centers_hz: np.ndarray) -> list[tuple[float, str]]:
+def _hz_ticks(centers_hz: np.ndarray, y0: float = 0.0) -> list[tuple[float, str]]:
     if len(centers_hz) == 0:
         return []
     ticks: list[tuple[float, str]] = []
@@ -215,7 +215,7 @@ def _hz_ticks(centers_hz: np.ndarray) -> list[tuple[float, str]]:
             continue
         used.add(idx)
         label = f"{hz / 1000:g}k" if hz >= 1000 else str(hz)
-        ticks.append((idx + 0.5, label))
+        ticks.append((idx + 0.5 + y0, label))
     return ticks
 
 
@@ -236,6 +236,26 @@ class MelSpectrogramView(pg.PlotWidget):
         self._img.setLookupTable(pg.colormap.get("magma").getLookupTable(nPts=256))
         self._img.setZValue(-30)
         self.addItem(self._img)
+        self._loud_band = 0.0
+        self._loud_bg = pg.PlotCurveItem(pen=None, fillLevel=0, brush=pg.mkBrush(14, 14, 14, 255))
+        self._loud_bg.setZValue(15)
+        self._loud_sep = pg.InfiniteLine(angle=0, movable=False, pen=pg.mkPen("#3A3A3A", width=1))
+        self._loud_sep.setZValue(16)
+        self._loud = pg.PlotCurveItem(pen=pg.mkPen("#99F6E4", width=1.6))
+        self._loud.setZValue(20)
+        self._loud_label = pg.TextItem(anchor=(0, 0))
+        self._loud_label.setHtml(
+            "<span style='font-family: Yu Gothic UI; font-size: 10px; color: #9CA3AF'>大きさ</span>"
+        )
+        self._loud_label.setZValue(21)
+        self.addItem(self._loud_bg)
+        self.addItem(self._loud_sep)
+        self.addItem(self._loud)
+        self.addItem(self._loud_label)
+        self._loud_bg.setVisible(False)
+        self._loud_sep.setVisible(False)
+        self._loud_label.setVisible(False)
+        plot.getViewBox().sigXRangeChanged.connect(lambda *_: self._place_loud_label())
         self._regions: list[pg.LinearRegionItem] = []
         self._texts: list[pg.TextItem] = []
 
@@ -248,8 +268,19 @@ class MelSpectrogramView(pg.PlotWidget):
     def set_empty(self) -> None:
         self.clear_labels()
         self._img.clear()
+        self._loud_band = 0.0
+        self._loud.setData([], [])
+        self._loud_bg.setVisible(False)
+        self._loud_sep.setVisible(False)
+        self._loud_label.setVisible(False)
         self.setXRange(0, 1, padding=0)
         self.setYRange(0, 1, padding=0)
+
+    def _place_loud_label(self) -> None:
+        if self._loud_band <= 0:
+            return
+        x0, x1 = self.getViewBox().viewRange()[0]
+        self._loud_label.setPos(float(x0) + (float(x1) - float(x0)) * 0.012, self._loud_band)
 
     def set_analysis(self, analysis: Analysis) -> None:
         self.clear_labels()
@@ -257,8 +288,21 @@ class MelSpectrogramView(pg.PlotWidget):
         db = mel.db
         n_mels = int(db.shape[0])
         peak = float(np.max(db)) if db.size else 0.0
+        band = max(8.0, n_mels * 0.22)
+        self._loud_band = band
         self._img.setImage(np.ascontiguousarray(db.T), autoLevels=False, levels=(peak - 80.0, peak))
-        self._img.setRect(mel.t0, 0.0, max(mel.t1 - mel.t0, 1e-3), float(n_mels))
+        self._img.setRect(mel.t0, band, max(mel.t1 - mel.t0, 1e-3), float(n_mels))
+        loud = loudness_db(analysis.y, analysis.sr)
+        loud_peak = float(np.max(loud)) if loud.size else 0.0
+        norm = np.clip((loud - (loud_peak - LOUDNESS_RANGE_DB)) / LOUDNESS_RANGE_DB, 0.0, 1.0)
+        times = (np.arange(len(loud)) + 0.5) / max(len(loud), 1) * analysis.duration
+        self._loud.setData(times, 1.0 + norm * max(band - 2.0, 1.0))
+        self._loud_bg.setData([0.0, analysis.duration], [band, band])
+        self._loud_bg.setVisible(True)
+        self._loud_sep.setPos(band)
+        self._loud_sep.setVisible(True)
+        self._loud_label.setVisible(True)
+        self._place_loud_label()
         for span in analysis.spans:
             rgb = LABEL_COLORS.get(phone_kind(span.label), (120, 120, 120))
             region = pg.LinearRegionItem(
@@ -276,12 +320,12 @@ class MelSpectrogramView(pg.PlotWidget):
                     "<span style='font-family: Yu Gothic UI; font-size: 11px; "
                     f"background-color: rgba(0,0,0,140); color: #F9FAFB'>{span.label}</span>"
                 )
-                text.setPos((span.start + span.end) / 2, n_mels * 0.96)
+                text.setPos((span.start + span.end) / 2, band + n_mels * 0.96)
                 text.setZValue(10)
                 self.addItem(text)
                 self._texts.append(text)
-        self.getPlotItem().getAxis("left").setTicks([_hz_ticks(mel.centers_hz), []])
-        self.setYRange(0, n_mels, padding=0.02)
+        self.getPlotItem().getAxis("left").setTicks([_hz_ticks(mel.centers_hz, band), []])
+        self.setYRange(0, n_mels + band, padding=0.0)
         self.setXRange(0, max(analysis.duration, 1e-3), padding=0.01)
 
 

@@ -23,6 +23,7 @@ sealed record PreviewData(
     string? Error,
     double[] Lo,
     double[] Hi,
+    double[] Loudness,
     byte[] Png,
     double SpecT0,
     double SpecT1);

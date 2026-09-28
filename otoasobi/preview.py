@@ -1,4 +1,4 @@
-"""波形の包絡とメルスペクトログラム。補正画面がこれを描く。"""
+"""波形の包絡、声の大きさ、メルスペクトログラム。補正画面がこれを描く。"""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from otoasobi.features import mel_spectrogram
+from otoasobi.features import loudness_db, mel_spectrogram
 
 _STOPS = np.array(
     [
@@ -42,6 +42,7 @@ _LUT = _lut()
 class Preview:
     wave_lo: list[float]
     wave_hi: list[float]
+    loudness: list[float]
     png: bytes
     spec_t0: float
     spec_t1: float
@@ -108,4 +109,11 @@ def spectrogram_png(y: np.ndarray, sr: int, max_cols: int = 1400) -> tuple[bytes
 def render_preview(y: np.ndarray, sr: int) -> Preview:
     lo, hi = waveform_envelope(y, sr)
     png, t0, t1 = spectrogram_png(y, sr)
-    return Preview(wave_lo=_nums(lo), wave_hi=_nums(hi), png=png, spec_t0=t0, spec_t1=t1)
+    return Preview(
+        wave_lo=_nums(lo),
+        wave_hi=_nums(hi),
+        loudness=_nums(loudness_db(y, sr)),
+        png=png,
+        spec_t0=t0,
+        spec_t1=t1,
+    )

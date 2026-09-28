@@ -184,7 +184,7 @@ public sealed partial class MainPage : Page
             var image = await DecodePngAsync(preview.Png);
             if (gen != _previewGen)
                 return;
-            Editor.SetFile(file, image, preview.SpecT0, preview.SpecT1, preview.Lo, preview.Hi);
+            Editor.SetFile(file, image, preview.SpecT0, preview.SpecT1, preview.Lo, preview.Hi, preview.Loudness);
         }
         catch (Exception ex)
         {

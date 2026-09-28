@@ -72,6 +72,7 @@ def _preview(path: str) -> dict:
         "ok": True,
         "wave_lo": preview.wave_lo,
         "wave_hi": preview.wave_hi,
+        "loudness": preview.loudness,
         "spec_png": base64.b64encode(preview.png).decode("ascii"),
         "spec_t0": preview.spec_t0,
         "spec_t1": preview.spec_t1,

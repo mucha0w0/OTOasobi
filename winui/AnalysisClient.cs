@@ -160,6 +160,7 @@ sealed class AnalysisClient : IDisposable
         string? error = root.TryGetProperty("error", out var errorValue) ? errorValue.GetString() : null;
         var lo = ReadDoubles(root, "wave_lo");
         var hi = ReadDoubles(root, "wave_hi");
+        var loudness = ReadDoubles(root, "loudness");
         var png = Array.Empty<byte>();
         if (root.TryGetProperty("spec_png", out var pngValue) && pngValue.ValueKind == JsonValueKind.String)
         {
@@ -170,7 +171,7 @@ sealed class AnalysisClient : IDisposable
 
         var t0 = root.TryGetProperty("spec_t0", out var t0Value) ? t0Value.GetDouble() : 0;
         var t1 = root.TryGetProperty("spec_t1", out var t1Value) ? t1Value.GetDouble() : 0;
-        return new PreviewData(ok, error, lo, hi, png, t0, t1);
+        return new PreviewData(ok, error, lo, hi, loudness, png, t0, t1);
     }
 
     static double[] ReadDoubles(JsonElement root, string name)

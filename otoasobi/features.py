@@ -192,6 +192,38 @@ def mel_spectrogram(y: np.ndarray, sr: int, n_mels: int = 96) -> MelSpectrogram:
     return MelSpectrogram(db=db.T, t0=t0, t1=max(t1, t0 + half), centers_hz=centers)
 
 
+LOUDNESS_RANGE_DB = 40.0
+
+
+def loudness_db(y: np.ndarray, sr: int) -> np.ndarray:
+    """Short-time loudness in dBFS, one value per ~8 ms, smoothed over 30 ms.
+
+    The series covers the file in equal steps. Display maps the peak down
+    through ``LOUDNESS_RANGE_DB`` so the contour fills a strip under the spectrogram.
+    """
+    y = np.asarray(y, dtype=np.float64).reshape(-1)
+    if sr <= 0 or len(y) == 0:
+        return np.full(2, -80.0)
+    duration = len(y) / float(sr)
+    bins = int(np.clip(round(duration / 0.008), 2, 2000))
+    edges = np.linspace(0, len(y), bins + 1).astype(np.int64)
+    power = y * y
+    csum = np.empty(len(y) + 1, dtype=np.float64)
+    csum[0] = 0.0
+    np.cumsum(power, out=csum[1:])
+    count = np.maximum(edges[1:] - edges[:-1], 1)
+    rms = np.sqrt((csum[edges[1:]] - csum[edges[:-1]]) / count)
+    smooth = max(1, int(round(0.030 / max(duration / bins, 1e-4))))
+    if smooth > 1:
+        if smooth % 2 == 0:
+            smooth += 1
+        pad = smooth // 2
+        kernel = np.ones(smooth, dtype=np.float64) / smooth
+        rms = np.convolve(np.pad(rms, (pad, pad), mode="edge"), kernel, mode="valid")
+    db = 20.0 * np.log10(np.maximum(rms, 1e-8))
+    return np.clip(db, -80.0, 0.0)
+
+
 def local_edge_cues(
     y: np.ndarray,
     sr: int,
