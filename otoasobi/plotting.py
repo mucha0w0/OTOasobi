@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 import numpy as np
 
-from otoasobi.phones import KIND_RGB, phone_kind
+from otoasobi.phones import KIND_RGB, SILENCE_LABEL, phone_kind
 from otoasobi.segment import Span
 
 LABEL_COLORS = {
@@ -39,6 +39,8 @@ def draw_analysis(fig: Figure, y, sr: int, spans: list[Span], title: str) -> Non
     ax.plot(times, y, color="#1F2937", linewidth=0.6, alpha=0.9)
     ymax = max(0.2, float(np.max(np.abs(y))) if len(y) else 0.2)
     for span in spans:
+        if span.label == SILENCE_LABEL:
+            continue
         ax.axvspan(
             span.start,
             span.end,
@@ -65,7 +67,7 @@ def draw_analysis(fig: Figure, y, sr: int, spans: list[Span], title: str) -> Non
     ax.axhline(0, color="#D1D5DB", linewidth=0.6)
     handles = [
         plt.Rectangle((0, 0), 1, 1, color=LABEL_COLORS[name], alpha=0.45, label=name)
-        for name in ("無音", "息", "子音", "母音")
+        for name in ("息", "子音", "母音")
     ]
     ax.legend(handles=handles, loc="lower right", framealpha=0.92)
     fig.tight_layout()

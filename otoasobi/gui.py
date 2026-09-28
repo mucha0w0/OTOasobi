@@ -37,7 +37,7 @@ from otoasobi.analyze import (
 )
 from otoasobi.features import LOUDNESS_RANGE_DB, loudness_db, mel_spectrogram
 from otoasobi.parser import FilenameError
-from otoasobi.phones import KIND_RGB, phone_kind
+from otoasobi.phones import KIND_RGB, SILENCE_LABEL, phone_kind
 from otoasobi.segment import Span
 
 LEFT_AXIS_WIDTH = 52
@@ -166,6 +166,8 @@ class WaveformView(pg.PlotWidget):
         self._lower.setData(t, lo)
         peak = max(0.2, float(np.max(np.abs(analysis.y))))
         for span in analysis.spans:
+            if span.label == SILENCE_LABEL:
+                continue
             rgb = LABEL_COLORS.get(phone_kind(span.label), (120, 120, 120))
             region = pg.LinearRegionItem(
                 values=(span.start, span.end),
@@ -304,6 +306,8 @@ class MelSpectrogramView(pg.PlotWidget):
         self._loud_label.setVisible(True)
         self._place_loud_label()
         for span in analysis.spans:
+            if span.label == SILENCE_LABEL:
+                continue
             rgb = LABEL_COLORS.get(phone_kind(span.label), (120, 120, 120))
             region = pg.LinearRegionItem(
                 values=(span.start, span.end),
@@ -419,7 +423,7 @@ class MainWindow(QMainWindow):
 
         legend = QLabel("　".join(
             f"<span style='color: rgb{LABEL_COLORS[name]}'>■</span> {name}"
-            for name in ("無音", "息", "子音", "母音")
+            for name in ("息", "子音", "母音")
         ))
         legend.setTextFormat(Qt.TextFormat.RichText)
         toolbar.addWidget(legend)
