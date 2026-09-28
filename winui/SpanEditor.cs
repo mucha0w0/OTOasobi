@@ -132,6 +132,7 @@ public sealed class SpanEditor : UserControl
         _plot.PointerMoved += OnPointerMoved;
         _plot.PointerReleased += OnPointerReleased;
         _plot.PointerCanceled += OnPointerReleased;
+        _plot.PointerCaptureLost += OnPointerCaptureLost;
         AddHandler(PointerWheelChangedEvent, new PointerEventHandler(OnWheel), true);
         PointerEntered += (_, _) => Focus(FocusState.Pointer);
         DoubleTapped += (_, e) =>
@@ -541,6 +542,14 @@ public sealed class SpanEditor : UserControl
         _pointer = e.Pointer;
         FinishDrag();
         e.Handled = true;
+    }
+
+    void OnPointerCaptureLost(object sender, PointerRoutedEventArgs e)
+    {
+        if (_drag == DragKind.None)
+            return;
+        _pointer = e.Pointer;
+        FinishDrag();
     }
 
     void FinishDrag()
