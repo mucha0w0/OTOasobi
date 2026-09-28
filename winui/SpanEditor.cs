@@ -18,8 +18,8 @@ public sealed class SpanEditor : UserControl
     const double LinkGap = 0.0005;
     const double HitPx = 18;
     const double LoudnessRangeDb = 40;
-    const double SplitThickness = 16;
-    const double SplitSlop = 8;
+    const double SplitThickness = 8;
+    const double SplitSlop = 10;
     const double MinBand = 48;
 
     enum DragKind
@@ -28,6 +28,13 @@ public sealed class SpanEditor : UserControl
         Boundary,
         Pan,
         Split,
+    }
+
+    enum SplitLook
+    {
+        Rest,
+        Hover,
+        Drag,
     }
 
     readonly Canvas _plot = new();
@@ -49,10 +56,7 @@ public sealed class SpanEditor : UserControl
     static readonly SolidColorBrush HotBrush = BrushOf(255, 251, 191, 36);
     static readonly SolidColorBrush TickBrush = BrushOf(255, 209, 213, 219);
     static readonly SolidColorBrush TextBrush = BrushOf(255, 249, 250, 251);
-    static readonly SolidColorBrush SplitBrush = BrushOf(255, 75, 85, 99);
-    static readonly SolidColorBrush SplitHotBrush = BrushOf(255, 15, 157, 142);
-    static readonly SolidColorBrush SplitDotBrush = BrushOf(255, 229, 231, 235);
-    static readonly SolidColorBrush SplitDotHotBrush = BrushOf(255, 249, 250, 251);
+    static readonly SolidColorBrush SplitLineBrush = BrushOf(0x24, 0xFF, 0xFF, 0xFF);
     static readonly SolidColorBrush LoudBrush = BrushOf(255, 153, 246, 228);
     static readonly SolidColorBrush LoudBackBrush = BrushOf(255, 14, 14, 14);
     static readonly Dictionary<string, SolidColorBrush> WaveFills = [];
@@ -1010,17 +1014,17 @@ public sealed class SpanEditor : UserControl
         if (_hotSplit == index)
             return;
         _hotSplit = index;
-        PaintSplit(_waveSplit, _hotSplit == 0);
-        PaintSplit(_loudSplit, _hotSplit == 1);
+        PaintSplit(_waveSplit, LookFor(0));
+        PaintSplit(_loudSplit, LookFor(1));
     }
 
     void ArrangeSplits()
     {
-        PlaceSplit(_waveSplit, WaveHeight, _hotSplit == 0);
+        PlaceSplit(_waveSplit, WaveHeight, LookFor(0));
         if (HasLoudness)
         {
             _loudSplit.Visibility = Visibility.Visible;
-            PlaceSplit(_loudSplit, SpecTop + SpecHeight, _hotSplit == 1);
+            PlaceSplit(_loudSplit, SpecTop + SpecHeight, LookFor(1));
         }
         else
         {
@@ -1028,54 +1032,61 @@ public sealed class SpanEditor : UserControl
         }
     }
 
-    void PlaceSplit(Grid bar, double top, bool hot)
+    SplitLook LookFor(int index)
+    {
+        if (_drag == DragKind.Split && _splitIndex == index)
+            return SplitLook.Drag;
+        if (_hotSplit == index)
+            return SplitLook.Hover;
+        return SplitLook.Rest;
+    }
+
+    void PlaceSplit(Grid bar, double top, SplitLook look)
     {
         bar.Width = Math.Max(0, _plot.Width);
         Canvas.SetLeft(bar, 0);
         Canvas.SetTop(bar, top);
-        PaintSplit(bar, hot);
+        PaintSplit(bar, look);
     }
 
-    static void PaintSplit(Grid bar, bool hot)
+    static void PaintSplit(Grid bar, SplitLook look)
     {
-        bar.Background = hot ? SplitHotBrush : SplitBrush;
-        if (bar.Children.Count == 0 || bar.Children[0] is not StackPanel dots)
+        if (bar.Children.Count == 0 || bar.Children[0] is not Border mark)
             return;
-        var fill = hot ? SplitDotHotBrush : SplitDotBrush;
-        foreach (var child in dots.Children)
+        mark.Height = look == SplitLook.Rest ? 1 : 2;
+        mark.Background = look switch
         {
-            if (child is Ellipse ellipse)
-                ellipse.Fill = fill;
-        }
+            SplitLook.Drag => ThemeBrush("AccentFillColorDefaultBrush", SplitLineBrush),
+            SplitLook.Hover => ThemeBrush("AccentFillColorSecondaryBrush", SplitLineBrush),
+            _ => SplitLineBrush,
+        };
+    }
+
+    static Brush ThemeBrush(string key, Brush fallback)
+    {
+        if (Application.Current?.Resources.TryGetValue(key, out var value) == true && value is Brush brush)
+            return brush;
+        return fallback;
     }
 
     static Grid MakeSplitBar()
     {
-        var dots = new StackPanel
+        var mark = new Border
         {
-            Orientation = Orientation.Horizontal,
-            HorizontalAlignment = HorizontalAlignment.Center,
+            Height = 1,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
             VerticalAlignment = VerticalAlignment.Center,
-            Spacing = 10,
+            Background = SplitLineBrush,
             IsHitTestVisible = false,
+            UseLayoutRounding = true,
         };
-        for (var i = 0; i < 3; i++)
-        {
-            dots.Children.Add(new Ellipse
-            {
-                Width = 4,
-                Height = 4,
-                Fill = SplitDotBrush,
-                IsHitTestVisible = false,
-            });
-        }
-
         var bar = new Grid
         {
             Height = SplitThickness,
-            Background = SplitBrush,
+            Background = BrushOf(0, 0, 0, 0),
             IsHitTestVisible = false,
-            Children = { dots },
+            UseLayoutRounding = true,
+            Children = { mark },
         };
         Canvas.SetZIndex(bar, 40);
         return bar;
