@@ -147,31 +147,6 @@
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                            <Button
-                                x:Name="OpenButton"
-                                Margin="4,0,0,0"
-                                VerticalAlignment="Center"
-                                Click="IdleView_Click"
-                                Style="{StaticResource ToolbarButtonStyle}"
-                                ToolTipService.ToolTip="音源フォルダを開きます（Ctrl+O）。ドロップしても開けます。">
-                                <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <SymbolIcon Symbol="Folder" />
-                                    <TextBlock Text="フォルダを開く" />
-                                </StackPanel>
-                            </Button>
-                            <Button
-                                x:Name="ReanalyzeButton"
-                                VerticalAlignment="Center"
-                                Click="Reanalyze_Click"
-                                Style="{StaticResource ToolbarButtonStyle}"
-                                ToolTipService.ToolTip="保存データを使わず、WAV を解析し直します。いまの区間は置き換わります。">
-                                <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <SymbolIcon Symbol="Refresh" />
-                                    <TextBlock Text="再解析" />
-                                </StackPanel>
-                            </Button>
-                        </StackPanel>
                         <Button
                             x:Name="WriteButton"
                             Grid.Column="1"

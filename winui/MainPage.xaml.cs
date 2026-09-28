@@ -524,11 +524,9 @@ public sealed partial class MainPage : Page
         var idle = !_busy;
         var ready = idle && EditorView.Visibility == Visibility.Visible && _files.Count > 0;
         OpenMenuItem.IsEnabled = idle;
-        OpenButton.IsEnabled = idle;
         WriteMenuItem.IsEnabled = ready;
         WriteButton.IsEnabled = ready;
         ReanalyzeMenuItem.IsEnabled = ready;
-        ReanalyzeButton.IsEnabled = ready;
     }
 
     void UpdateFileStatus(string name, double done, string label)
