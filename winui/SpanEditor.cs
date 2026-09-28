@@ -763,6 +763,13 @@ public sealed class SpanEditor : UserControl
 
         for (var i = 0; i < _lines.Count && i < _groups.Count; i++)
         {
+            if (IsOuterSilenceEdge(i))
+            {
+                _lines[i].Visibility = Visibility.Collapsed;
+                continue;
+            }
+
+            _lines[i].Visibility = Visibility.Visible;
             var x = X(GroupTime(i));
             _lines[i].X1 = x;
             _lines[i].X2 = x;
@@ -939,6 +946,8 @@ public sealed class SpanEditor : UserControl
         var bestDist = HitPx;
         for (var i = 0; i < _groups.Count; i++)
         {
+            if (IsOuterSilenceEdge(i))
+                continue;
             var dist = Math.Abs(X(GroupTime(i)) - x);
             if (dist <= bestDist)
             {
@@ -970,6 +979,25 @@ public sealed class SpanEditor : UserControl
         }
 
         return best;
+    }
+
+    bool IsOuterSilenceEdge(int group)
+    {
+        if (_file == null || group < 0 || group >= _groups.Count)
+            return false;
+        var spans = _file.Spans;
+        var members = _groups[group];
+        if (spans.Count == 0 || members.Count == 0)
+            return false;
+        foreach (var (index, isStart) in members)
+        {
+            var leading = index == 0 && spans[0].Label == "無音" && isStart;
+            var trailing = index == spans.Count - 1 && spans[^1].Label == "無音" && !isStart;
+            if (!leading && !trailing)
+                return false;
+        }
+
+        return true;
     }
 
     double GroupTime(int group)
