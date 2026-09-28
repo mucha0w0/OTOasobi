@@ -10,7 +10,7 @@
     mc:Ignorable="d">
 
     <Page.Resources>
-        <x:String x:Key="EditorHelp">境界をドラッグして時刻を分けます。右ドラッグ、または選択中の左右キーでスクロールします。</x:String>
+        <x:String x:Key="EditorHelp">上の波形では境界をドラッグして時刻を分けます。音量の下に出る oto.ini のラベルはドラッグできません。右ドラッグ、または選択中の左右キーでスクロールします。</x:String>
         <Style x:Key="ToolbarButtonStyle" TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
             <Setter Property="MinHeight" Value="32" />
             <Setter Property="Padding" Value="10,6" />
@@ -305,7 +305,7 @@
                                     <TextBlock
                                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                         Style="{StaticResource CaptionTextBlockStyle}"
-                                        Text="oto.ini を書くときの位置です。先行発声は母音の開始のままです。"
+                                        Text="oto.ini を書くときの位置です。先行発声は母音の開始のままです。音量の下の波形に、この位置のラベルを出します。そこではドラッグできません。"
                                         TextWrapping="Wrap" />
                                     <StackPanel Spacing="2">
                                         <Grid>

@@ -47,6 +47,7 @@ public sealed class SpanEditor : UserControl
     readonly InputCursor _cursorHand = InputSystemCursor.Create(InputSystemCursorShape.Hand);
     readonly Grid _waveSplit = MakeSplitBar();
     readonly Grid _loudSplit = MakeSplitBar();
+    readonly Grid _otoSplit = MakeSplitBar();
 
     static readonly SolidColorBrush WaveBrush = BrushOf(170, 230, 230, 230);
     static readonly SolidColorBrush WaveLineBrush = BrushOf(255, 236, 236, 236);
@@ -59,6 +60,18 @@ public sealed class SpanEditor : UserControl
     static readonly SolidColorBrush SplitLineBrush = BrushOf(0x24, 0xFF, 0xFF, 0xFF);
     static readonly SolidColorBrush LoudBrush = BrushOf(255, 153, 246, 228);
     static readonly SolidColorBrush LoudBackBrush = BrushOf(255, 14, 14, 14);
+    static readonly SolidColorBrush OtoRegionBrush = BrushOf(64, 15, 157, 142);
+    static readonly SolidColorBrush OtoRegionHotBrush = BrushOf(120, 45, 212, 191);
+    static readonly SolidColorBrush OtoChipBrush = BrushOf(190, 14, 14, 14);
+    const int OtoPointCount = 5;
+    static readonly SolidColorBrush[] OtoPointBrushes =
+    [
+        BrushOf(255, 236, 236, 236),
+        BrushOf(255, 251, 146, 60),
+        BrushOf(255, 248, 113, 113),
+        BrushOf(255, 96, 165, 250),
+        BrushOf(255, 196, 181, 253),
+    ];
     static readonly Dictionary<string, SolidColorBrush> WaveFills = [];
     static readonly Dictionary<string, SolidColorBrush> SpecFills = [];
 
@@ -77,8 +90,9 @@ public sealed class SpanEditor : UserControl
     int _sampleRate;
     double _view0;
     double _view1 = 1;
-    double _waveShare = 0.40;
-    double _loudShare = 0.18;
+    double _waveShare = 0.30;
+    double _loudShare = 0.14;
+    double _otoShare = 0.24;
     bool _viewportArmed;
     (double T0, double T1, int Columns, int Rows) _notified;
 
@@ -90,13 +104,24 @@ public sealed class SpanEditor : UserControl
     Rectangle? _loudnessBack;
     Polyline? _loudnessLine;
     Border? _loudnessLabel;
+    Polygon? _otoWave;
+    Polyline? _otoWaveLine;
+    Line? _otoZero;
+    Border? _otoCaption;
     readonly List<Rectangle> _waveRects = [];
     readonly List<Rectangle> _specRects = [];
     readonly List<TextBlock> _waveTexts = [];
     readonly List<TextBlock> _specTexts = [];
     readonly List<Line> _lines = [];
     readonly List<TextBlock> _ticks = [];
+    readonly List<OtoMark> _otoMarks = [];
+    readonly List<Rectangle> _otoRects = [];
+    readonly List<TextBlock> _otoTexts = [];
+    readonly List<Line> _otoLines = [];
+    readonly List<Border> _otoPointChips = [];
     List<List<(int Index, bool IsStart)>> _groups = [];
+    OtoExport _oto = new(200, 200, 200, 0.5);
+    int _hotOto = -1;
 
     DragKind _drag = DragKind.None;
     int _dragIndex = -1;
@@ -105,6 +130,7 @@ public sealed class SpanEditor : UserControl
     double _splitY;
     double _splitWave;
     double _splitLoud;
+    double _splitOto;
     double _panX;
     double _panView0;
     double _panView1;
@@ -167,6 +193,7 @@ public sealed class SpanEditor : UserControl
         {
             if (_drag != DragKind.None)
                 return;
+            SetHotOto(-1);
             SetReadout("");
             SetHotSplit(-1);
         };
@@ -246,6 +273,12 @@ public sealed class SpanEditor : UserControl
         _specTexts.Clear();
         _lines.Clear();
         _ticks.Clear();
+        _otoMarks.Clear();
+        _otoRects.Clear();
+        _otoTexts.Clear();
+        _otoLines.Clear();
+        _otoPointChips.Clear();
+        _hotOto = -1;
         _groups.Clear();
         _specImage = null;
         _wave = null;
@@ -254,6 +287,10 @@ public sealed class SpanEditor : UserControl
         _loudnessBack = null;
         _loudnessLine = null;
         _loudnessLabel = null;
+        _otoWave = null;
+        _otoWaveLine = null;
+        _otoZero = null;
+        _otoCaption = null;
         SetReadout(message);
         ProtectedCursor = _cursorArrow;
     }
@@ -295,6 +332,14 @@ public sealed class SpanEditor : UserControl
         SetFullView();
         Rebuild();
         SetReadout("");
+    }
+
+    internal void SetOtoSettings(OtoExport settings)
+    {
+        _oto = settings;
+        if (_file == null || _plot.Width < 2 || _plot.Height < 2)
+            return;
+        ArrangeOtoLabels();
     }
 
     public void ShowDetail(
@@ -349,6 +394,16 @@ public sealed class SpanEditor : UserControl
         _specTexts.Clear();
         _lines.Clear();
         _ticks.Clear();
+        _otoMarks.Clear();
+        _otoRects.Clear();
+        _otoTexts.Clear();
+        _otoLines.Clear();
+        _otoPointChips.Clear();
+        _hotOto = -1;
+        _otoWave = null;
+        _otoWaveLine = null;
+        _otoZero = null;
+        _otoCaption = null;
         if (_file == null)
             return;
 
@@ -459,9 +514,11 @@ public sealed class SpanEditor : UserControl
             _plot.Children.Add(text);
         foreach (var text in _specTexts)
             _plot.Children.Add(text);
+        AddOtoVisuals();
         _plot.Children.Add(_loudnessLabel);
         _plot.Children.Add(_waveSplit);
         _plot.Children.Add(_loudSplit);
+        _plot.Children.Add(_otoSplit);
 
         ArrangeAll();
     }
@@ -494,10 +551,17 @@ public sealed class SpanEditor : UserControl
             _splitY = point.Position.Y;
             _splitWave = ShownWaveShare;
             _splitLoud = ShownLoudShare;
+            _splitOto = ShownOtoShare;
             _changed = false;
             SetHotSplit(split);
             ArmCapture(e.Pointer);
             ProtectedCursor = _cursorNs;
+            e.Handled = true;
+            return;
+        }
+
+        if (InOtoBand(point.Position.Y))
+        {
             e.Handled = true;
             return;
         }
@@ -554,12 +618,22 @@ public sealed class SpanEditor : UserControl
         {
             ProtectedCursor = _cursorNs;
             Highlight(-1);
+            SetHotOto(-1);
             SetHotSplit(split);
             SetReadout("");
             return;
         }
 
         SetHotSplit(-1);
+        if (InOtoBand(point.Position.Y))
+        {
+            ProtectedCursor = _cursorArrow;
+            Highlight(-1);
+            ShowOtoHover(x);
+            return;
+        }
+
+        SetHotOto(-1);
         var group = HitGroup(x);
         if (group >= 0)
         {
@@ -720,6 +794,7 @@ public sealed class SpanEditor : UserControl
         }
 
         ArrangeLoudness();
+        ArrangeOtoWave();
         ArrangeSplits();
     }
 
@@ -790,6 +865,8 @@ public sealed class SpanEditor : UserControl
             PlaceText(_specTexts, i, left, specTop + 8, width);
         }
 
+        ArrangeOtoLabels();
+
         for (var i = 0; i < _lines.Count && i < _groups.Count; i++)
         {
             if (IsOuterSilenceEdge(i))
@@ -803,7 +880,7 @@ public sealed class SpanEditor : UserControl
             _lines[i].X1 = x;
             _lines[i].X2 = x;
             _lines[i].Y1 = 0;
-            _lines[i].Y2 = Math.Max(0, _plot.Height - Ruler);
+            _lines[i].Y2 = Math.Max(0, OtoTop - SplitThickness);
         }
     }
 
@@ -848,9 +925,7 @@ public sealed class SpanEditor : UserControl
         if (_samples)
         {
             _wave.Points = new PointCollection();
-            var points = new PointCollection();
-            for (var i = 0; i < count; i++)
-                points.Add(new Point(X(BinTime(i, count)), WaveY(_hi[i])));
+            var points = SamplePoints(WaveY);
             if (_waveLine != null)
             {
                 _waveLine.Points = points;
@@ -868,7 +943,45 @@ public sealed class SpanEditor : UserControl
             _waveLine.Visibility = Visibility.Collapsed;
         }
 
-        _wave.Points = WavePoints();
+        _wave.Points = WavePoints(WaveY);
+    }
+
+    void ArrangeOtoWave()
+    {
+        var count = Math.Min(_lo.Length, _hi.Length);
+        var visible = _otoWave != null && count > 0 && _file != null && OtoHeight > 1;
+        if (_otoWave == null || _otoWaveLine == null)
+            return;
+        if (!visible)
+        {
+            _otoWave.Points = new PointCollection();
+            _otoWaveLine.Points = new PointCollection();
+            if (_otoZero != null)
+                _otoZero.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        if (_otoZero != null)
+        {
+            var y = OtoTop + OtoHeight * 0.5;
+            _otoZero.Visibility = Visibility.Visible;
+            _otoZero.X1 = Pad;
+            _otoZero.X2 = Math.Max(Pad, _plot.Width - Pad);
+            _otoZero.Y1 = y;
+            _otoZero.Y2 = y;
+        }
+
+        if (_samples)
+        {
+            _otoWave.Points = new PointCollection();
+            _otoWaveLine.Points = SamplePoints(OtoY);
+            _otoWaveLine.Visibility = Visibility.Visible;
+            return;
+        }
+
+        _otoWaveLine.Points = new PointCollection();
+        _otoWaveLine.Visibility = Visibility.Collapsed;
+        _otoWave.Points = WavePoints(OtoY);
     }
 
     void PlaceDots(PointCollection points)
@@ -925,16 +1038,25 @@ public sealed class SpanEditor : UserControl
         _dots.Clear();
     }
 
-    PointCollection WavePoints()
+    PointCollection WavePoints(Func<double, double> yOf)
     {
         var points = new PointCollection();
         var count = Math.Min(_lo.Length, _hi.Length);
         if (count == 0 || _file == null)
             return points;
         for (var i = 0; i < count; i++)
-            points.Add(new Point(X(BinTime(i, count)), WaveY(_hi[i])));
+            points.Add(new Point(X(BinTime(i, count)), yOf(_hi[i])));
         for (var i = count - 1; i >= 0; i--)
-            points.Add(new Point(X(BinTime(i, count)), WaveY(_lo[i])));
+            points.Add(new Point(X(BinTime(i, count)), yOf(_lo[i])));
+        return points;
+    }
+
+    PointCollection SamplePoints(Func<double, double> yOf)
+    {
+        var points = new PointCollection();
+        var count = Math.Min(_lo.Length, _hi.Length);
+        for (var i = 0; i < count; i++)
+            points.Add(new Point(X(BinTime(i, count)), yOf(_hi[i])));
         return points;
     }
 
@@ -975,19 +1097,25 @@ public sealed class SpanEditor : UserControl
         if (area < 1)
             return;
         var dy = y - _splitY;
-        var bands = HasLoudness ? 3.0 : 2.0;
+        var bands = HasLoudness ? 4.0 : 3.0;
         var minPx = Math.Min(MinBand, area / bands);
+        var wavePx = area * _splitWave;
+        var loudPx = HasLoudness ? area * _splitLoud : 0;
+        var otoPx = area * _splitOto;
         if (_splitIndex == 0)
         {
-            var loudPx = HasLoudness ? area * _splitLoud : 0;
-            var wavePx = ClampRange(area * _splitWave + dy, minPx, area - loudPx - minPx);
+            wavePx = ClampRange(wavePx + dy, minPx, area - loudPx - otoPx - minPx);
             _waveShare = wavePx / area;
+        }
+        else if (_splitIndex == 1)
+        {
+            loudPx = ClampRange(loudPx - dy, minPx, area - wavePx - otoPx - minPx);
+            _loudShare = loudPx / area;
         }
         else
         {
-            var wavePx = area * _splitWave;
-            var loudPx = ClampRange(area * _splitLoud - dy, minPx, area - wavePx - minPx);
-            _loudShare = loudPx / area;
+            otoPx = ClampRange(otoPx - dy, minPx, area - wavePx - loudPx - minPx);
+            _otoShare = otoPx / area;
         }
 
         ArrangeAll();
@@ -997,8 +1125,10 @@ public sealed class SpanEditor : UserControl
     {
         if (InSplit(y, WaveHeight))
             return 0;
-        if (HasLoudness && InSplit(y, SpecTop + SpecHeight))
+        if (HasLoudness && InSplit(y, LoudnessTop - SplitThickness))
             return 1;
+        if (InSplit(y, OtoTop - SplitThickness))
+            return 2;
         return -1;
     }
 
@@ -1016,6 +1146,7 @@ public sealed class SpanEditor : UserControl
         _hotSplit = index;
         PaintSplit(_waveSplit, LookFor(0));
         PaintSplit(_loudSplit, LookFor(1));
+        PaintSplit(_otoSplit, LookFor(2));
     }
 
     void ArrangeSplits()
@@ -1024,12 +1155,15 @@ public sealed class SpanEditor : UserControl
         if (HasLoudness)
         {
             _loudSplit.Visibility = Visibility.Visible;
-            PlaceSplit(_loudSplit, SpecTop + SpecHeight, LookFor(1));
+            PlaceSplit(_loudSplit, LoudnessTop - SplitThickness, LookFor(1));
         }
         else
         {
             _loudSplit.Visibility = Visibility.Collapsed;
         }
+
+        _otoSplit.Visibility = Visibility.Visible;
+        PlaceSplit(_otoSplit, OtoTop - SplitThickness, LookFor(2));
     }
 
     SplitLook LookFor(int index)
@@ -1213,11 +1347,13 @@ public sealed class SpanEditor : UserControl
 
     bool HasLoudness => _loudness.Length >= 2;
 
+    int BandCount => HasLoudness ? 4 : 3;
+
     double BandArea
     {
         get
         {
-            var handles = HasLoudness ? 2 : 1;
+            var handles = HasLoudness ? 3 : 2;
             return Math.Max(0, ContentBottom - handles * SplitThickness);
         }
     }
@@ -1229,7 +1365,18 @@ public sealed class SpanEditor : UserControl
             var area = BandArea;
             if (area < 1)
                 return 0.08;
-            return Math.Min(0.2, MinBand / area);
+            var byPx = MinBand / area;
+            var byCount = 0.92 / BandCount;
+            return Math.Min(Math.Min(0.2, byPx), byCount);
+        }
+    }
+
+    double ShownOtoShare
+    {
+        get
+        {
+            var min = ShareFloor;
+            return Math.Clamp(_otoShare, min, 1 - (BandCount - 1) * min);
         }
     }
 
@@ -1240,7 +1387,8 @@ public sealed class SpanEditor : UserControl
             if (!HasLoudness)
                 return 0;
             var min = ShareFloor;
-            return Math.Clamp(_loudShare, min, 1 - 2 * min);
+            var max = 1 - ShownOtoShare - 2 * min;
+            return Math.Clamp(_loudShare, min, Math.Max(min, max));
         }
     }
 
@@ -1249,21 +1397,25 @@ public sealed class SpanEditor : UserControl
         get
         {
             var min = ShareFloor;
-            if (!HasLoudness)
-                return Math.Clamp(_waveShare, min, 1 - min);
-            return Math.Clamp(_waveShare, min, 1 - ShownLoudShare - min);
+            var max = 1 - ShownOtoShare - ShownLoudShare - min;
+            return Math.Clamp(_waveShare, min, Math.Max(min, max));
         }
     }
 
     double WaveHeight => Math.Max(1, BandArea * ShownWaveShare);
 
+    double OtoHeight => Math.Max(1, BandArea * ShownOtoShare);
+
+    double LoudnessHeight => HasLoudness ? Math.Max(1, BandArea * ShownLoudShare) : 0;
+
+    double SpecHeight => Math.Max(1, BandArea - WaveHeight - LoudnessHeight - OtoHeight);
+
     double SpecTop => WaveHeight + SplitThickness;
 
-    double LoudnessHeight => Math.Max(HasLoudness ? 1 : 0, BandArea * ShownLoudShare);
+    double LoudnessTop => SpecTop + SpecHeight + (HasLoudness ? SplitThickness : 0);
 
-    double LoudnessTop => SpecTop + SpecHeight + SplitThickness;
-
-    double SpecHeight => Math.Max(1, BandArea - WaveHeight - BandArea * ShownLoudShare);
+    double OtoTop =>
+        (HasLoudness ? LoudnessTop + LoudnessHeight : SpecTop + SpecHeight) + SplitThickness;
 
     double X(double time)
     {
@@ -1289,6 +1441,14 @@ public sealed class SpanEditor : UserControl
         var bottom = LoudnessTop + LoudnessHeight - 3;
         var level = Math.Clamp((db - (_loudPeak - LoudnessRangeDb)) / LoudnessRangeDb, 0, 1);
         return bottom - level * Math.Max(1, bottom - top);
+    }
+
+    double OtoY(double sample)
+    {
+        var mid = OtoTop + OtoHeight * 0.5;
+        var amp = Math.Max(1, OtoHeight * 0.5 - 6);
+        var peak = _wavePeak > 1e-9 ? _wavePeak : 0.2;
+        return mid - sample / peak * amp;
     }
 
     void SetFullView()
@@ -1500,4 +1660,364 @@ public sealed class SpanEditor : UserControl
     {
         return new SolidColorBrush(Color.FromArgb(a, r, g, b));
     }
+
+    void AddOtoVisuals()
+    {
+        if (_file == null)
+            return;
+
+        _otoWave = new Polygon
+        {
+            Fill = WaveBrush,
+            IsHitTestVisible = false,
+        };
+        _plot.Children.Add(_otoWave);
+        _otoWaveLine = new Polyline
+        {
+            Stroke = WaveLineBrush,
+            StrokeThickness = 1.25,
+            StrokeLineJoin = PenLineJoin.Round,
+            IsHitTestVisible = false,
+        };
+        _plot.Children.Add(_otoWaveLine);
+        _otoZero = new Line
+        {
+            Stroke = ZeroBrush,
+            StrokeThickness = 1,
+            IsHitTestVisible = false,
+        };
+        _plot.Children.Add(_otoZero);
+
+        OtoMarks.Fill(_file, _oto, _otoMarks);
+        foreach (var _ in _otoMarks)
+        {
+            var rect = new Rectangle
+            {
+                Fill = OtoRegionBrush,
+                IsHitTestVisible = false,
+            };
+            var text = new TextBlock
+            {
+                Foreground = TextBrush,
+                FontSize = 12,
+                TextAlignment = TextAlignment.Center,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                IsHitTestVisible = false,
+            };
+            _otoRects.Add(rect);
+            _otoTexts.Add(text);
+            _plot.Children.Add(rect);
+            for (var point = 0; point < OtoPointCount; point++)
+            {
+                var line = new Line
+                {
+                    Stroke = OtoBrush(point),
+                    StrokeThickness = 2,
+                    IsHitTestVisible = false,
+                };
+                var name = new TextBlock
+                {
+                    Text = OtoPointName(point),
+                    Foreground = OtoBrush(point),
+                    FontSize = 10,
+                    IsHitTestVisible = false,
+                };
+                var chip = new Border
+                {
+                    Background = OtoChipBrush,
+                    Padding = new Thickness(3, 0, 3, 0),
+                    IsHitTestVisible = false,
+                    Child = name,
+                };
+                _otoLines.Add(line);
+                _otoPointChips.Add(chip);
+                _plot.Children.Add(line);
+            }
+
+            _plot.Children.Add(text);
+        }
+
+        foreach (var chip in _otoPointChips)
+            _plot.Children.Add(chip);
+
+        _otoCaption = new Border
+        {
+            Background = OtoChipBrush,
+            Padding = new Thickness(4, 0, 4, 0),
+            IsHitTestVisible = false,
+            Child = new TextBlock
+            {
+                Text = "oto.ini",
+                FontSize = 11,
+                Foreground = TickBrush,
+            },
+        };
+        _plot.Children.Add(_otoCaption);
+    }
+
+    void ArrangeOtoLabels()
+    {
+        if (_file == null)
+            return;
+        OtoMarks.Fill(_file, _oto, _otoMarks);
+        var count = Math.Min(_otoMarks.Count, _otoRects.Count);
+        var lanes = LaneOf(_otoMarks, count);
+        var laneCount = 1;
+        for (var i = 0; i < count; i++)
+            laneCount = Math.Max(laneCount, lanes[i] + 1);
+
+        var usable = Math.Max(0, OtoHeight - 8);
+        var pitch = laneCount <= 1 ? 16 : Math.Min(16, usable / laneCount);
+        var top = OtoTop;
+        var height = OtoHeight;
+        for (var i = 0; i < count; i++)
+        {
+            var mark = _otoMarks[i];
+            var start = Math.Min(mark.Offset, mark.Blank);
+            var end = Math.Max(mark.Offset, mark.Blank);
+            var left = X(start);
+            var width = Math.Max(0, X(end) - left);
+            var rect = _otoRects[i];
+            rect.Fill = i == _hotOto ? OtoRegionHotBrush : OtoRegionBrush;
+            rect.Visibility = width < 1 || height < 2 ? Visibility.Collapsed : Visibility.Visible;
+            Canvas.SetLeft(rect, left);
+            Canvas.SetTop(rect, top);
+            rect.Width = width;
+            rect.Height = Math.Max(0, height);
+
+            var textTop = top + 4 + lanes[i] * pitch;
+            var text = _otoTexts[i];
+            text.Text = mark.Alias;
+            text.Width = width;
+            var showAlias = width >= 28 && height >= 20 && textTop + 14 <= top + height - 2;
+            text.Visibility = showAlias ? Visibility.Visible : Visibility.Collapsed;
+            Canvas.SetLeft(text, left);
+            Canvas.SetTop(text, textTop);
+
+            for (var point = 0; point < OtoPointCount; point++)
+            {
+                var line = _otoLines[i * OtoPointCount + point];
+                var x = X(mark.At(point));
+                line.Visibility = height > 1 ? Visibility.Visible : Visibility.Collapsed;
+                line.X1 = x;
+                line.X2 = x;
+                line.Y1 = top;
+                line.Y2 = top + height;
+            }
+        }
+
+        for (var i = count; i < _otoRects.Count; i++)
+            _otoRects[i].Visibility = Visibility.Collapsed;
+        for (var i = count; i < _otoTexts.Count; i++)
+            _otoTexts[i].Visibility = Visibility.Collapsed;
+        for (var i = count * OtoPointCount; i < _otoLines.Count; i++)
+            _otoLines[i].Visibility = Visibility.Collapsed;
+
+        var textBottom = top + 4 + laneCount * Math.Max(pitch, 14);
+        var nameY = top + height - 16;
+        var showNames = count > 0 && height >= 56 && nameY >= textBottom;
+        if (!showNames)
+        {
+            foreach (var chip in _otoPointChips)
+                chip.Visibility = Visibility.Collapsed;
+        }
+        else
+        {
+            PlaceOtoNames(count, nameY);
+        }
+
+        if (_otoCaption != null)
+        {
+            var showCaption = height > 22;
+            _otoCaption.Visibility = showCaption ? Visibility.Visible : Visibility.Collapsed;
+            Canvas.SetLeft(_otoCaption, Pad + 2);
+            Canvas.SetTop(_otoCaption, top + 3);
+        }
+    }
+
+    void PlaceOtoNames(int count, double nameY)
+    {
+        var pending = new List<(double X, int Index)>();
+        for (var i = 0; i < count; i++)
+        {
+            for (var point = 0; point < OtoPointCount; point++)
+            {
+                var index = i * OtoPointCount + point;
+                var x = X(_otoMarks[i].At(point));
+                if (x < -30 || x > _plot.Width + 30)
+                {
+                    _otoPointChips[index].Visibility = Visibility.Collapsed;
+                    continue;
+                }
+
+                pending.Add((x, index));
+            }
+        }
+
+        pending.Sort((a, b) => a.X.CompareTo(b.X));
+        var nextLeft = double.NegativeInfinity;
+        var shown = new bool[_otoPointChips.Count];
+        foreach (var item in pending)
+        {
+            var chip = _otoPointChips[item.Index];
+            if (chip.Child is not TextBlock text)
+            {
+                chip.Visibility = Visibility.Collapsed;
+                continue;
+            }
+
+            var width = Math.Max(12, text.Text.Length * 10 + 8);
+            var left = item.X - width / 2;
+            if (left < nextLeft)
+            {
+                chip.Visibility = Visibility.Collapsed;
+                continue;
+            }
+
+            chip.Visibility = Visibility.Visible;
+            Canvas.SetLeft(chip, left);
+            Canvas.SetTop(chip, nameY);
+            shown[item.Index] = true;
+            nextLeft = left + width + 4;
+        }
+
+        for (var i = 0; i < _otoPointChips.Count; i++)
+        {
+            if (!shown[i])
+                _otoPointChips[i].Visibility = Visibility.Collapsed;
+        }
+    }
+
+    void ShowOtoHover(double x)
+    {
+        if (_otoMarks.Count == 0)
+        {
+            SetHotOto(-1);
+            SetReadout("");
+            return;
+        }
+
+        var best = -1;
+        var bestPoint = -1;
+        var bestDist = HitPx;
+        for (var i = 0; i < _otoMarks.Count; i++)
+        {
+            var mark = _otoMarks[i];
+            for (var point = 0; point < OtoPointCount; point++)
+            {
+                var dist = Math.Abs(X(mark.At(point)) - x);
+                if (dist > bestDist)
+                    continue;
+                bestDist = dist;
+                best = i;
+                bestPoint = point;
+            }
+        }
+
+        if (best >= 0)
+        {
+            var mark = _otoMarks[best];
+            var at = mark.At(bestPoint);
+            var names = "";
+            for (var point = 0; point < OtoPointCount; point++)
+            {
+                if (Math.Abs(mark.At(point) - at) > 0.0005)
+                    continue;
+                names = names.Length == 0 ? OtoPointName(point) : names + "・" + OtoPointName(point);
+            }
+
+            SetHotOto(best);
+            SetReadout($"{mark.Alias}   {names}   {at:0.000} 秒");
+            return;
+        }
+
+        var region = HitOtoRegion(XToTime(x));
+        SetHotOto(region);
+        if (region < 0)
+        {
+            SetReadout("");
+            return;
+        }
+
+        var hit = _otoMarks[region];
+        SetReadout($"{hit.Alias}   {hit.Offset:0.000}–{hit.Blank:0.000}");
+    }
+
+    int HitOtoRegion(double time)
+    {
+        var best = -1;
+        var bestWidth = double.MaxValue;
+        for (var i = 0; i < _otoMarks.Count; i++)
+        {
+            var start = Math.Min(_otoMarks[i].Offset, _otoMarks[i].Blank);
+            var end = Math.Max(_otoMarks[i].Offset, _otoMarks[i].Blank);
+            if (time < start - 1e-9 || time > end + 1e-9)
+                continue;
+            var width = end - start;
+            if (width < bestWidth)
+            {
+                bestWidth = width;
+                best = i;
+            }
+        }
+
+        return best;
+    }
+
+    void SetHotOto(int index)
+    {
+        if (index >= _otoMarks.Count)
+            index = -1;
+        if (_hotOto == index)
+            return;
+        PaintOtoRegion(_hotOto, hot: false);
+        _hotOto = index;
+        PaintOtoRegion(index, hot: true);
+    }
+
+    void PaintOtoRegion(int index, bool hot)
+    {
+        if (index < 0 || index >= _otoRects.Count)
+            return;
+        _otoRects[index].Fill = hot ? OtoRegionHotBrush : OtoRegionBrush;
+    }
+
+    bool InOtoBand(double y) => _file != null && y >= OtoTop && y < OtoTop + OtoHeight;
+
+    static int[] LaneOf(List<OtoMark> marks, int count)
+    {
+        var lanes = new int[count];
+        var ends = new List<double>();
+        for (var i = 0; i < count; i++)
+        {
+            var start = Math.Min(marks[i].Offset, marks[i].Blank);
+            var end = Math.Max(marks[i].Offset, marks[i].Blank);
+            var lane = ends.FindIndex(edge => start >= edge - 1e-4);
+            if (lane < 0)
+            {
+                lane = ends.Count;
+                ends.Add(end);
+            }
+            else
+            {
+                ends[lane] = end;
+            }
+
+            lanes[i] = lane;
+        }
+
+        return lanes;
+    }
+
+    static string OtoPointName(int point) => point switch
+    {
+        0 => "オフセット",
+        1 => "オーバーラップ",
+        2 => "先行発声",
+        3 => "子音部",
+        _ => "ブランク",
+    };
+
+    static SolidColorBrush OtoBrush(int point) =>
+        OtoPointBrushes[Math.Clamp(point, 0, OtoPointBrushes.Length - 1)];
 }

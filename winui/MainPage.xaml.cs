@@ -41,6 +41,7 @@ public sealed partial class MainPage : Page
         BlankSlider.ValueChanged += (_, _) => OnConfigChanged();
         OverlapSlider.ValueChanged += (_, _) => OnConfigChanged();
         _configReady = true;
+        Editor.SetOtoSettings(CurrentExport());
         AddHandler(PointerWheelChangedEvent, new PointerEventHandler(OnPageWheel), true);
     }
 
@@ -377,6 +378,7 @@ public sealed partial class MainPage : Page
         ConsonantValue.Text = FormatMs(ConsonantSlider.Value);
         BlankValue.Text = FormatMs(BlankSlider.Value);
         OverlapValue.Text = $"{Math.Round(OverlapSlider.Value).ToString(CultureInfo.InvariantCulture)}%";
+        Editor.SetOtoSettings(CurrentExport());
         if (!_configReady || !_wrote)
             return;
         _wrote = false;
