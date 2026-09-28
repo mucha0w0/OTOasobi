@@ -11,6 +11,7 @@ sealed class AnalysisClient : IDisposable
     readonly StreamWriter _input;
     readonly ConcurrentDictionary<int, TaskCompletionSource<string>> _pending = new();
     readonly ConcurrentDictionary<int, Action<int, int>> _progress = new();
+    readonly ConcurrentDictionary<int, Action<string, double, string>> _fileProgress = new();
     readonly object _writeLock = new();
     int _nextId;
     bool _disposed;
@@ -46,11 +47,16 @@ sealed class AnalysisClient : IDisposable
         _ = Task.Run(ReadLoop);
     }
 
-    public async Task<FolderData> AnalyzeFolderAsync(string path, Action<int, int>? onProgress = null, bool force = false)
+    public async Task<FolderData> AnalyzeFolderAsync(
+        string path,
+        Action<int, int>? onProgress = null,
+        bool force = false,
+        Action<string, double, string>? onFile = null)
     {
         using var doc = await SendAsync(
             id => JsonSerializer.Serialize(new { id, cmd = "analyze", path, force }),
-            onProgress).ConfigureAwait(true);
+            onProgress,
+            onFile).ConfigureAwait(true);
         return ReadFolder(doc.RootElement);
     }
 
@@ -103,7 +109,10 @@ sealed class AnalysisClient : IDisposable
         return new AnalyzeResult(ok, txt, error, notice);
     }
 
-    async Task<JsonDocument> SendAsync(Func<int, string> build, Action<int, int>? onProgress)
+    async Task<JsonDocument> SendAsync(
+        Func<int, string> build,
+        Action<int, int>? onProgress,
+        Action<string, double, string>? onFile = null)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (_process.HasExited)
@@ -114,6 +123,8 @@ sealed class AnalysisClient : IDisposable
         _pending[id] = done;
         if (onProgress != null)
             _progress[id] = onProgress;
+        if (onFile != null)
+            _fileProgress[id] = onFile;
         var request = build(id);
         lock (_writeLock)
         {
@@ -129,6 +140,7 @@ sealed class AnalysisClient : IDisposable
         finally
         {
             _progress.TryRemove(id, out _);
+            _fileProgress.TryRemove(id, out _);
         }
     }
 
@@ -267,27 +279,51 @@ sealed class AnalysisClient : IDisposable
                         continue;
                     var id = idValue.GetInt32();
                     if (root.TryGetProperty("event", out var eventValue)
-                        && eventValue.ValueKind == JsonValueKind.String
-                        && eventValue.GetString() == "progress")
+                        && eventValue.ValueKind == JsonValueKind.String)
                     {
-                        var doneCount = root.TryGetProperty("done", out var doneValue) && doneValue.TryGetInt32(out var parsedDone)
-                            ? parsedDone
-                            : 0;
-                        var total = root.TryGetProperty("total", out var totalValue) && totalValue.TryGetInt32(out var parsedTotal)
-                            ? parsedTotal
-                            : 0;
-                        if (_progress.TryGetValue(id, out var progress))
+                        var eventName = eventValue.GetString();
+                        if (eventName == "progress")
                         {
-                            try
+                            var doneCount = root.TryGetProperty("done", out var doneValue) && doneValue.TryGetInt32(out var parsedDone)
+                                ? parsedDone
+                                : 0;
+                            var total = root.TryGetProperty("total", out var totalValue) && totalValue.TryGetInt32(out var parsedTotal)
+                                ? parsedTotal
+                                : 0;
+                            if (_progress.TryGetValue(id, out var progress))
                             {
-                                progress(doneCount, total);
+                                try
+                                {
+                                    progress(doneCount, total);
+                                }
+                                catch (Exception)
+                                {
+                                }
                             }
-                            catch (Exception)
-                            {
-                            }
+
+                            continue;
                         }
 
-                        continue;
+                        if (eventName == "file")
+                        {
+                            var name = root.TryGetProperty("name", out var nameValue) ? nameValue.GetString() ?? "" : "";
+                            var fileDone = root.TryGetProperty("done", out var fileDoneValue) && fileDoneValue.TryGetDouble(out var parsedFile)
+                                ? parsedFile
+                                : 0;
+                            var label = root.TryGetProperty("label", out var labelValue) ? labelValue.GetString() ?? "" : "";
+                            if (_fileProgress.TryGetValue(id, out var fileProgress))
+                            {
+                                try
+                                {
+                                    fileProgress(name, fileDone, label);
+                                }
+                                catch (Exception)
+                                {
+                                }
+                            }
+
+                            continue;
+                        }
                     }
 
                     if (_pending.TryRemove(id, out var done))

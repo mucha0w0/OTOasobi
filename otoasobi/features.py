@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import numpy as np
@@ -27,7 +28,13 @@ def _to_mono(y: np.ndarray) -> np.ndarray:
     return y
 
 
-def compute_features(y: np.ndarray, sr: int, hop_s: float = 0.01, win_s: float = 0.025) -> FrameTrack:
+def compute_features(
+    y: np.ndarray,
+    sr: int,
+    hop_s: float = 0.01,
+    win_s: float = 0.025,
+    on_progress: Callable[[int, int], None] | None = None,
+) -> FrameTrack:
     y = _to_mono(y)
     hop = max(1, int(sr * hop_s))
     win = max(hop + 1, int(sr * win_s))
@@ -50,6 +57,7 @@ def compute_features(y: np.ndarray, sr: int, hop_s: float = 0.01, win_s: float =
     mel_fb, _mel_centers = _mel_filterbank(sr, win, n_mels, fmin, fmax)
     cepstrum = _cepstrum_matrix(n_mels, n_ceps)
     n_frames = max(1, 1 + (len(y) - win) // hop)
+    report_every = max(1, n_frames // 40)
     rms = np.zeros(n_frames)
     ratio = np.zeros(n_frames)
     zcr = np.zeros(n_frames)
@@ -89,6 +97,8 @@ def compute_features(y: np.ndarray, sr: int, hop_s: float = 0.01, win_s: float =
             diff = mag - prev
             flux[i] = float(np.sum(diff[diff > 0]))
         prev = mag
+        if on_progress is not None and (i % report_every == 0 or i + 1 == n_frames):
+            on_progress(i + 1, n_frames)
     times = (np.arange(n_frames) * hop + win / 2) / sr
     return FrameTrack(
         sr=sr,
@@ -149,17 +159,45 @@ def _mel_filterbank(sr: int, n_fft: int, n_mels: int, fmin: float, fmax: float) 
     return fb, hz_pts[1:-1]
 
 
-def _stft_size(sr: int, n_samples: int) -> tuple[int, int]:
-    target = max(64, int(round(0.025 * sr)))
+SPECTROGRAM_RANGE_DB = 60.0
+SPECTROGRAM_GAMMA = 1.55
+
+
+def _display_window(sr: int) -> int:
+    """約 12 ms。長い窓は時間方向の輪郭をなまらせる。"""
+    limit = max(256, int(round(0.014 * sr)))
+    win = 256
+    while win * 2 <= limit and win < 1024:
+        win *= 2
+    return win
+
+
+def _display_fft(win: int) -> int:
     n_fft = 256
-    while n_fft < target and n_fft < 2048:
+    while n_fft < max(win, 2048):
         n_fft *= 2
-    if n_samples < n_fft:
-        n_fft = max(64, 1 << int(np.floor(np.log2(max(n_samples, 64)))))
-    hop = max(1, n_fft // 4)
-    if n_samples // hop > 3000:
-        hop = max(hop, int(np.ceil(n_samples / 3000)))
-    return n_fft, hop
+    return n_fft
+
+
+def _preemphasize(y: np.ndarray, coef: float = 0.97) -> np.ndarray:
+    if len(y) < 2 or coef <= 0.0:
+        return y
+    out = np.empty_like(y)
+    out[0] = y[0]
+    out[1:] = y[1:] - coef * y[:-1]
+    return out
+
+
+def spectrogram_tone(db: np.ndarray) -> np.ndarray:
+    """ピークから一定幅だけを残し、中間を沈めて帯の境目を立てる。"""
+    db = np.asarray(db, dtype=np.float64)
+    if db.size == 0:
+        return db
+    peak = float(np.max(db))
+    if peak - float(np.min(db)) < 1.0:
+        return np.zeros(db.shape, dtype=np.float64)
+    norm = np.clip((db - (peak - SPECTROGRAM_RANGE_DB)) / SPECTROGRAM_RANGE_DB, 0.0, 1.0)
+    return norm ** SPECTROGRAM_GAMMA
 
 
 def mel_spectrogram(y: np.ndarray, sr: int, n_mels: int = 96) -> MelSpectrogram:
@@ -167,21 +205,28 @@ def mel_spectrogram(y: np.ndarray, sr: int, n_mels: int = 96) -> MelSpectrogram:
     if sr <= 0 or len(y) == 0:
         centers = np.linspace(0.0, 1.0, n_mels)
         return MelSpectrogram(np.zeros((n_mels, 1)), 0.0, 1.0, centers)
-    n_fft, hop = _stft_size(sr, len(y))
+    y = _preemphasize(y)
+    win = _display_window(sr)
+    if len(y) < win:
+        win = max(64, 1 << int(np.floor(np.log2(max(len(y), 64)))))
+    n_fft = _display_fft(win)
+    hop = max(1, win // 4)
+    if len(y) // hop > 3000:
+        hop = max(hop, int(np.ceil(len(y) / 3000)))
     n_mels = min(n_mels, max(16, n_fft // 2))
     fmax = min(8000.0, sr / 2.0)
     fmin = min(40.0, fmax * 0.25)
-    pad = n_fft // 2
+    pad = win // 2
     padded = np.pad(y, (pad, pad))
-    n_frames = 1 + (len(padded) - n_fft) // hop
+    n_frames = 1 + (len(padded) - win) // hop
     frames = np.lib.stride_tricks.as_strided(
         padded,
-        shape=(n_frames, n_fft),
+        shape=(n_frames, win),
         strides=(padded.strides[0] * hop, padded.strides[0]),
         writeable=False,
     )
-    window = np.hanning(n_fft)
-    power = np.abs(np.fft.rfft(frames * window, axis=1)) ** 2
+    window = np.hanning(win)
+    power = np.abs(np.fft.rfft(frames * window, n=n_fft, axis=1)) ** 2
     fb, centers = _mel_filterbank(sr, n_fft, n_mels, fmin, fmax)
     db = 10.0 * np.log10(np.maximum(power @ fb.T, 1e-10))
     peak = float(np.max(db))
@@ -199,7 +244,7 @@ def loudness_db(y: np.ndarray, sr: int) -> np.ndarray:
     """Short-time loudness in dBFS, one value per ~8 ms, smoothed over 30 ms.
 
     The series covers the file in equal steps. Display maps the peak down
-    through ``LOUDNESS_RANGE_DB`` so the contour fills a strip under the spectrogram.
+    through ``LOUDNESS_RANGE_DB`` so the contour fills the loudness graph.
     """
     y = np.asarray(y, dtype=np.float64).reshape(-1)
     if sr <= 0 or len(y) == 0:

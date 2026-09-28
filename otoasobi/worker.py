@@ -3,6 +3,8 @@
 1行に1オブジェクト。
 要求: {"id": 1, "cmd": "analyze", "path": "C:/音声フォルダ"}
 途中: {"id": 1, "event": "progress", "done": 1, "total": 4}
+      {"id": 1, "event": "file", "name": "あ.wav", "done": 0.4, "label": "特徴を計算しています"}
+file の done は、いま解析しているファイルの 0 から 1。
 応答: {"id": 1, "ok": true, "files": [...], "notice": "..."}
       {"id": 1, "ok": false, "error": "..."}
 
@@ -63,7 +65,31 @@ def _analyze(request_id: object, path: str, force: bool) -> dict:
     def on_progress(done: int, total: int) -> None:
         _respond({"id": request_id, "event": "progress", "done": done, "total": total})
 
-    files, skipped = analyze_folder_files(path, on_progress=on_progress)
+    shown = {"name": "", "done": -1.0, "label": ""}
+
+    def on_file(name: str, fraction: float, label: str) -> None:
+        done = round(max(0.0, min(1.0, float(fraction))), 3)
+        if (
+            shown["name"] == name
+            and shown["label"] == label
+            and done < 1.0
+            and done - float(shown["done"]) < 0.02
+        ):
+            return
+        shown["name"] = name
+        shown["done"] = done
+        shown["label"] = label
+        _respond(
+            {
+                "id": request_id,
+                "event": "file",
+                "name": name,
+                "done": done,
+                "label": label,
+            }
+        )
+
+    files, skipped = analyze_folder_files(path, on_progress=on_progress, on_file=on_file)
     if not files:
         return {"id": request_id, "ok": False, "error": skipped_notice(skipped)}
     notes: list[str] = []

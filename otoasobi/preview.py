@@ -13,7 +13,14 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from otoasobi.features import _mel_filterbank, loudness_db
+from otoasobi.features import (
+    _display_fft,
+    _display_window,
+    _mel_filterbank,
+    _preemphasize,
+    loudness_db,
+    spectrogram_tone,
+)
 
 _STOPS = np.array(
     [
@@ -110,14 +117,6 @@ def waveform_view(
     return lo, hi, wt0, wt1, False
 
 
-def _fft_size(sr: int) -> int:
-    target = max(64, int(round(0.025 * sr)))
-    n_fft = 256
-    while n_fft < target and n_fft < 2048:
-        n_fft *= 2
-    return n_fft
-
-
 def _filterbank(sr: int, n_fft: int, n_mels: int) -> np.ndarray:
     key = (sr, n_fft, n_mels)
     cached = _FB.get(key)
@@ -132,8 +131,10 @@ def _filterbank(sr: int, n_fft: int, n_mels: int) -> np.ndarray:
 
 def _mel_db(y: np.ndarray, sr: int, i0: int, i1: int, max_frames: int, n_mels: int = 96) -> np.ndarray:
     """[i0, i1) に中心があるフレーム。窓は範囲の外のサンプルも使う。"""
+    y = _preemphasize(np.asarray(y, dtype=np.float64).reshape(-1))
     n = int(y.shape[0])
-    n_fft = _fft_size(sr)
+    win = _display_window(sr)
+    n_fft = _display_fft(win)
     n_mels = min(n_mels, max(16, n_fft // 2))
     if n == 0 or i1 <= i0:
         return np.zeros((n_mels, 1))
@@ -143,19 +144,19 @@ def _mel_db(y: np.ndarray, sr: int, i0: int, i1: int, max_frames: int, n_mels: i
     centers = np.arange(i0, i1, hop, dtype=np.int64)
     if len(centers) == 0:
         centers = np.array([i0], dtype=np.int64)
-    half = n_fft // 2
+    half = win // 2
     padded = np.pad(y, (half, half))
     n_frames = int(len(centers))
     hop = int(centers[1] - centers[0]) if n_frames > 1 else 1
     base = int(centers[0])
-    needed = (n_frames - 1) * hop + n_fft
+    needed = (n_frames - 1) * hop + win
     view = np.lib.stride_tricks.as_strided(
         padded[base : base + needed],
-        shape=(n_frames, n_fft),
+        shape=(n_frames, win),
         strides=(hop * padded.strides[0], padded.strides[0]),
         writeable=False,
     )
-    power = np.abs(np.fft.rfft(view * np.hanning(n_fft), axis=1)) ** 2
+    power = np.abs(np.fft.rfft(view * np.hanning(win), n=n_fft, axis=1)) ** 2
     db = 10.0 * np.log10(np.maximum(power @ _filterbank(sr, n_fft, n_mels).T, 1e-10))
     peak = float(np.max(db))
     db = np.clip(db, peak - 80.0, peak)
@@ -193,9 +194,7 @@ def spectrogram_png(
     view0, view1, i0, i1 = _bounds(n, sr, t0, t1)
     db = _mel_db(y, sr, i0, i1, width)
     n_mels, n_frames = int(db.shape[0]), int(db.shape[1])
-    lo = float(np.min(db))
-    hi = float(np.max(db))
-    color_index = np.clip(np.rint((db - lo) / (hi - lo + 1e-9) * 255.0), 0, 255).astype(np.int32)
+    color_index = np.clip(np.rint(spectrogram_tone(db) * 255.0), 0, 255).astype(np.int32)
     cols = np.minimum((np.arange(width) * n_frames) // width, n_frames - 1)
     rows = (np.arange(height) * n_mels) // height
     rows = n_mels - 1 - np.minimum(rows, n_mels - 1)

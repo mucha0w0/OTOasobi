@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import numpy as np
 
 from otoasobi.align_mms import AlignedChar, align_chars, available as mms_available
@@ -424,10 +426,14 @@ def _align_chunks(
     index_chunks: list[list[int]],
     chunk_bounds: list[tuple[float, float]],
     duration: float,
+    on_step: Callable[[float, str], None] | None = None,
 ) -> list[AlignedChar]:
     aligned: list[AlignedChar] = []
     pad = 0.04
+    total = max(1, len(index_chunks))
     for i, indices in enumerate(index_chunks):
+        if on_step is not None:
+            on_step(0.58 + 0.26 * i / total, "音素を対応しています")
         plan = _plan_for_indices(tokens, indices)
         if not plan:
             continue
@@ -450,7 +456,12 @@ def segment_precision(
     sr: int,
     track: FrameTrack,
     duration: float,
+    on_step: Callable[[float, str], None] | None = None,
 ) -> tuple[list[Span], str]:
+    def step(fraction: float, label: str) -> None:
+        if on_step is not None:
+            on_step(fraction, label)
+
     if not mms_available():
         raise RuntimeError("MMS is not installed")
 
@@ -468,6 +479,7 @@ def segment_precision(
     formants_fine = None
     bits: list[str] = []
 
+    step(0.30, "声の範囲を見ています")
     try:
         from otoasobi import praat_refine
 
@@ -490,10 +502,14 @@ def segment_precision(
                     chunk_bounds[-1][0],
                     min(duration, max(chunk_bounds[-1][0] + 0.03, p1)),
                 )
+            step(0.38, "声の性質を計算しています")
             harm = praat_refine.harmonicity(y, sr)
+            step(0.46, "声の性質を計算しています")
             formants = praat_refine.formant_tracks(y, sr)
             try:
+                step(0.52, "声の性質を計算しています")
                 harm_fine = praat_refine.harmonicity(y, sr, time_step=0.002)
+                step(0.56, "声の性質を計算しています")
                 formants_fine = praat_refine.formant_tracks(y, sr, time_step=0.005)
             except Exception:
                 harm_fine = None
@@ -505,8 +521,9 @@ def segment_precision(
         harm_fine = None
         formants_fine = None
 
+    step(0.58, "音素を対応しています")
     try:
-        aligned = _align_chunks(y, sr, tokens, index_chunks, chunk_bounds, duration)
+        aligned = _align_chunks(y, sr, tokens, index_chunks, chunk_bounds, duration, on_step)
         bits.append("mms")
     except Exception:
         aligned = align_chars(y, sr, plan)
@@ -565,7 +582,9 @@ def segment_precision(
         engine = "mms+praat" if "praat" in bits else "mms"
         return clean_spans(spans, duration), engine
 
+    group_total = max(1, len(group_chunks))
     for i, groups in enumerate(group_chunks):
+        step(0.86 + 0.06 * i / group_total, "境界を整えています")
         for group in groups:
             start, end = mora_bounds[group.index]
 

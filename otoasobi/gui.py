@@ -4,8 +4,8 @@ import multiprocessing
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QThread, Qt, Signal
-from PySide6.QtGui import QAction, QColor, QDragEnterEvent, QDropEvent, QIcon, QKeySequence
+from PySide6.QtCore import QThread, QTimer, Qt, Signal
+from PySide6.QtGui import QAction, QColor, QDragEnterEvent, QDropEvent, QIcon, QKeySequence, QPainter
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -35,7 +35,7 @@ from otoasobi.analyze import (
     write_label_txt,
     write_log_txt,
 )
-from otoasobi.features import LOUDNESS_RANGE_DB, loudness_db, mel_spectrogram
+from otoasobi.features import LOUDNESS_RANGE_DB, loudness_db, mel_spectrogram, spectrogram_tone
 from otoasobi.parser import FilenameError
 from otoasobi.phones import KIND_RGB, SILENCE_LABEL, phone_kind
 from otoasobi.segment import Span
@@ -104,7 +104,12 @@ QMenu {
     border: 1px solid #3A3A3A;
 }
 QMenu::item:selected { background: #0F9D8E; color: #06110F; }
-QSplitter::handle { background: #2A2A2A; }
+QSplitter::handle {
+    background: #3A3A3A;
+}
+QSplitter::handle:hover {
+    background: #0F9D8E;
+}
 QScrollBar:vertical, QScrollBar:horizontal {
     background: #161616;
     width: 10px;
@@ -132,6 +137,7 @@ class WaveformView(pg.PlotWidget):
         plot = self.getPlotItem()
         plot.showGrid(x=True, y=False, alpha=0.15)
         plot.setLabel("bottom", "時間", units="s")
+        plot.setTitle("波形", color="#D1D5DB", size="10pt")
         _reserve_left_axis(plot, show_values=False)
         plot.getViewBox().setDefaultPadding(0.02)
         self._upper = pg.PlotCurveItem(pen=None)
@@ -224,6 +230,7 @@ def _hz_ticks(centers_hz: np.ndarray, y0: float = 0.0) -> list[tuple[float, str]
 class MelSpectrogramView(pg.PlotWidget):
     def __init__(self) -> None:
         super().__init__(background="#161616")
+        self.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, False)
         self.setAcceptDrops(False)
         self.enableAutoRange(False)
         plot = self.getPlotItem()
@@ -238,26 +245,6 @@ class MelSpectrogramView(pg.PlotWidget):
         self._img.setLookupTable(pg.colormap.get("magma").getLookupTable(nPts=256))
         self._img.setZValue(-30)
         self.addItem(self._img)
-        self._loud_band = 0.0
-        self._loud_bg = pg.PlotCurveItem(pen=None, fillLevel=0, brush=pg.mkBrush(14, 14, 14, 255))
-        self._loud_bg.setZValue(15)
-        self._loud_sep = pg.InfiniteLine(angle=0, movable=False, pen=pg.mkPen("#3A3A3A", width=1))
-        self._loud_sep.setZValue(16)
-        self._loud = pg.PlotCurveItem(pen=pg.mkPen("#99F6E4", width=1.6))
-        self._loud.setZValue(20)
-        self._loud_label = pg.TextItem(anchor=(0, 0))
-        self._loud_label.setHtml(
-            "<span style='font-family: Yu Gothic UI; font-size: 10px; color: #9CA3AF'>大きさ</span>"
-        )
-        self._loud_label.setZValue(21)
-        self.addItem(self._loud_bg)
-        self.addItem(self._loud_sep)
-        self.addItem(self._loud)
-        self.addItem(self._loud_label)
-        self._loud_bg.setVisible(False)
-        self._loud_sep.setVisible(False)
-        self._loud_label.setVisible(False)
-        plot.getViewBox().sigXRangeChanged.connect(lambda *_: self._place_loud_label())
         self._regions: list[pg.LinearRegionItem] = []
         self._texts: list[pg.TextItem] = []
 
@@ -270,41 +257,17 @@ class MelSpectrogramView(pg.PlotWidget):
     def set_empty(self) -> None:
         self.clear_labels()
         self._img.clear()
-        self._loud_band = 0.0
-        self._loud.setData([], [])
-        self._loud_bg.setVisible(False)
-        self._loud_sep.setVisible(False)
-        self._loud_label.setVisible(False)
         self.setXRange(0, 1, padding=0)
         self.setYRange(0, 1, padding=0)
-
-    def _place_loud_label(self) -> None:
-        if self._loud_band <= 0:
-            return
-        x0, x1 = self.getViewBox().viewRange()[0]
-        self._loud_label.setPos(float(x0) + (float(x1) - float(x0)) * 0.012, self._loud_band)
 
     def set_analysis(self, analysis: Analysis) -> None:
         self.clear_labels()
         mel = mel_spectrogram(analysis.y, analysis.sr)
         db = mel.db
         n_mels = int(db.shape[0])
-        peak = float(np.max(db)) if db.size else 0.0
-        band = max(8.0, n_mels * 0.22)
-        self._loud_band = band
-        self._img.setImage(np.ascontiguousarray(db.T), autoLevels=False, levels=(peak - 80.0, peak))
-        self._img.setRect(mel.t0, band, max(mel.t1 - mel.t0, 1e-3), float(n_mels))
-        loud = loudness_db(analysis.y, analysis.sr)
-        loud_peak = float(np.max(loud)) if loud.size else 0.0
-        norm = np.clip((loud - (loud_peak - LOUDNESS_RANGE_DB)) / LOUDNESS_RANGE_DB, 0.0, 1.0)
-        times = (np.arange(len(loud)) + 0.5) / max(len(loud), 1) * analysis.duration
-        self._loud.setData(times, 1.0 + norm * max(band - 2.0, 1.0))
-        self._loud_bg.setData([0.0, analysis.duration], [band, band])
-        self._loud_bg.setVisible(True)
-        self._loud_sep.setPos(band)
-        self._loud_sep.setVisible(True)
-        self._loud_label.setVisible(True)
-        self._place_loud_label()
+        tone = spectrogram_tone(db)
+        self._img.setImage(np.ascontiguousarray(tone.T), autoLevels=False, levels=(0.0, 1.0))
+        self._img.setRect(mel.t0, 0.0, max(mel.t1 - mel.t0, 1e-3), float(n_mels))
         for span in analysis.spans:
             if span.label == SILENCE_LABEL:
                 continue
@@ -324,12 +287,46 @@ class MelSpectrogramView(pg.PlotWidget):
                     "<span style='font-family: Yu Gothic UI; font-size: 11px; "
                     f"background-color: rgba(0,0,0,140); color: #F9FAFB'>{span.label}</span>"
                 )
-                text.setPos((span.start + span.end) / 2, band + n_mels * 0.96)
+                text.setPos((span.start + span.end) / 2, n_mels * 0.96)
                 text.setZValue(10)
                 self.addItem(text)
                 self._texts.append(text)
-        self.getPlotItem().getAxis("left").setTicks([_hz_ticks(mel.centers_hz, band), []])
-        self.setYRange(0, n_mels + band, padding=0.0)
+        self.getPlotItem().getAxis("left").setTicks([_hz_ticks(mel.centers_hz), []])
+        self.setYRange(0, n_mels, padding=0.0)
+        self.setXRange(0, max(analysis.duration, 1e-3), padding=0.01)
+
+
+class LoudnessView(pg.PlotWidget):
+    def __init__(self) -> None:
+        super().__init__(background="#161616")
+        self.setAcceptDrops(False)
+        self.enableAutoRange(False)
+        plot = self.getPlotItem()
+        plot.showGrid(x=True, y=False, alpha=0.15)
+        plot.setLabel("bottom", "時間", units="s")
+        plot.setTitle("大きさ", color="#D1D5DB", size="10pt")
+        _reserve_left_axis(plot, show_values=False)
+        plot.getViewBox().setDefaultPadding(0.0)
+        plot.getViewBox().setMouseEnabled(x=True, y=False)
+        self._curve = pg.PlotCurveItem(
+            pen=pg.mkPen("#99F6E4", width=1.6),
+            fillLevel=0,
+            brush=pg.mkBrush(153, 246, 228, 48),
+        )
+        self.addItem(self._curve)
+
+    def set_empty(self) -> None:
+        self._curve.setData([], [])
+        self.setXRange(0, 1, padding=0)
+        self.setYRange(0, 1, padding=0)
+
+    def set_analysis(self, analysis: Analysis) -> None:
+        loud = loudness_db(analysis.y, analysis.sr)
+        loud_peak = float(np.max(loud)) if loud.size else 0.0
+        norm = np.clip((loud - (loud_peak - LOUDNESS_RANGE_DB)) / LOUDNESS_RANGE_DB, 0.0, 1.0)
+        times = (np.arange(len(loud)) + 0.5) / max(len(loud), 1) * analysis.duration
+        self._curve.setData(times, norm)
+        self.setYRange(0, 1, padding=0.06)
         self.setXRange(0, max(analysis.duration, 1e-3), padding=0.01)
 
 
@@ -388,6 +385,7 @@ class MainWindow(QMainWindow):
         self._worker: AnalyzeWorker | None = None
         self._warmup: WarmupWorker | None = None
         self._precision_ready = False
+        self._plot_heights_set = False
         self._build()
         self._start_warmup()
 
@@ -429,15 +427,25 @@ class MainWindow(QMainWindow):
         toolbar.addWidget(legend)
 
         splitter = QSplitter(Qt.Orientation.Vertical)
+        splitter.setHandleWidth(8)
+        splitter.setChildrenCollapsible(False)
         plots = QSplitter(Qt.Orientation.Vertical)
+        plots.setHandleWidth(8)
         plots.setChildrenCollapsible(False)
         self.wave = WaveformView()
         self.mel = MelSpectrogramView()
+        self.loud = LoudnessView()
         self.mel.setXLink(self.wave)
+        self.loud.setXLink(self.wave)
+        for view in (self.wave, self.mel, self.loud):
+            view.setMinimumHeight(72)
         plots.addWidget(self.wave)
         plots.addWidget(self.mel)
+        plots.addWidget(self.loud)
         plots.setStretchFactor(0, 2)
         plots.setStretchFactor(1, 3)
+        plots.setStretchFactor(2, 1)
+        self.plots = plots
         splitter.addWidget(plots)
 
         self.table = QTableWidget(0, 4)
@@ -478,6 +486,23 @@ class MainWindow(QMainWindow):
         view_menu = self.menuBar().addMenu("解析")
         view_menu.addAction(self.act_reanalyze)
         view_menu.addAction(self.act_play)
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        self._apply_plot_heights()
+
+    def _apply_plot_heights(self) -> None:
+        if self._plot_heights_set:
+            return
+        total = self.plots.height()
+        if total <= 0:
+            QTimer.singleShot(0, self._apply_plot_heights)
+            return
+        self._plot_heights_set = True
+        wave = total * 2 // 6
+        spec = total * 3 // 6
+        loud = total - wave - spec
+        self.plots.setSizes([wave, spec, loud])
 
     def _start_warmup(self) -> None:
         self._warmup = WarmupWorker()
@@ -535,6 +560,7 @@ class MainWindow(QMainWindow):
         self.file_label.setText(analysis.path.name)
         self.wave.set_analysis(analysis)
         self.mel.set_analysis(analysis)
+        self.loud.set_analysis(analysis)
         self._fill_table(analysis.spans)
         txt = default_txt_path(analysis.path)
         log = default_log_path(analysis.path)

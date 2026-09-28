@@ -38,19 +38,33 @@ def load_wav(path: str | Path) -> tuple[np.ndarray, int]:
     return y, int(sr)
 
 
-def analyze_wav(path: str | Path) -> Analysis:
+def analyze_wav(
+    path: str | Path,
+    on_step: Callable[[float, str], None] | None = None,
+) -> Analysis:
+    def step(fraction: float, label: str) -> None:
+        if on_step is not None:
+            on_step(fraction, label)
+
+    step(0.0, "読み込んでいます")
     path = Path(path)
     stem = stem_from_path(path.name)
     tokens = parse_stem(stem)
     y, sr = load_wav(path)
     duration = len(y) / sr
-    track = compute_features(y, sr)
+
+    def on_frames(done: int, total: int) -> None:
+        if total > 0:
+            step(0.04 + 0.24 * done / total, "特徴を計算しています")
+
+    step(0.04, "特徴を計算しています")
+    track = compute_features(y, sr, on_progress=on_frames)
     engine = "acoustic"
     spans = None
     try:
         from otoasobi.precision import segment_precision
 
-        spans, engine = segment_precision(tokens, y, sr, track, duration)
+        spans, engine = segment_precision(tokens, y, sr, track, duration, on_step)
     except Exception:
         import traceback
 
@@ -58,14 +72,17 @@ def analyze_wav(path: str | Path) -> Analysis:
         spans = None
         engine = "acoustic"
     if spans is None:
+        step(0.40, "音の位置を分けています")
         spans = segment_tokens(tokens, track, duration)
         engine = "acoustic"
     try:
+        step(0.94, "息を分けています")
         spans = apply_leading_breath(spans, y, sr, track)
     except Exception:
         import traceback
 
         traceback.print_exc()
+    step(1.0, "息を分けています")
     return Analysis(
         path=path,
         stem=stem,
@@ -179,6 +196,7 @@ def skipped_notice(skipped: list[str]) -> str:
 def analyze_folder_files(
     folder: str | Path,
     on_progress: Callable[[int, int], None] | None = None,
+    on_file: Callable[[str, float, str], None] | None = None,
 ) -> tuple[list[AnalyzedFile], list[str]]:
     """フォルダ内の WAV を解析する。ファイルはまだ書かない。"""
     folder = Path(folder)
@@ -193,8 +211,12 @@ def analyze_folder_files(
     files: list[AnalyzedFile] = []
     skipped: list[str] = []
     for index, wav in enumerate(wavs, start=1):
+        def on_step(fraction: float, label: str, name: str = wav.name) -> None:
+            if on_file is not None:
+                on_file(name, fraction, label)
+
         try:
-            analysis = analyze_wav(wav)
+            analysis = analyze_wav(wav, on_step if on_file is not None else None)
         except Exception:
             skipped.append(wav.name)
         else:
@@ -238,8 +260,9 @@ def export_folder(
 def analyze_folder(
     folder: str | Path,
     on_progress: Callable[[int, int], None] | None = None,
+    on_file: Callable[[str, float, str], None] | None = None,
 ) -> FolderResult:
-    files, skipped = analyze_folder_files(folder, on_progress=on_progress)
+    files, skipped = analyze_folder_files(folder, on_progress=on_progress, on_file=on_file)
     if not files:
         return FolderResult(txt=None, skipped=skipped)
     return FolderResult(txt=export_folder(folder, files), skipped=skipped)

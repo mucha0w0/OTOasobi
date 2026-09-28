@@ -167,7 +167,14 @@ public sealed partial class MainPage : Page
                     if (_busy)
                         UpdateStatus(done, count);
                 });
-            }, force);
+            }, force, (name, done, label) =>
+            {
+                queue.TryEnqueue(() =>
+                {
+                    if (_busy)
+                        UpdateFileStatus(name, done, label);
+                });
+            });
             if (!result.Ok || result.Files.Count == 0)
             {
                 ShowError(string.IsNullOrEmpty(result.Error) ? "解析に失敗しました。" : result.Error);
@@ -446,6 +453,9 @@ public sealed partial class MainPage : Page
         ClearNotice();
         BusyTitle.Text = "読み込んでいます";
         SetProgress(done, total);
+        FileStatusText.Text = "解析するファイルを準備しています";
+        FileProgress.IsIndeterminate = true;
+        FileStatusBar.Visibility = Visibility.Visible;
     }
 
     void UpdateStatus(int done, int total)
@@ -519,17 +529,34 @@ public sealed partial class MainPage : Page
         ReanalyzeButton.IsEnabled = ready;
     }
 
+    void UpdateFileStatus(string name, double done, string label)
+    {
+        var fraction = Math.Clamp(done, 0, 1);
+        var percent = (int)Math.Round(fraction * 100);
+        FileProgress.IsIndeterminate = false;
+        FileProgress.Maximum = 1;
+        FileProgress.Value = fraction;
+        var detail = string.IsNullOrEmpty(label) ? $"{percent}%" : $"{label}  {percent}%";
+        var text = string.IsNullOrEmpty(name) ? detail : $"{name}  {detail}";
+        FileStatusText.Text = text;
+        ToolTipService.SetToolTip(FileStatusText, text);
+        FileStatusBar.Visibility = Visibility.Visible;
+    }
+
     void ShowStatus(string text)
     {
         StatusText.Text = text;
         StatusProgress.IsIndeterminate = true;
         StatusBar.Visibility = Visibility.Visible;
+        FileStatusBar.Visibility = Visibility.Collapsed;
     }
 
     void HideStatus()
     {
         StatusBar.Visibility = Visibility.Collapsed;
         StatusProgress.IsIndeterminate = false;
+        FileStatusBar.Visibility = Visibility.Collapsed;
+        FileProgress.IsIndeterminate = false;
     }
 
     void ShowNotice(string title, string? body, InfoBarSeverity severity)
