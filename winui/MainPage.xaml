@@ -10,7 +10,7 @@
     mc:Ignorable="d">
 
     <Page.Resources>
-        <x:String x:Key="EditorHelp">境界をドラッグして時刻を分け、ラベル上のドラッグで区間を移動します。右ドラッグ、または選択中の左右キーでスクロールします。</x:String>
+        <x:String x:Key="EditorHelp">境界をドラッグして時刻を分けます。右ドラッグ、または選択中の左右キーでスクロールします。</x:String>
         <Style x:Key="ToolbarButtonStyle" TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
             <Setter Property="MinHeight" Value="32" />
             <Setter Property="Padding" Value="10,6" />

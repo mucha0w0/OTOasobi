@@ -23,7 +23,6 @@ public sealed class SpanEditor : UserControl
     {
         None,
         Boundary,
-        Span,
         Pan,
     }
 
@@ -33,7 +32,6 @@ public sealed class SpanEditor : UserControl
     readonly RectangleGeometry _clip = new();
     readonly InputCursor _cursorArrow = InputSystemCursor.Create(InputSystemCursorShape.Arrow);
     readonly InputCursor _cursorEw = InputSystemCursor.Create(InputSystemCursorShape.SizeWestEast);
-    readonly InputCursor _cursorMove = InputSystemCursor.Create(InputSystemCursorShape.SizeAll);
     readonly InputCursor _cursorHand = InputSystemCursor.Create(InputSystemCursorShape.Hand);
 
     static readonly SolidColorBrush WaveBrush = BrushOf(170, 230, 230, 230);
@@ -77,7 +75,6 @@ public sealed class SpanEditor : UserControl
 
     DragKind _drag = DragKind.None;
     int _dragIndex = -1;
-    double _grabTime;
     double _panX;
     double _panView0;
     double _panView1;
@@ -403,21 +400,6 @@ public sealed class SpanEditor : UserControl
             Highlight(group);
             ShowBoundary(group);
             e.Handled = true;
-            return;
-        }
-
-        var span = HitSpan(XToTime(x));
-        if (span >= 0)
-        {
-            _drag = DragKind.Span;
-            _dragIndex = span;
-            _grabTime = XToTime(x);
-            _origin = Snapshot();
-            _changed = false;
-            ArmCapture(e.Pointer);
-            ProtectedCursor = _cursorMove;
-            ShowSpan(span);
-            e.Handled = true;
         }
     }
 
@@ -446,13 +428,6 @@ public sealed class SpanEditor : UserControl
             return;
         }
 
-        if (_drag == DragKind.Span)
-        {
-            ApplySpan(XToTime(x));
-            e.Handled = true;
-            return;
-        }
-
         var group = HitGroup(x);
         if (group >= 0)
         {
@@ -464,15 +439,11 @@ public sealed class SpanEditor : UserControl
 
         Highlight(-1);
         var span = HitSpan(XToTime(x));
-        if (span >= 0)
-        {
-            ProtectedCursor = _cursorMove;
-            ShowSpan(span);
-            return;
-        }
-
         ProtectedCursor = _cursorArrow;
-        SetReadout("");
+        if (span >= 0)
+            ShowSpan(span);
+        else
+            SetReadout("");
     }
 
     void SetReadout(string text)
@@ -558,41 +529,6 @@ public sealed class SpanEditor : UserControl
         ArrangeSpans();
         Highlight(_dragIndex);
         ShowBoundary(_dragIndex);
-    }
-
-    void ApplySpan(double time)
-    {
-        if (_file == null || _dragIndex < 0 || _dragIndex >= _origin.Count)
-            return;
-        Restore(_origin);
-        var index = _dragIndex;
-        var start = _origin[index].Start;
-        var end = _origin[index].End;
-        var linkLeft = index > 0 && Math.Abs(_origin[index - 1].End - start) <= LinkGap;
-        var linkRight = index + 1 < _origin.Count && Math.Abs(_origin[index + 1].Start - end) <= LinkGap;
-        var startLo = 0.0;
-        if (linkLeft)
-            startLo = _origin[index - 1].Start + MinSpan;
-        else if (index > 0)
-            startLo = _origin[index - 1].End;
-        var endHi = Duration;
-        if (linkRight)
-            endHi = _origin[index + 1].End - MinSpan;
-        else if (index + 1 < _origin.Count)
-            endHi = _origin[index + 1].Start;
-        var dtMin = startLo - start;
-        var dtMax = endHi - end;
-        var dt = dtMax < dtMin ? 0 : Math.Clamp(time - _grabTime, dtMin, dtMax);
-        var spans = _file.Spans;
-        spans[index].Start = start + dt;
-        spans[index].End = end + dt;
-        if (linkLeft)
-            spans[index - 1].End = spans[index].Start;
-        if (linkRight)
-            spans[index + 1].Start = spans[index].End;
-        _changed = Changed();
-        ArrangeSpans();
-        ShowSpan(index);
     }
 
     void Pan(double x)
