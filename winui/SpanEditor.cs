@@ -16,7 +16,7 @@ public sealed class SpanEditor : UserControl
     const double Ruler = 18;
     const double MinSpan = 0.005;
     const double LinkGap = 0.0005;
-    const double HitPx = 8;
+    const double HitPx = 18;
 
     enum DragKind
     {
@@ -74,11 +74,14 @@ public sealed class SpanEditor : UserControl
     double _panView1;
     List<(double Start, double End)> _origin = [];
     bool _changed;
+    object? _zoomToken;
     Pointer? _pointer;
 
     public SpanEditor()
     {
         var root = new Grid();
+        _plot.Background = BrushOf(255, 22, 22, 22);
+        _plot.ManipulationMode = ManipulationModes.None;
         _plot.Clip = _clip;
         _readout.IsHitTestVisible = false;
         _readout.FontSize = 13;
@@ -98,6 +101,8 @@ public sealed class SpanEditor : UserControl
         root.Children.Add(_badge);
         Content = root;
         Background = BrushOf(255, 22, 22, 22);
+        ManipulationMode = ManipulationModes.None;
+        IsTabStop = true;
 
         SizeChanged += (_, e) =>
         {
@@ -106,12 +111,12 @@ public sealed class SpanEditor : UserControl
             _clip.Rect = new Rect(0, 0, Math.Max(0, e.NewSize.Width), Math.Max(0, e.NewSize.Height));
             ArrangeAll();
         };
-        PointerPressed += OnPointerPressed;
-        PointerMoved += OnPointerMoved;
-        PointerReleased += OnPointerReleased;
-        PointerCanceled += OnPointerReleased;
-        PointerCaptureLost += (_, _) => FinishDrag();
-        PointerWheelChanged += OnWheel;
+        _plot.PointerPressed += OnPointerPressed;
+        _plot.PointerMoved += OnPointerMoved;
+        _plot.PointerReleased += OnPointerReleased;
+        _plot.PointerCanceled += OnPointerReleased;
+        AddHandler(PointerWheelChangedEvent, new PointerEventHandler(OnWheel), true);
+        PointerEntered += (_, _) => Focus(FocusState.Pointer);
         DoubleTapped += (_, e) =>
         {
             if (_file == null)
@@ -126,6 +131,30 @@ public sealed class SpanEditor : UserControl
             if (_drag == DragKind.None)
                 SetReadout("");
         };
+    }
+
+    public void ZoomIn() => ZoomBy(0.8);
+
+    public void ZoomOut() => ZoomBy(1.25);
+
+    public void ZoomReset()
+    {
+        if (_file == null)
+            return;
+        FinishDrag();
+        SetFullView();
+        ArrangeAll();
+    }
+
+    public bool ZoomAt(double x, int delta, object? token = null)
+    {
+        if (token != null && ReferenceEquals(token, _zoomToken))
+            return true;
+        if (_file == null || delta == 0 || _drag != DragKind.None || _plot.Width < 2)
+            return false;
+        _zoomToken = token;
+        ZoomBy(delta > 0 ? 0.8 : 1.25, x);
+        return true;
     }
 
     public event EventHandler? Edited;
@@ -218,8 +247,16 @@ public sealed class SpanEditor : UserControl
 
         foreach (var span in _file.Spans)
         {
-            var waveRect = new Rectangle { Fill = FillBrush(span.Label, wave: true), IsHitTestVisible = false };
-            var specRect = new Rectangle { Fill = FillBrush(span.Label, wave: false), IsHitTestVisible = false };
+            var waveRect = new Rectangle
+            {
+                Fill = FillBrush(span.Label, wave: true),
+                ManipulationMode = ManipulationModes.None,
+            };
+            var specRect = new Rectangle
+            {
+                Fill = FillBrush(span.Label, wave: false),
+                ManipulationMode = ManipulationModes.None,
+            };
             var waveText = MakeLabel(span);
             var specText = MakeLabel(span);
             _waveRects.Add(waveRect);
@@ -236,7 +273,7 @@ public sealed class SpanEditor : UserControl
             var line = new Line
             {
                 Stroke = LineBrush,
-                StrokeThickness = 1.5,
+                StrokeThickness = 2,
                 IsHitTestVisible = false,
             };
             _lines.Add(line);
@@ -255,7 +292,7 @@ public sealed class SpanEditor : UserControl
     {
         if (_file == null || _plot.Width < 2)
             return;
-        var point = e.GetCurrentPoint(this);
+        var point = e.GetCurrentPoint(_plot);
         var x = point.Position.X;
         _pointer = e.Pointer;
         if (point.Properties.IsRightButtonPressed || point.Properties.IsMiddleButtonPressed)
@@ -265,14 +302,11 @@ public sealed class SpanEditor : UserControl
             _panView0 = _view0;
             _panView1 = _view1;
             _changed = false;
-            CapturePointer(e.Pointer);
+            ArmCapture(e.Pointer);
             ProtectedCursor = _cursorHand;
             e.Handled = true;
             return;
         }
-
-        if (!point.Properties.IsLeftButtonPressed)
-            return;
 
         var group = HitGroup(x);
         if (group >= 0)
@@ -281,7 +315,7 @@ public sealed class SpanEditor : UserControl
             _dragIndex = group;
             _origin = Snapshot();
             _changed = false;
-            CapturePointer(e.Pointer);
+            ArmCapture(e.Pointer);
             ProtectedCursor = _cursorEw;
             Highlight(group);
             ShowBoundary(group);
@@ -297,18 +331,23 @@ public sealed class SpanEditor : UserControl
             _grabTime = XToTime(x);
             _origin = Snapshot();
             _changed = false;
-            CapturePointer(e.Pointer);
+            ArmCapture(e.Pointer);
             ProtectedCursor = _cursorMove;
             ShowSpan(span);
             e.Handled = true;
         }
     }
 
+    void ArmCapture(Pointer pointer)
+    {
+        _plot.CapturePointer(pointer);
+    }
+
     void OnPointerMoved(object sender, PointerRoutedEventArgs e)
     {
         if (_file == null)
             return;
-        var point = e.GetCurrentPoint(this);
+        var point = e.GetCurrentPoint(_plot);
         var x = point.Position.X;
         if (_drag == DragKind.Pan)
         {
@@ -317,14 +356,14 @@ public sealed class SpanEditor : UserControl
             return;
         }
 
-        if (_drag == DragKind.Boundary && point.Properties.IsLeftButtonPressed)
+        if (_drag == DragKind.Boundary)
         {
             ApplyBoundary(XToTime(x));
             e.Handled = true;
             return;
         }
 
-        if (_drag == DragKind.Span && point.Properties.IsLeftButtonPressed)
+        if (_drag == DragKind.Span)
         {
             ApplySpan(XToTime(x));
             e.Handled = true;
@@ -377,13 +416,13 @@ public sealed class SpanEditor : UserControl
         {
             var pointer = _pointer;
             _pointer = null;
-            if (PointerCaptures != null)
+            if (_plot.PointerCaptures != null)
             {
-                foreach (var captured in PointerCaptures)
+                foreach (var captured in _plot.PointerCaptures)
                 {
                     if (captured.PointerId == pointer.PointerId)
                     {
-                        ReleasePointerCapture(pointer);
+                        _plot.ReleasePointerCapture(pointer);
                         break;
                     }
                 }
@@ -396,19 +435,21 @@ public sealed class SpanEditor : UserControl
 
     void OnWheel(object sender, PointerRoutedEventArgs e)
     {
-        if (_file == null || _drag != DragKind.None)
+        var point = e.GetCurrentPoint(_plot);
+        if (ZoomAt(point.Position.X, point.Properties.MouseWheelDelta, e))
+            e.Handled = true;
+    }
+
+    void ZoomBy(double factor, double? anchorX = null)
+    {
+        if (_file == null || _plot.Width < 2)
             return;
-        var point = e.GetCurrentPoint(this);
-        var delta = point.Properties.MouseWheelDelta;
-        if (delta == 0)
-            return;
-        var factor = delta > 0 ? 0.8 : 1.25;
-        var anchor = XToTime(point.Position.X);
-        var span = Math.Clamp((_view1 - _view0) * factor, Math.Min(0.02, Duration), Duration);
+        var x = anchorX ?? _plot.Width / 2;
+        var anchor = XToTime(x);
+        var span = Math.Clamp((_view1 - _view0) * factor, Math.Min(0.05, Duration), Duration);
         var ratio = (anchor - _view0) / Math.Max(1e-9, _view1 - _view0);
         SetView(anchor - span * ratio, anchor - span * ratio + span);
         ArrangeAll();
-        e.Handled = true;
     }
 
     void ApplyBoundary(double time)

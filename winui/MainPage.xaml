@@ -57,6 +57,9 @@
                             <TextBlock Text="子音" Foreground="#FFD97706" VerticalAlignment="Center" />
                             <TextBlock Text="母音" Foreground="#FF0F9D8E" VerticalAlignment="Center" />
                         </StackPanel>
+                        <Button Content="縮小" Click="ZoomOut_Click" />
+                        <Button Content="拡大" Click="ZoomIn_Click" />
+                        <Button Content="全体" Click="ZoomReset_Click" />
                         <Button Content="フォルダを選択" Click="IdleView_Click" />
                         <Button x:Name="OpenButton" Content="oto.iniを開く" Click="OpenTxt_Click" IsEnabled="False" />
                         <Button

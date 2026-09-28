@@ -11,7 +11,7 @@ namespace Otoasobi;
 
 public sealed partial class MainPage : Page
 {
-    const string Hint = "境界をドラッグして修正。ラベル上のドラッグで区間を移動。ホイールで拡大、右ドラッグでスクロール、ダブルクリックで全体表示。";
+    const string Hint = "境界をドラッグして修正。ラベル上のドラッグで区間を移動。ホイールか「拡大」「縮小」で拡大縮小、右ドラッグでスクロール、ダブルクリックか「全体」で全体表示。";
 
     static AnalysisClient? _analysis;
 
@@ -29,6 +29,29 @@ public sealed partial class MainPage : Page
     {
         InitializeComponent();
         Editor.Edited += (_, _) => OnEdited();
+        AddHandler(PointerWheelChangedEvent, new PointerEventHandler(OnPageWheel), true);
+    }
+
+    void ZoomIn_Click(object sender, RoutedEventArgs e) => Editor.ZoomIn();
+
+    void ZoomOut_Click(object sender, RoutedEventArgs e) => Editor.ZoomOut();
+
+    void ZoomReset_Click(object sender, RoutedEventArgs e) => Editor.ZoomReset();
+
+    void OnPageWheel(object sender, PointerRoutedEventArgs e)
+    {
+        if (EditorView.Visibility != Visibility.Visible || Editor.ActualWidth < 2)
+            return;
+        var point = e.GetCurrentPoint(Editor);
+        if (point.Position.X < 0 || point.Position.Y < 0
+            || point.Position.X > Editor.ActualWidth
+            || point.Position.Y > Editor.ActualHeight)
+            return;
+        var delta = point.Properties.MouseWheelDelta;
+        if (delta == 0)
+            delta = e.GetCurrentPoint(this).Properties.MouseWheelDelta;
+        if (Editor.ZoomAt(point.Position.X, delta, e))
+            e.Handled = true;
     }
 
     public static void ShutdownAnalysis()
