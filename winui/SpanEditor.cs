@@ -140,6 +140,30 @@ public sealed class SpanEditor : UserControl
             if (_drag == DragKind.None)
                 SetReadout("");
         };
+        KeyDown += OnKeyDown;
+    }
+
+    void OnKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (_file == null || _drag != DragKind.None)
+            return;
+        if (e.Key == Windows.System.VirtualKey.Left)
+        {
+            Nudge(-0.2);
+            e.Handled = true;
+        }
+        else if (e.Key == Windows.System.VirtualKey.Right)
+        {
+            Nudge(0.2);
+            e.Handled = true;
+        }
+    }
+
+    void Nudge(double fraction)
+    {
+        var span = _view1 - _view0;
+        SetView(_view0 + span * fraction, _view1 + span * fraction);
+        ArrangeAll();
     }
 
     public void ZoomIn() => ZoomBy(0.8);

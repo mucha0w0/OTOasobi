@@ -13,6 +13,12 @@ public sealed partial class MainWindow : Window
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(AppTitleBar);
         AppWindow.SetIcon("Assets/AppIcon.ico");
+        if (AppWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter presenter)
+        {
+            presenter.PreferredMinimumWidth = 1024;
+            presenter.PreferredMinimumHeight = 680;
+        }
+
         AppWindow.Resize(new SizeInt32(1280, 840));
 
         RootFrame.Navigate(typeof(MainPage));

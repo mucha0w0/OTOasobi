@@ -9,6 +9,24 @@
     Background="Transparent"
     mc:Ignorable="d">
 
+    <Page.Resources>
+        <x:String x:Key="EditorHelp">境界をドラッグして時刻を分け、ラベル上のドラッグで区間を移動します。右ドラッグ、または選択中の左右キーでスクロールします。</x:String>
+        <Style x:Key="ToolbarButtonStyle" TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
+            <Setter Property="MinHeight" Value="32" />
+            <Setter Property="Padding" Value="10,6" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style x:Key="ToolbarAccentButtonStyle" TargetType="Button" BasedOn="{StaticResource AccentButtonStyle}">
+            <Setter Property="MinHeight" Value="32" />
+            <Setter Property="Padding" Value="12,6" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+    </Page.Resources>
+
+    <Page.KeyboardAccelerators>
+        <KeyboardAccelerator Modifiers="Control" Key="O" Invoked="OpenFolder_Accelerator" />
+    </Page.KeyboardAccelerators>
+
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="*" />
@@ -16,116 +34,358 @@
         </Grid.RowDefinitions>
 
         <Grid>
-            <Button
+            <StackPanel
                 x:Name="IdleView"
-                Content="フォルダを選択またはドラッグ＆ドロップ"
-                FontSize="20"
-                Padding="28,16"
+                MaxWidth="440"
+                Padding="24"
+                Spacing="8"
                 HorizontalAlignment="Center"
-                VerticalAlignment="Center"
-                Click="IdleView_Click" />
+                VerticalAlignment="Center">
+                <Viewbox Width="40" Height="40" Margin="0,0,0,8" HorizontalAlignment="Center">
+                    <SymbolIcon Symbol="Folder" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                </Viewbox>
+                <TextBlock
+                    Text="音源フォルダを開く"
+                    Style="{StaticResource SubtitleTextBlockStyle}"
+                    HorizontalAlignment="Center"
+                    TextAlignment="Center" />
+                <TextBlock
+                    Margin="0,0,0,8"
+                    Text="フォルダ内の WAV を解析し、区間を直してから oto.ini を作ります。フォルダをこのウィンドウへドロップしても開けます。"
+                    Style="{StaticResource BodyTextBlockStyle}"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    TextAlignment="Center"
+                    TextWrapping="Wrap" />
+                <Button
+                    MinWidth="160"
+                    Margin="0,8,0,0"
+                    HorizontalAlignment="Center"
+                    Click="IdleView_Click"
+                    Content="フォルダを開く"
+                    Style="{StaticResource AccentButtonStyle}" />
+            </StackPanel>
 
-            <TextBlock
+            <StackPanel
                 x:Name="BusyView"
-                Text="解析中..."
-                FontSize="22"
+                MaxWidth="360"
+                Spacing="12"
                 HorizontalAlignment="Center"
                 VerticalAlignment="Center"
-                Visibility="Collapsed" />
+                Visibility="Collapsed">
+                <ProgressRing
+                    x:Name="BusyRing"
+                    Width="48"
+                    Height="48"
+                    HorizontalAlignment="Center"
+                    AutomationProperties.Name="解析しています"
+                    IsActive="False" />
+                <TextBlock
+                    Text="解析しています"
+                    Style="{StaticResource SubtitleTextBlockStyle}"
+                    HorizontalAlignment="Center" />
+                <ProgressBar
+                    x:Name="BusyProgress"
+                    AutomationProperties.Name="解析の進行状況"
+                    Minimum="0"
+                    Maximum="1" />
+                <TextBlock
+                    x:Name="BusyCount"
+                    HorizontalAlignment="Center"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+            </StackPanel>
 
             <Grid x:Name="EditorView" Visibility="Collapsed">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
 
-                <Grid Padding="16,12,16,8" ColumnSpacing="12">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <TextBlock
-                        x:Name="FolderLabel"
-                        VerticalAlignment="Center"
-                        TextTrimming="CharacterEllipsis"
-                        FontSize="14" />
-                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
-                        <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center" Margin="0,0,12,0">
-                            <TextBlock Text="無音" Foreground="#FF9AA0A6" VerticalAlignment="Center" />
-                            <TextBlock Text="息" Foreground="#FF60A5FA" VerticalAlignment="Center" />
-                            <TextBlock Text="子音" Foreground="#FFD97706" VerticalAlignment="Center" />
-                            <TextBlock Text="母音" Foreground="#FF0F9D8E" VerticalAlignment="Center" />
-                        </StackPanel>
-                        <Button Content="縮小" Click="ZoomOut_Click" />
-                        <Button Content="拡大" Click="ZoomIn_Click" />
-                        <Button Content="全体" Click="ZoomReset_Click" />
-                        <Button Content="フォルダを選択" Click="IdleView_Click" />
-                        <Button x:Name="OpenButton" Content="oto.iniを開く" Click="OpenTxt_Click" IsEnabled="False" />
+                <Border
+                    Padding="8,4,12,4"
+                    BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                    BorderThickness="0,0,0,1"
+                    Background="{ThemeResource LayerFillColorDefaultBrush}">
+                    <Grid ColumnSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <CommandBar
+                            Background="Transparent"
+                            DefaultLabelPosition="Right"
+                            OverflowButtonVisibility="Auto"
+                            VerticalAlignment="Center">
+                            <CommandBar.Content>
+                                <Button
+                                    Margin="4,0,0,0"
+                                    VerticalAlignment="Center"
+                                    Click="IdleView_Click"
+                                    Style="{StaticResource ToolbarButtonStyle}"
+                                    ToolTipService.ToolTip="音源フォルダを開きます（Ctrl+O）。ドロップしても開けます。">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <SymbolIcon Symbol="Folder" />
+                                        <TextBlock Text="フォルダを開く" />
+                                    </StackPanel>
+                                </Button>
+                            </CommandBar.Content>
+                            <AppBarButton
+                                x:Name="ZoomOutButton"
+                                Click="ZoomOut_Click"
+                                Icon="ZoomOut"
+                                Label="縮小"
+                                ToolTipService.ToolTip="表示を縮小して、より長い時間を見ます（Ctrl+-、ホイール下）">
+                                <AppBarButton.KeyboardAccelerators>
+                                    <KeyboardAccelerator Modifiers="Control" Key="Subtract" />
+                                </AppBarButton.KeyboardAccelerators>
+                            </AppBarButton>
+                            <AppBarButton
+                                x:Name="ZoomInButton"
+                                Click="ZoomIn_Click"
+                                Icon="ZoomIn"
+                                Label="拡大"
+                                ToolTipService.ToolTip="表示を拡大して、境界を細かく見ます（Ctrl++、ホイール上）">
+                                <AppBarButton.KeyboardAccelerators>
+                                    <KeyboardAccelerator Modifiers="Control" Key="Add" />
+                                </AppBarButton.KeyboardAccelerators>
+                            </AppBarButton>
+                            <AppBarButton
+                                Click="ZoomReset_Click"
+                                Label="全体表示"
+                                ToolTipService.ToolTip="ファイル全体を表示します（Ctrl+0、ダブルクリック）">
+                                <AppBarButton.Icon>
+                                    <FontIcon Glyph="&#xE9A6;" />
+                                </AppBarButton.Icon>
+                                <AppBarButton.KeyboardAccelerators>
+                                    <KeyboardAccelerator Modifiers="Control" Key="Number0" />
+                                    <KeyboardAccelerator Modifiers="Control" Key="NumberPad0" />
+                                </AppBarButton.KeyboardAccelerators>
+                            </AppBarButton>
+                            <AppBarSeparator />
+                            <AppBarButton
+                                x:Name="OpenButton"
+                                Click="OpenTxt_Click"
+                                Icon="OpenFile"
+                                IsEnabled="False"
+                                Label="oto.iniを開く" />
+                        </CommandBar>
                         <Button
                             x:Name="WriteButton"
-                            Content="oto.ini作成"
+                            Grid.Column="1"
+                            VerticalAlignment="Center"
                             Click="WriteOto_Click"
-                            Style="{StaticResource AccentButtonStyle}" />
-                    </StackPanel>
-                </Grid>
+                            Style="{StaticResource ToolbarAccentButtonStyle}"
+                            ToolTipService.ToolTip="直した区間から oto.ini を計算して、フォルダに保存します（Ctrl+S）">
+                            <Button.KeyboardAccelerators>
+                                <KeyboardAccelerator Modifiers="Control" Key="S" />
+                            </Button.KeyboardAccelerators>
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <SymbolIcon Symbol="Save" />
+                                <TextBlock Text="oto.iniを作成" />
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+                </Border>
+
+                <TextBlock
+                    x:Name="FolderLabel"
+                    Grid.Row="1"
+                    Margin="16,8,16,0"
+                    AutomationProperties.Name="開いているフォルダ"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    IsTextSelectionEnabled="True"
+                    Style="{StaticResource CaptionTextBlockStyle}"
+                    TextTrimming="CharacterEllipsis" />
 
                 <ScrollViewer
-                    x:Name="BannerHost"
-                    Grid.Row="1"
-                    MaxHeight="96"
-                    Margin="16,0,16,8"
+                    x:Name="NoticeHost"
+                    Grid.Row="2"
+                    MaxHeight="132"
+                    Margin="16,8,16,0"
                     HorizontalScrollBarVisibility="Disabled"
                     VerticalScrollBarVisibility="Auto"
                     Visibility="Collapsed">
-                    <TextBlock x:Name="Banner" TextWrapping="Wrap" />
+                    <InfoBar
+                        x:Name="NoticeBar"
+                        HorizontalAlignment="Stretch"
+                        IsClosable="True"
+                        IsOpen="False"
+                        Closed="NoticeBar_Closed" />
                 </ScrollViewer>
 
-                <Grid Grid.Row="2">
+                <Grid Grid.Row="3" Margin="0,8,0,0">
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="240" />
+                        <ColumnDefinition Width="280" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
-                    <Border
-                        BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
-                        BorderThickness="0,0,1,0">
-                        <ListView
-                            x:Name="FileList"
-                            SelectionMode="Single"
-                            SelectionChanged="FileList_SelectionChanged"
-                            ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-                            <ListView.ItemTemplate>
-                                <DataTemplate>
-                                    <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
-                                </DataTemplate>
-                            </ListView.ItemTemplate>
-                        </ListView>
+                    <Border BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}" BorderThickness="0,0,1,0">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+                            <Border
+                                Padding="16,12,16,8"
+                                BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                                BorderThickness="0,0,0,1">
+                                <Grid>
+                                    <TextBlock
+                                        VerticalAlignment="Center"
+                                        Style="{StaticResource BodyStrongTextBlockStyle}"
+                                        Text="ファイル" />
+                                    <TextBlock
+                                        x:Name="FileCount"
+                                        HorizontalAlignment="Right"
+                                        VerticalAlignment="Center"
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Style="{StaticResource CaptionTextBlockStyle}" />
+                                </Grid>
+                            </Border>
+                            <ListView
+                                x:Name="FileList"
+                                Grid.Row="1"
+                                AutomationProperties.Name="ファイル一覧"
+                                ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                SelectionChanged="FileList_SelectionChanged"
+                                SelectionMode="Single">
+                                <ListView.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock
+                                            VerticalAlignment="Center"
+                                            Text="{Binding Name}"
+                                            TextTrimming="CharacterEllipsis"
+                                            ToolTipService.ToolTip="{Binding Name}" />
+                                    </DataTemplate>
+                                </ListView.ItemTemplate>
+                            </ListView>
+                        </Grid>
                     </Border>
-                    <Grid Grid.Column="1">
+                    <Grid Grid.Column="1" Margin="0,0,0,8">
                         <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="*" />
                         </Grid.RowDefinitions>
+                        <Grid Padding="16,4,16,0" ColumnSpacing="16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" MinWidth="120" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel VerticalAlignment="Center" Spacing="2">
+                                <TextBlock
+                                    x:Name="FileTitle"
+                                    Style="{StaticResource BodyStrongTextBlockStyle}"
+                                    TextTrimming="CharacterEllipsis" />
+                                <TextBlock
+                                    x:Name="FileMeta"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Style="{StaticResource CaptionTextBlockStyle}"
+                                    TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                            <StackPanel
+                                Grid.Column="1"
+                                Orientation="Horizontal"
+                                Spacing="16"
+                                VerticalAlignment="Center"
+                                AutomationProperties.Name="区間の色">
+                                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                    <Border
+                                        Width="14"
+                                        Height="14"
+                                        VerticalAlignment="Center"
+                                        Background="#FF9AA0A6"
+                                        BorderBrush="{ThemeResource ControlStrokeColorSecondaryBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="2"
+                                        AutomationProperties.AccessibilityView="Raw" />
+                                    <TextBlock VerticalAlignment="Center" Text="無音" />
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                    <Border
+                                        Width="14"
+                                        Height="14"
+                                        VerticalAlignment="Center"
+                                        Background="#FF60A5FA"
+                                        BorderBrush="{ThemeResource ControlStrokeColorSecondaryBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="2"
+                                        AutomationProperties.AccessibilityView="Raw" />
+                                    <TextBlock VerticalAlignment="Center" Text="息" />
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                    <Border
+                                        Width="14"
+                                        Height="14"
+                                        VerticalAlignment="Center"
+                                        Background="#FFD97706"
+                                        BorderBrush="{ThemeResource ControlStrokeColorSecondaryBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="2"
+                                        AutomationProperties.AccessibilityView="Raw" />
+                                    <TextBlock VerticalAlignment="Center" Text="子音" />
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                    <Border
+                                        Width="14"
+                                        Height="14"
+                                        VerticalAlignment="Center"
+                                        Background="#FF0F9D8E"
+                                        BorderBrush="{ThemeResource ControlStrokeColorSecondaryBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="2"
+                                        AutomationProperties.AccessibilityView="Raw" />
+                                    <TextBlock VerticalAlignment="Center" Text="母音" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Grid>
                         <TextBlock
-                            x:Name="FileCaption"
-                            Margin="12,4,12,4"
-                            FontSize="14"
-                            TextTrimming="CharacterEllipsis" />
-                        <local:SpanEditor x:Name="Editor" Grid.Row="1" Margin="8,0,8,8" />
+                            Grid.Row="1"
+                            Margin="16,4,16,8"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Style="{StaticResource CaptionTextBlockStyle}"
+                            Text="{StaticResource EditorHelp}"
+                            TextWrapping="Wrap" />
+                        <local:SpanEditor
+                            x:Name="Editor"
+                            Grid.Row="2"
+                            Margin="12,0,12,4"
+                            AutomationProperties.Name="波形と区間"
+                            AutomationProperties.HelpText="{StaticResource EditorHelp}" />
                     </Grid>
                 </Grid>
             </Grid>
 
-            <TextBlock
+            <StackPanel
                 x:Name="ErrorView"
-                FontSize="18"
-                TextAlignment="Center"
-                TextWrapping="Wrap"
+                MaxWidth="480"
+                Padding="24"
+                Spacing="8"
                 HorizontalAlignment="Center"
                 VerticalAlignment="Center"
-                MaxWidth="560"
-                Tapped="ErrorView_Tapped"
-                Visibility="Collapsed" />
+                Visibility="Collapsed">
+                <Viewbox Width="32" Height="32" Margin="0,0,0,8" HorizontalAlignment="Center">
+                    <SymbolIcon Symbol="Important" Foreground="{ThemeResource SystemFillColorCriticalBrush}" />
+                </Viewbox>
+                <TextBlock
+                    Text="フォルダを開けませんでした"
+                    Style="{StaticResource SubtitleTextBlockStyle}"
+                    HorizontalAlignment="Center"
+                    TextAlignment="Center" />
+                <TextBlock
+                    x:Name="ErrorText"
+                    Margin="0,0,0,8"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    TextAlignment="Center"
+                    TextWrapping="Wrap" />
+                <Button
+                    MinWidth="160"
+                    Margin="0,8,0,0"
+                    HorizontalAlignment="Center"
+                    Click="IdleView_Click"
+                    Content="フォルダを開く"
+                    Style="{StaticResource AccentButtonStyle}" />
+            </StackPanel>
         </Grid>
 
         <Border
@@ -136,7 +396,7 @@
             BorderThickness="0,1,0,0"
             Background="{ThemeResource LayerFillColorDefaultBrush}"
             Visibility="Collapsed">
-            <Grid>
+            <Grid ColumnSpacing="16">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
@@ -144,14 +404,12 @@
                 <ProgressBar
                     x:Name="StatusProgress"
                     VerticalAlignment="Center"
-                    Minimum="0"
-                    Maximum="1" />
+                    AutomationProperties.Name="処理の進行状況"
+                    IsIndeterminate="True" />
                 <TextBlock
                     x:Name="StatusText"
                     Grid.Column="1"
-                    Margin="16,0,0,0"
-                    VerticalAlignment="Center"
-                    FontSize="14" />
+                    VerticalAlignment="Center" />
             </Grid>
         </Border>
     </Grid>

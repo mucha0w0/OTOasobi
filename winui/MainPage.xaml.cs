@@ -11,8 +11,6 @@ namespace Otoasobi;
 
 public sealed partial class MainPage : Page
 {
-    const string Hint = "境界をドラッグして修正。ラベル上のドラッグで区間を移動。ホイールか「拡大」「縮小」で拡大縮小、右ドラッグでスクロール、ダブルクリックか「全体」で全体表示。";
-
     static AnalysisClient? _analysis;
 
     readonly List<WavFile> _files = [];
@@ -30,6 +28,18 @@ public sealed partial class MainPage : Page
         InitializeComponent();
         Editor.Edited += (_, _) => OnEdited();
         AddHandler(PointerWheelChangedEvent, new PointerEventHandler(OnPageWheel), true);
+        // メインキーボードの - と +。この SDK の VirtualKey には名前が無い。
+        ZoomOutButton.KeyboardAccelerators.Add(Key((Windows.System.VirtualKey)189));
+        ZoomInButton.KeyboardAccelerators.Add(Key((Windows.System.VirtualKey)187));
+    }
+
+    static KeyboardAccelerator Key(Windows.System.VirtualKey key)
+    {
+        return new KeyboardAccelerator
+        {
+            Key = key,
+            Modifiers = Windows.System.VirtualKeyModifiers.Control,
+        };
     }
 
     void ZoomIn_Click(object sender, RoutedEventArgs e) => Editor.ZoomIn();
@@ -84,9 +94,15 @@ public sealed partial class MainPage : Page
         _ = PickFolderAsync();
     }
 
-    void ErrorView_Tapped(object sender, TappedRoutedEventArgs e)
+    void OpenFolder_Accelerator(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
     {
+        args.Handled = true;
         _ = PickFolderAsync();
+    }
+
+    void NoticeBar_Closed(InfoBar sender, InfoBarClosedEventArgs args)
+    {
+        NoticeHost.Visibility = Visibility.Collapsed;
     }
 
     async Task PickFolderAsync()
@@ -167,7 +183,7 @@ public sealed partial class MainPage : Page
         if (_folder == null)
             return;
         var gen = ++_previewGen;
-        FileCaption.Text = Caption(file);
+        ShowFile(file);
         Editor.Clear("波形を読み込んでいます…");
         try
         {
@@ -199,36 +215,40 @@ public sealed partial class MainPage : Page
             return;
         _busy = true;
         WriteButton.IsEnabled = false;
-        OpenButton.IsEnabled = false;
+        SetOpenEnabled(false);
         Editor.IsEnabled = false;
-        ShowHint("oto.iniを計算しています…");
+        ShowStatus("oto.iniを計算しています");
         try
         {
             _analysis ??= new AnalysisClient();
             var result = await _analysis.WriteAsync(_folder, _files);
             if (!result.Ok || string.IsNullOrEmpty(result.Txt))
             {
-                ShowBanner(string.IsNullOrEmpty(result.Error) ? "oto.iniを作成できませんでした。" : result.Error);
-                ShowHint(Hint);
+                ShowNotice(
+                    "oto.iniを作成できませんでした",
+                    string.IsNullOrEmpty(result.Error) ? null : result.Error,
+                    InfoBarSeverity.Error);
                 return;
             }
 
             _txtPath = result.Txt;
             _wrote = true;
-            OpenButton.IsEnabled = true;
-            ShowBanner(WroteMessage());
-            ShowHint(Hint);
+            SetOpenEnabled(true);
+            var severity = string.IsNullOrWhiteSpace(_notice)
+                ? InfoBarSeverity.Success
+                : InfoBarSeverity.Warning;
+            ShowNotice("oto.iniを作成しました", WithSkip(null), severity);
         }
         catch (Exception ex)
         {
-            ShowBanner(ex.Message);
-            ShowHint(Hint);
+            ShowNotice("oto.iniを作成できませんでした", ex.Message, InfoBarSeverity.Error);
         }
         finally
         {
             _busy = false;
             Editor.IsEnabled = true;
             WriteButton.IsEnabled = _files.Count > 0;
+            HideStatus();
         }
     }
 
@@ -237,9 +257,12 @@ public sealed partial class MainPage : Page
         if (!_wrote)
             return;
         _wrote = false;
-        OpenButton.IsEnabled = false;
+        SetOpenEnabled(false);
         _txtPath = null;
-        ShowBanner(JoinNotice("画面上の修正は、もう一度「oto.ini作成」を押すと oto.ini に反映されます。"));
+        ShowNotice(
+            "修正はまだファイルに入っていません",
+            WithSkip("もう一度「oto.iniを作成」を押すと、oto.ini に反映されます。"),
+            InfoBarSeverity.Warning);
     }
 
     async Task<BitmapImage?> DecodePngAsync(byte[] png)
@@ -262,89 +285,115 @@ public sealed partial class MainPage : Page
 
     void ShowBusy(int done, int total)
     {
-        IdleView.Visibility = Visibility.Collapsed;
-        EditorView.Visibility = Visibility.Collapsed;
-        ErrorView.Visibility = Visibility.Collapsed;
-        BusyView.Visibility = Visibility.Visible;
-        StatusBar.Visibility = Visibility.Visible;
-        StatusProgress.Visibility = Visibility.Visible;
-        Grid.SetColumn(StatusText, 1);
-        Grid.SetColumnSpan(StatusText, 1);
-        StatusText.Margin = new Thickness(16, 0, 0, 0);
+        ShowOnly("busy");
+        HideStatus();
+        ClearNotice();
         UpdateStatus(done, total);
     }
 
     void UpdateStatus(int done, int total)
     {
-        StatusText.Text = $"{done}（解析完了）/{total}（解析対象）";
-        StatusProgress.IsIndeterminate = false;
-        StatusProgress.Maximum = Math.Max(total, 1);
-        StatusProgress.Value = done;
+        BusyCount.Text = $"{done} / {total} ファイル";
+        BusyProgress.IsIndeterminate = false;
+        BusyProgress.Maximum = Math.Max(total, 1);
+        BusyProgress.Value = done;
     }
 
     void ShowEditor(string folder)
     {
-        IdleView.Visibility = Visibility.Collapsed;
-        BusyView.Visibility = Visibility.Collapsed;
-        ErrorView.Visibility = Visibility.Collapsed;
-        EditorView.Visibility = Visibility.Visible;
+        ShowOnly("editor");
+        HideStatus();
         FolderLabel.Text = folder;
+        ToolTipService.SetToolTip(FolderLabel, folder);
+        FileCount.Text = $"{_files.Count} 件";
         WriteButton.IsEnabled = true;
-        OpenButton.IsEnabled = false;
-        ShowBanner(JoinNotice("位置を直したら「oto.ini作成」を押してください。直した区間から oto.ini を計算します。"));
-        ShowHint(Hint);
+        SetOpenEnabled(false);
+        var severity = string.IsNullOrWhiteSpace(_notice)
+            ? InfoBarSeverity.Informational
+            : InfoBarSeverity.Warning;
+        ShowNotice(
+            "区間を確認してください",
+            WithSkip("直した区間から計算します。位置を直したら「oto.iniを作成」を押してください。"),
+            severity);
         Widen();
         _suppressSelection = true;
         FileList.ItemsSource = null;
         FileList.ItemsSource = _files;
         _suppressSelection = false;
         if (_files.Count > 0)
+        {
             FileList.SelectedIndex = 0;
+            FileList.Focus(FocusState.Programmatic);
+        }
     }
 
     void ShowError(string message)
     {
-        IdleView.Visibility = Visibility.Collapsed;
-        BusyView.Visibility = Visibility.Collapsed;
-        EditorView.Visibility = Visibility.Collapsed;
-        StatusBar.Visibility = Visibility.Collapsed;
-        ErrorView.Text = message;
-        ErrorView.Visibility = Visibility.Visible;
+        ShowOnly("error");
+        HideStatus();
+        ClearNotice();
+        ErrorText.Text = message;
     }
 
-    void ShowHint(string text)
+    void ShowOnly(string view)
     {
-        StatusBar.Visibility = Visibility.Visible;
-        StatusProgress.Visibility = Visibility.Collapsed;
-        Grid.SetColumn(StatusText, 0);
-        Grid.SetColumnSpan(StatusText, 2);
-        StatusText.Margin = new Thickness(0);
+        IdleView.Visibility = view == "idle" ? Visibility.Visible : Visibility.Collapsed;
+        BusyView.Visibility = view == "busy" ? Visibility.Visible : Visibility.Collapsed;
+        EditorView.Visibility = view == "editor" ? Visibility.Visible : Visibility.Collapsed;
+        ErrorView.Visibility = view == "error" ? Visibility.Visible : Visibility.Collapsed;
+        BusyRing.IsActive = view == "busy";
+    }
+
+    void ShowStatus(string text)
+    {
         StatusText.Text = text;
+        StatusProgress.IsIndeterminate = true;
+        StatusBar.Visibility = Visibility.Visible;
     }
 
-    void ShowBanner(string? text)
+    void HideStatus()
     {
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            Banner.Text = "";
-            BannerHost.Visibility = Visibility.Collapsed;
-            return;
-        }
-
-        Banner.Text = text;
-        BannerHost.Visibility = Visibility.Visible;
+        StatusBar.Visibility = Visibility.Collapsed;
+        StatusProgress.IsIndeterminate = false;
     }
 
-    string WroteMessage()
+    void ShowNotice(string title, string? body, InfoBarSeverity severity)
     {
-        return JoinNotice("oto.iniを作成しました。");
+        NoticeBar.Title = title;
+        NoticeBar.Message = body ?? "";
+        NoticeBar.Severity = severity;
+        NoticeBar.IsOpen = true;
+        NoticeHost.Visibility = Visibility.Visible;
     }
 
-    string JoinNotice(string message)
+    void ClearNotice()
+    {
+        NoticeBar.IsOpen = false;
+        NoticeHost.Visibility = Visibility.Collapsed;
+    }
+
+    void SetOpenEnabled(bool enabled)
+    {
+        OpenButton.IsEnabled = enabled;
+        ToolTipService.SetToolTip(
+            OpenButton,
+            enabled ? "作成した oto.ini を開きます。" : "「oto.iniを作成」を押すと開きます。");
+    }
+
+    string WithSkip(string? body)
     {
         if (string.IsNullOrWhiteSpace(_notice))
-            return message;
-        return _notice + "\n" + message;
+            return body ?? "";
+        if (string.IsNullOrWhiteSpace(body))
+            return _notice;
+        return body + "\n" + _notice;
+    }
+
+    void ShowFile(WavFile file)
+    {
+        FileTitle.Text = file.Name;
+        ToolTipService.SetToolTip(FileTitle, file.Name);
+        FileMeta.Text = $"{EngineLabel(file.Engine)}  ·  {file.Duration:0.00} 秒";
     }
 
     void Widen()
@@ -356,11 +405,6 @@ public sealed partial class MainPage : Page
         var height = Math.Max(size.Height, 840);
         if (width != size.Width || height != size.Height)
             App.MainWindow.AppWindow.Resize(new SizeInt32(width, height));
-    }
-
-    static string Caption(WavFile file)
-    {
-        return $"{file.Name}    {EngineLabel(file.Engine)}    {file.Duration:0.00} 秒";
     }
 
     static string EngineLabel(string engine)
