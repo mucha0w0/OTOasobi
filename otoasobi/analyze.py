@@ -9,7 +9,7 @@ import soundfile as sf
 
 from otoasobi.breath import apply_leading_breath
 from otoasobi.features import compute_features
-from otoasobi.oto import OTO_INI_NAME, mono_oto_lines, write_oto_ini
+from otoasobi.oto import OTO_INI_NAME, OtoSettings, mono_oto_lines, write_oto_ini
 from otoasobi.parser import Token, parse_stem, stem_from_path
 from otoasobi.phones import VOWEL_ONSET_LABELS
 from otoasobi.segment import Span, segment_tokens
@@ -211,8 +211,12 @@ def analyze_folder_files(
     return files, skipped
 
 
-def export_folder(folder: str | Path, files: list[AnalyzedFile]) -> Path:
-    """直した区間から oto.ini とラベルを書く。"""
+def export_folder(
+    folder: str | Path,
+    files: list[AnalyzedFile],
+    settings: OtoSettings | None = None,
+) -> Path:
+    """直した区間から oto.ini とラベルを書く。settings が無いときはいまの初期値。"""
     folder = Path(folder)
     if not folder.is_dir():
         raise RuntimeError("フォルダが見つかりません。")
@@ -221,7 +225,7 @@ def export_folder(folder: str | Path, files: list[AnalyzedFile]) -> Path:
     span_entries = [(item.name, item.spans) for item in files]
     oto_lines: list[str] = []
     for item in files:
-        oto_lines.extend(mono_oto_lines(item.name, item.spans, item.duration))
+        oto_lines.extend(mono_oto_lines(item.name, item.spans, item.duration, settings))
     out = folder / OTO_INI_NAME
     log = folder / BATCH_LOG_NAME
     onset = folder / BATCH_TXT_NAME

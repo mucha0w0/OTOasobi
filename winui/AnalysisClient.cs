@@ -79,7 +79,7 @@ sealed class AnalysisClient : IDisposable
         throw new IOException(string.IsNullOrEmpty(error) ? "保存データを書けませんでした。" : error);
     }
 
-    public async Task<AnalyzeResult> WriteAsync(string folder, IReadOnlyList<WavFile> files)
+    public async Task<AnalyzeResult> WriteAsync(string folder, IReadOnlyList<WavFile> files, OtoExport config)
     {
         using var doc = await SendAsync(id => JsonSerializer.Serialize(new
         {
@@ -87,6 +87,13 @@ sealed class AnalysisClient : IDisposable
             cmd = "write",
             folder,
             files = FilePayload(files),
+            config = new
+            {
+                offset_ms = config.OffsetMs,
+                consonant_ms = config.ConsonantMs,
+                blank_ms = config.BlankMs,
+                overlap = config.Overlap,
+            },
         }), null).ConfigureAwait(true);
         var root = doc.RootElement;
         var ok = root.TryGetProperty("ok", out var okValue) && okValue.GetBoolean();
@@ -326,3 +333,5 @@ sealed class AnalysisClient : IDisposable
 }
 
 sealed record AnalyzeResult(bool Ok, string? Txt, string? Error, string? Notice);
+
+sealed record OtoExport(double OffsetMs, double ConsonantMs, double BlankMs, double Overlap);

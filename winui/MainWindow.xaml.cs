@@ -15,11 +15,11 @@ public sealed partial class MainWindow : Window
         AppWindow.SetIcon("Assets/AppIcon.ico");
         if (AppWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter presenter)
         {
-            presenter.PreferredMinimumWidth = 1024;
+            presenter.PreferredMinimumWidth = 1180;
             presenter.PreferredMinimumHeight = 680;
         }
 
-        AppWindow.Resize(new SizeInt32(1280, 840));
+        AppWindow.Resize(new SizeInt32(1540, 840));
 
         RootFrame.Navigate(typeof(MainPage));
         if (RootFrame.Content is MainPage page)

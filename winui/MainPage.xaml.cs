@@ -25,12 +25,22 @@ public sealed partial class MainPage : Page
     IDisposable? _previewStream;
     DispatcherQueueTimer? _viewportTimer;
     string _appliedKey = "";
+    bool _configReady;
+
+    // oto.py の PAD_MS と OVERLAP_AT。
+    const double DefaultMarginMs = 200;
+    const double DefaultOverlapPercent = 50;
 
     public MainPage()
     {
         InitializeComponent();
         Editor.Edited += (_, _) => OnEdited();
         Editor.ViewportChanged += (_, _) => ScheduleViewport();
+        OffsetSlider.ValueChanged += (_, _) => OnConfigChanged();
+        ConsonantSlider.ValueChanged += (_, _) => OnConfigChanged();
+        BlankSlider.ValueChanged += (_, _) => OnConfigChanged();
+        OverlapSlider.ValueChanged += (_, _) => OnConfigChanged();
+        _configReady = true;
         AddHandler(PointerWheelChangedEvent, new PointerEventHandler(OnPageWheel), true);
     }
 
@@ -306,11 +316,12 @@ public sealed partial class MainPage : Page
         _busy = true;
         UpdateCommands();
         Editor.IsEnabled = false;
+        ConfigBody.IsEnabled = false;
         ShowStatus("oto.iniを計算しています");
         try
         {
             _analysis ??= new AnalysisClient();
-            var result = await _analysis.WriteAsync(_folder, _files);
+            var result = await _analysis.WriteAsync(_folder, _files, CurrentExport());
             if (!result.Ok || string.IsNullOrEmpty(result.Txt))
             {
                 ShowNotice(
@@ -341,10 +352,43 @@ public sealed partial class MainPage : Page
         {
             _busy = false;
             Editor.IsEnabled = true;
+            ConfigBody.IsEnabled = true;
             UpdateCommands();
             HideStatus();
         }
     }
+
+    OtoExport CurrentExport() => new(
+        OffsetSlider.Value,
+        ConsonantSlider.Value,
+        BlankSlider.Value,
+        OverlapSlider.Value / 100.0);
+
+    void OnConfigChanged()
+    {
+        OffsetValue.Text = FormatMs(OffsetSlider.Value);
+        ConsonantValue.Text = FormatMs(ConsonantSlider.Value);
+        BlankValue.Text = FormatMs(BlankSlider.Value);
+        OverlapValue.Text = $"{Math.Round(OverlapSlider.Value).ToString(CultureInfo.InvariantCulture)}%";
+        if (!_configReady || !_wrote)
+            return;
+        _wrote = false;
+        ShowNotice(
+            "修正はまだファイルに入っていません",
+            WithSkip("もう一度「oto.iniを作成」を押すと、oto.ini に反映されます。"),
+            InfoBarSeverity.Warning);
+    }
+
+    void ResetConfig_Click(object sender, RoutedEventArgs e)
+    {
+        OffsetSlider.Value = DefaultMarginMs;
+        ConsonantSlider.Value = DefaultMarginMs;
+        BlankSlider.Value = DefaultMarginMs;
+        OverlapSlider.Value = DefaultOverlapPercent;
+    }
+
+    static string FormatMs(double value) =>
+        $"{Math.Round(value).ToString(CultureInfo.InvariantCulture)} ms";
 
     void OnEdited()
     {
@@ -523,7 +567,7 @@ public sealed partial class MainPage : Page
         if (App.MainWindow == null)
             return;
         var size = App.MainWindow.AppWindow.Size;
-        var width = Math.Max(size.Width, 1280);
+        var width = Math.Max(size.Width, 1540);
         var height = Math.Max(size.Height, 840);
         if (width != size.Width || height != size.Height)
             App.MainWindow.AppWindow.Resize(new SizeInt32(width, height));

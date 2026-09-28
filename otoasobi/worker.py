@@ -14,7 +14,8 @@ preview の t0/t1 は表示中の秒。columns/rows は画面のピクセル数�
 波形はその幅の最小最大で、サンプルの方が少なければ 1 点ずつ返す。
 スペクトラムは同じ範囲をそのピクセル数へ最近傍で描き、拡大しても引き伸ばさない。
 要求: {"id": 3, "cmd": "save", "folder": "C:/音声フォルダ", "files": [...]}
-要求: {"id": 4, "cmd": "write", "folder": "C:/音声フォルダ", "files": [...]}
+要求: {"id": 4, "cmd": "write", "folder": "C:/音声フォルダ", "files": [...], "config": {...}}
+config は offset_ms, consonant_ms, blank_ms（ミリ秒）と overlap（0 から 1）。無いときは初期値。
 応答の txt は単独音モードの oto.ini。全区間は OTOasibi_log.txt、母音始まりは OTOasibi_out.txt。
 画面で区間を直したあとは save が保存データを更新し、write が oto.ini を計算して書く。
 """
@@ -35,6 +36,7 @@ from otoasobi.analyze import (
     skipped_notice,
 )
 from otoasobi.cache import file_from_mapping, file_to_mapping, read_cache, save_cache
+from otoasobi.oto import oto_settings_from
 from otoasobi.parser import FilenameError
 from otoasobi.preview import render_preview
 
@@ -148,9 +150,9 @@ def _save(folder: str, files: object) -> dict:
     return {"ok": True}
 
 
-def _write(folder: str, files: object) -> dict:
+def _write(folder: str, files: object, config: object) -> dict:
     parsed = _parsed_files(files)
-    out = export_folder(folder, parsed)
+    out = export_folder(folder, parsed, oto_settings_from(config))
     try:
         save_cache(folder, parsed)
     except Exception as exc:
@@ -196,7 +198,7 @@ def main() -> None:
                 folder = request.get("folder")
                 if not isinstance(folder, str) or not folder:
                     raise RuntimeError("folder がありません")
-                payload = _write(folder, request.get("files"))
+                payload = _write(folder, request.get("files"), request.get("config"))
             else:
                 raise RuntimeError("未対応のコマンドです")
         except FilenameError as exc:

@@ -10,20 +10,54 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
 from otoasobi.phones import BREATH_LABEL, SILENCE_LABEL, VOWEL_ONSET_LABELS
 from otoasobi.segment import Span
 
-# 子音開始の前、母音開始の後、母音終了の前に置く余白。
+# 子音開始の前、母音開始の後、母音終了の前に置く余白。画面の初期値。
 PAD_MS = 200.0
 # 子音の開始と終了（母音の開始）のあいだの位置。種類ごとの比率は後で足す。
 OVERLAP_AT = 0.5
 # ブランクと子音部のあいだがこれより短いと、UTAU のエンジンが落ちる。
 MIN_GAP_MS = 1.0
+# 画面のスライダーより外の値は、ここに収める。
+MAX_PAD_MS = 2000.0
 OTO_INI_NAME = "oto.ini"
 # 日本語 Windows の ANSI。
 ANSI = "cp932"
+
+
+@dataclass(frozen=True)
+class OtoSettings:
+    """oto.ini の位置。未指定のときはいまの書き出しと同じ。"""
+
+    offset_ms: float = PAD_MS
+    consonant_ms: float = PAD_MS
+    blank_ms: float = PAD_MS
+    overlap_at: float = OVERLAP_AT
+
+
+def _bounded(value: object, default: float, lo: float, hi: float) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return default
+    number = float(value)
+    if number != number:
+        return default
+    return max(lo, min(hi, number))
+
+
+def oto_settings_from(raw: object) -> OtoSettings:
+    """画面からの config。無い欄と範囲外は初期値か、許す範囲の端に寄せる。"""
+    if not isinstance(raw, dict):
+        return OtoSettings()
+    return OtoSettings(
+        offset_ms=_bounded(raw.get("offset_ms"), PAD_MS, 0.0, MAX_PAD_MS),
+        consonant_ms=_bounded(raw.get("consonant_ms"), PAD_MS, 0.0, MAX_PAD_MS),
+        blank_ms=_bounded(raw.get("blank_ms"), PAD_MS, 0.0, MAX_PAD_MS),
+        overlap_at=_bounded(raw.get("overlap"), OVERLAP_AT, 0.0, 1.0),
+    )
 
 
 def _ms(seconds: float) -> float:
@@ -71,8 +105,15 @@ def _place_blank(blank_at: float, offset: float, consonant: float, duration_ms: 
     return blank, consonant
 
 
-def mono_oto_line(filename: str, spans: list[Span], index: int, duration: float) -> str | None:
+def mono_oto_line(
+    filename: str,
+    spans: list[Span],
+    index: int,
+    duration: float,
+    settings: OtoSettings | None = None,
+) -> str | None:
     """1 エイリアス分の単独音 oto.ini 行。母音でも ん でもなければ None。"""
+    settings = settings or OtoSettings()
     vowel = spans[index]
     if vowel.label not in VOWEL_ONSET_LABELS:
         return None
@@ -82,21 +123,26 @@ def mono_oto_line(filename: str, spans: list[Span], index: int, duration: float)
     v1 = _ms(vowel.end)
     dur = max(_ms(duration), v1, c0)
 
-    offset = max(0.0, round(c0 - PAD_MS, 3))
+    offset = max(0.0, round(c0 - settings.offset_ms, 3))
     preutter = max(0.0, round(v0 - offset, 3))
-    overlap = round((c0 + (v0 - c0) * OVERLAP_AT) - offset, 3)
-    consonant = max(0.0, round((v0 + PAD_MS) - offset, 3))
-    blank_at = round(v1 - PAD_MS, 3)
+    overlap = round((c0 + (v0 - c0) * settings.overlap_at) - offset, 3)
+    consonant = max(0.0, round((v0 + settings.consonant_ms) - offset, 3))
+    blank_at = round(v1 - settings.blank_ms, 3)
     blank, consonant = _place_blank(blank_at, offset, consonant, dur)
     return (
         f"{filename}={alias},{_fmt(offset)},{_fmt(consonant)},{_fmt(blank)},{_fmt(preutter)},{_fmt(overlap)}"
     )
 
 
-def mono_oto_lines(filename: str, spans: list[Span], duration: float) -> list[str]:
+def mono_oto_lines(
+    filename: str,
+    spans: list[Span],
+    duration: float,
+    settings: OtoSettings | None = None,
+) -> list[str]:
     lines: list[str] = []
     for index in range(len(spans)):
-        line = mono_oto_line(filename, spans, index, duration)
+        line = mono_oto_line(filename, spans, index, duration, settings)
         if line is not None:
             lines.append(line)
     return lines
