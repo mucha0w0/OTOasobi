@@ -4,7 +4,7 @@ import multiprocessing
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QThread, QTimer, Qt, Signal
+from PySide6.QtCore import QEvent, QPoint, QThread, QTimer, Qt, Signal
 from PySide6.QtGui import QAction, QColor, QDragEnterEvent, QDropEvent, QIcon, QKeySequence, QPainter
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QSplitter,
+    QSplitterHandle,
     QStatusBar,
     QTableWidget,
     QTableWidgetItem,
@@ -104,12 +105,6 @@ QMenu {
     border: 1px solid #3A3A3A;
 }
 QMenu::item:selected { background: #0F9D8E; color: #06110F; }
-QSplitter::handle {
-    background: #3A3A3A;
-}
-QSplitter::handle:hover {
-    background: #0F9D8E;
-}
 QScrollBar:vertical, QScrollBar:horizontal {
     background: #161616;
     width: 10px;
@@ -117,6 +112,150 @@ QScrollBar:vertical, QScrollBar:horizontal {
 }
 QScrollBar::handle { background: #3F3F3F; border-radius: 4px; }
 """
+
+
+HANDLE_THICKNESS = 18
+HANDLE_SLOP = 16
+
+
+class PlotSplitHandle(QSplitterHandle):
+    def __init__(self, orientation: Qt.Orientation, parent: QSplitter) -> None:
+        super().__init__(orientation, parent)
+        self.setCursor(Qt.CursorShape.SizeVerCursor)
+        self.setMouseTracking(True)
+        self.setToolTip("ドラッグして縦幅を変える")
+        self._hover = False
+
+    def enterEvent(self, event) -> None:
+        self._hover = True
+        self.update()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event) -> None:
+        self._hover = False
+        self.update()
+        super().leaveEvent(event)
+
+    def paintEvent(self, event) -> None:
+        painter = QPainter(self)
+        painter.fillRect(self.rect(), QColor("#0F9D8E" if self._hover else "#4B5563"))
+        grip = QColor("#F9FAFB" if self._hover else "#E5E7EB")
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(grip)
+        cx = self.width() // 2
+        cy = self.height() // 2
+        for dx in (-14, 0, 14):
+            painter.drawEllipse(cx + dx - 2, cy - 2, 4, 4)
+
+
+class PlotSplitter(QSplitter):
+    """Vertical splitter whose handle stays visible and grabbable.
+
+    A press on the handle resizes as usual. A press on the neighboring plot,
+    within ``HANDLE_SLOP`` pixels of the handle, resizes too, so the boundary
+    can be dragged without hitting an invisible gap.
+    """
+
+    def __init__(self, *, edge_drag: bool = False) -> None:
+        super().__init__(Qt.Orientation.Vertical)
+        self.setHandleWidth(HANDLE_THICKNESS)
+        self.setChildrenCollapsible(False)
+        self.setOpaqueResize(True)
+        self._edge_drag = edge_drag
+        self._drag_index: int | None = None
+        self._drag_origin = 0
+        self._drag_global = 0.0
+        self._edge_widget: QWidget | None = None
+
+    def createHandle(self) -> QSplitterHandle:
+        return PlotSplitHandle(self.orientation(), self)
+
+    def addWidget(self, widget: QWidget) -> None:
+        super().addWidget(widget)
+        for index in range(1, self.count()):
+            handle = self.handle(index)
+            if handle is not None:
+                handle.raise_()
+        if not self._edge_drag:
+            return
+        widget.installEventFilter(self)
+        viewport = getattr(widget, "viewport", None)
+        if callable(viewport):
+            view = viewport()
+            if view is not None:
+                view.installEventFilter(self)
+
+    def eventFilter(self, obj, event) -> bool:
+        if not self._edge_drag:
+            return super().eventFilter(obj, event)
+        etype = event.type()
+        if etype == QEvent.Type.Leave and self._edge_widget is obj and self._drag_index is None:
+            obj.unsetCursor()
+            self._edge_widget = None
+            return False
+        if etype == QEvent.Type.MouseButtonPress and event.button() == Qt.MouseButton.LeftButton:
+            index = self._near_handle(obj, event.position().toPoint())
+            if index is not None:
+                handle = self.handle(index)
+                self._drag_index = index
+                self._drag_origin = handle.y()
+                self._drag_global = float(event.globalPosition().y())
+                self.setCursor(Qt.CursorShape.SizeVerCursor)
+                self.grabMouse()
+                return True
+        if etype == QEvent.Type.MouseMove and self._drag_index is not None:
+            self._apply_drag(float(event.globalPosition().y()))
+            return True
+        if etype == QEvent.Type.MouseButtonRelease and self._drag_index is not None:
+            self._end_drag()
+            return True
+        if etype == QEvent.Type.MouseMove and not event.buttons():
+            near = self._near_handle(obj, event.position().toPoint())
+            if near is not None:
+                obj.setCursor(Qt.CursorShape.SizeVerCursor)
+                self._edge_widget = obj
+                return True
+            if self._edge_widget is obj:
+                obj.unsetCursor()
+                self._edge_widget = None
+        return super().eventFilter(obj, event)
+
+    def mouseMoveEvent(self, event) -> None:
+        if self._drag_index is not None:
+            self._apply_drag(float(event.globalPosition().y()))
+            event.accept()
+            return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event) -> None:
+        if self._drag_index is not None:
+            self._end_drag()
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
+
+    def _near_handle(self, widget: QWidget, local: QPoint) -> int | None:
+        point = widget.mapTo(self, local)
+        for index in range(1, self.count()):
+            handle = self.handle(index)
+            if handle is None or handle.height() <= 0:
+                continue
+            top = handle.y() - HANDLE_SLOP
+            bottom = handle.y() + handle.height() + HANDLE_SLOP
+            if top <= point.y() <= bottom:
+                return index
+        return None
+
+    def _apply_drag(self, global_y: float) -> None:
+        if self._drag_index is None:
+            return
+        self.moveSplitter(int(self._drag_origin + (global_y - self._drag_global)), self._drag_index)
+
+    def _end_drag(self) -> None:
+        self._drag_index = None
+        if QWidget.mouseGrabber() is self:
+            self.releaseMouse()
+        self.unsetCursor()
 
 
 def _icon_path() -> Path | None:
@@ -426,12 +565,8 @@ class MainWindow(QMainWindow):
         legend.setTextFormat(Qt.TextFormat.RichText)
         toolbar.addWidget(legend)
 
-        splitter = QSplitter(Qt.Orientation.Vertical)
-        splitter.setHandleWidth(8)
-        splitter.setChildrenCollapsible(False)
-        plots = QSplitter(Qt.Orientation.Vertical)
-        plots.setHandleWidth(8)
-        plots.setChildrenCollapsible(False)
+        splitter = PlotSplitter()
+        plots = PlotSplitter(edge_drag=True)
         self.wave = WaveformView()
         self.mel = MelSpectrogramView()
         self.loud = LoudnessView()
