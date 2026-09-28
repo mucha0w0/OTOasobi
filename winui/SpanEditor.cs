@@ -18,12 +18,16 @@ public sealed class SpanEditor : UserControl
     const double LinkGap = 0.0005;
     const double HitPx = 18;
     const double LoudnessRangeDb = 40;
+    const double SplitThickness = 16;
+    const double SplitSlop = 8;
+    const double MinBand = 48;
 
     enum DragKind
     {
         None,
         Boundary,
         Pan,
+        Split,
     }
 
     readonly Canvas _plot = new();
@@ -32,7 +36,10 @@ public sealed class SpanEditor : UserControl
     readonly RectangleGeometry _clip = new();
     readonly InputCursor _cursorArrow = InputSystemCursor.Create(InputSystemCursorShape.Arrow);
     readonly InputCursor _cursorEw = InputSystemCursor.Create(InputSystemCursorShape.SizeWestEast);
+    readonly InputCursor _cursorNs = InputSystemCursor.Create(InputSystemCursorShape.SizeNorthSouth);
     readonly InputCursor _cursorHand = InputSystemCursor.Create(InputSystemCursorShape.Hand);
+    readonly Grid _waveSplit = MakeSplitBar();
+    readonly Grid _loudSplit = MakeSplitBar();
 
     static readonly SolidColorBrush WaveBrush = BrushOf(170, 230, 230, 230);
     static readonly SolidColorBrush WaveLineBrush = BrushOf(255, 236, 236, 236);
@@ -41,8 +48,11 @@ public sealed class SpanEditor : UserControl
     static readonly SolidColorBrush LineBrush = BrushOf(230, 255, 255, 255);
     static readonly SolidColorBrush HotBrush = BrushOf(255, 251, 191, 36);
     static readonly SolidColorBrush TickBrush = BrushOf(255, 209, 213, 219);
-    static readonly SolidColorBrush SepBrush = BrushOf(255, 42, 42, 42);
     static readonly SolidColorBrush TextBrush = BrushOf(255, 249, 250, 251);
+    static readonly SolidColorBrush SplitBrush = BrushOf(255, 75, 85, 99);
+    static readonly SolidColorBrush SplitHotBrush = BrushOf(255, 15, 157, 142);
+    static readonly SolidColorBrush SplitDotBrush = BrushOf(255, 229, 231, 235);
+    static readonly SolidColorBrush SplitDotHotBrush = BrushOf(255, 249, 250, 251);
     static readonly SolidColorBrush LoudBrush = BrushOf(255, 153, 246, 228);
     static readonly SolidColorBrush LoudBackBrush = BrushOf(255, 14, 14, 14);
     static readonly Dictionary<string, SolidColorBrush> WaveFills = [];
@@ -63,6 +73,8 @@ public sealed class SpanEditor : UserControl
     int _sampleRate;
     double _view0;
     double _view1 = 1;
+    double _waveShare = 0.40;
+    double _loudShare = 0.18;
     bool _viewportArmed;
     (double T0, double T1, int Columns, int Rows) _notified;
 
@@ -71,9 +83,7 @@ public sealed class SpanEditor : UserControl
     Polyline? _waveLine;
     readonly List<Ellipse> _dots = [];
     Line? _zero;
-    Rectangle? _separator;
     Rectangle? _loudnessBack;
-    Rectangle? _loudnessSep;
     Polyline? _loudnessLine;
     Border? _loudnessLabel;
     readonly List<Rectangle> _waveRects = [];
@@ -86,6 +96,11 @@ public sealed class SpanEditor : UserControl
 
     DragKind _drag = DragKind.None;
     int _dragIndex = -1;
+    int _splitIndex = -1;
+    int _hotSplit = -1;
+    double _splitY;
+    double _splitWave;
+    double _splitLoud;
     double _panX;
     double _panView0;
     double _panView1;
@@ -146,8 +161,10 @@ public sealed class SpanEditor : UserControl
         };
         PointerExited += (_, _) =>
         {
-            if (_drag == DragKind.None)
-                SetReadout("");
+            if (_drag != DragKind.None)
+                return;
+            SetReadout("");
+            SetHotSplit(-1);
         };
         KeyDown += OnKeyDown;
     }
@@ -230,9 +247,7 @@ public sealed class SpanEditor : UserControl
         _wave = null;
         _waveLine = null;
         _zero = null;
-        _separator = null;
         _loudnessBack = null;
-        _loudnessSep = null;
         _loudnessLine = null;
         _loudnessLabel = null;
         SetReadout(message);
@@ -365,28 +380,12 @@ public sealed class SpanEditor : UserControl
         };
         _plot.Children.Add(_zero);
 
-        _separator = new Rectangle
-        {
-            Height = 1,
-            Fill = SepBrush,
-            IsHitTestVisible = false,
-        };
-        _plot.Children.Add(_separator);
-
         _loudnessBack = new Rectangle
         {
             Fill = LoudBackBrush,
             IsHitTestVisible = false,
         };
         _plot.Children.Add(_loudnessBack);
-
-        _loudnessSep = new Rectangle
-        {
-            Height = 1,
-            Fill = SepBrush,
-            IsHitTestVisible = false,
-        };
-        _plot.Children.Add(_loudnessSep);
 
         _loudnessLine = new Polyline
         {
@@ -457,6 +456,8 @@ public sealed class SpanEditor : UserControl
         foreach (var text in _specTexts)
             _plot.Children.Add(text);
         _plot.Children.Add(_loudnessLabel);
+        _plot.Children.Add(_waveSplit);
+        _plot.Children.Add(_loudSplit);
 
         ArrangeAll();
     }
@@ -477,6 +478,22 @@ public sealed class SpanEditor : UserControl
             _changed = false;
             ArmCapture(e.Pointer);
             ProtectedCursor = _cursorHand;
+            e.Handled = true;
+            return;
+        }
+
+        var split = HitSplit(point.Position.Y);
+        if (split >= 0)
+        {
+            _drag = DragKind.Split;
+            _splitIndex = split;
+            _splitY = point.Position.Y;
+            _splitWave = ShownWaveShare;
+            _splitLoud = ShownLoudShare;
+            _changed = false;
+            SetHotSplit(split);
+            ArmCapture(e.Pointer);
+            ProtectedCursor = _cursorNs;
             e.Handled = true;
             return;
         }
@@ -521,6 +538,24 @@ public sealed class SpanEditor : UserControl
             return;
         }
 
+        if (_drag == DragKind.Split)
+        {
+            ApplySplit(point.Position.Y);
+            e.Handled = true;
+            return;
+        }
+
+        var split = HitSplit(point.Position.Y);
+        if (split >= 0)
+        {
+            ProtectedCursor = _cursorNs;
+            Highlight(-1);
+            SetHotSplit(split);
+            SetReadout("");
+            return;
+        }
+
+        SetHotSplit(-1);
         var group = HitGroup(x);
         if (group >= 0)
         {
@@ -565,8 +600,12 @@ public sealed class SpanEditor : UserControl
         if (_drag == DragKind.None)
             return;
         var changed = _changed;
+        var split = _drag == DragKind.Split;
         _drag = DragKind.None;
+        _splitIndex = -1;
         _origin = [];
+        if (split)
+            SetHotSplit(-1);
         if (_pointer != null)
         {
             var pointer = _pointer;
@@ -676,14 +715,8 @@ public sealed class SpanEditor : UserControl
             _zero.Y2 = y;
         }
 
-        if (_separator != null)
-        {
-            Canvas.SetLeft(_separator, 0);
-            Canvas.SetTop(_separator, WaveHeight);
-            _separator.Width = _plot.Width;
-        }
-
         ArrangeLoudness();
+        ArrangeSplits();
     }
 
     void ArrangeLoudness()
@@ -698,14 +731,6 @@ public sealed class SpanEditor : UserControl
             _loudnessBack.Width = _plot.Width;
             _loudnessBack.Height = Math.Max(0, height);
             _loudnessBack.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
-        }
-
-        if (_loudnessSep != null)
-        {
-            Canvas.SetLeft(_loudnessSep, 0);
-            Canvas.SetTop(_loudnessSep, top);
-            _loudnessSep.Width = _plot.Width;
-            _loudnessSep.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
         }
 
         if (_loudnessLabel != null)
@@ -940,6 +965,129 @@ public sealed class SpanEditor : UserControl
             _lines[i].Stroke = i == group ? HotBrush : LineBrush;
     }
 
+    void ApplySplit(double y)
+    {
+        var area = BandArea;
+        if (area < 1)
+            return;
+        var dy = y - _splitY;
+        var bands = HasLoudness ? 3.0 : 2.0;
+        var minPx = Math.Min(MinBand, area / bands);
+        if (_splitIndex == 0)
+        {
+            var loudPx = HasLoudness ? area * _splitLoud : 0;
+            var wavePx = ClampRange(area * _splitWave + dy, minPx, area - loudPx - minPx);
+            _waveShare = wavePx / area;
+        }
+        else
+        {
+            var wavePx = area * _splitWave;
+            var loudPx = ClampRange(area * _splitLoud - dy, minPx, area - wavePx - minPx);
+            _loudShare = loudPx / area;
+        }
+
+        ArrangeAll();
+    }
+
+    int HitSplit(double y)
+    {
+        if (InSplit(y, WaveHeight))
+            return 0;
+        if (HasLoudness && InSplit(y, SpecTop + SpecHeight))
+            return 1;
+        return -1;
+    }
+
+    static bool InSplit(double y, double top)
+    {
+        return y >= top - SplitSlop && y < top + SplitThickness + SplitSlop;
+    }
+
+    void SetHotSplit(int index)
+    {
+        if (_drag == DragKind.Split)
+            index = _splitIndex;
+        if (_hotSplit == index)
+            return;
+        _hotSplit = index;
+        PaintSplit(_waveSplit, _hotSplit == 0);
+        PaintSplit(_loudSplit, _hotSplit == 1);
+    }
+
+    void ArrangeSplits()
+    {
+        PlaceSplit(_waveSplit, WaveHeight, _hotSplit == 0);
+        if (HasLoudness)
+        {
+            _loudSplit.Visibility = Visibility.Visible;
+            PlaceSplit(_loudSplit, SpecTop + SpecHeight, _hotSplit == 1);
+        }
+        else
+        {
+            _loudSplit.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    void PlaceSplit(Grid bar, double top, bool hot)
+    {
+        bar.Width = Math.Max(0, _plot.Width);
+        Canvas.SetLeft(bar, 0);
+        Canvas.SetTop(bar, top);
+        PaintSplit(bar, hot);
+    }
+
+    static void PaintSplit(Grid bar, bool hot)
+    {
+        bar.Background = hot ? SplitHotBrush : SplitBrush;
+        if (bar.Children.Count == 0 || bar.Children[0] is not StackPanel dots)
+            return;
+        var fill = hot ? SplitDotHotBrush : SplitDotBrush;
+        foreach (var child in dots.Children)
+        {
+            if (child is Ellipse ellipse)
+                ellipse.Fill = fill;
+        }
+    }
+
+    static Grid MakeSplitBar()
+    {
+        var dots = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            Spacing = 10,
+            IsHitTestVisible = false,
+        };
+        for (var i = 0; i < 3; i++)
+        {
+            dots.Children.Add(new Ellipse
+            {
+                Width = 4,
+                Height = 4,
+                Fill = SplitDotBrush,
+                IsHitTestVisible = false,
+            });
+        }
+
+        var bar = new Grid
+        {
+            Height = SplitThickness,
+            Background = SplitBrush,
+            IsHitTestVisible = false,
+            Children = { dots },
+        };
+        Canvas.SetZIndex(bar, 40);
+        return bar;
+    }
+
+    static double ClampRange(double value, double lo, double hi)
+    {
+        if (hi < lo)
+            return lo;
+        return Math.Clamp(value, lo, hi);
+    }
+
     int HitGroup(double x)
     {
         var best = -1;
@@ -1052,26 +1200,59 @@ public sealed class SpanEditor : UserControl
 
     double ContentBottom => Math.Max(0, _plot.Height - Ruler);
 
-    double WaveHeight => ContentBottom * 0.40;
+    bool HasLoudness => _loudness.Length >= 2;
 
-    double SpecTop => WaveHeight;
-
-    double SpecBlockHeight => Math.Max(1, ContentBottom - SpecTop);
-
-    double LoudnessHeight
+    double BandArea
     {
         get
         {
-            if (_loudness.Length < 2)
-                return 0;
-            var wanted = Math.Clamp(SpecBlockHeight * 0.28, 44, 110);
-            return Math.Min(wanted, SpecBlockHeight * 0.42);
+            var handles = HasLoudness ? 2 : 1;
+            return Math.Max(0, ContentBottom - handles * SplitThickness);
         }
     }
 
-    double LoudnessTop => SpecTop + SpecHeight;
+    double ShareFloor
+    {
+        get
+        {
+            var area = BandArea;
+            if (area < 1)
+                return 0.08;
+            return Math.Min(0.2, MinBand / area);
+        }
+    }
 
-    double SpecHeight => Math.Max(1, SpecBlockHeight - LoudnessHeight);
+    double ShownLoudShare
+    {
+        get
+        {
+            if (!HasLoudness)
+                return 0;
+            var min = ShareFloor;
+            return Math.Clamp(_loudShare, min, 1 - 2 * min);
+        }
+    }
+
+    double ShownWaveShare
+    {
+        get
+        {
+            var min = ShareFloor;
+            if (!HasLoudness)
+                return Math.Clamp(_waveShare, min, 1 - min);
+            return Math.Clamp(_waveShare, min, 1 - ShownLoudShare - min);
+        }
+    }
+
+    double WaveHeight => Math.Max(1, BandArea * ShownWaveShare);
+
+    double SpecTop => WaveHeight + SplitThickness;
+
+    double LoudnessHeight => Math.Max(HasLoudness ? 1 : 0, BandArea * ShownLoudShare);
+
+    double LoudnessTop => SpecTop + SpecHeight + SplitThickness;
+
+    double SpecHeight => Math.Max(1, BandArea - WaveHeight - BandArea * ShownLoudShare);
 
     double X(double time)
     {
