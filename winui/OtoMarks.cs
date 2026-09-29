@@ -30,7 +30,7 @@ static class OtoMarks
         dest.Clear();
         var offsetMs = Bounded(settings.OffsetMs, 200, 0, MaxPadMs);
         var consonantMs = Bounded(settings.ConsonantMs, 200, 0, MaxPadMs);
-        var blankAt = Bounded(settings.Blank, 0, 0, 1);
+        var blankAt = Bounded(settings.Blank, 0, -1, 1);
         var overlapAt = Bounded(settings.Overlap, 0.5, 0, 1);
         var spans = file.Spans;
         for (var i = 0; i < spans.Count; i++)

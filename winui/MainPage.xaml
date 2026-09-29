@@ -321,14 +321,14 @@
                                             x:Name="BlankSlider"
                                             AutomationProperties.Name="ブランク"
                                             Maximum="100"
-                                            Minimum="0"
+                                            Minimum="-100"
                                             StepFrequency="1"
                                             SnapsTo="StepValues"
                                             Value="0" />
                                         <TextBlock
                                             Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                             Style="{StaticResource CaptionTextBlockStyle}"
-                                            Text="上辺の右端が 0%、減衰の終わりが 100%"
+                                            Text="上辺の右端（0%）から。マイナスは手前、プラスは減衰側"
                                             TextWrapping="Wrap" />
                                     </StackPanel>
                                     <StackPanel Spacing="2">

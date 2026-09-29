@@ -27,7 +27,7 @@ public sealed partial class MainPage : Page
     string _appliedKey = "";
     bool _configReady;
 
-    // oto.py の PAD_MS、OVERLAP_AT、ブランク 0%（上辺の右端）。
+    // oto.py の PAD_MS、OVERLAP_AT、ブランク 0%（上辺の右端からのずれ）。
     const double DefaultMarginMs = 200;
     const double DefaultBlankPercent = 0;
     const double DefaultOverlapPercent = 50;
@@ -377,7 +377,7 @@ public sealed partial class MainPage : Page
     {
         OffsetValue.Text = FormatMs(OffsetSlider.Value);
         ConsonantValue.Text = FormatMs(ConsonantSlider.Value);
-        BlankValue.Text = FormatPercent(BlankSlider.Value);
+        BlankValue.Text = FormatSignedPercent(BlankSlider.Value);
         OverlapValue.Text = FormatPercent(OverlapSlider.Value);
         Editor.SetOtoSettings(CurrentExport());
         if (!_configReady || !_wrote)
@@ -402,6 +402,15 @@ public sealed partial class MainPage : Page
 
     static string FormatPercent(double value) =>
         $"{Math.Round(value).ToString(CultureInfo.InvariantCulture)}%";
+
+    static string FormatSignedPercent(double value)
+    {
+        var rounded = Math.Round(value);
+        var text = rounded.ToString(CultureInfo.InvariantCulture);
+        if (rounded > 0)
+            text = "+" + text;
+        return text + "%";
+    }
 
     void OnEdited()
     {

@@ -1,7 +1,7 @@
 """ブランクを、音量の右脚の上に置く。
 
-0% は上辺の右端、100% はそこから 12 dB 落ちた点。
-落ちきる前に音が終わるときは、母音のあとに続く無音と息を含めた終わり。
+0 は上辺の右端。正の値は減衰側、負の値は手前へ、右脚の長さを 1 としてずらす。
+落ちきる前に音が終わるときは、母音のあとに続く無音と息を右脚の長さに含める。
 右脚が取れないときは母音の終了。
 
 画面の winui/BlankRelease.cs と揃える。
@@ -65,7 +65,7 @@ def release_blank_seconds(
     if found is None:
         return vowel_end
     t0, t1 = found
-    placed = min(1.0, max(0.0, float(ratio)))
+    placed = min(1.0, max(-1.0, float(ratio)))
     return t0 + placed * (t1 - t0)
 
 

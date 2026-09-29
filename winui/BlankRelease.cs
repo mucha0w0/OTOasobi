@@ -31,7 +31,7 @@ static class BlankRelease
         var found = Anchors(heavy, loudness, hop, spans[index].Start, WindowEnd(spans, index, duration));
         if (found == null)
             return vowelEnd;
-        var placed = Math.Clamp(ratio, 0, 1);
+        var placed = Math.Clamp(ratio, -1, 1);
         return found.Value.T0 + placed * (found.Value.T1 - found.Value.T0);
     }
 

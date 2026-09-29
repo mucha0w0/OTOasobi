@@ -17,8 +17,8 @@ preview の t0/t1 は表示中の秒。columns/rows は画面のピクセル数�
 スペクトラムは同じ範囲をそのピクセル数へ最近傍で描き、拡大しても引き伸ばさない。
 要求: {"id": 3, "cmd": "save", "folder": "C:/音声フォルダ", "files": [...]}
 要求: {"id": 4, "cmd": "write", "folder": "C:/音声フォルダ", "files": [...], "config": {...}}
-config は offset_ms, consonant_ms（ミリ秒）、blank と overlap（0 から 1）。無いときは初期値。
-blank の 0 は音量の上辺の右端、1 は減衰の終わり。
+config は offset_ms, consonant_ms（ミリ秒）、blank（-1 から 1）と overlap（0 から 1）。無いときは初期値。
+blank の 0 は音量の上辺の右端。正は減衰側、負は手前へ、右脚の長さを 1 としてずらす。
 応答の txt は単独音モードの oto.ini。全区間は OTOasibi_log.txt、母音始まりは OTOasibi_out.txt。
 画面で区間を直したあとは save が保存データを更新し、write が oto.ini を計算して書く。
 """

@@ -6,7 +6,7 @@
 
 オフセットはファイル先頭から。子音部・先行発声・オーバーラップはオフセットから。
 ブランクは負の値で書き、オフセットからの時間に -1 を掛けたものです。
-ブランクの位置は音量の右脚で、0 が上辺の右端、1 が減衰の終わりです。
+ブランクの位置は音量の上辺の右端から、右脚の長さを 1 として前後にずらします。
 """
 
 from __future__ import annotations
@@ -39,7 +39,7 @@ class OtoSettings:
 
     offset_ms: float = PAD_MS
     consonant_ms: float = PAD_MS
-    # 0 が上辺の右端、1 が減衰の終わり。
+    # 0 が上辺の右端。1 は減衰側へ右脚ひとつ分、-1 は手前へ同じ長さ。
     blank_at: float = 0.0
     overlap_at: float = OVERLAP_AT
 
@@ -60,7 +60,7 @@ def oto_settings_from(raw: object) -> OtoSettings:
     return OtoSettings(
         offset_ms=_bounded(raw.get("offset_ms"), PAD_MS, 0.0, MAX_PAD_MS),
         consonant_ms=_bounded(raw.get("consonant_ms"), PAD_MS, 0.0, MAX_PAD_MS),
-        blank_at=_bounded(raw.get("blank"), 0.0, 0.0, 1.0),
+        blank_at=_bounded(raw.get("blank"), 0.0, -1.0, 1.0),
         overlap_at=_bounded(raw.get("overlap"), OVERLAP_AT, 0.0, 1.0),
     )
 
