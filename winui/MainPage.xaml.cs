@@ -27,9 +27,9 @@ public sealed partial class MainPage : Page
     string _appliedKey = "";
     bool _configReady;
 
-    // oto.py の PAD_MS、OVERLAP_AT、ブランク 0%（上辺の右端からのずれ）。
+    // oto.py の PAD_MS、OVERLAP_AT、ブランク 0 秒（上辺の右端からのずれ）。
     const double DefaultMarginMs = 200;
-    const double DefaultBlankPercent = 0;
+    const double DefaultBlankSeconds = 0;
     const double DefaultOverlapPercent = 50;
 
     public MainPage()
@@ -370,14 +370,14 @@ public sealed partial class MainPage : Page
     OtoExport CurrentExport() => new(
         OffsetSlider.Value,
         ConsonantSlider.Value,
-        BlankSlider.Value / 100.0,
+        BlankSlider.Value,
         OverlapSlider.Value / 100.0);
 
     void OnConfigChanged()
     {
         OffsetValue.Text = FormatMs(OffsetSlider.Value);
         ConsonantValue.Text = FormatMs(ConsonantSlider.Value);
-        BlankValue.Text = FormatSignedPercent(BlankSlider.Value);
+        BlankValue.Text = FormatSignedSeconds(BlankSlider.Value);
         OverlapValue.Text = FormatPercent(OverlapSlider.Value);
         Editor.SetOtoSettings(CurrentExport());
         if (!_configReady || !_wrote)
@@ -393,7 +393,7 @@ public sealed partial class MainPage : Page
     {
         OffsetSlider.Value = DefaultMarginMs;
         ConsonantSlider.Value = DefaultMarginMs;
-        BlankSlider.Value = DefaultBlankPercent;
+        BlankSlider.Value = DefaultBlankSeconds;
         OverlapSlider.Value = DefaultOverlapPercent;
     }
 
@@ -403,13 +403,15 @@ public sealed partial class MainPage : Page
     static string FormatPercent(double value) =>
         $"{Math.Round(value).ToString(CultureInfo.InvariantCulture)}%";
 
-    static string FormatSignedPercent(double value)
+    static string FormatSignedSeconds(double value)
     {
-        var rounded = Math.Round(value);
-        var text = rounded.ToString(CultureInfo.InvariantCulture);
+        var rounded = Math.Round(value, 3);
+        var text = Math.Abs(rounded).ToString("0.000", CultureInfo.InvariantCulture);
         if (rounded > 0)
-            text = "+" + text;
-        return text + "%";
+            return "+" + text + " s";
+        if (rounded < 0)
+            return "-" + text + " s";
+        return "0.000 s";
     }
 
     void OnEdited()

@@ -315,20 +315,20 @@
                                                 VerticalAlignment="Center"
                                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                                 Style="{StaticResource CaptionTextBlockStyle}"
-                                                Text="0%" />
+                                                Text="0.000 s" />
                                         </Grid>
                                         <Slider
                                             x:Name="BlankSlider"
                                             AutomationProperties.Name="ブランク"
-                                            Maximum="100"
-                                            Minimum="-100"
-                                            StepFrequency="1"
+                                            Maximum="1"
+                                            Minimum="-1"
+                                            StepFrequency="0.001"
                                             SnapsTo="StepValues"
                                             Value="0" />
                                         <TextBlock
                                             Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                             Style="{StaticResource CaptionTextBlockStyle}"
-                                            Text="上辺の右端（0%）から。マイナスは手前、プラスは減衰側"
+                                            Text="上辺の右端から。マイナスは手前、プラスは減衰側"
                                             TextWrapping="Wrap" />
                                     </StackPanel>
                                     <StackPanel Spacing="2">

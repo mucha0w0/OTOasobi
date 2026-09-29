@@ -1,8 +1,7 @@
-"""ブランクを、音量の右脚の上に置く。
+"""ブランクを、音量の上辺の右端から秒数でずらす。
 
-0 は上辺の右端。正の値は減衰側、負の値は手前へ、右脚の長さを 1 としてずらす。
-落ちきる前に音が終わるときは、母音のあとに続く無音と息を右脚の長さに含める。
-右脚が取れないときは母音の終了。
+0 秒がその角。正は減衰側、負は手前。
+右脚が取れないときは、母音の終了から同じ秒数だけずらす。
 
 画面の winui/BlankRelease.cs と揃える。
 """
@@ -46,27 +45,27 @@ def release_blank_seconds(
     duration: float,
     spans: list[Span],
     index: int,
-    ratio: float,
+    shift: float,
 ) -> float:
-    """ファイル先頭からの秒。右脚が取れないときは母音の終了。"""
+    """ファイル先頭からの秒。右脚が取れないときは母音の終了から同じ秒数。"""
     vowel_end = float(spans[index].end)
+    shift = float(shift)
     if (
         loudness_db is None
         or duration <= 0
         or vowel_end - float(spans[index].start) < MIN_WINDOW_S
     ):
-        return vowel_end
+        return vowel_end + shift
     light = np.asarray(loudness_db, dtype=np.float64).reshape(-1)
     count = int(light.shape[0])
     if count < 2:
-        return vowel_end
+        return vowel_end + shift
     times = (np.arange(count, dtype=np.float64) + 0.5) * float(duration) / float(count)
     found = _anchors(times, light, float(spans[index].start), release_window_end(spans, index, duration))
     if found is None:
-        return vowel_end
-    t0, t1 = found
-    placed = min(1.0, max(-1.0, float(ratio)))
-    return t0 + placed * (t1 - t0)
+        return vowel_end + shift
+    t0, _t1 = found
+    return t0 + shift
 
 
 def _percentile(values: np.ndarray, q: float) -> float:

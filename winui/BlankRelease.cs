@@ -17,22 +17,21 @@ static class BlankRelease
         double duration,
         List<PhoneSpan> spans,
         int index,
-        double ratio)
+        double shift)
     {
         var vowelEnd = spans[index].End;
         if (loudness == null || loudness.Length < 2 || duration <= 0)
-            return vowelEnd;
+            return vowelEnd + shift;
         if (vowelEnd - spans[index].Start < MinWindowS)
-            return vowelEnd;
+            return vowelEnd + shift;
 
         var count = loudness.Length;
         var hop = duration / count;
         var heavy = Smooth(loudness, hop);
         var found = Anchors(heavy, loudness, hop, spans[index].Start, WindowEnd(spans, index, duration));
         if (found == null)
-            return vowelEnd;
-        var placed = Math.Clamp(ratio, -1, 1);
-        return found.Value.T0 + placed * (found.Value.T1 - found.Value.T0);
+            return vowelEnd + shift;
+        return found.Value.T0 + shift;
     }
 
     static double WindowEnd(List<PhoneSpan> spans, int index, double duration)
