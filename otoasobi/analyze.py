@@ -8,7 +8,7 @@ import numpy as np
 import soundfile as sf
 
 from otoasobi.breath import apply_leading_breath
-from otoasobi.features import compute_features
+from otoasobi.features import compute_features, loudness_db
 from otoasobi.oto import OTO_INI_NAME, OtoSettings, mono_oto_lines, write_oto_ini
 from otoasobi.parser import Token, parse_stem, stem_from_path
 from otoasobi.phones import VOWEL_ONSET_LABELS
@@ -233,6 +233,20 @@ def analyze_folder_files(
     return files, skipped
 
 
+def _file_loudness(folder: Path, name: str) -> np.ndarray | None:
+    """書き出し時のブランク用。読めないファイルは母音終了へ戻す。"""
+    path = folder / name
+    if not path.is_file():
+        return None
+    try:
+        y, sr = load_wav(path)
+    except Exception:
+        return None
+    if sr <= 0 or len(y) == 0:
+        return None
+    return loudness_db(y, sr)
+
+
 def export_folder(
     folder: str | Path,
     files: list[AnalyzedFile],
@@ -247,7 +261,15 @@ def export_folder(
     span_entries = [(item.name, item.spans) for item in files]
     oto_lines: list[str] = []
     for item in files:
-        oto_lines.extend(mono_oto_lines(item.name, item.spans, item.duration, settings))
+        oto_lines.extend(
+            mono_oto_lines(
+                item.name,
+                item.spans,
+                item.duration,
+                settings,
+                _file_loudness(folder, item.name),
+            )
+        )
     out = folder / OTO_INI_NAME
     log = folder / BATCH_LOG_NAME
     onset = folder / BATCH_TXT_NAME

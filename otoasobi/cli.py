@@ -8,6 +8,7 @@ from otoasobi.analyze import (
     write_label_txt,
     write_log_txt,
 )
+from otoasobi.features import loudness_db
 from otoasobi.oto import mono_oto_lines
 
 
@@ -22,7 +23,11 @@ def main() -> None:
     write_label_txt(out, analysis.spans)
     write_log_txt(log, analysis.spans)
     sys.stdout.reconfigure(encoding="utf-8")
-    print("\n".join(mono_oto_lines(path.name, analysis.spans, analysis.duration)), end="\n")
+    loudness = loudness_db(analysis.y, analysis.sr)
+    print(
+        "\n".join(mono_oto_lines(path.name, analysis.spans, analysis.duration, loudness=loudness)),
+        end="\n",
+    )
     print(f"engine {analysis.engine}", file=sys.stderr)
     print(f"wrote {out}", file=sys.stderr)
     print(f"wrote {log}", file=sys.stderr)

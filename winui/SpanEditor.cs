@@ -1688,7 +1688,7 @@ public sealed class SpanEditor : UserControl
         };
         _plot.Children.Add(_otoZero);
 
-        OtoMarks.Fill(_file, _oto, _otoMarks);
+        OtoMarks.Fill(_file, _oto, _otoMarks, _loudness);
         foreach (var _ in _otoMarks)
         {
             var rect = new Rectangle
@@ -1759,7 +1759,7 @@ public sealed class SpanEditor : UserControl
     {
         if (_file == null)
             return;
-        OtoMarks.Fill(_file, _oto, _otoMarks);
+        OtoMarks.Fill(_file, _oto, _otoMarks, _loudness);
         var count = Math.Min(_otoMarks.Count, _otoRects.Count);
         var lanes = LaneOf(_otoMarks, count);
         var laneCount = 1;

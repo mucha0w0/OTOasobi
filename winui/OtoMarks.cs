@@ -25,19 +25,28 @@ static class OtoMarks
     const double MinGapMs = 1;
     const double MaxPadMs = 2000;
 
-    public static void Fill(WavFile file, OtoExport settings, List<OtoMark> dest)
+    public static void Fill(WavFile file, OtoExport settings, List<OtoMark> dest, double[]? loudness)
     {
         dest.Clear();
         var offsetMs = Bounded(settings.OffsetMs, 200, 0, MaxPadMs);
         var consonantMs = Bounded(settings.ConsonantMs, 200, 0, MaxPadMs);
-        var blankMs = Bounded(settings.BlankMs, 200, 0, MaxPadMs);
+        var blankAt = Bounded(settings.Blank, 0, 0, 1);
         var overlapAt = Bounded(settings.Overlap, 0.5, 0, 1);
         var spans = file.Spans;
         for (var i = 0; i < spans.Count; i++)
         {
             if (!IsVowelOnset(spans[i].Label))
                 continue;
-            dest.Add(Build(file.Name, spans, i, file.Duration, offsetMs, consonantMs, blankMs, overlapAt));
+            dest.Add(Build(
+                file.Name,
+                spans,
+                i,
+                file.Duration,
+                offsetMs,
+                consonantMs,
+                blankAt,
+                overlapAt,
+                loudness));
         }
     }
 
@@ -48,8 +57,9 @@ static class OtoMarks
         double duration,
         double offsetMs,
         double consonantMs,
-        double blankMs,
-        double overlapAt)
+        double blankAt,
+        double overlapAt,
+        double[]? loudness)
     {
         var vowel = spans[index];
         var alias = vowel.Token;
@@ -67,8 +77,8 @@ static class OtoMarks
         var preutter = Math.Max(0, Round3(v0 - offset));
         var overlap = Round3((c0 + (v0 - c0) * overlapAt) - offset);
         var consonant = Math.Max(0, Round3((v0 + consonantMs) - offset));
-        var blankAt = Round3(v1 - blankMs);
-        var placed = PlaceBlank(blankAt, offset, consonant, dur);
+        var blankAtMs = Ms(BlankRelease.At(loudness, duration, spans, index, blankAt));
+        var placed = PlaceBlank(blankAtMs, offset, consonant, dur);
         var blank = placed.Blank;
         consonant = placed.Consonant;
 

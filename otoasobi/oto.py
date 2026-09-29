@@ -6,6 +6,7 @@
 
 オフセットはファイル先頭から。子音部・先行発声・オーバーラップはオフセットから。
 ブランクは負の値で書き、オフセットからの時間に -1 を掛けたものです。
+ブランクの位置は音量の右脚で、0 が上辺の右端、1 が減衰の終わりです。
 """
 
 from __future__ import annotations
@@ -13,10 +14,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+import numpy as np
+
+from otoasobi.blank import release_blank_seconds
 from otoasobi.phones import BREATH_LABEL, SILENCE_LABEL, VOWEL_ONSET_LABELS
 from otoasobi.segment import Span
 
-# 子音開始の前、母音開始の後、母音終了の前に置く余白。画面の初期値。
+# 子音開始の前、母音開始の後に置く余白。画面の初期値。
 PAD_MS = 200.0
 # 子音の開始と終了（母音の開始）のあいだの位置。種類ごとの比率は後で足す。
 OVERLAP_AT = 0.5
@@ -35,7 +39,8 @@ class OtoSettings:
 
     offset_ms: float = PAD_MS
     consonant_ms: float = PAD_MS
-    blank_ms: float = PAD_MS
+    # 0 が上辺の右端、1 が減衰の終わり。
+    blank_at: float = 0.0
     overlap_at: float = OVERLAP_AT
 
 
@@ -55,7 +60,7 @@ def oto_settings_from(raw: object) -> OtoSettings:
     return OtoSettings(
         offset_ms=_bounded(raw.get("offset_ms"), PAD_MS, 0.0, MAX_PAD_MS),
         consonant_ms=_bounded(raw.get("consonant_ms"), PAD_MS, 0.0, MAX_PAD_MS),
-        blank_ms=_bounded(raw.get("blank_ms"), PAD_MS, 0.0, MAX_PAD_MS),
+        blank_at=_bounded(raw.get("blank"), 0.0, 0.0, 1.0),
         overlap_at=_bounded(raw.get("overlap"), OVERLAP_AT, 0.0, 1.0),
     )
 
@@ -111,6 +116,7 @@ def mono_oto_line(
     index: int,
     duration: float,
     settings: OtoSettings | None = None,
+    loudness: np.ndarray | None = None,
 ) -> str | None:
     """1 エイリアス分の単独音 oto.ini 行。母音でも ん でもなければ None。"""
     settings = settings or OtoSettings()
@@ -127,7 +133,9 @@ def mono_oto_line(
     preutter = max(0.0, round(v0 - offset, 3))
     overlap = round((c0 + (v0 - c0) * settings.overlap_at) - offset, 3)
     consonant = max(0.0, round((v0 + settings.consonant_ms) - offset, 3))
-    blank_at = round(v1 - settings.blank_ms, 3)
+    blank_at = _ms(
+        release_blank_seconds(loudness, duration, spans, index, settings.blank_at)
+    )
     blank, consonant = _place_blank(blank_at, offset, consonant, dur)
     return (
         f"{filename}={alias},{_fmt(offset)},{_fmt(consonant)},{_fmt(blank)},{_fmt(preutter)},{_fmt(overlap)}"
@@ -139,10 +147,11 @@ def mono_oto_lines(
     spans: list[Span],
     duration: float,
     settings: OtoSettings | None = None,
+    loudness: np.ndarray | None = None,
 ) -> list[str]:
     lines: list[str] = []
     for index in range(len(spans)):
-        line = mono_oto_line(filename, spans, index, duration, settings)
+        line = mono_oto_line(filename, spans, index, duration, settings, loudness)
         if line is not None:
             lines.append(line)
     return lines

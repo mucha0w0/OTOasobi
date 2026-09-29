@@ -97,7 +97,7 @@ sealed class AnalysisClient : IDisposable
             {
                 offset_ms = config.OffsetMs,
                 consonant_ms = config.ConsonantMs,
-                blank_ms = config.BlankMs,
+                blank = config.Blank,
                 overlap = config.Overlap,
             },
         }), null).ConfigureAwait(true);
@@ -370,4 +370,4 @@ sealed class AnalysisClient : IDisposable
 
 sealed record AnalyzeResult(bool Ok, string? Txt, string? Error, string? Notice);
 
-sealed record OtoExport(double OffsetMs, double ConsonantMs, double BlankMs, double Overlap);
+sealed record OtoExport(double OffsetMs, double ConsonantMs, double Blank, double Overlap);
