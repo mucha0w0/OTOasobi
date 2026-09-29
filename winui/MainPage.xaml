@@ -320,8 +320,8 @@
                                         <Slider
                                             x:Name="BlankSlider"
                                             AutomationProperties.Name="ブランク"
-                                            Maximum="1"
-                                            Minimum="-1"
+                                            Maximum="0.1"
+                                            Minimum="-0.1"
                                             StepFrequency="0.001"
                                             SnapsTo="StepValues"
                                             Value="0" />

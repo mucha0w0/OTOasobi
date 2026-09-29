@@ -29,7 +29,7 @@ MIN_GAP_MS = 1.0
 # 画面のスライダーより外の値は、ここに収める。
 MAX_PAD_MS = 2000.0
 # 上辺の右端からずらす幅。画面のブランクスライダーと同じ。
-MAX_BLANK_SHIFT_S = 1.0
+MAX_BLANK_SHIFT_S = 0.1
 OTO_INI_NAME = "oto.ini"
 # 日本語 Windows の ANSI。
 ANSI = "cp932"

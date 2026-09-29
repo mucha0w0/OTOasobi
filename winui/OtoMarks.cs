@@ -24,7 +24,7 @@ static class OtoMarks
 {
     const double MinGapMs = 1;
     const double MaxPadMs = 2000;
-    const double MaxBlankShiftS = 1;
+    const double MaxBlankShiftS = 0.1;
 
     public static void Fill(WavFile file, OtoExport settings, List<OtoMark> dest, double[]? loudness)
     {
