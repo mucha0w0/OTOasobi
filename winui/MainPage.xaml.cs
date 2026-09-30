@@ -198,6 +198,17 @@ public sealed partial class MainPage : Page
     {
         if (_busy || _folder == null || _analyzed)
             return;
+        var dialog = new ContentDialog
+        {
+            Title = "すべてのデータを解析します",
+            Content = "フォルダ内の WAV をすべて解析します。",
+            PrimaryButtonText = "はい",
+            CloseButtonText = "いいえ",
+            DefaultButton = ContentDialogButton.Close,
+            XamlRoot = XamlRoot,
+        };
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary || _busy || _folder == null || _analyzed)
+            return;
         await RunAsync(_folder, force: true);
     }
 

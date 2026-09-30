@@ -800,7 +800,7 @@ public sealed class SpanEditor : UserControl
         button.Click += (_, _) => AnalyzeRequested?.Invoke(this, EventArgs.Empty);
         var caption = new TextBlock
         {
-            Text = "この機能を使うには、まずは音声を解析してね",
+            Text = "この機能を使うには、先に音声を解析してください。",
             Foreground = TextBrush,
             FontSize = 14,
             TextAlignment = TextAlignment.Center,
