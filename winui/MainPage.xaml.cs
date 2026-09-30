@@ -3,6 +3,7 @@ using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Windows.Graphics;
 using Windows.Storage.Streams;
@@ -204,12 +205,44 @@ public sealed partial class MainPage : Page
             Content = "フォルダ内の WAV をすべて解析します。",
             PrimaryButtonText = "はい",
             CloseButtonText = "いいえ",
-            DefaultButton = ContentDialogButton.Close,
+            DefaultButton = ContentDialogButton.Primary,
             XamlRoot = XamlRoot,
         };
+        dialog.Opened += (_, _) => PlaceAffirmativeOnTheRight(dialog);
         if (await dialog.ShowAsync() != ContentDialogResult.Primary || _busy || _folder == null || _analyzed)
             return;
         await RunAsync(_folder, force: true);
+    }
+
+    static void PlaceAffirmativeOnTheRight(DependencyObject root)
+    {
+        Button? yes = null;
+        Button? no = null;
+        foreach (var button in Descendants<Button>(root))
+        {
+            if (button.Content as string == "はい")
+                yes = button;
+            else if (button.Content as string == "いいえ")
+                no = button;
+        }
+
+        if (yes == null || no == null)
+            return;
+        Grid.SetColumn(no, 0);
+        Grid.SetColumn(yes, 4);
+    }
+
+    static IEnumerable<T> Descendants<T>(DependencyObject root) where T : DependencyObject
+    {
+        var count = VisualTreeHelper.GetChildrenCount(root);
+        for (var i = 0; i < count; i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+            if (child is T match)
+                yield return match;
+            foreach (var nested in Descendants<T>(child))
+                yield return nested;
+        }
     }
 
     void ReanalyzeSelected_Click(object sender, RoutedEventArgs e)
