@@ -36,7 +36,11 @@ sealed class NoiseWaveform : UserControl
     readonly ScrollBar _bar = new()
     {
         Orientation = Orientation.Horizontal,
+        IndicatorMode = ScrollingIndicatorMode.MouseIndicator,
+        HorizontalAlignment = HorizontalAlignment.Stretch,
         Height = 18,
+        MinHeight = 18,
+        Margin = new Thickness(0, 4, 0, 0),
         ViewportSize = 1,
     };
 
