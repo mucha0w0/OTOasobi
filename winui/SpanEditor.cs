@@ -37,7 +37,7 @@ public sealed class SpanEditor : UserControl
         Drag,
     }
 
-    readonly Canvas _plot = new();
+    readonly CursorCanvas _plot = new();
     readonly TextBlock _readout = new();
     readonly Border _badge;
     readonly RectangleGeometry _clip = new();
@@ -603,8 +603,8 @@ public sealed class SpanEditor : UserControl
 
     void UseCursor(InputCursor cursor)
     {
-        if (!ReferenceEquals(_plot.ProtectedCursor, cursor))
-            _plot.ProtectedCursor = cursor;
+        if (!ReferenceEquals(_plot.Cursor, cursor))
+            _plot.Cursor = cursor;
         if (!ReferenceEquals(ProtectedCursor, cursor))
             ProtectedCursor = cursor;
     }
@@ -2109,4 +2109,13 @@ public sealed class SpanEditor : UserControl
 
     static SolidColorBrush OtoBrush(int point) =>
         OtoPointBrushes[Math.Clamp(point, 0, OtoPointBrushes.Length - 1)];
+
+    sealed class CursorCanvas : Canvas
+    {
+        public InputCursor Cursor
+        {
+            get => ProtectedCursor;
+            set => ProtectedCursor = value;
+        }
+    }
 }
