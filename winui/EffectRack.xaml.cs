@@ -1,6 +1,8 @@
 using System.Globalization;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 
@@ -12,8 +14,12 @@ public sealed partial class EffectRack : UserControl
     readonly EqualizerEffect _eq = new();
     readonly NormalizeEffect _norm = new() { Enabled = false };
     readonly List<EqPreset> _userPresets = [];
+    readonly List<NormalizePreset> _normPresets = [];
+    readonly Slider[] _bandSliders = new Slider[EqualizerEffect.BandCount];
+    readonly TextBlock[] _bandValues = new TextBlock[EqualizerEffect.BandCount];
     StoredChain _stored = new();
     EqPreset? _selected;
+    NormalizePreset? _normSelected;
     Border? _dragCard;
     int _dropIndex = -1;
     Border? _marked;
@@ -21,6 +27,7 @@ public sealed partial class EffectRack : UserControl
     Thickness _markedThickness;
     bool _ready;
     bool _dirty;
+    bool _applying;
     bool _chainErrorShown;
 
     public EffectRack()
@@ -29,21 +36,16 @@ public sealed partial class EffectRack : UserControl
         EqGrip.Tag = EqCard;
         NormGrip.Tag = NormCard;
         _chain.SetOrder([_eq, _norm]);
-        Curve.Edited += (_, _) => PullFromCurve();
-        Curve.EditCompleted += OnCurveCompleted;
-        Curve.InteractionStarted += (_, _) => HostScroll.VerticalScrollMode = ScrollMode.Disabled;
-        Curve.PointerEntered += (_, _) => HostScroll.VerticalScrollMode = ScrollMode.Disabled;
-        Curve.PointerExited += (_, _) =>
-        {
-            if (!Curve.IsDragging && _dragCard == null)
-                HostScroll.VerticalScrollMode = ScrollMode.Enabled;
-        };
+        BuildEqSliders();
         LoadPresets();
+        LoadNormPresets();
         LoadChain();
         EqToggle.Toggled += EqToggle_Toggled;
         NormToggle.Toggled += NormToggle_Toggled;
         NormSlider.ValueChanged += (_, _) =>
         {
+            if (_applying)
+                return;
             _norm.TargetDb = NormSlider.Value;
             UpdateNormChrome();
         };
@@ -69,7 +71,7 @@ public sealed partial class EffectRack : UserControl
         var flat = EqPreset.BuiltIns[0];
         _selected = flat;
         _eq.SetGains(flat.Gains);
-        Curve.SetGains(flat.Gains);
+        ShowGains();
         UpdateDirty();
     }
 
@@ -87,7 +89,7 @@ public sealed partial class EffectRack : UserControl
                 _eq.Enabled = entry.Enabled;
                 _eq.SetGains(entry.Gains);
                 EqToggle.IsOn = entry.Enabled;
-                Curve.SetGains(_eq.Gains);
+                ShowGains();
                 _selected = FindPreset(entry.Preset) ?? FindMatching(_eq.Gains);
                 order.Add(_eq);
             }
@@ -97,6 +99,7 @@ public sealed partial class EffectRack : UserControl
                 _norm.TargetDb = entry.Target;
                 NormToggle.IsOn = entry.Enabled;
                 NormSlider.Value = _norm.TargetDb;
+                _normSelected = FindNormPreset(entry.Preset) ?? FindMatchingNorm(_norm.TargetDb);
                 order.Add(_norm);
             }
         }
@@ -108,6 +111,19 @@ public sealed partial class EffectRack : UserControl
         _chain.SetOrder(order);
         LayoutCards();
         UpdateDirty();
+        UpdateNormDirty();
+    }
+
+    void LoadNormPresets()
+    {
+        _normPresets.Clear();
+        _normPresets.AddRange(NormalizePresetStore.Load());
+        RebuildNormPresetMenu();
+        var standard = NormalizePreset.BuiltIns.First(preset => preset.Matches(NormalizeEffect.DefaultDb));
+        _normSelected = standard;
+        _norm.TargetDb = standard.Target;
+        NormSlider.Value = _norm.TargetDb;
+        UpdateNormDirty();
     }
 
     void LayoutCards()
@@ -140,6 +156,7 @@ public sealed partial class EffectRack : UserControl
     {
         NormBody.Opacity = NormToggle.IsOn ? 1 : 0.5;
         NormValue.Text = FormatDb(_norm.TargetDb);
+        UpdateNormDirty();
     }
 
     void Grip_Pressed(object sender, PointerRoutedEventArgs e)
@@ -204,8 +221,7 @@ public sealed partial class EffectRack : UserControl
             _dragCard.Opacity = 1;
         _dragCard = null;
         RestoreMark();
-        if (!Curve.IsDragging)
-            HostScroll.VerticalScrollMode = ScrollMode.Enabled;
+        HostScroll.VerticalScrollMode = ScrollMode.Enabled;
     }
 
     void CommitGrip(int from, int to)
@@ -259,42 +275,65 @@ public sealed partial class EffectRack : UserControl
         _markedBrush = null;
     }
 
-    void OnCurveCompleted(object? sender, EventArgs e)
+    void BuildEqSliders()
     {
-        HostScroll.VerticalScrollMode = ScrollMode.Enabled;
-        PullFromCurve();
-        SaveChain();
+        var valueStyle = (Style)Resources["BandValueStyle"];
+        for (var i = 0; i < EqualizerEffect.BandCount; i++)
+        {
+            var freq = EqualizerEffect.FormatFrequency(EqualizerEffect.Frequencies[i]);
+            var value = new TextBlock { Text = FormatDb(0), Style = valueStyle };
+            var head = new Grid();
+            head.Children.Add(new TextBlock { Text = freq, VerticalAlignment = VerticalAlignment.Center });
+            head.Children.Add(value);
+            var slider = new Slider
+            {
+                Minimum = EqualizerEffect.MinDb,
+                Maximum = EqualizerEffect.MaxDb,
+                StepFrequency = 0.1,
+                SnapsTo = SliderSnapsTo.StepValues,
+                Value = 0,
+            };
+            AutomationProperties.SetName(slider, freq);
+            var index = i;
+            slider.ValueChanged += (_, _) => OnBandChanged(index);
+            slider.PointerReleased += (_, _) => SaveChain();
+            slider.LostFocus += (_, _) => SaveChain();
+            var row = new StackPanel { Spacing = 2 };
+            row.Children.Add(head);
+            row.Children.Add(slider);
+            EqBody.Children.Add(row);
+            _bandSliders[i] = slider;
+            _bandValues[i] = value;
+        }
     }
 
-    void PullFromCurve()
+    void OnBandChanged(int index)
     {
-        _eq.SetGains(Curve.Gains);
-        UpdateReadout();
+        if (_applying)
+            return;
+        var gains = new double[EqualizerEffect.BandCount];
+        for (var i = 0; i < gains.Length; i++)
+            gains[i] = _bandSliders[i].Value;
+        _eq.SetGains(gains);
+        _bandValues[index].Text = FormatDb(_eq.Gains[index]);
         UpdateDirty();
+    }
+
+    void ShowGains()
+    {
+        _applying = true;
+        for (var i = 0; i < EqualizerEffect.BandCount; i++)
+        {
+            _bandSliders[i].Value = _eq.Gains[i];
+            _bandValues[i].Text = FormatDb(_eq.Gains[i]);
+        }
+
+        _applying = false;
     }
 
     void UpdateChrome()
     {
-        Curve.Opacity = EqToggle.IsOn ? 1 : 0.5;
-        UpdateReadout();
-    }
-
-    void UpdateReadout()
-    {
-        var off = !EqToggle.IsOn;
-        if (Curve.ActiveBand < 0)
-        {
-            EqReadout.Text = off
-                ? "オフです。点をドラッグしてカーブを用意できます"
-                : "点を上下にドラッグします";
-            return;
-        }
-
-        var index = Curve.ActiveBand;
-        var text = EqualizerEffect.FormatFrequency(EqualizerEffect.Frequencies[index])
-            + "  ·  "
-            + FormatDb(_eq.Gains[index]);
-        EqReadout.Text = off ? "オフ  ·  " + text : text;
+        EqBody.Opacity = EqToggle.IsOn ? 1 : 0.5;
     }
 
     void RebuildPresetMenu()
@@ -325,7 +364,7 @@ public sealed partial class EffectRack : UserControl
     {
         _selected = preset;
         _eq.SetGains(preset.Gains);
-        Curve.SetGains(preset.Gains);
+        ShowGains();
         UpdateChrome();
         UpdateDirty();
         SaveChain();
@@ -399,6 +438,7 @@ public sealed partial class EffectRack : UserControl
                 {
                     Kind = NormalizeEffect.KindId,
                     Enabled = _norm.Enabled,
+                    Preset = _normSelected?.Name ?? "",
                     Target = _norm.TargetDb,
                 });
             }
@@ -449,14 +489,14 @@ public sealed partial class EffectRack : UserControl
         var panel = new StackPanel { Spacing = 8, MinWidth = 280 };
         panel.Children.Add(new TextBlock
         {
-            Text = "このカーブにつける名前を入力してください。",
+            Text = "この設定につける名前を入力してください。",
             TextWrapping = TextWrapping.Wrap,
         });
         panel.Children.Add(box);
         panel.Children.Add(error);
         var dialog = new ContentDialog
         {
-            Title = "現在のカーブを保存",
+            Title = "現在の設定を保存",
             Content = panel,
             PrimaryButtonText = "保存",
             CloseButtonText = "キャンセル",
@@ -466,7 +506,7 @@ public sealed partial class EffectRack : UserControl
         dialog.Opened += (_, _) => box.Focus(FocusState.Programmatic);
         dialog.PrimaryButtonClick += (_, args) =>
         {
-            var message = NameError(box.Text);
+            var message = NameError(box.Text, EqPreset.IsReservedName);
             if (message == null)
                 return;
             args.Cancel = true;
@@ -483,7 +523,7 @@ public sealed partial class EffectRack : UserControl
             var confirm = new ContentDialog
             {
                 Title = "プリセットを上書きしますか？",
-                Content = $"「{name}」は既にあります。いまのカーブで置き換えます。",
+                Content = $"「{name}」は既にあります。いまの設定で置き換えます。",
                 PrimaryButtonText = "上書きする",
                 CloseButtonText = "キャンセル",
                 DefaultButton = ContentDialogButton.Close,
@@ -511,7 +551,156 @@ public sealed partial class EffectRack : UserControl
         SelectPreset(target);
     }
 
-    static string? NameError(string raw)
+    void RebuildNormPresetMenu()
+    {
+        NormPresetFlyout.Items.Clear();
+        foreach (var preset in NormalizePreset.BuiltIns)
+            AddNormPresetItem(preset);
+        if (_normPresets.Count > 0)
+            NormPresetFlyout.Items.Add(new MenuFlyoutSeparator());
+        foreach (var preset in _normPresets)
+            AddNormPresetItem(preset);
+    }
+
+    void AddNormPresetItem(NormalizePreset preset)
+    {
+        var item = new RadioMenuFlyoutItem
+        {
+            Text = preset.Name,
+            GroupName = "norm-preset",
+            Tag = preset,
+            IsChecked = ReferenceEquals(preset, _normSelected),
+        };
+        item.Click += (_, _) => SelectNormPreset(preset);
+        NormPresetFlyout.Items.Add(item);
+    }
+
+    void SelectNormPreset(NormalizePreset preset)
+    {
+        _normSelected = preset;
+        _norm.TargetDb = preset.Target;
+        _applying = true;
+        NormSlider.Value = _norm.TargetDb;
+        _applying = false;
+        UpdateNormChrome();
+        SaveChain();
+    }
+
+    void UpdateNormDirty()
+    {
+        var dirty = _normSelected != null && !_normSelected.Matches(_norm.TargetDb);
+        NormPresetNameText.Text = _normSelected?.Name ?? NormalizePreset.CustomName;
+        NormPresetDirtyMark.Visibility = dirty ? Visibility.Visible : Visibility.Collapsed;
+        foreach (var entry in NormPresetFlyout.Items)
+        {
+            if (entry is not RadioMenuFlyoutItem radio || radio.Tag is not NormalizePreset preset)
+                continue;
+            radio.IsChecked = ReferenceEquals(preset, _normSelected);
+            var text = dirty && ReferenceEquals(preset, _normSelected) ? preset.Name + " *" : preset.Name;
+            if (radio.Text != text)
+                radio.Text = text;
+        }
+    }
+
+    NormalizePreset? FindNormPreset(string name)
+    {
+        if (name.Length == 0)
+            return null;
+        return NormalizePreset.BuiltIns.FirstOrDefault(preset => preset.Name == name)
+            ?? _normPresets.FirstOrDefault(preset => preset.Name == name);
+    }
+
+    NormalizePreset? FindMatchingNorm(double target) =>
+        NormalizePreset.BuiltIns.FirstOrDefault(preset => preset.Matches(target))
+        ?? _normPresets.FirstOrDefault(preset => preset.Matches(target));
+
+    void SaveNormPreset_Click(object sender, RoutedEventArgs e)
+    {
+        _ = SaveNormPresetAsync();
+    }
+
+    async Task SaveNormPresetAsync()
+    {
+        var box = new TextBox { PlaceholderText = "プリセット名" };
+        if (_normSelected is { BuiltIn: false })
+        {
+            box.Text = _normSelected.Name;
+            box.SelectAll();
+        }
+
+        var error = new TextBlock
+        {
+            TextWrapping = TextWrapping.Wrap,
+            Visibility = Visibility.Collapsed,
+        };
+        if (Application.Current.Resources.TryGetValue("SystemFillColorCriticalBrush", out var brush) && brush is Brush paint)
+            error.Foreground = paint;
+        var panel = new StackPanel { Spacing = 8, MinWidth = 280 };
+        panel.Children.Add(new TextBlock
+        {
+            Text = "このピークにつける名前を入力してください。",
+            TextWrapping = TextWrapping.Wrap,
+        });
+        panel.Children.Add(box);
+        panel.Children.Add(error);
+        var dialog = new ContentDialog
+        {
+            Title = "現在のピークを保存",
+            Content = panel,
+            PrimaryButtonText = "保存",
+            CloseButtonText = "キャンセル",
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = XamlRoot,
+        };
+        dialog.Opened += (_, _) => box.Focus(FocusState.Programmatic);
+        dialog.PrimaryButtonClick += (_, args) =>
+        {
+            var message = NameError(box.Text, NormalizePreset.IsReservedName);
+            if (message == null)
+                return;
+            args.Cancel = true;
+            error.Text = message;
+            error.Visibility = Visibility.Visible;
+        };
+        if (XamlRoot == null || await dialog.ShowAsync() != ContentDialogResult.Primary)
+            return;
+
+        var name = box.Text.Trim();
+        var existing = _normPresets.FirstOrDefault(preset => preset.Name == name);
+        if (existing != null && !ReferenceEquals(existing, _normSelected))
+        {
+            var confirm = new ContentDialog
+            {
+                Title = "プリセットを上書きしますか？",
+                Content = $"「{name}」は既にあります。いまのピークで置き換えます。",
+                PrimaryButtonText = "上書きする",
+                CloseButtonText = "キャンセル",
+                DefaultButton = ContentDialogButton.Close,
+                XamlRoot = XamlRoot,
+            };
+            if (await confirm.ShowAsync() != ContentDialogResult.Primary)
+                return;
+        }
+
+        var target = existing ?? new NormalizePreset { Name = name };
+        target.Target = _norm.TargetDb;
+        if (existing == null)
+            _normPresets.Add(target);
+        try
+        {
+            NormalizePresetStore.Save(_normPresets);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            await TellAsync("プリセットを保存できませんでした", ex.Message);
+            return;
+        }
+
+        RebuildNormPresetMenu();
+        SelectNormPreset(target);
+    }
+
+    static string? NameError(string raw, Func<string, bool> reserved)
     {
         var name = raw.Trim();
         if (name.Length == 0)
@@ -520,7 +709,7 @@ public sealed partial class EffectRack : UserControl
             return "名前は40文字までです。";
         if (name.Any(char.IsControl))
             return "名前に使えない文字があります。";
-        if (EqPreset.IsReservedName(name))
+        if (reserved(name))
             return "その名前は使えません。";
         return null;
     }

@@ -51,13 +51,6 @@ sealed class EqualizerEffect : AudioEffect
         return hz.ToString("0", CultureInfo.InvariantCulture) + " Hz";
     }
 
-    public static string FormatTick(double hz)
-    {
-        if (hz >= 1000)
-            return (hz / 1000).ToString("0", CultureInfo.InvariantCulture) + "k";
-        return hz.ToString("0", CultureInfo.InvariantCulture);
-    }
-
     public void SetGains(IReadOnlyList<double>? gains)
     {
         for (var i = 0; i < BandCount; i++)
