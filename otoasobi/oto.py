@@ -6,6 +6,7 @@
 
 オフセットはファイル先頭から。子音部・先行発声・オーバーラップはオフセットから。
 ブランクは負の値で書き、オフセットからの時間に -1 を掛けたものです。
+オフセットは子音の開始の 0.2 秒前を基準に、±0.1 秒だけ前後にずらします。
 ブランクの位置は音量の上辺の右端から、秒数で前後にずらします。
 """
 
@@ -26,8 +27,10 @@ PAD_MS = 200.0
 OVERLAP_AT = 0.5
 # ブランクと子音部のあいだがこれより短いと、UTAU のエンジンが落ちる。
 MIN_GAP_MS = 1.0
-# 画面のスライダーより外の値は、ここに収める。
+# 子音部で、これより外の値はここに収める。
 MAX_PAD_MS = 2000.0
+# オフセットは PAD_MS から前後にこの幅。画面のオフセットスライダーと同じ。
+MAX_OFFSET_SHIFT_MS = 100.0
 # 上辺の右端からずらす幅。画面のブランクスライダーと同じ。
 MAX_BLANK_SHIFT_S = 0.1
 OTO_INI_NAME = "oto.ini"
@@ -60,7 +63,12 @@ def oto_settings_from(raw: object) -> OtoSettings:
     if not isinstance(raw, dict):
         return OtoSettings()
     return OtoSettings(
-        offset_ms=_bounded(raw.get("offset_ms"), PAD_MS, 0.0, MAX_PAD_MS),
+        offset_ms=_bounded(
+            raw.get("offset_ms"),
+            PAD_MS,
+            PAD_MS - MAX_OFFSET_SHIFT_MS,
+            PAD_MS + MAX_OFFSET_SHIFT_MS,
+        ),
         consonant_ms=_bounded(raw.get("consonant_ms"), PAD_MS, 0.0, MAX_PAD_MS),
         blank_at=_bounded(raw.get("blank"), 0.0, -MAX_BLANK_SHIFT_S, MAX_BLANK_SHIFT_S),
         overlap_at=_bounded(raw.get("overlap"), OVERLAP_AT, 0.0, 1.0),

@@ -11,13 +11,14 @@ file の done は、いま解析しているファイルの 0 から 1。
 analyze は oto.ini を書かない。区間は OTOasibi_cache.json に残す。
 同じフォルダに保存データがあるときは再解析せず、そのファイルを返す。
 "force": true のときだけ解析し直し、保存データを上書きする。
+"only": "あ.wav" のときは、その 1 ファイルだけ解析し直す。応答の files はその 1 件で、保存データは書かない。
 要求: {"id": 2, "cmd": "preview", "path": "C:/音声フォルダ/あ.wav", "t0": 0, "t1": 1.2, "columns": 1600, "rows": 400}
 preview の t0/t1 は表示中の秒。columns/rows は画面のピクセル数。
 波形はその幅の最小最大で、サンプルの方が少なければ 1 点ずつ返す。
 スペクトラムは同じ範囲をそのピクセル数へ最近傍で描き、拡大しても引き伸ばさない。
 要求: {"id": 3, "cmd": "save", "folder": "C:/音声フォルダ", "files": [...]}
 要求: {"id": 4, "cmd": "write", "folder": "C:/音声フォルダ", "files": [...], "config": {...}}
-config は offset_ms, consonant_ms（ミリ秒）、blank（秒、-0.1 から 0.1）と overlap（0 から 1）。無いときは初期値。
+config は offset_ms（ミリ秒。子音開始の 200ms 前を中心に ±100ms）、consonant_ms（ミリ秒）、blank（秒、-0.1 から 0.1）と overlap（0 から 1）。無いときは初期値。
 blank の 0 は音量の上辺の右端。正は減衰側、負は手前へ、その秒数だけずらす。
 応答の txt は単独音モードの oto.ini。全区間は OTOasibi_log.txt、母音始まりは OTOasibi_out.txt。
 画面で区間を直したあとは save が保存データを更新し、write が oto.ini を計算して書く。
@@ -30,10 +31,12 @@ import json
 import os
 import sys
 import traceback
+from pathlib import Path
 
 from otoasobi.analyze import (
     AnalyzedFile,
     analyze_folder_files,
+    analyze_wav,
     export_folder,
     load_wav,
     skipped_notice,
@@ -47,6 +50,63 @@ from otoasobi.preview import render_preview
 def _respond(payload: dict) -> None:
     sys.stdout.write(json.dumps(payload, ensure_ascii=False) + "\n")
     sys.stdout.flush()
+
+
+def _wav_in_folder(folder: str, name: object) -> Path:
+    if not isinstance(name, str) or not name or "/" in name or "\\" in name or name.startswith("."):
+        raise RuntimeError("ファイル名が不正です。")
+    if Path(name).name != name or Path(name).suffix.lower() != ".wav":
+        raise RuntimeError("WAV ファイルを選んでください。")
+    root = Path(folder)
+    if not root.is_dir():
+        raise RuntimeError("フォルダが見つかりません。")
+    wav = (root / name).resolve()
+    if wav.parent != root.resolve():
+        raise RuntimeError("ファイル名が不正です。")
+    if not wav.is_file():
+        raise RuntimeError("選んだ音声が見つかりません。")
+    return wav
+
+
+def _analyze_one(request_id: object, folder: str, name: object) -> dict:
+    """表示中の 1 ファイルだけ解析する。保存データは画面側がまとめて書く。"""
+    wav = _wav_in_folder(folder, name)
+
+    def on_progress(done: int, total: int) -> None:
+        _respond({"id": request_id, "event": "progress", "done": done, "total": total})
+
+    shown = {"done": -1.0, "label": ""}
+
+    def on_step(fraction: float, label: str) -> None:
+        done = round(max(0.0, min(1.0, float(fraction))), 3)
+        if shown["label"] == label and done < 1.0 and done - float(shown["done"]) < 0.02:
+            return
+        shown["done"] = done
+        shown["label"] = label
+        _respond(
+            {
+                "id": request_id,
+                "event": "file",
+                "name": wav.name,
+                "done": done,
+                "label": label,
+            }
+        )
+
+    on_progress(0, 1)
+    analysis = analyze_wav(wav, on_step)
+    on_progress(1, 1)
+    item = AnalyzedFile(
+        name=wav.name,
+        duration=analysis.duration,
+        spans=analysis.spans,
+        engine=analysis.engine,
+    )
+    return {
+        "id": request_id,
+        "ok": True,
+        "files": [file_to_mapping(item)],
+    }
 
 
 def _analyze(request_id: object, path: str, force: bool) -> dict:
@@ -210,7 +270,11 @@ def main() -> None:
                 path = request.get("path")
                 if not isinstance(path, str) or not path:
                     raise RuntimeError("path がありません")
-                payload = _analyze(request_id, path, request.get("force") is True)
+                only = request.get("only")
+                if only is not None:
+                    payload = _analyze_one(request_id, path, only)
+                else:
+                    payload = _analyze(request_id, path, request.get("force") is True)
             elif command == "preview":
                 path = request.get("path")
                 if not isinstance(path, str) or not path:

@@ -60,6 +60,19 @@ sealed class AnalysisClient : IDisposable
         return ReadFolder(doc.RootElement);
     }
 
+    public async Task<FolderData> AnalyzeFileAsync(
+        string folder,
+        string name,
+        Action<int, int>? onProgress = null,
+        Action<string, double, string>? onFile = null)
+    {
+        using var doc = await SendAsync(
+            id => JsonSerializer.Serialize(new { id, cmd = "analyze", path = folder, only = name }),
+            onProgress,
+            onFile).ConfigureAwait(true);
+        return ReadFolder(doc.RootElement);
+    }
+
     public async Task<PreviewData> PreviewAsync(string path, double t0, double t1, int columns, int rows)
     {
         using var doc = await SendAsync(

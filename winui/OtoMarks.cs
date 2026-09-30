@@ -24,12 +24,18 @@ static class OtoMarks
 {
     const double MinGapMs = 1;
     const double MaxPadMs = 2000;
+    const double OffsetBaseMs = 200;
+    const double MaxOffsetShiftMs = 100;
     const double MaxBlankShiftS = 0.1;
 
     public static void Fill(WavFile file, OtoExport settings, List<OtoMark> dest, double[]? loudness)
     {
         dest.Clear();
-        var offsetMs = Bounded(settings.OffsetMs, 200, 0, MaxPadMs);
+        var offsetMs = Bounded(
+            settings.OffsetMs,
+            OffsetBaseMs,
+            OffsetBaseMs - MaxOffsetShiftMs,
+            OffsetBaseMs + MaxOffsetShiftMs);
         var consonantMs = Bounded(settings.ConsonantMs, 200, 0, MaxPadMs);
         var blankAt = Bounded(settings.Blank, 0, -MaxBlankShiftS, MaxBlankShiftS);
         var overlapAt = Bounded(settings.Overlap, 0.5, 0, 1);

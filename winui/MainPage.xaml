@@ -63,6 +63,11 @@
                         Text="再解析"
                         Click="Reanalyze_Click"
                         IsEnabled="False" />
+                    <MenuFlyoutItem
+                        x:Name="ReanalyzeSelectedMenuItem"
+                        Text="選択した音声だけを再解析"
+                        Click="ReanalyzeSelected_Click"
+                        IsEnabled="False" />
                 </MenuBarItem>
             </MenuBar>
         </Border>
@@ -265,20 +270,20 @@
                                                 VerticalAlignment="Center"
                                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                                 Style="{StaticResource CaptionTextBlockStyle}"
-                                                Text="200 ms" />
+                                                Text="0.000 s" />
                                         </Grid>
                                         <Slider
                                             x:Name="OffsetSlider"
                                             AutomationProperties.Name="オフセット"
-                                            Maximum="1000"
-                                            Minimum="0"
-                                            StepFrequency="1"
+                                            Maximum="0.1"
+                                            Minimum="-0.1"
+                                            StepFrequency="0.001"
                                             SnapsTo="StepValues"
-                                            Value="200" />
+                                            Value="0" />
                                         <TextBlock
                                             Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                             Style="{StaticResource CaptionTextBlockStyle}"
-                                            Text="子音の開始より前"
+                                            Text="子音の開始の 0.2 秒前から。マイナスは手前、プラスは後"
                                             TextWrapping="Wrap" />
                                     </StackPanel>
                                     <StackPanel Spacing="2">
@@ -290,16 +295,16 @@
                                                 VerticalAlignment="Center"
                                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                                 Style="{StaticResource CaptionTextBlockStyle}"
-                                                Text="200 ms" />
+                                                Text="0.200 s" />
                                         </Grid>
                                         <Slider
                                             x:Name="ConsonantSlider"
                                             AutomationProperties.Name="子音部"
-                                            Maximum="1000"
+                                            Maximum="0.2"
                                             Minimum="0"
-                                            StepFrequency="1"
+                                            StepFrequency="0.001"
                                             SnapsTo="StepValues"
-                                            Value="200" />
+                                            Value="0.2" />
                                         <TextBlock
                                             Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                             Style="{StaticResource CaptionTextBlockStyle}"

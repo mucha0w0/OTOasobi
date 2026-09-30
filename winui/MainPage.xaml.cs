@@ -28,7 +28,10 @@ public sealed partial class MainPage : Page
     bool _configReady;
 
     // oto.py の PAD_MS、OVERLAP_AT、ブランク 0 秒（上辺の右端からのずれ）。
+    // オフセットは PAD_MS から ±0.1 秒。マイナスは手前。子音部は 0〜0.2 秒。
     const double DefaultMarginMs = 200;
+    const double DefaultOffsetSeconds = 0;
+    const double DefaultConsonantSeconds = 0.2;
     const double DefaultBlankSeconds = 0;
     const double DefaultOverlapPercent = 50;
 
@@ -100,6 +103,26 @@ public sealed partial class MainPage : Page
         await RunAsync(_folder, force: true);
     }
 
+    async Task ConfirmReanalyzeSelectedAsync()
+    {
+        if (_busy || _folder == null || FileList.SelectedItem is not WavFile file)
+            return;
+        var dialog = new ContentDialog
+        {
+            Title = "選択した音声だけを再解析しますか？",
+            Content = $"{file.Name} だけを解析し直します。この音声のいまの区間は置き換わります。ほかの音声はそのままです。",
+            PrimaryButtonText = "再解析する",
+            CloseButtonText = "キャンセル",
+            DefaultButton = ContentDialogButton.Close,
+            XamlRoot = XamlRoot,
+        };
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary || _busy || _folder == null)
+            return;
+        if (FileList.SelectedItem is not WavFile selected || selected != file)
+            return;
+        await ReanalyzeSelectedAsync(file);
+    }
+
     public void ChooseFolder()
     {
         _ = PickFolderAsync();
@@ -140,10 +163,16 @@ public sealed partial class MainPage : Page
         _ = ConfirmReanalyzeAsync();
     }
 
+    void ReanalyzeSelected_Click(object sender, RoutedEventArgs e)
+    {
+        _ = ConfirmReanalyzeSelectedAsync();
+    }
+
     void FileList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_suppressSelection)
             return;
+        UpdateCommands();
         if (FileList.SelectedItem is not WavFile file)
             return;
         _ = LoadPreviewAsync(file);
@@ -194,6 +223,88 @@ public sealed partial class MainPage : Page
         finally
         {
             _busy = false;
+            UpdateCommands();
+        }
+    }
+
+    async Task ReanalyzeSelectedAsync(WavFile file)
+    {
+        var folder = _folder;
+        if (folder == null)
+            return;
+        _busy = true;
+        Editor.IsEnabled = false;
+        ConfigBody.IsEnabled = false;
+        ShowBusy(0, 1);
+        var queue = DispatcherQueue;
+        try
+        {
+            _analysis ??= new AnalysisClient();
+            var result = await _analysis.AnalyzeFileAsync(folder, file.Name, (done, count) =>
+            {
+                queue.TryEnqueue(() =>
+                {
+                    if (_busy)
+                        UpdateStatus(done, count);
+                });
+            }, (name, done, label) =>
+            {
+                queue.TryEnqueue(() =>
+                {
+                    if (_busy)
+                        UpdateFileStatus(name, done, label);
+                });
+            });
+            if (folder != _folder)
+                return;
+            if (!result.Ok || result.Files.Count == 0)
+            {
+                ShowOnly("editor");
+                HideStatus();
+                ShowNotice(
+                    "再解析できませんでした",
+                    string.IsNullOrEmpty(result.Error) ? $"{file.Name} を解析できませんでした。" : result.Error,
+                    InfoBarSeverity.Error);
+                return;
+            }
+
+            var updated = result.Files[0];
+            Editor.Clear("波形を読み込んでいます…");
+            file.Duration = updated.Duration;
+            file.Engine = updated.Engine;
+            file.Spans.Clear();
+            file.Spans.AddRange(updated.Spans);
+            var saved = await SaveCacheAsync();
+            if (folder != _folder)
+                return;
+            ShowOnly("editor");
+            HideStatus();
+            if (saved)
+            {
+                ShowNotice(
+                    "選択した音声を再解析しました",
+                    $"{file.Name} の区間を置き換えました。ほかの音声はそのままです。",
+                    InfoBarSeverity.Success);
+            }
+
+            if (FileList.SelectedItem != file)
+                FileList.SelectedItem = file;
+            else
+                await LoadPreviewAsync(file);
+        }
+        catch (Exception ex)
+        {
+            if (folder != _folder)
+                return;
+            ShowOnly("editor");
+            HideStatus();
+            ShowNotice("再解析できませんでした", ex.Message, InfoBarSeverity.Error);
+        }
+        finally
+        {
+            _busy = false;
+            Editor.IsEnabled = true;
+            ConfigBody.IsEnabled = true;
             UpdateCommands();
         }
     }
@@ -368,15 +479,15 @@ public sealed partial class MainPage : Page
     }
 
     OtoExport CurrentExport() => new(
-        OffsetSlider.Value,
-        ConsonantSlider.Value,
+        Math.Round(DefaultMarginMs - OffsetSlider.Value * 1000.0),
+        Math.Round(ConsonantSlider.Value * 1000.0),
         BlankSlider.Value,
         OverlapSlider.Value / 100.0);
 
     void OnConfigChanged()
     {
-        OffsetValue.Text = FormatMs(OffsetSlider.Value);
-        ConsonantValue.Text = FormatMs(ConsonantSlider.Value);
+        OffsetValue.Text = FormatSignedSeconds(OffsetSlider.Value);
+        ConsonantValue.Text = FormatSeconds(ConsonantSlider.Value);
         BlankValue.Text = FormatSignedSeconds(BlankSlider.Value);
         OverlapValue.Text = FormatPercent(OverlapSlider.Value);
         Editor.SetOtoSettings(CurrentExport());
@@ -391,14 +502,14 @@ public sealed partial class MainPage : Page
 
     void ResetConfig_Click(object sender, RoutedEventArgs e)
     {
-        OffsetSlider.Value = DefaultMarginMs;
-        ConsonantSlider.Value = DefaultMarginMs;
+        OffsetSlider.Value = DefaultOffsetSeconds;
+        ConsonantSlider.Value = DefaultConsonantSeconds;
         BlankSlider.Value = DefaultBlankSeconds;
         OverlapSlider.Value = DefaultOverlapPercent;
     }
 
-    static string FormatMs(double value) =>
-        $"{Math.Round(value).ToString(CultureInfo.InvariantCulture)} ms";
+    static string FormatSeconds(double value) =>
+        Math.Round(value, 3).ToString("0.000", CultureInfo.InvariantCulture) + " s";
 
     static string FormatPercent(double value) =>
         $"{Math.Round(value).ToString(CultureInfo.InvariantCulture)}%";
@@ -426,22 +537,24 @@ public sealed partial class MainPage : Page
             InfoBarSeverity.Warning);
     }
 
-    async Task SaveCacheAsync()
+    async Task<bool> SaveCacheAsync()
     {
         var folder = _folder;
         if (folder == null || _files.Count == 0)
-            return;
+            return false;
         var gen = ++_saveGen;
         try
         {
             _analysis ??= new AnalysisClient();
             await _analysis.SaveCacheAsync(folder, _files);
+            return true;
         }
         catch (Exception ex)
         {
             if (gen != _saveGen || folder != _folder)
-                return;
+                return false;
             ShowNotice("保存データを更新できませんでした", ex.Message, InfoBarSeverity.Error);
+            return false;
         }
     }
 
@@ -542,6 +655,7 @@ public sealed partial class MainPage : Page
         WriteMenuItem.IsEnabled = ready;
         WriteButton.IsEnabled = ready;
         ReanalyzeMenuItem.IsEnabled = ready;
+        ReanalyzeSelectedMenuItem.IsEnabled = ready && FileList.SelectedItem is WavFile;
     }
 
     void UpdateFileStatus(string name, double done, string label)
