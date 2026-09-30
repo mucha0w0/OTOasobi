@@ -244,21 +244,18 @@
                         Grid.Column="2"
                         BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
                         BorderThickness="1,0,0,0">
-                        <Grid>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="*" />
-                            </Grid.RowDefinitions>
-                            <Border
-                                Padding="16,12,16,8"
-                                BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
-                                BorderThickness="0,0,0,1">
-                                <TextBlock
-                                    VerticalAlignment="Center"
-                                    Style="{StaticResource BodyStrongTextBlockStyle}"
-                                    Text="oto調整" />
-                            </Border>
-                            <ContentControl x:Name="ConfigBody" Grid.Row="1" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch">
+                        <TabView
+                            IsAddTabButtonVisible="False"
+                            CanDragTabs="False"
+                            CanReorderTabs="False"
+                            AllowDropTabs="False"
+                            TabWidthMode="Equal">
+                            <TabViewItem
+                                Header="oto調整"
+                                IsClosable="False"
+                                HorizontalContentAlignment="Stretch"
+                                VerticalContentAlignment="Stretch">
+                            <ContentControl x:Name="ConfigBody" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch">
                             <Grid>
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="*" />
@@ -390,7 +387,13 @@
                                 </StackPanel>
                             </Grid>
                             </ContentControl>
-                        </Grid>
+                            </TabViewItem>
+                            <TabViewItem
+                                Header="原音修正"
+                                IsClosable="False"
+                                HorizontalContentAlignment="Stretch"
+                                VerticalContentAlignment="Stretch" />
+                        </TabView>
                     </Border>
                 </Grid>
             </Grid>
