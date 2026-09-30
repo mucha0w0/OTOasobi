@@ -305,7 +305,7 @@ public sealed class SpanEditor : UserControl
         _otoZero = null;
         _otoCaption = null;
         SetReadout(message);
-        ProtectedCursor = _cursorArrow;
+        UseCursor(_cursorArrow);
     }
 
     public void SetFile(
@@ -487,12 +487,14 @@ public sealed class SpanEditor : UserControl
             {
                 Fill = silence ? null : FillBrush(span.Label, wave: true),
                 ManipulationMode = ManipulationModes.None,
+                IsHitTestVisible = false,
                 Visibility = silence ? Visibility.Collapsed : Visibility.Visible,
             };
             var specRect = new Rectangle
             {
                 Fill = silence ? null : FillBrush(span.Label, wave: false),
                 ManipulationMode = ManipulationModes.None,
+                IsHitTestVisible = false,
                 Visibility = silence ? Visibility.Collapsed : Visibility.Visible,
             };
             var waveText = MakeLabel(span);
@@ -551,7 +553,7 @@ public sealed class SpanEditor : UserControl
             _panView1 = _view1;
             _changed = false;
             ArmCapture(e.Pointer);
-            ProtectedCursor = _cursorHand;
+            UseCursor(_cursorHand);
             e.Handled = true;
             return;
         }
@@ -568,7 +570,7 @@ public sealed class SpanEditor : UserControl
             _changed = false;
             SetHotSplit(split);
             ArmCapture(e.Pointer);
-            ProtectedCursor = _cursorNs;
+            UseCursor(_cursorNs);
             e.Handled = true;
             return;
         }
@@ -587,7 +589,7 @@ public sealed class SpanEditor : UserControl
             _origin = Snapshot();
             _changed = false;
             ArmCapture(e.Pointer);
-            ProtectedCursor = _cursorEw;
+            UseCursor(_cursorEw);
             Highlight(group);
             ShowBoundary(group);
             e.Handled = true;
@@ -599,6 +601,14 @@ public sealed class SpanEditor : UserControl
         _plot.CapturePointer(pointer);
     }
 
+    void UseCursor(InputCursor cursor)
+    {
+        if (!ReferenceEquals(_plot.ProtectedCursor, cursor))
+            _plot.ProtectedCursor = cursor;
+        if (!ReferenceEquals(ProtectedCursor, cursor))
+            ProtectedCursor = cursor;
+    }
+
     void OnPointerMoved(object sender, PointerRoutedEventArgs e)
     {
         if (_file == null)
@@ -608,6 +618,7 @@ public sealed class SpanEditor : UserControl
         if (_drag == DragKind.Pan)
         {
             Pan(x);
+            UseCursor(_cursorHand);
             e.Handled = true;
             return;
         }
@@ -615,6 +626,7 @@ public sealed class SpanEditor : UserControl
         if (_drag == DragKind.Boundary)
         {
             ApplyBoundary(XToTime(x));
+            UseCursor(_cursorEw);
             e.Handled = true;
             return;
         }
@@ -622,6 +634,7 @@ public sealed class SpanEditor : UserControl
         if (_drag == DragKind.Split)
         {
             ApplySplit(point.Position.Y);
+            UseCursor(_cursorNs);
             e.Handled = true;
             return;
         }
@@ -629,7 +642,7 @@ public sealed class SpanEditor : UserControl
         var split = HitSplit(point.Position.Y);
         if (split >= 0)
         {
-            ProtectedCursor = _cursorNs;
+            UseCursor(_cursorNs);
             Highlight(-1);
             SetHotOto(-1);
             SetHotSplit(split);
@@ -640,7 +653,7 @@ public sealed class SpanEditor : UserControl
         SetHotSplit(-1);
         if (InOtoBand(point.Position.Y))
         {
-            ProtectedCursor = _cursorArrow;
+            UseCursor(_cursorArrow);
             Highlight(-1);
             ShowOtoHover(x);
             return;
@@ -650,7 +663,7 @@ public sealed class SpanEditor : UserControl
         var group = HitGroup(x);
         if (group >= 0)
         {
-            ProtectedCursor = _cursorEw;
+            UseCursor(_cursorEw);
             Highlight(group);
             ShowBoundary(group);
             return;
@@ -658,7 +671,7 @@ public sealed class SpanEditor : UserControl
 
         Highlight(-1);
         var span = HitSpan(XToTime(x));
-        ProtectedCursor = _cursorArrow;
+        UseCursor(_cursorArrow);
         if (span >= 0)
             ShowSpan(span);
         else
