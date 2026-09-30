@@ -179,7 +179,7 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="280" />
                         <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="260" />
+                        <ColumnDefinition Width="320" />
                     </Grid.ColumnDefinitions>
                     <Border BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}" BorderThickness="0,0,1,0">
                         <Grid>
@@ -392,7 +392,9 @@
                                 Header="原音修正"
                                 IsClosable="False"
                                 HorizontalContentAlignment="Stretch"
-                                VerticalContentAlignment="Stretch" />
+                                VerticalContentAlignment="Stretch">
+                                <local:EffectRack />
+                            </TabViewItem>
                         </TabView>
                     </Border>
                 </Grid>

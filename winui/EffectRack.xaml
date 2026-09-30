@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="Otoasobi.EffectRack"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:Otoasobi">
+    <UserControl.Resources>
+        <Style x:Key="RackButtonStyle" TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
+            <Setter Property="MinHeight" Value="32" />
+            <Setter Property="Padding" Value="10,6" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+        </Style>
+    </UserControl.Resources>
+    <ScrollViewer
+        x:Name="HostScroll"
+        HorizontalScrollBarVisibility="Disabled"
+        HorizontalScrollMode="Disabled"
+        VerticalScrollBarVisibility="Auto"
+        VerticalScrollMode="Enabled">
+        <StackPanel Padding="16,12,16,16" Spacing="12">
+            <StackPanel Spacing="2">
+                <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="エフェクト" />
+                <TextBlock
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Style="{StaticResource CaptionTextBlockStyle}"
+                    Text="上から順に音声へかけます。"
+                    TextWrapping="Wrap" />
+            </StackPanel>
+            <!-- カードの並びが、音声へかける順。 -->
+            <Border
+                Padding="12,10,12,12"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                BorderThickness="1"
+                CornerRadius="8">
+                <StackPanel Spacing="10">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock
+                            VerticalAlignment="Center"
+                            Style="{StaticResource BodyStrongTextBlockStyle}"
+                            Text="イコライザー" />
+                        <ToggleSwitch
+                            x:Name="EqToggle"
+                            Grid.Column="1"
+                            MinWidth="0"
+                            Margin="8,0,0,0"
+                            VerticalAlignment="Center"
+                            AutomationProperties.Name="イコライザーのオンオフ"
+                            IsOn="True"
+                            OffContent=""
+                            OnContent=""
+                            ToolTipService.ToolTip="オフにすると、このイコライザーは音声にかかりません" />
+                    </Grid>
+                    <Border
+                        Height="200"
+                        Background="#161616"
+                        BorderBrush="#333333"
+                        BorderThickness="1">
+                        <local:EqCurve
+                            x:Name="Curve"
+                            ToolTipService.ToolTip="点を上下にドラッグして、その周波数の大きさを変えます。ダブルクリックか Delete で、その帯域を 0 dB に戻します。左右キーで帯域を移ります。" />
+                    </Border>
+                    <TextBlock
+                        x:Name="EqReadout"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Style="{StaticResource CaptionTextBlockStyle}"
+                        Text="点を上下にドラッグします"
+                        TextWrapping="Wrap" />
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="プリセット" />
+                        <DropDownButton
+                            x:Name="PresetMenu"
+                            MinHeight="32"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Stretch"
+                            AutomationProperties.Name="イコライザーのプリセット">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock
+                                    x:Name="PresetNameText"
+                                    VerticalAlignment="Center"
+                                    Text="フラット"
+                                    TextTrimming="CharacterEllipsis" />
+                                <TextBlock
+                                    x:Name="PresetDirtyMark"
+                                    Grid.Column="1"
+                                    Margin="6,0,0,0"
+                                    VerticalAlignment="Center"
+                                    AutomationProperties.Name="変更あり"
+                                    Text="*"
+                                    ToolTipService.ToolTip="このプリセットから変更しています"
+                                    Visibility="Collapsed" />
+                            </Grid>
+                            <DropDownButton.Flyout>
+                                <MenuFlyout x:Name="PresetFlyout" />
+                            </DropDownButton.Flyout>
+                        </DropDownButton>
+                        <Button
+                            Click="SavePreset_Click"
+                            Content="現在のカーブを保存"
+                            Style="{StaticResource RackButtonStyle}"
+                            ToolTipService.ToolTip="いまのカーブを、名前をつけて保存します" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>
