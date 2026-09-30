@@ -68,6 +68,10 @@ sealed class StoredEffect
     public double[] Gains { get; set; } = [];
 
     public double Target { get; set; } = -1;
+
+    public double Frequency { get; set; } = HighPassEffect.DefaultHz;
+
+    public int Slope { get; set; } = HighPassEffect.DefaultSlope;
 }
 
 sealed class StoredChain

@@ -35,6 +35,92 @@
                 Text="上から順にかかります。左のつまみをドラッグすると、順番を入れ替えられます。"
                 TextWrapping="Wrap" />
             <StackPanel x:Name="EffectList" Spacing="10">
+                <Border x:Name="HpCard" Style="{StaticResource EffectCardStyle}">
+                    <StackPanel Spacing="8">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Border
+                                x:Name="HpGrip"
+                                Width="28"
+                                Margin="-4,0,4,0"
+                                VerticalAlignment="Stretch"
+                                Background="Transparent"
+                                PointerCanceled="Grip_Released"
+                                PointerCaptureLost="Grip_CaptureLost"
+                                PointerMoved="Grip_Moved"
+                                PointerPressed="Grip_Pressed"
+                                PointerReleased="Grip_Released"
+                                ToolTipService.ToolTip="ドラッグして順番を入れ替えます">
+                                <StackPanel VerticalAlignment="Center" Spacing="3" IsHitTestVisible="False">
+                                    <Border Width="14" Height="2" Background="{ThemeResource TextFillColorSecondaryBrush}" CornerRadius="1" />
+                                    <Border Width="14" Height="2" Background="{ThemeResource TextFillColorSecondaryBrush}" CornerRadius="1" />
+                                    <Border Width="14" Height="2" Background="{ThemeResource TextFillColorSecondaryBrush}" CornerRadius="1" />
+                                </StackPanel>
+                            </Border>
+                            <TextBlock
+                                Grid.Column="1"
+                                VerticalAlignment="Center"
+                                Style="{StaticResource BodyStrongTextBlockStyle}"
+                                Text="ハイパス" />
+                            <ToggleSwitch
+                                x:Name="HpToggle"
+                                Grid.Column="2"
+                                MinWidth="0"
+                                Margin="8,0,0,0"
+                                Padding="0"
+                                VerticalAlignment="Center"
+                                AutomationProperties.Name="ハイパスのオンオフ"
+                                IsOn="True"
+                                OffContent=""
+                                OnContent=""
+                                ToolTipService.ToolTip="オフにすると、ハイパスは音声にかかりません" />
+                        </Grid>
+                        <StackPanel x:Name="HpBody" Spacing="8">
+                            <Grid>
+                                <TextBlock VerticalAlignment="Center" Text="カットオフ" />
+                                <TextBlock
+                                    x:Name="HpFrequencyValue"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Center"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Style="{StaticResource CaptionTextBlockStyle}"
+                                    Text="80 Hz" />
+                            </Grid>
+                            <Slider
+                                x:Name="HpFrequency"
+                                AutomationProperties.Name="ハイパスのカットオフ"
+                                Maximum="200"
+                                Minimum="20"
+                                SnapsTo="StepValues"
+                                StepFrequency="1"
+                                ToolTipService.ToolTip="この周波数より下を落とします。80〜100 Hz が目安です"
+                                Value="80" />
+                            <TextBlock Text="傾き" />
+                            <StackPanel Spacing="4">
+                                <RadioButton
+                                    x:Name="HpSlope12"
+                                    MinWidth="0"
+                                    Content="12 dB/oct"
+                                    GroupName="HpSlope"
+                                    IsChecked="True" />
+                                <RadioButton
+                                    x:Name="HpSlope24"
+                                    MinWidth="0"
+                                    Content="24 dB/oct"
+                                    GroupName="HpSlope" />
+                            </StackPanel>
+                            <TextBlock
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Text="声に含まれない低い音を落とします。空調のブーンという音や、マイクスタンドの振動が対象です。80〜100 Hz、12〜24 dB/oct が目安です。"
+                                TextWrapping="Wrap" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
                 <Border x:Name="EqCard" Style="{StaticResource EffectCardStyle}">
                     <StackPanel Spacing="8">
                         <Grid>

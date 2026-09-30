@@ -11,6 +11,7 @@ namespace Otoasobi;
 public sealed partial class EffectRack : UserControl
 {
     readonly EffectChain _chain = new();
+    readonly HighPassEffect _hp = new();
     readonly EqualizerEffect _eq = new();
     readonly NormalizeEffect _norm = new() { Enabled = false };
     readonly List<EqPreset> _userPresets = [];
@@ -35,13 +36,26 @@ public sealed partial class EffectRack : UserControl
         InitializeComponent();
         EqGrip.Tag = EqCard;
         NormGrip.Tag = NormCard;
-        _chain.SetOrder([_eq, _norm]);
+        HpGrip.Tag = HpCard;
+        _chain.SetOrder([_hp, _eq, _norm]);
         BuildEqSliders();
         LoadPresets();
         LoadNormPresets();
         LoadChain();
         EqToggle.Toggled += EqToggle_Toggled;
         NormToggle.Toggled += NormToggle_Toggled;
+        HpToggle.Toggled += HpToggle_Toggled;
+        HpFrequency.ValueChanged += (_, _) =>
+        {
+            if (_applying)
+                return;
+            _hp.Frequency = HpFrequency.Value;
+            UpdateHpChrome();
+        };
+        HpFrequency.PointerReleased += (_, _) => SaveChain();
+        HpFrequency.LostFocus += (_, _) => SaveChain();
+        HpSlope12.Checked += HpSlope_Checked;
+        HpSlope24.Checked += HpSlope_Checked;
         NormSlider.ValueChanged += (_, _) =>
         {
             if (_applying)
@@ -54,6 +68,7 @@ public sealed partial class EffectRack : UserControl
         _ready = true;
         UpdateChrome();
         UpdateNormChrome();
+        UpdateHpChrome();
     }
 
     public EffectChain Chain => _chain;
@@ -102,8 +117,18 @@ public sealed partial class EffectRack : UserControl
                 _normSelected = FindNormPreset(entry.Preset) ?? FindMatchingNorm(_norm.TargetDb);
                 order.Add(_norm);
             }
+            else if (entry.Kind == HighPassEffect.KindId && seen.Add(entry.Kind))
+            {
+                _hp.Enabled = entry.Enabled;
+                _hp.Frequency = entry.Frequency;
+                _hp.Slope = entry.Slope;
+                ShowHighPass();
+                order.Add(_hp);
+            }
         }
 
+        if (seen.Add(HighPassEffect.KindId))
+            order.Insert(0, _hp);
         if (seen.Add(EqualizerEffect.KindId))
             order.Add(_eq);
         if (seen.Add(NormalizeEffect.KindId))
@@ -112,6 +137,7 @@ public sealed partial class EffectRack : UserControl
         LayoutCards();
         UpdateDirty();
         UpdateNormDirty();
+        UpdateHpChrome();
     }
 
     void LoadNormPresets()
@@ -131,7 +157,9 @@ public sealed partial class EffectRack : UserControl
         EffectList.Children.Clear();
         foreach (var effect in _chain.Effects)
         {
-            if (ReferenceEquals(effect, _eq))
+            if (ReferenceEquals(effect, _hp))
+                EffectList.Children.Add(HpCard);
+            else if (ReferenceEquals(effect, _eq))
                 EffectList.Children.Add(EqCard);
             else if (ReferenceEquals(effect, _norm))
                 EffectList.Children.Add(NormCard);
@@ -150,6 +178,42 @@ public sealed partial class EffectRack : UserControl
         _norm.Enabled = NormToggle.IsOn;
         UpdateNormChrome();
         SaveChain();
+    }
+
+    void HpToggle_Toggled(object sender, RoutedEventArgs e)
+    {
+        _hp.Enabled = HpToggle.IsOn;
+        UpdateHpChrome();
+        SaveChain();
+    }
+
+    void HpSlope_Checked(object sender, RoutedEventArgs e)
+    {
+        if (_applying)
+            return;
+        var slope = HpSlope24.IsChecked == true ? HighPassEffect.Slope24 : HighPassEffect.Slope12;
+        if (slope == _hp.Slope)
+            return;
+        _hp.Slope = slope;
+        SaveChain();
+    }
+
+    void ShowHighPass()
+    {
+        _applying = true;
+        HpToggle.IsOn = _hp.Enabled;
+        HpFrequency.Value = _hp.Frequency;
+        if (_hp.Slope == HighPassEffect.Slope24)
+            HpSlope24.IsChecked = true;
+        else
+            HpSlope12.IsChecked = true;
+        _applying = false;
+    }
+
+    void UpdateHpChrome()
+    {
+        HpBody.Opacity = HpToggle.IsOn ? 1 : 0.5;
+        HpFrequencyValue.Text = FormatHz(_hp.Frequency);
     }
 
     void UpdateNormChrome()
@@ -440,6 +504,16 @@ public sealed partial class EffectRack : UserControl
                     Enabled = _norm.Enabled,
                     Preset = _normSelected?.Name ?? "",
                     Target = _norm.TargetDb,
+                });
+            }
+            else if (ReferenceEquals(effect, _hp))
+            {
+                list.Add(new StoredEffect
+                {
+                    Kind = HighPassEffect.KindId,
+                    Enabled = _hp.Enabled,
+                    Frequency = _hp.Frequency,
+                    Slope = _hp.Slope,
                 });
             }
         }
@@ -738,4 +812,7 @@ public sealed partial class EffectRack : UserControl
             return "-" + text + " dB";
         return "0.0 dB";
     }
+
+    static string FormatHz(double hz) =>
+        Math.Round(hz).ToString("0", CultureInfo.InvariantCulture) + " Hz";
 }
