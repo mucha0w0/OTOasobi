@@ -344,11 +344,6 @@
                                             <TextBlock
                                                 Style="{StaticResource BodyStrongTextBlockStyle}"
                                                 Text="オーバーラップ" />
-                                            <TextBlock
-                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                Style="{StaticResource CaptionTextBlockStyle}"
-                                                Text="子音の開始から母音の開始までの割合です。子音ごとに別の値です。"
-                                                TextWrapping="Wrap" />
                                             <StackPanel x:Name="OverlapList" Spacing="16" />
                                         </StackPanel>
                                     </StackPanel>
