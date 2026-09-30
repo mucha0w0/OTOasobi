@@ -283,7 +283,7 @@
                                         <TextBlock
                                             Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                             Style="{StaticResource CaptionTextBlockStyle}"
-                                            Text="子音の開始の 0.2 秒前から。マイナスは手前、プラスは後"
+                                            Text="子音の開始から。マイナスは手前、プラスは後"
                                             TextWrapping="Wrap" />
                                     </StackPanel>
                                     <StackPanel Spacing="2">

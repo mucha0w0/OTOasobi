@@ -27,9 +27,8 @@ public sealed partial class MainPage : Page
     string _appliedKey = "";
     bool _configReady;
 
-    // oto.py の PAD_MS、OVERLAP_AT、ブランク 0 秒（上辺の右端からのずれ）。
-    // オフセットは PAD_MS から ±0.1 秒。マイナスは手前。子音部は 0〜0.2 秒。
-    const double DefaultMarginMs = 200;
+    // oto.py の子音部、OVERLAP_AT、ブランク 0 秒（上辺の右端からのずれ）。
+    // オフセットの 0 は子音開始。スライダーは ±0.1 秒で、マイナスは手前。
     const double DefaultOffsetSeconds = 0;
     const double DefaultConsonantSeconds = 0.2;
     const double DefaultBlankSeconds = 0;
@@ -479,7 +478,7 @@ public sealed partial class MainPage : Page
     }
 
     OtoExport CurrentExport() => new(
-        Math.Round(DefaultMarginMs - OffsetSlider.Value * 1000.0),
+        Math.Round(-OffsetSlider.Value * 1000.0),
         Math.Round(ConsonantSlider.Value * 1000.0),
         BlankSlider.Value,
         OverlapSlider.Value / 100.0);

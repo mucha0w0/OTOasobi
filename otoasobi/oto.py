@@ -6,7 +6,7 @@
 
 オフセットはファイル先頭から。子音部・先行発声・オーバーラップはオフセットから。
 ブランクは負の値で書き、オフセットからの時間に -1 を掛けたものです。
-オフセットは子音の開始の 0.2 秒前を基準に、±0.1 秒だけ前後にずらします。
+オフセットは子音の開始を基準に、±0.1 秒だけ前後にずらします。
 ブランクの位置は音量の上辺の右端から、秒数で前後にずらします。
 """
 
@@ -21,7 +21,7 @@ from otoasobi.blank import release_blank_seconds
 from otoasobi.phones import BREATH_LABEL, SILENCE_LABEL, VOWEL_ONSET_LABELS
 from otoasobi.segment import Span
 
-# 子音開始の前、母音開始の後に置く余白。画面の初期値。
+# 母音開始の後に置く子音部。画面の初期値。
 PAD_MS = 200.0
 # 子音の開始と終了（母音の開始）のあいだの位置。種類ごとの比率は後で足す。
 OVERLAP_AT = 0.5
@@ -29,7 +29,7 @@ OVERLAP_AT = 0.5
 MIN_GAP_MS = 1.0
 # 子音部で、これより外の値はここに収める。
 MAX_PAD_MS = 2000.0
-# オフセットは PAD_MS から前後にこの幅。画面のオフセットスライダーと同じ。
+# 子音の開始から前後にこの幅。画面のオフセットスライダーと同じ。正は手前。
 MAX_OFFSET_SHIFT_MS = 100.0
 # 上辺の右端からずらす幅。画面のブランクスライダーと同じ。
 MAX_BLANK_SHIFT_S = 0.1
@@ -42,7 +42,8 @@ ANSI = "cp932"
 class OtoSettings:
     """oto.ini の位置。未指定のときはいまの書き出しと同じ。"""
 
-    offset_ms: float = PAD_MS
+    # 子音開始からのミリ秒。正は手前、負は後。0 はその開始。
+    offset_ms: float = 0.0
     consonant_ms: float = PAD_MS
     # 上辺の右端からの秒。正は減衰側、負は手前。
     blank_at: float = 0.0
@@ -65,9 +66,9 @@ def oto_settings_from(raw: object) -> OtoSettings:
     return OtoSettings(
         offset_ms=_bounded(
             raw.get("offset_ms"),
-            PAD_MS,
-            PAD_MS - MAX_OFFSET_SHIFT_MS,
-            PAD_MS + MAX_OFFSET_SHIFT_MS,
+            0.0,
+            -MAX_OFFSET_SHIFT_MS,
+            MAX_OFFSET_SHIFT_MS,
         ),
         consonant_ms=_bounded(raw.get("consonant_ms"), PAD_MS, 0.0, MAX_PAD_MS),
         blank_at=_bounded(raw.get("blank"), 0.0, -MAX_BLANK_SHIFT_S, MAX_BLANK_SHIFT_S),
