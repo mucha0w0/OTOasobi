@@ -15,11 +15,13 @@ public sealed partial class EffectRack : UserControl
     readonly NoiseWaveform _wave = new();
     readonly HighPassEffect _hp = new();
     readonly EqualizerEffect _eq = new();
+    readonly CompressorEffect _comp = new();
     readonly NormalizeEffect _norm = new() { Enabled = false };
     readonly List<EqPreset> _userPresets = [];
     readonly List<NormalizePreset> _normPresets = [];
     readonly List<HighPassPreset> _hpPresets = [];
     readonly List<NoisePreset> _noisePresets = [];
+    readonly List<CompressorPreset> _compPresets = [];
     readonly Slider[] _bandSliders = new Slider[EqualizerEffect.BandCount];
     readonly TextBlock[] _bandValues = new TextBlock[EqualizerEffect.BandCount];
     StoredChain _stored = new();
@@ -27,6 +29,7 @@ public sealed partial class EffectRack : UserControl
     NormalizePreset? _normSelected;
     HighPassPreset? _hpSelected;
     NoisePreset? _noiseSelected;
+    CompressorPreset? _compSelected;
     Border? _dragCard;
     int _dropIndex = -1;
     Border? _marked;
@@ -51,14 +54,16 @@ public sealed partial class EffectRack : UserControl
         _wave.RangeChanging += Wave_Changing;
         _wave.RangeChosen += Wave_Chosen;
         EqGrip.Tag = EqCard;
+        CompGrip.Tag = CompCard;
         NormGrip.Tag = NormCard;
         HpGrip.Tag = HpCard;
-        _chain.SetOrder([_noise, _hp, _eq, _norm]);
+        _chain.SetOrder([_noise, _hp, _eq, _comp, _norm]);
         BuildEqSliders();
         LoadPresets();
         LoadNormPresets();
         LoadHpPresets();
         LoadNoisePresets();
+        LoadCompPresets();
         LoadChain();
         EqToggle.Toggled += EqToggle_Toggled;
         NormToggle.Toggled += NormToggle_Toggled;
@@ -93,11 +98,31 @@ public sealed partial class EffectRack : UserControl
         };
         NoiseReduction.PointerReleased += (_, _) => SaveChain();
         NoiseReduction.LostFocus += (_, _) => SaveChain();
+        CompToggle.Toggled += CompToggle_Toggled;
+        CompRatio.ValueChanged += (_, _) =>
+        {
+            if (_applying)
+                return;
+            _comp.Ratio = CompRatio.Value;
+            UpdateCompChrome();
+        };
+        CompRatio.PointerReleased += (_, _) => SaveChain();
+        CompRatio.LostFocus += (_, _) => SaveChain();
+        CompReduction.ValueChanged += (_, _) =>
+        {
+            if (_applying)
+                return;
+            _comp.ReductionDb = CompReduction.Value;
+            UpdateCompChrome();
+        };
+        CompReduction.PointerReleased += (_, _) => SaveChain();
+        CompReduction.LostFocus += (_, _) => SaveChain();
         _ready = true;
         UpdateChrome();
         UpdateNormChrome();
         UpdateHpChrome();
         UpdateNoiseChrome();
+        UpdateCompChrome();
     }
 
     public bool NeedsNoiseRange => _noise.Enabled && !_noise.HasProfile;
@@ -203,12 +228,30 @@ public sealed partial class EffectRack : UserControl
                 _noiseSelected = FindNoisePreset(entry.Preset) ?? FindMatchingNoise(_noise.ReductionDb);
                 ShowNoise();
             }
+            else if (entry.Kind == CompressorEffect.KindId && seen.Add(entry.Kind))
+            {
+                _comp.Enabled = entry.Enabled;
+                _comp.Ratio = entry.Ratio;
+                _comp.ReductionDb = entry.Reduction;
+                _compSelected = FindCompPreset(entry.Preset) ?? FindMatchingComp(_comp.Ratio, _comp.ReductionDb);
+                ShowCompressor();
+                order.Add(_comp);
+            }
         }
 
         if (seen.Add(HighPassEffect.KindId))
             order.Insert(0, _hp);
         if (seen.Add(EqualizerEffect.KindId))
             order.Add(_eq);
+        if (seen.Add(CompressorEffect.KindId))
+        {
+            var normAt = order.FindIndex(effect => ReferenceEquals(effect, _norm));
+            if (normAt >= 0)
+                order.Insert(normAt, _comp);
+            else
+                order.Add(_comp);
+        }
+
         if (seen.Add(NormalizeEffect.KindId))
             order.Add(_norm);
         order.RemoveAll(effect => ReferenceEquals(effect, _noise));
@@ -219,6 +262,7 @@ public sealed partial class EffectRack : UserControl
         UpdateNormDirty();
         UpdateHpChrome();
         UpdateNoiseChrome();
+        UpdateCompChrome();
     }
 
     void LoadNormPresets()
@@ -244,6 +288,8 @@ public sealed partial class EffectRack : UserControl
                 EffectList.Children.Add(HpCard);
             else if (ReferenceEquals(effect, _eq))
                 EffectList.Children.Add(EqCard);
+            else if (ReferenceEquals(effect, _comp))
+                EffectList.Children.Add(CompCard);
             else if (ReferenceEquals(effect, _norm))
                 EffectList.Children.Add(NormCard);
         }
@@ -707,6 +753,44 @@ public sealed partial class EffectRack : UserControl
         UpdateNormDirty();
     }
 
+    void CompToggle_Toggled(object sender, RoutedEventArgs e)
+    {
+        _comp.Enabled = CompToggle.IsOn;
+        UpdateCompChrome();
+        SaveChain();
+    }
+
+    void ShowCompressor()
+    {
+        _applying = true;
+        CompToggle.IsOn = _comp.Enabled;
+        CompRatio.Value = _comp.Ratio;
+        CompReduction.Value = _comp.ReductionDb;
+        _applying = false;
+    }
+
+    void UpdateCompChrome()
+    {
+        CompBody.Opacity = CompToggle.IsOn ? 1 : 0.5;
+        CompRatioValue.Text = _comp.Ratio.ToString("0.0", CultureInfo.InvariantCulture) + ":1";
+        CompReductionValue.Text = _comp.ReductionDb.ToString("0.0", CultureInfo.InvariantCulture) + " dB";
+        UpdateCompDirty();
+    }
+
+    void LoadCompPresets()
+    {
+        _compPresets.Clear();
+        _compPresets.AddRange(CompressorPresetStore.Load());
+        var standard = CompressorPreset.BuiltIns.First(preset =>
+            preset.Matches(CompressorEffect.DefaultRatio, CompressorEffect.DefaultReductionDb));
+        _compSelected = standard;
+        _comp.Ratio = standard.Ratio;
+        _comp.ReductionDb = standard.Reduction;
+        ShowCompressor();
+        RebuildCompPresetMenu();
+        UpdateCompDirty();
+    }
+
     void Grip_Pressed(object sender, PointerRoutedEventArgs e)
     {
         if (sender is not Border grip || grip.Tag is not Border card)
@@ -1030,6 +1114,17 @@ public sealed partial class EffectRack : UserControl
                     Reduction = _noise.ReductionDb,
                 });
             }
+            else if (ReferenceEquals(effect, _comp))
+            {
+                list.Add(new StoredEffect
+                {
+                    Kind = CompressorEffect.KindId,
+                    Enabled = _comp.Enabled,
+                    Preset = _compSelected?.Name ?? "",
+                    Ratio = _comp.Ratio,
+                    Reduction = _comp.ReductionDb,
+                });
+            }
         }
 
         foreach (var old in _stored.Effects)
@@ -1286,6 +1381,155 @@ public sealed partial class EffectRack : UserControl
 
         RebuildHpPresetMenu();
         SelectHpPreset(target);
+    }
+
+    void RebuildCompPresetMenu()
+    {
+        CompPresetFlyout.Items.Clear();
+        foreach (var preset in CompressorPreset.BuiltIns)
+            AddCompPresetItem(preset);
+        if (_compPresets.Count > 0)
+            CompPresetFlyout.Items.Add(new MenuFlyoutSeparator());
+        foreach (var preset in _compPresets)
+            AddCompPresetItem(preset);
+    }
+
+    void AddCompPresetItem(CompressorPreset preset)
+    {
+        var item = new RadioMenuFlyoutItem
+        {
+            Text = preset.Name,
+            GroupName = "comp-preset",
+            Tag = preset,
+            IsChecked = ReferenceEquals(preset, _compSelected),
+        };
+        item.Click += (_, _) => SelectCompPreset(preset);
+        CompPresetFlyout.Items.Add(item);
+    }
+
+    void SelectCompPreset(CompressorPreset preset)
+    {
+        _compSelected = preset;
+        _comp.Ratio = preset.Ratio;
+        _comp.ReductionDb = preset.Reduction;
+        ShowCompressor();
+        UpdateCompChrome();
+        SaveChain();
+    }
+
+    void UpdateCompDirty()
+    {
+        var dirty = _compSelected != null && !_compSelected.Matches(_comp.Ratio, _comp.ReductionDb);
+        CompPresetNameText.Text = _compSelected?.Name ?? CompressorPreset.CustomName;
+        CompPresetDirtyMark.Visibility = dirty ? Visibility.Visible : Visibility.Collapsed;
+        foreach (var entry in CompPresetFlyout.Items)
+        {
+            if (entry is not RadioMenuFlyoutItem radio || radio.Tag is not CompressorPreset preset)
+                continue;
+            radio.IsChecked = ReferenceEquals(preset, _compSelected);
+            var text = dirty && ReferenceEquals(preset, _compSelected) ? preset.Name + " *" : preset.Name;
+            if (radio.Text != text)
+                radio.Text = text;
+        }
+    }
+
+    CompressorPreset? FindCompPreset(string name)
+    {
+        if (name.Length == 0)
+            return null;
+        return CompressorPreset.BuiltIns.FirstOrDefault(preset => preset.Name == name)
+            ?? _compPresets.FirstOrDefault(preset => preset.Name == name);
+    }
+
+    CompressorPreset? FindMatchingComp(double ratio, double reduction) =>
+        CompressorPreset.BuiltIns.FirstOrDefault(preset => preset.Matches(ratio, reduction))
+        ?? _compPresets.FirstOrDefault(preset => preset.Matches(ratio, reduction));
+
+    void SaveCompPreset_Click(object sender, RoutedEventArgs e)
+    {
+        _ = SaveCompPresetAsync();
+    }
+
+    async Task SaveCompPresetAsync()
+    {
+        var box = new TextBox { PlaceholderText = "プリセット名" };
+        if (_compSelected is { BuiltIn: false })
+        {
+            box.Text = _compSelected.Name;
+            box.SelectAll();
+        }
+
+        var error = new TextBlock
+        {
+            TextWrapping = TextWrapping.Wrap,
+            Visibility = Visibility.Collapsed,
+        };
+        if (Application.Current.Resources.TryGetValue("SystemFillColorCriticalBrush", out var brush) && brush is Brush paint)
+            error.Foreground = paint;
+        var panel = new StackPanel { Spacing = 8, MinWidth = 280 };
+        panel.Children.Add(new TextBlock
+        {
+            Text = "この設定につける名前を入力してください。",
+            TextWrapping = TextWrapping.Wrap,
+        });
+        panel.Children.Add(box);
+        panel.Children.Add(error);
+        var dialog = new ContentDialog
+        {
+            Title = "現在の設定を保存",
+            Content = panel,
+            PrimaryButtonText = "保存",
+            CloseButtonText = "キャンセル",
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = XamlRoot,
+        };
+        dialog.Opened += (_, _) => box.Focus(FocusState.Programmatic);
+        dialog.PrimaryButtonClick += (_, args) =>
+        {
+            var message = NameError(box.Text, CompressorPreset.IsReservedName);
+            if (message == null)
+                return;
+            args.Cancel = true;
+            error.Text = message;
+            error.Visibility = Visibility.Visible;
+        };
+        if (XamlRoot == null || await dialog.ShowAsync() != ContentDialogResult.Primary)
+            return;
+
+        var name = box.Text.Trim();
+        var existing = _compPresets.FirstOrDefault(preset => preset.Name == name);
+        if (existing != null && !ReferenceEquals(existing, _compSelected))
+        {
+            var confirm = new ContentDialog
+            {
+                Title = "プリセットを上書きしますか？",
+                Content = $"「{name}」は既にあります。いまの設定で置き換えます。",
+                PrimaryButtonText = "上書きする",
+                CloseButtonText = "キャンセル",
+                DefaultButton = ContentDialogButton.Close,
+                XamlRoot = XamlRoot,
+            };
+            if (await confirm.ShowAsync() != ContentDialogResult.Primary)
+                return;
+        }
+
+        var target = existing ?? new CompressorPreset { Name = name };
+        target.Ratio = _comp.Ratio;
+        target.Reduction = _comp.ReductionDb;
+        if (existing == null)
+            _compPresets.Add(target);
+        try
+        {
+            CompressorPresetStore.Save(_compPresets);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            await TellAsync("プリセットを保存できませんでした", ex.Message);
+            return;
+        }
+
+        RebuildCompPresetMenu();
+        SelectCompPreset(target);
     }
 
     void RebuildNormPresetMenu()

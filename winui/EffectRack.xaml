@@ -364,6 +364,135 @@
                         </StackPanel>
                     </StackPanel>
                 </Border>
+                <Border x:Name="CompCard" Style="{StaticResource EffectCardStyle}">
+                    <StackPanel Spacing="8">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Border
+                                x:Name="CompGrip"
+                                Width="28"
+                                Margin="-4,0,4,0"
+                                VerticalAlignment="Stretch"
+                                Background="Transparent"
+                                PointerCanceled="Grip_Released"
+                                PointerCaptureLost="Grip_CaptureLost"
+                                PointerMoved="Grip_Moved"
+                                PointerPressed="Grip_Pressed"
+                                PointerReleased="Grip_Released"
+                                ToolTipService.ToolTip="ドラッグして順番を入れ替えます">
+                                <StackPanel VerticalAlignment="Center" Spacing="3" IsHitTestVisible="False">
+                                    <Border Width="14" Height="2" Background="{ThemeResource TextFillColorSecondaryBrush}" CornerRadius="1" />
+                                    <Border Width="14" Height="2" Background="{ThemeResource TextFillColorSecondaryBrush}" CornerRadius="1" />
+                                    <Border Width="14" Height="2" Background="{ThemeResource TextFillColorSecondaryBrush}" CornerRadius="1" />
+                                </StackPanel>
+                            </Border>
+                            <TextBlock
+                                Grid.Column="1"
+                                VerticalAlignment="Center"
+                                Style="{StaticResource BodyStrongTextBlockStyle}"
+                                Text="コンプレッサー" />
+                            <ToggleSwitch
+                                x:Name="CompToggle"
+                                Grid.Column="2"
+                                MinWidth="0"
+                                Margin="8,0,0,0"
+                                Padding="0"
+                                VerticalAlignment="Center"
+                                AutomationProperties.Name="コンプレッサーのオンオフ"
+                                IsOn="True"
+                                OffContent=""
+                                OnContent=""
+                                ToolTipService.ToolTip="オフにすると、コンプレッサーは音声にかかりません" />
+                        </Grid>
+                        <StackPanel x:Name="CompBody" Spacing="8">
+                            <Grid>
+                                <TextBlock VerticalAlignment="Center" Text="レシオ" />
+                                <TextBlock
+                                    x:Name="CompRatioValue"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Center"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Style="{StaticResource CaptionTextBlockStyle}"
+                                    Text="2.5:1" />
+                            </Grid>
+                            <Slider
+                                x:Name="CompRatio"
+                                AutomationProperties.Name="コンプレッサーのレシオ"
+                                Maximum="3"
+                                Minimum="2"
+                                SnapsTo="StepValues"
+                                StepFrequency="0.1"
+                                ToolTipService.ToolTip="2:1 から 3:1 です。小さいほど、広い範囲を緩やかに揃えます"
+                                Value="2.5" />
+                            <Grid>
+                                <TextBlock VerticalAlignment="Center" Text="抑える量" />
+                                <TextBlock
+                                    x:Name="CompReductionValue"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Center"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Style="{StaticResource CaptionTextBlockStyle}"
+                                    Text="3.0 dB" />
+                            </Grid>
+                            <Slider
+                                x:Name="CompReduction"
+                                AutomationProperties.Name="コンプレッサーの抑える量"
+                                Maximum="6"
+                                Minimum="0"
+                                SnapsTo="StepValues"
+                                StepFrequency="0.5"
+                                ToolTipService.ToolTip="大きめの部分を、最大でこの量だけ下げます。2〜4 dB が目安です"
+                                Value="3" />
+                            <TextBlock
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Text="ファイルの中の大きめの部分だけを、2〜4 dB ほど軽く下げて強弱を揃えます。立ち上がりは遅めなので子音の頭は残り、息や小さい音は持ち上げません。強くかけすぎると息が持ち上がり、再合成のノイズになります。"
+                                TextWrapping="Wrap" />
+                        </StackPanel>
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="プリセット" />
+                            <DropDownButton
+                                x:Name="CompPresetMenu"
+                                MinHeight="32"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Stretch"
+                                AutomationProperties.Name="コンプレッサーのプリセット">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock
+                                        x:Name="CompPresetNameText"
+                                        VerticalAlignment="Center"
+                                        Text="標準"
+                                        TextTrimming="CharacterEllipsis" />
+                                    <TextBlock
+                                        x:Name="CompPresetDirtyMark"
+                                        Grid.Column="1"
+                                        Margin="6,0,0,0"
+                                        VerticalAlignment="Center"
+                                        AutomationProperties.Name="変更あり"
+                                        Text="*"
+                                        ToolTipService.ToolTip="このプリセットから変更しています"
+                                        Visibility="Collapsed" />
+                                </Grid>
+                                <DropDownButton.Flyout>
+                                    <MenuFlyout x:Name="CompPresetFlyout" />
+                                </DropDownButton.Flyout>
+                            </DropDownButton>
+                            <Button
+                                Click="SaveCompPreset_Click"
+                                Content="現在の設定を保存"
+                                Style="{StaticResource RackButtonStyle}"
+                                ToolTipService.ToolTip="いまのレシオと抑える量を、名前をつけて保存します" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
                 <Border x:Name="NormCard" Style="{StaticResource EffectCardStyle}">
                     <StackPanel Spacing="8">
                         <Grid>
