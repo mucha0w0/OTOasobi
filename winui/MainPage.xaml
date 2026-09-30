@@ -285,11 +285,6 @@
                                                     StepFrequency="0.001"
                                                     SnapsTo="StepValues"
                                                     Value="0" />
-                                                <TextBlock
-                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                    Style="{StaticResource CaptionTextBlockStyle}"
-                                                    Text="子音の開始から。マイナスは手前、プラスは後"
-                                                    TextWrapping="Wrap" />
                                             </StackPanel>
                                             <StackPanel Spacing="2">
                                                 <Grid>
@@ -310,11 +305,6 @@
                                                     StepFrequency="0.001"
                                                     SnapsTo="StepValues"
                                                     Value="0.2" />
-                                                <TextBlock
-                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                    Style="{StaticResource CaptionTextBlockStyle}"
-                                                    Text="母音の開始より後"
-                                                    TextWrapping="Wrap" />
                                             </StackPanel>
                                             <StackPanel Spacing="2">
                                                 <Grid>
@@ -335,11 +325,6 @@
                                                     StepFrequency="0.001"
                                                     SnapsTo="StepValues"
                                                     Value="0" />
-                                                <TextBlock
-                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                    Style="{StaticResource CaptionTextBlockStyle}"
-                                                    Text="上辺の右端から。マイナスは手前、プラスは減衰側"
-                                                    TextWrapping="Wrap" />
                                             </StackPanel>
                                         </StackPanel>
                                     </Expander>
@@ -362,11 +347,6 @@
                                             StepFrequency="1"
                                             SnapsTo="StepValues"
                                             Value="50" />
-                                        <TextBlock
-                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                            Style="{StaticResource CaptionTextBlockStyle}"
-                                            Text="子音の開始が 0%、母音の開始が 100%"
-                                            TextWrapping="Wrap" />
                                     </StackPanel>
                                     <Button
                                         x:Name="WriteButton"
