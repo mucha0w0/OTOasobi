@@ -210,6 +210,7 @@ def _preview(path: str, request: dict) -> dict:
     preview = render_preview(y, sr, t0, t1, columns, rows)
     payload = {
         "ok": True,
+        "duration": duration,
         "wave_lo": preview.wave_lo,
         "wave_hi": preview.wave_hi,
         "wave_t0": preview.wave_t0,

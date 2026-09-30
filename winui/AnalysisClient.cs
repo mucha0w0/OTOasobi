@@ -236,7 +236,9 @@ sealed class AnalysisClient : IDisposable
         var sampleRate = 0;
         if (root.TryGetProperty("sr", out var srValue) && srValue.TryGetInt32(out var parsedRate))
             sampleRate = parsedRate;
-        return new PreviewData(ok, error, lo, hi, loudness, png, t0, t1, waveT0, waveT1, samples, sampleRate);
+        var fileDuration = root.TryGetProperty("duration", out var durationValue) ? durationValue.GetDouble() : 0;
+        return new PreviewData(
+            ok, error, lo, hi, loudness, png, t0, t1, waveT0, waveT1, samples, sampleRate, fileDuration);
     }
 
     static double[] ReadDoubles(JsonElement root, string name)

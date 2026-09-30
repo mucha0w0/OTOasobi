@@ -41,6 +41,7 @@ public sealed partial class MainPage : Page
     {
         InitializeComponent();
         Editor.Edited += (_, _) => OnEdited();
+        Editor.AnalyzeRequested += (_, _) => _ = StartAnalysisAsync();
         Editor.ViewportChanged += (_, _) => ScheduleViewport();
         OffsetSlider.ValueChanged += (_, _) => OnConfigChanged();
         ConsonantSlider.ValueChanged += (_, _) => OnConfigChanged();
@@ -53,8 +54,7 @@ public sealed partial class MainPage : Page
 
     void OnPageWheel(object sender, PointerRoutedEventArgs e)
     {
-        if (EditorView.Visibility != Visibility.Visible || AnalysisGate.Visibility == Visibility.Visible
-            || Editor.ActualWidth < 2)
+        if (EditorView.Visibility != Visibility.Visible || Editor.ActualWidth < 2)
             return;
         var point = e.GetCurrentPoint(Editor);
         if (point.Position.X < 0 || point.Position.Y < 0
@@ -213,12 +213,6 @@ public sealed partial class MainPage : Page
         UpdateCommands();
         if (FileList.SelectedItem is not WavFile file)
             return;
-        if (!_analyzed)
-        {
-            ShowFile(file);
-            return;
-        }
-
         _ = LoadPreviewAsync(file);
     }
 
@@ -397,6 +391,8 @@ public sealed partial class MainPage : Page
             var image = await DecodePngAsync(preview.Png);
             if (gen != _previewGen)
                 return;
+            if (file.Duration <= 0 && preview.Duration > 0)
+                file.Duration = preview.Duration;
             Editor.SetFile(
                 file,
                 image,
@@ -667,15 +663,16 @@ public sealed partial class MainPage : Page
         FileCount.Text = $"{_files.Count} 件";
         FileTitle.Text = "";
         ToolTipService.SetToolTip(FileTitle, null);
-        Editor.Clear("");
-        Editor.IsEnabled = false;
-        ConfigBody.IsEnabled = false;
-        AnalysisGate.Visibility = Visibility.Visible;
+        Editor.IsEnabled = true;
+        ConfigBody.IsEnabled = true;
+        Editor.SetLabelsLocked(true);
         Widen();
         _suppressSelection = true;
         FileList.ItemsSource = null;
         FileList.ItemsSource = _files;
         _suppressSelection = false;
+        if (_files.Count > 0)
+            FileList.SelectedIndex = 0;
         UpdateCommands();
     }
 
@@ -694,7 +691,7 @@ public sealed partial class MainPage : Page
     void ShowEditor(string folder, bool cached)
     {
         _analyzed = true;
-        AnalysisGate.Visibility = Visibility.Collapsed;
+        Editor.SetLabelsLocked(false);
         Editor.IsEnabled = true;
         ConfigBody.IsEnabled = true;
         ShowOnly("editor");

@@ -138,10 +138,21 @@ public sealed class SpanEditor : UserControl
     bool _changed;
     object? _zoomToken;
     Pointer? _pointer;
+    bool _labelsLocked;
+    readonly Border _labelGate;
+
+    public event EventHandler? AnalyzeRequested;
+
+    public void SetLabelsLocked(bool locked)
+    {
+        _labelsLocked = locked;
+        PlaceLabelGate();
+    }
 
     public SpanEditor()
     {
         var root = new Grid();
+        _labelGate = MakeLabelGate();
         _plot.Background = BrushOf(255, 22, 22, 22);
         _plot.ManipulationMode = ManipulationModes.None;
         _plot.Clip = _clip;
@@ -161,6 +172,7 @@ public sealed class SpanEditor : UserControl
         };
         root.Children.Add(_plot);
         root.Children.Add(_badge);
+        root.Children.Add(_labelGate);
         Content = root;
         Background = BrushOf(255, 22, 22, 22);
         ManipulationMode = ManipulationModes.None;
@@ -172,6 +184,7 @@ public sealed class SpanEditor : UserControl
             _plot.Height = e.NewSize.Height;
             _clip.Rect = new Rect(0, 0, Math.Max(0, e.NewSize.Width), Math.Max(0, e.NewSize.Height));
             ArrangeAll();
+            PlaceLabelGate();
         };
         _plot.PointerPressed += OnPointerPressed;
         _plot.PointerMoved += OnPointerMoved;
@@ -769,7 +782,70 @@ public sealed class SpanEditor : UserControl
         ArrangeWave();
         ArrangeSpans();
         ArrangeTicks();
+        PlaceLabelGate();
         NotifyViewport();
+    }
+
+    Border MakeLabelGate()
+    {
+        var button = new Button
+        {
+            Content = "音声を解析",
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Padding = new Thickness(16, 6, 16, 6),
+            Margin = new Thickness(0, 8, 0, 0),
+        };
+        if (Application.Current.Resources.TryGetValue("AccentButtonStyle", out var style) && style is Style accent)
+            button.Style = accent;
+        button.Click += (_, _) => AnalyzeRequested?.Invoke(this, EventArgs.Empty);
+        var caption = new TextBlock
+        {
+            Text = "この機能を使うには、まずは音声を解析してね",
+            Foreground = TextBrush,
+            FontSize = 14,
+            TextAlignment = TextAlignment.Center,
+            TextWrapping = TextWrapping.Wrap,
+            HorizontalAlignment = HorizontalAlignment.Center,
+        };
+        var card = new StackPanel
+        {
+            Spacing = 0,
+            MaxWidth = 360,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        card.Children.Add(caption);
+        card.Children.Add(button);
+        return new Border
+        {
+            Background = BrushOf(168, 0, 0, 0),
+            Padding = new Thickness(16, 8, 16, 8),
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            VerticalAlignment = VerticalAlignment.Top,
+            IsHitTestVisible = true,
+            Visibility = Visibility.Collapsed,
+            Child = card,
+        };
+    }
+
+    void PlaceLabelGate()
+    {
+        if (!_labelsLocked || _plot.Height < 2)
+        {
+            _labelGate.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        var height = Math.Max(0, OtoHeight);
+        if (height < 8)
+        {
+            _labelGate.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        _labelGate.Margin = new Thickness(0, OtoTop, 0, 0);
+        _labelGate.Height = height;
+        _labelGate.Visibility = Visibility.Visible;
     }
 
     void ArrangeWave()

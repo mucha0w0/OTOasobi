@@ -30,4 +30,5 @@ sealed record PreviewData(
     double WaveT0,
     double WaveT1,
     bool Samples,
-    int SampleRate);
+    int SampleRate,
+    double Duration);
