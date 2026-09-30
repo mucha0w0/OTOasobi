@@ -72,6 +72,8 @@ sealed class StoredEffect
     public double Frequency { get; set; } = HighPassEffect.DefaultHz;
 
     public int Slope { get; set; } = HighPassEffect.DefaultSlope;
+
+    public double Reduction { get; set; } = NoiseSuppressorEffect.DefaultReductionDb;
 }
 
 sealed class StoredChain

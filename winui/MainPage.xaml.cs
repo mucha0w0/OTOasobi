@@ -333,10 +333,26 @@ public sealed partial class MainPage : Page
     {
         if (_busy || _folder == null)
             return;
+        if (Effects.NeedsNoiseRange)
+        {
+            var need = new ContentDialog
+            {
+                Title = "無音の範囲を選んでください",
+                Content = "ノイズサプレッサーがオンです。原音から無音の範囲を選んでから、適用してください。",
+                CloseButtonText = "閉じる",
+                XamlRoot = XamlRoot,
+            };
+            await need.ShowAsync();
+            return;
+        }
+
+        var applyText = "original の音声に、オンのエフェクトをかけて、フォルダ直下の音声を上書きします。そのあと解析します。";
+        if (Effects.NoiseApplyNote is string note)
+            applyText += "\n" + note;
         var dialog = new ContentDialog
         {
             Title = "解析データはリセットされますがよろしいですか？",
-            Content = "original の音声に、オンのエフェクトをかけて、フォルダ直下の音声を上書きします。そのあと解析します。",
+            Content = applyText,
             PrimaryButtonText = "はい",
             CloseButtonText = "いいえ",
             DefaultButton = ContentDialogButton.Close,
@@ -410,6 +426,7 @@ public sealed partial class MainPage : Page
     {
         _busy = true;
         _folder = folderPath;
+        Effects.SetFolder(folderPath);
         _files.Clear();
         _notice = null;
         _wrote = false;

@@ -32,9 +32,91 @@
             <TextBlock
                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                 Style="{StaticResource CaptionTextBlockStyle}"
-                Text="上から順にかかります。左のつまみをドラッグすると、順番を入れ替えられます。"
+                Text="上から順にかかります。ノイズサプレッサーは先頭に固定です。ほかは左のつまみをドラッグすると、順番を入れ替えられます。"
                 TextWrapping="Wrap" />
             <StackPanel x:Name="EffectList" Spacing="10">
+                <Border x:Name="NoiseCard" Style="{StaticResource EffectCardStyle}">
+                    <StackPanel Spacing="8">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Border Width="28" Margin="-4,0,4,0" />
+                            <TextBlock
+                                Grid.Column="1"
+                                VerticalAlignment="Center"
+                                Style="{StaticResource BodyStrongTextBlockStyle}"
+                                Text="ノイズサプレッサー" />
+                            <ToggleSwitch
+                                x:Name="NoiseToggle"
+                                Grid.Column="2"
+                                MinWidth="0"
+                                Margin="8,0,0,0"
+                                Padding="0"
+                                VerticalAlignment="Center"
+                                AutomationProperties.Name="ノイズサプレッサーのオンオフ"
+                                IsOn="False"
+                                OffContent=""
+                                OnContent=""
+                                ToolTipService.ToolTip="オフにすると、ノイズサプレッサーは音声にかかりません" />
+                        </Grid>
+                        <StackPanel x:Name="NoiseBody" Spacing="8">
+                            <TextBlock
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Text="最初にかかります。順番は変えられません。"
+                                TextWrapping="Wrap" />
+                            <Grid>
+                                <TextBlock VerticalAlignment="Center" Text="抑える量" />
+                                <TextBlock
+                                    x:Name="NoiseReductionValue"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Center"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Style="{StaticResource CaptionTextBlockStyle}"
+                                    Text="8.0 dB" />
+                            </Grid>
+                            <Slider
+                                x:Name="NoiseReduction"
+                                AutomationProperties.Name="ノイズサプレッサーの抑える量"
+                                Maximum="16"
+                                Minimum="0"
+                                SnapsTo="StepValues"
+                                StepFrequency="0.5"
+                                ToolTipService.ToolTip="無音にある定常的な音を、この量だけ下げます"
+                                Value="8" />
+                            <TextBlock
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Text="無音にある定常的な音を、この量だけ下げます。最大でも少し残します。"
+                                TextWrapping="Wrap" />
+                            <Button
+                                x:Name="PickNoiseButton"
+                                AutomationProperties.Name="原音からノイズを採る"
+                                Click="PickNoise_Click"
+                                Content="原音からノイズを採る"
+                                Style="{StaticResource RackButtonStyle}"
+                                ToolTipService.ToolTip="original の WAV を開き、無音の範囲を選びます" />
+                            <TextBlock
+                                x:Name="NoiseFileName"
+                                Style="{StaticResource BodyTextBlockStyle}"
+                                TextTrimming="CharacterEllipsis"
+                                Visibility="Collapsed" />
+                            <Border x:Name="NoiseWaveHost" Visibility="Collapsed" />
+                            <TextBlock
+                                x:Name="NoiseDuration"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Style="{StaticResource CaptionTextBlockStyle}" />
+                            <TextBlock
+                                x:Name="NoiseMessage"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                TextWrapping="Wrap" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
                 <Border x:Name="HpCard" Style="{StaticResource EffectCardStyle}">
                     <StackPanel Spacing="8">
                         <Grid>

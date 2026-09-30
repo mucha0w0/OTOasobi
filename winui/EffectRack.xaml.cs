@@ -11,6 +11,8 @@ namespace Otoasobi;
 public sealed partial class EffectRack : UserControl
 {
     readonly EffectChain _chain = new();
+    readonly NoiseSuppressorEffect _noise = new() { Enabled = false };
+    readonly NoiseWaveform _wave = new();
     readonly HighPassEffect _hp = new();
     readonly EqualizerEffect _eq = new();
     readonly NormalizeEffect _norm = new() { Enabled = false };
@@ -32,14 +34,24 @@ public sealed partial class EffectRack : UserControl
     bool _dirty;
     bool _applying;
     bool _chainErrorShown;
+    string? _folder;
+    float[]? _noiseMono;
+    int _noiseRate;
+    string? _noiseFile;
+    int _noiseGeneration;
+    double? _noiseStart;
+    double? _noiseEnd;
 
     public EffectRack()
     {
         InitializeComponent();
+        NoiseWaveHost.Child = _wave;
+        _wave.RangeChanging += Wave_Changing;
+        _wave.RangeChosen += Wave_Chosen;
         EqGrip.Tag = EqCard;
         NormGrip.Tag = NormCard;
         HpGrip.Tag = HpCard;
-        _chain.SetOrder([_hp, _eq, _norm]);
+        _chain.SetOrder([_noise, _hp, _eq, _norm]);
         BuildEqSliders();
         LoadPresets();
         LoadNormPresets();
@@ -68,10 +80,62 @@ public sealed partial class EffectRack : UserControl
         };
         NormSlider.PointerReleased += (_, _) => SaveChain();
         NormSlider.LostFocus += (_, _) => SaveChain();
+        NoiseToggle.Toggled += NoiseToggle_Toggled;
+        NoiseReduction.ValueChanged += (_, _) =>
+        {
+            if (_applying)
+                return;
+            _noise.ReductionDb = NoiseReduction.Value;
+            UpdateNoiseChrome();
+        };
+        NoiseReduction.PointerReleased += (_, _) => SaveChain();
+        NoiseReduction.LostFocus += (_, _) => SaveChain();
         _ready = true;
         UpdateChrome();
         UpdateNormChrome();
         UpdateHpChrome();
+        UpdateNoiseChrome();
+    }
+
+    public bool NeedsNoiseRange => _noise.Enabled && !_noise.HasProfile;
+
+    public string? NoiseApplyNote
+    {
+        get
+        {
+            if (!_noise.Enabled || !_noise.HasProfile || _noiseStart is not double start || _noiseEnd is not double end)
+                return null;
+            var seconds = Math.Abs(end - start).ToString("0.00", CultureInfo.InvariantCulture);
+            return $"ノイズサプレッサーは、選んだ {seconds}秒の無音で抑えます。";
+        }
+    }
+
+    public void SetFolder(string? folder)
+    {
+        var next = string.IsNullOrWhiteSpace(folder) ? null : Path.GetFullPath(folder);
+        if (string.Equals(_folder, next, StringComparison.OrdinalIgnoreCase))
+            return;
+        _folder = next;
+        _noiseGeneration++;
+        _noise.ClearProfile();
+        _noiseMono = null;
+        _noiseFile = null;
+        _noiseStart = null;
+        _noiseEnd = null;
+        _wave.Clear();
+        NoiseFileName.Visibility = Visibility.Collapsed;
+        NoiseWaveHost.Visibility = Visibility.Collapsed;
+        NoiseDuration.Text = "";
+        NoiseMessage.Text = "";
+        if (next == null)
+            return;
+        var capture = NoiseCaptureStore.Find(next);
+        if (capture == null || capture.File.Length == 0)
+            return;
+        var path = NoiseSources.Resolve(next, capture.File);
+        if (path == null)
+            return;
+        _ = LoadNoiseFileAsync(new NoiseSource(capture.File, path, true), capture.Start, capture.End);
     }
 
     public EffectChain Chain => _chain;
@@ -129,6 +193,12 @@ public sealed partial class EffectRack : UserControl
                 ShowHighPass();
                 order.Add(_hp);
             }
+            else if (entry.Kind == NoiseSuppressorEffect.KindId && seen.Add(entry.Kind))
+            {
+                _noise.Enabled = entry.Enabled;
+                _noise.ReductionDb = entry.Reduction;
+                ShowNoise();
+            }
         }
 
         if (seen.Add(HighPassEffect.KindId))
@@ -137,6 +207,8 @@ public sealed partial class EffectRack : UserControl
             order.Add(_eq);
         if (seen.Add(NormalizeEffect.KindId))
             order.Add(_norm);
+        order.RemoveAll(effect => ReferenceEquals(effect, _noise));
+        order.Insert(0, _noise);
         _chain.SetOrder(order);
         LayoutCards();
         UpdateDirty();
@@ -161,7 +233,9 @@ public sealed partial class EffectRack : UserControl
         EffectList.Children.Clear();
         foreach (var effect in _chain.Effects)
         {
-            if (ReferenceEquals(effect, _hp))
+            if (ReferenceEquals(effect, _noise))
+                EffectList.Children.Add(NoiseCard);
+            else if (ReferenceEquals(effect, _hp))
                 EffectList.Children.Add(HpCard);
             else if (ReferenceEquals(effect, _eq))
                 EffectList.Children.Add(EqCard);
@@ -189,6 +263,231 @@ public sealed partial class EffectRack : UserControl
         _hp.Enabled = HpToggle.IsOn;
         UpdateHpChrome();
         SaveChain();
+    }
+
+    void NoiseToggle_Toggled(object sender, RoutedEventArgs e)
+    {
+        _noise.Enabled = NoiseToggle.IsOn;
+        UpdateNoiseChrome();
+        SaveChain();
+    }
+
+    void ShowNoise()
+    {
+        _applying = true;
+        NoiseToggle.IsOn = _noise.Enabled;
+        NoiseReduction.Value = _noise.ReductionDb;
+        _applying = false;
+    }
+
+    void UpdateNoiseChrome()
+    {
+        NoiseBody.Opacity = NoiseToggle.IsOn ? 1 : 0.5;
+        NoiseReductionValue.Text = _noise.ReductionDb.ToString("0.0", CultureInfo.InvariantCulture) + " dB";
+    }
+
+    void PickNoise_Click(object sender, RoutedEventArgs e)
+    {
+        _ = PickNoiseAsync();
+    }
+
+    async Task PickNoiseAsync()
+    {
+        if (_folder == null)
+        {
+            await TellAsync("フォルダを開いてください", "音源フォルダを開いてから、原音を選べます。");
+            return;
+        }
+
+        if (XamlRoot == null)
+            return;
+        var files = NoiseSources.List(_folder);
+        if (files.Count == 0)
+        {
+            await TellAsync("原音がありません", "original にも、フォルダ直下にも WAV がありません。");
+            return;
+        }
+
+        var list = new ListView
+        {
+            SelectionMode = ListViewSelectionMode.Single,
+            MaxHeight = 360,
+            MinWidth = 280,
+        };
+        foreach (var file in files)
+            list.Items.Add(file.Name);
+        var current = files.ToList().FindIndex(file => string.Equals(file.Name, _noiseFile, StringComparison.OrdinalIgnoreCase));
+        list.SelectedIndex = current >= 0 ? current : 0;
+        var note = new TextBlock
+        {
+            Text = files[0].FromOriginal
+                ? "original フォルダの WAV です。"
+                : "original がまだ無いので、フォルダ直下の WAV を出しています。",
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 0, 0, 8),
+        };
+        var panel = new StackPanel { Spacing = 0 };
+        panel.Children.Add(note);
+        panel.Children.Add(list);
+        var dialog = new ContentDialog
+        {
+            Title = "原音からノイズを採る",
+            Content = panel,
+            PrimaryButtonText = "開く",
+            CloseButtonText = "キャンセル",
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = XamlRoot,
+        };
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary || list.SelectedItem is not string name)
+            return;
+        var source = files.First(file => file.Name == name);
+        if (string.Equals(source.Name, _noiseFile, StringComparison.OrdinalIgnoreCase)
+            && _noiseStart is double keptStart
+            && _noiseEnd is double keptEnd)
+        {
+            await LoadNoiseFileAsync(source, keptStart, keptEnd);
+            return;
+        }
+
+        await LoadNoiseFileAsync(source, null, null);
+    }
+
+    async Task LoadNoiseFileAsync(NoiseSource source, double? start, double? end)
+    {
+        var generation = ++_noiseGeneration;
+        var folder = _folder;
+        NoiseMessage.Text = "読み込んでいます。";
+        PaintNoiseMessage(error: false);
+        WavAudio audio;
+        try
+        {
+            audio = await Task.Run(() => WavAudio.Read(source.Path));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
+        {
+            if (generation != _noiseGeneration)
+                return;
+            NoiseMessage.Text = ex.Message;
+            PaintNoiseMessage(error: true);
+            return;
+        }
+
+        if (generation != _noiseGeneration || !string.Equals(folder, _folder, StringComparison.OrdinalIgnoreCase))
+            return;
+        _noiseMono = NoiseSuppressorEffect.Downmix(audio.Samples, audio.Channels);
+        _noiseRate = audio.SampleRate;
+        _noiseFile = source.Name;
+        _noise.ClearProfile();
+        _noiseStart = null;
+        _noiseEnd = null;
+        NoiseFileName.Text = source.Name;
+        ToolTipService.SetToolTip(NoiseFileName, source.Name);
+        NoiseFileName.Visibility = Visibility.Visible;
+        NoiseWaveHost.Visibility = Visibility.Visible;
+        _wave.SetAudio(_noiseMono, audio.SampleRate);
+        if (start is double rangeStart && end is double rangeEnd)
+        {
+            TryCommit(rangeStart, rangeEnd, save: false);
+            return;
+        }
+
+        _wave.ClearRange();
+        NoiseDuration.Text = "";
+        NoiseMessage.Text = "ドラッグして、無音の範囲を選んでください。";
+        PaintNoiseMessage(error: false);
+        if (folder != null)
+        {
+            try
+            {
+                NoiseCaptureStore.Remove(folder);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                await TellAsync("状態を保存できませんでした", ex.Message);
+            }
+        }
+    }
+
+    void Wave_Changing(object? sender, NoiseRangeEventArgs e)
+    {
+        NoiseMessage.Text = "";
+        NoiseDuration.Text = FormatSelection(e.Start, e.End);
+    }
+
+    void Wave_Chosen(object? sender, NoiseRangeEventArgs e)
+    {
+        TryCommit(e.Start, e.End, save: true);
+    }
+
+    void TryCommit(double start, double end, bool save)
+    {
+        if (_noiseMono == null || _noiseFile == null)
+            return;
+        var message = NoiseSuppressorEffect.RangeMessage(_noiseMono, _noiseRate, start, end);
+        if (message != null)
+        {
+            NoiseMessage.Text = message;
+            PaintNoiseMessage(error: true);
+            if (_noiseStart is double keptStart && _noiseEnd is double keptEnd)
+            {
+                _wave.SetRange(keptStart, keptEnd);
+                NoiseDuration.Text = FormatSelection(keptStart, keptEnd);
+            }
+            else
+            {
+                _wave.ClearRange();
+                NoiseDuration.Text = FormatSelection(start, end);
+            }
+
+            return;
+        }
+
+        NoiseProfile profile;
+        try
+        {
+            profile = NoiseSuppressorEffect.BuildProfile(_noiseMono, _noiseRate, start, end);
+        }
+        catch (InvalidDataException ex)
+        {
+            NoiseMessage.Text = ex.Message;
+            PaintNoiseMessage(error: true);
+            return;
+        }
+
+        if (end < start)
+            (start, end) = (end, start);
+        _noise.SetProfile(profile);
+        _noiseStart = start;
+        _noiseEnd = end;
+        _wave.SetRange(start, end);
+        NoiseDuration.Text = FormatSelection(start, end);
+        NoiseMessage.Text = "";
+        if (!save || _folder == null)
+            return;
+        try
+        {
+            NoiseCaptureStore.Save(new NoiseCapture
+            {
+                Folder = _folder,
+                File = _noiseFile,
+                Start = start,
+                End = end,
+            });
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _ = TellAsync("状態を保存できませんでした", ex.Message);
+        }
+    }
+
+    static string FormatSelection(double start, double end) =>
+        Math.Abs(end - start).ToString("0.00", CultureInfo.InvariantCulture) + "秒";
+
+    void PaintNoiseMessage(bool error)
+    {
+        var key = error ? "SystemFillColorCriticalBrush" : "TextFillColorSecondaryBrush";
+        if (Application.Current.Resources.TryGetValue(key, out var brush) && brush is Brush paint)
+            NoiseMessage.Foreground = paint;
     }
 
     void HpSlope_Checked(object sender, RoutedEventArgs e)
@@ -310,26 +609,45 @@ public sealed partial class EffectRack : UserControl
 
     void CommitGrip(int from, int to)
     {
-        if (from < 0 || to < 0 || from == to)
+        if (from <= 0 || to < 0 || from == to)
             return;
+        if (to < 1)
+            to = 1;
         _chain.Move(from, to);
+        PinNoise();
         LayoutCards();
         SaveChain();
+    }
+
+    void PinNoise()
+    {
+        var effects = _chain.Effects.ToList();
+        if (effects.Count == 0 || ReferenceEquals(effects[0], _noise))
+            return;
+        effects.Remove(_noise);
+        effects.Insert(0, _noise);
+        _chain.SetOrder(effects);
     }
 
     int IndexAt(Windows.Foundation.Point point)
     {
         var count = EffectList.Children.Count;
+        var index = Math.Max(0, count - 1);
         for (var i = 0; i < count; i++)
         {
             if (EffectList.Children[i] is not FrameworkElement element)
                 continue;
             var top = element.TransformToVisual(EffectList).TransformPoint(default).Y;
             if (point.Y < top + element.ActualHeight * 0.5)
-                return i;
+            {
+                index = i;
+                break;
+            }
         }
 
-        return Math.Max(0, count - 1);
+        if (count > 1 && index < 1)
+            return 1;
+        return index;
     }
 
     void MarkDrop(int index)
@@ -535,6 +853,15 @@ public sealed partial class EffectRack : UserControl
                     Preset = _hpSelected?.Name ?? "",
                     Frequency = _hp.Frequency,
                     Slope = _hp.Slope,
+                });
+            }
+            else if (ReferenceEquals(effect, _noise))
+            {
+                list.Add(new StoredEffect
+                {
+                    Kind = NoiseSuppressorEffect.KindId,
+                    Enabled = _noise.Enabled,
+                    Reduction = _noise.ReductionDb,
                 });
             }
         }
