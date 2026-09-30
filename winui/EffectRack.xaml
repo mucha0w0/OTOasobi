@@ -115,6 +115,44 @@
                                 Style="{StaticResource CaptionTextBlockStyle}"
                                 TextWrapping="Wrap" />
                         </StackPanel>
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="プリセット" />
+                            <DropDownButton
+                                x:Name="NoisePresetMenu"
+                                MinHeight="32"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Stretch"
+                                AutomationProperties.Name="ノイズサプレッサーのプリセット">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock
+                                        x:Name="NoisePresetNameText"
+                                        VerticalAlignment="Center"
+                                        Text="標準"
+                                        TextTrimming="CharacterEllipsis" />
+                                    <TextBlock
+                                        x:Name="NoisePresetDirtyMark"
+                                        Grid.Column="1"
+                                        Margin="6,0,0,0"
+                                        VerticalAlignment="Center"
+                                        AutomationProperties.Name="変更あり"
+                                        Text="*"
+                                        ToolTipService.ToolTip="このプリセットから変更しています"
+                                        Visibility="Collapsed" />
+                                </Grid>
+                                <DropDownButton.Flyout>
+                                    <MenuFlyout x:Name="NoisePresetFlyout" />
+                                </DropDownButton.Flyout>
+                            </DropDownButton>
+                            <Button
+                                Click="SaveNoisePreset_Click"
+                                Content="現在の抑える量を保存"
+                                Style="{StaticResource RackButtonStyle}"
+                                ToolTipService.ToolTip="いまの抑える量を、名前をつけて保存します" />
+                        </StackPanel>
                     </StackPanel>
                 </Border>
                 <Border x:Name="HpCard" Style="{StaticResource EffectCardStyle}">

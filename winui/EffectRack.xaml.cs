@@ -19,12 +19,14 @@ public sealed partial class EffectRack : UserControl
     readonly List<EqPreset> _userPresets = [];
     readonly List<NormalizePreset> _normPresets = [];
     readonly List<HighPassPreset> _hpPresets = [];
+    readonly List<NoisePreset> _noisePresets = [];
     readonly Slider[] _bandSliders = new Slider[EqualizerEffect.BandCount];
     readonly TextBlock[] _bandValues = new TextBlock[EqualizerEffect.BandCount];
     StoredChain _stored = new();
     EqPreset? _selected;
     NormalizePreset? _normSelected;
     HighPassPreset? _hpSelected;
+    NoisePreset? _noiseSelected;
     Border? _dragCard;
     int _dropIndex = -1;
     Border? _marked;
@@ -56,6 +58,7 @@ public sealed partial class EffectRack : UserControl
         LoadPresets();
         LoadNormPresets();
         LoadHpPresets();
+        LoadNoisePresets();
         LoadChain();
         EqToggle.Toggled += EqToggle_Toggled;
         NormToggle.Toggled += NormToggle_Toggled;
@@ -197,6 +200,7 @@ public sealed partial class EffectRack : UserControl
             {
                 _noise.Enabled = entry.Enabled;
                 _noise.ReductionDb = entry.Reduction;
+                _noiseSelected = FindNoisePreset(entry.Preset) ?? FindMatchingNoise(_noise.ReductionDb);
                 ShowNoise();
             }
         }
@@ -214,6 +218,7 @@ public sealed partial class EffectRack : UserControl
         UpdateDirty();
         UpdateNormDirty();
         UpdateHpChrome();
+        UpdateNoiseChrome();
     }
 
     void LoadNormPresets()
@@ -284,6 +289,166 @@ public sealed partial class EffectRack : UserControl
     {
         NoiseBody.Opacity = NoiseToggle.IsOn ? 1 : 0.5;
         NoiseReductionValue.Text = _noise.ReductionDb.ToString("0.0", CultureInfo.InvariantCulture) + " dB";
+        UpdateNoiseDirty();
+    }
+
+    void LoadNoisePresets()
+    {
+        _noisePresets.Clear();
+        _noisePresets.AddRange(NoisePresetStore.Load());
+        var standard = NoisePreset.BuiltIns.First(preset => preset.Matches(NoiseSuppressorEffect.DefaultReductionDb));
+        _noiseSelected = standard;
+        _noise.ReductionDb = standard.Reduction;
+        ShowNoise();
+        RebuildNoisePresetMenu();
+        UpdateNoiseDirty();
+    }
+
+    void RebuildNoisePresetMenu()
+    {
+        NoisePresetFlyout.Items.Clear();
+        foreach (var preset in NoisePreset.BuiltIns)
+            AddNoisePresetItem(preset);
+        if (_noisePresets.Count > 0)
+            NoisePresetFlyout.Items.Add(new MenuFlyoutSeparator());
+        foreach (var preset in _noisePresets)
+            AddNoisePresetItem(preset);
+    }
+
+    void AddNoisePresetItem(NoisePreset preset)
+    {
+        var item = new RadioMenuFlyoutItem
+        {
+            Text = preset.Name,
+            GroupName = "noise-preset",
+            Tag = preset,
+            IsChecked = ReferenceEquals(preset, _noiseSelected),
+        };
+        item.Click += (_, _) => SelectNoisePreset(preset);
+        NoisePresetFlyout.Items.Add(item);
+    }
+
+    void SelectNoisePreset(NoisePreset preset)
+    {
+        _noiseSelected = preset;
+        _noise.ReductionDb = preset.Reduction;
+        ShowNoise();
+        UpdateNoiseChrome();
+        SaveChain();
+    }
+
+    void UpdateNoiseDirty()
+    {
+        var dirty = _noiseSelected != null && !_noiseSelected.Matches(_noise.ReductionDb);
+        NoisePresetNameText.Text = _noiseSelected?.Name ?? NoisePreset.CustomName;
+        NoisePresetDirtyMark.Visibility = dirty ? Visibility.Visible : Visibility.Collapsed;
+        foreach (var entry in NoisePresetFlyout.Items)
+        {
+            if (entry is not RadioMenuFlyoutItem radio || radio.Tag is not NoisePreset preset)
+                continue;
+            radio.IsChecked = ReferenceEquals(preset, _noiseSelected);
+            var text = dirty && ReferenceEquals(preset, _noiseSelected) ? preset.Name + " *" : preset.Name;
+            if (radio.Text != text)
+                radio.Text = text;
+        }
+    }
+
+    NoisePreset? FindNoisePreset(string name)
+    {
+        if (name.Length == 0)
+            return null;
+        return NoisePreset.BuiltIns.FirstOrDefault(preset => preset.Name == name)
+            ?? _noisePresets.FirstOrDefault(preset => preset.Name == name);
+    }
+
+    NoisePreset? FindMatchingNoise(double db) =>
+        NoisePreset.BuiltIns.FirstOrDefault(preset => preset.Matches(db))
+        ?? _noisePresets.FirstOrDefault(preset => preset.Matches(db));
+
+    void SaveNoisePreset_Click(object sender, RoutedEventArgs e)
+    {
+        _ = SaveNoisePresetAsync();
+    }
+
+    async Task SaveNoisePresetAsync()
+    {
+        var box = new TextBox { PlaceholderText = "プリセット名" };
+        if (_noiseSelected is { BuiltIn: false })
+        {
+            box.Text = _noiseSelected.Name;
+            box.SelectAll();
+        }
+
+        var error = new TextBlock
+        {
+            TextWrapping = TextWrapping.Wrap,
+            Visibility = Visibility.Collapsed,
+        };
+        if (Application.Current.Resources.TryGetValue("SystemFillColorCriticalBrush", out var brush) && brush is Brush paint)
+            error.Foreground = paint;
+        var panel = new StackPanel { Spacing = 8, MinWidth = 280 };
+        panel.Children.Add(new TextBlock
+        {
+            Text = "この抑える量につける名前を入力してください。",
+            TextWrapping = TextWrapping.Wrap,
+        });
+        panel.Children.Add(box);
+        panel.Children.Add(error);
+        var dialog = new ContentDialog
+        {
+            Title = "現在の抑える量を保存",
+            Content = panel,
+            PrimaryButtonText = "保存",
+            CloseButtonText = "キャンセル",
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = XamlRoot,
+        };
+        dialog.Opened += (_, _) => box.Focus(FocusState.Programmatic);
+        dialog.PrimaryButtonClick += (_, args) =>
+        {
+            var message = NameError(box.Text, NoisePreset.IsReservedName);
+            if (message == null)
+                return;
+            args.Cancel = true;
+            error.Text = message;
+            error.Visibility = Visibility.Visible;
+        };
+        if (XamlRoot == null || await dialog.ShowAsync() != ContentDialogResult.Primary)
+            return;
+
+        var name = box.Text.Trim();
+        var existing = _noisePresets.FirstOrDefault(preset => preset.Name == name);
+        if (existing != null && !ReferenceEquals(existing, _noiseSelected))
+        {
+            var confirm = new ContentDialog
+            {
+                Title = "プリセットを上書きしますか？",
+                Content = $"「{name}」は既にあります。いまの抑える量で置き換えます。",
+                PrimaryButtonText = "上書きする",
+                CloseButtonText = "キャンセル",
+                DefaultButton = ContentDialogButton.Close,
+                XamlRoot = XamlRoot,
+            };
+            if (await confirm.ShowAsync() != ContentDialogResult.Primary)
+                return;
+        }
+
+        var target = existing ?? new NoisePreset { Name = name };
+        target.Reduction = _noise.ReductionDb;
+        if (existing == null)
+            _noisePresets.Add(target);
+        try
+        {
+            NoisePresetStore.Save(_noisePresets);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            await TellAsync("プリセットを保存できませんでした", ex.Message);
+            return;
+        }
+
+        RebuildNoisePresetMenu();
+        SelectNoisePreset(target);
     }
 
     void PickNoise_Click(object sender, RoutedEventArgs e)
@@ -861,6 +1026,7 @@ public sealed partial class EffectRack : UserControl
                 {
                     Kind = NoiseSuppressorEffect.KindId,
                     Enabled = _noise.Enabled,
+                    Preset = _noiseSelected?.Name ?? "",
                     Reduction = _noise.ReductionDb,
                 });
             }
