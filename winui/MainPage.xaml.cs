@@ -61,10 +61,10 @@ public sealed partial class MainPage : Page
         Editor.Edited += (_, _) => OnEdited();
         Editor.AnalyzeRequested += (_, _) => _ = StartAnalysisAsync();
         Editor.ViewportChanged += (_, _) => ScheduleViewport();
+        BuildOverlapSliders();
         OffsetSlider.ValueChanged += (_, _) => OnConfigChanged();
         ConsonantSlider.ValueChanged += (_, _) => OnConfigChanged();
         BlankSlider.ValueChanged += (_, _) => OnConfigChanged();
-        BuildOverlapSliders();
         LoadPresets();
         _configReady = true;
         Editor.SetOtoSettings(CurrentExport());
@@ -102,13 +102,13 @@ public sealed partial class MainPage : Page
                 Value = DefaultOverlapPercent,
             };
             AutomationProperties.SetName(slider, "オーバーラップ " + caption);
+            _overlapSliders[key] = slider;
+            _overlapValues[key] = value;
             slider.ValueChanged += (_, _) => OnConfigChanged();
             var row = new StackPanel { Spacing = 2 };
             row.Children.Add(head);
             row.Children.Add(slider);
             rows!.Children.Add(row);
-            _overlapSliders[key] = slider;
-            _overlapValues[key] = value;
         }
     }
 
@@ -627,9 +627,14 @@ public sealed partial class MainPage : Page
 
     OtoExport CurrentExport()
     {
-        var overlap = new Dictionary<string, double>(_overlapSliders.Count);
-        foreach (var (key, slider) in _overlapSliders)
-            overlap[key] = slider.Value / 100.0;
+        var overlap = new Dictionary<string, double>(ConsonantOverlap.Kinds.Length);
+        foreach (var (_, key, _) in ConsonantOverlap.Kinds)
+        {
+            overlap[key] = _overlapSliders.TryGetValue(key, out var slider)
+                ? slider.Value / 100.0
+                : ConsonantOverlap.Default;
+        }
+
         return new(
             Math.Round(-OffsetSlider.Value * 1000.0),
             Math.Round(ConsonantSlider.Value * 1000.0),
@@ -644,9 +649,11 @@ public sealed partial class MainPage : Page
         BlankValue.Text = FormatSignedSeconds(BlankSlider.Value);
         foreach (var (key, slider) in _overlapSliders)
             _overlapValues[key].Text = FormatPercent(slider.Value);
+        if (!_configReady)
+            return;
         Editor.SetOtoSettings(CurrentExport());
         UpdatePresetDirty();
-        if (!_configReady || !_wrote)
+        if (!_wrote)
             return;
         _wrote = false;
         ShowNotice(
