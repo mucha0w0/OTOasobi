@@ -119,6 +119,44 @@
                                 Text="声に含まれない低い音を落とします。空調のブーンという音や、マイクスタンドの振動が対象です。80〜100 Hz、12〜24 dB/oct が目安です。"
                                 TextWrapping="Wrap" />
                         </StackPanel>
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="プリセット" />
+                            <DropDownButton
+                                x:Name="HpPresetMenu"
+                                MinHeight="32"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Stretch"
+                                AutomationProperties.Name="ハイパスのプリセット">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock
+                                        x:Name="HpPresetNameText"
+                                        VerticalAlignment="Center"
+                                        Text="標準"
+                                        TextTrimming="CharacterEllipsis" />
+                                    <TextBlock
+                                        x:Name="HpPresetDirtyMark"
+                                        Grid.Column="1"
+                                        Margin="6,0,0,0"
+                                        VerticalAlignment="Center"
+                                        AutomationProperties.Name="変更あり"
+                                        Text="*"
+                                        ToolTipService.ToolTip="このプリセットから変更しています"
+                                        Visibility="Collapsed" />
+                                </Grid>
+                                <DropDownButton.Flyout>
+                                    <MenuFlyout x:Name="HpPresetFlyout" />
+                                </DropDownButton.Flyout>
+                            </DropDownButton>
+                            <Button
+                                Click="SaveHpPreset_Click"
+                                Content="現在の設定を保存"
+                                Style="{StaticResource RackButtonStyle}"
+                                ToolTipService.ToolTip="いまのカットオフと傾きを、名前をつけて保存します" />
+                        </StackPanel>
                     </StackPanel>
                 </Border>
                 <Border x:Name="EqCard" Style="{StaticResource EffectCardStyle}">

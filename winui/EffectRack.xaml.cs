@@ -16,11 +16,13 @@ public sealed partial class EffectRack : UserControl
     readonly NormalizeEffect _norm = new() { Enabled = false };
     readonly List<EqPreset> _userPresets = [];
     readonly List<NormalizePreset> _normPresets = [];
+    readonly List<HighPassPreset> _hpPresets = [];
     readonly Slider[] _bandSliders = new Slider[EqualizerEffect.BandCount];
     readonly TextBlock[] _bandValues = new TextBlock[EqualizerEffect.BandCount];
     StoredChain _stored = new();
     EqPreset? _selected;
     NormalizePreset? _normSelected;
+    HighPassPreset? _hpSelected;
     Border? _dragCard;
     int _dropIndex = -1;
     Border? _marked;
@@ -41,6 +43,7 @@ public sealed partial class EffectRack : UserControl
         BuildEqSliders();
         LoadPresets();
         LoadNormPresets();
+        LoadHpPresets();
         LoadChain();
         EqToggle.Toggled += EqToggle_Toggled;
         NormToggle.Toggled += NormToggle_Toggled;
@@ -122,6 +125,7 @@ public sealed partial class EffectRack : UserControl
                 _hp.Enabled = entry.Enabled;
                 _hp.Frequency = entry.Frequency;
                 _hp.Slope = entry.Slope;
+                _hpSelected = FindHpPreset(entry.Preset) ?? FindMatchingHp(_hp.Frequency, _hp.Slope);
                 ShowHighPass();
                 order.Add(_hp);
             }
@@ -195,6 +199,7 @@ public sealed partial class EffectRack : UserControl
         if (slope == _hp.Slope)
             return;
         _hp.Slope = slope;
+        UpdateHpDirty();
         SaveChain();
     }
 
@@ -214,6 +219,21 @@ public sealed partial class EffectRack : UserControl
     {
         HpBody.Opacity = HpToggle.IsOn ? 1 : 0.5;
         HpFrequencyValue.Text = FormatHz(_hp.Frequency);
+        UpdateHpDirty();
+    }
+
+    void LoadHpPresets()
+    {
+        _hpPresets.Clear();
+        _hpPresets.AddRange(HighPassPresetStore.Load());
+        var standard = HighPassPreset.BuiltIns.First(preset =>
+            preset.Matches(HighPassEffect.DefaultHz, HighPassEffect.DefaultSlope));
+        _hpSelected = standard;
+        _hp.Frequency = standard.Frequency;
+        _hp.Slope = standard.Slope;
+        ShowHighPass();
+        RebuildHpPresetMenu();
+        UpdateHpDirty();
     }
 
     void UpdateNormChrome()
@@ -512,6 +532,7 @@ public sealed partial class EffectRack : UserControl
                 {
                     Kind = HighPassEffect.KindId,
                     Enabled = _hp.Enabled,
+                    Preset = _hpSelected?.Name ?? "",
                     Frequency = _hp.Frequency,
                     Slope = _hp.Slope,
                 });
@@ -623,6 +644,155 @@ public sealed partial class EffectRack : UserControl
 
         RebuildPresetMenu();
         SelectPreset(target);
+    }
+
+    void RebuildHpPresetMenu()
+    {
+        HpPresetFlyout.Items.Clear();
+        foreach (var preset in HighPassPreset.BuiltIns)
+            AddHpPresetItem(preset);
+        if (_hpPresets.Count > 0)
+            HpPresetFlyout.Items.Add(new MenuFlyoutSeparator());
+        foreach (var preset in _hpPresets)
+            AddHpPresetItem(preset);
+    }
+
+    void AddHpPresetItem(HighPassPreset preset)
+    {
+        var item = new RadioMenuFlyoutItem
+        {
+            Text = preset.Name,
+            GroupName = "hp-preset",
+            Tag = preset,
+            IsChecked = ReferenceEquals(preset, _hpSelected),
+        };
+        item.Click += (_, _) => SelectHpPreset(preset);
+        HpPresetFlyout.Items.Add(item);
+    }
+
+    void SelectHpPreset(HighPassPreset preset)
+    {
+        _hpSelected = preset;
+        _hp.Frequency = preset.Frequency;
+        _hp.Slope = preset.Slope;
+        ShowHighPass();
+        UpdateHpChrome();
+        SaveChain();
+    }
+
+    void UpdateHpDirty()
+    {
+        var dirty = _hpSelected != null && !_hpSelected.Matches(_hp.Frequency, _hp.Slope);
+        HpPresetNameText.Text = _hpSelected?.Name ?? HighPassPreset.CustomName;
+        HpPresetDirtyMark.Visibility = dirty ? Visibility.Visible : Visibility.Collapsed;
+        foreach (var entry in HpPresetFlyout.Items)
+        {
+            if (entry is not RadioMenuFlyoutItem radio || radio.Tag is not HighPassPreset preset)
+                continue;
+            radio.IsChecked = ReferenceEquals(preset, _hpSelected);
+            var text = dirty && ReferenceEquals(preset, _hpSelected) ? preset.Name + " *" : preset.Name;
+            if (radio.Text != text)
+                radio.Text = text;
+        }
+    }
+
+    HighPassPreset? FindHpPreset(string name)
+    {
+        if (name.Length == 0)
+            return null;
+        return HighPassPreset.BuiltIns.FirstOrDefault(preset => preset.Name == name)
+            ?? _hpPresets.FirstOrDefault(preset => preset.Name == name);
+    }
+
+    HighPassPreset? FindMatchingHp(double hz, int slope) =>
+        HighPassPreset.BuiltIns.FirstOrDefault(preset => preset.Matches(hz, slope))
+        ?? _hpPresets.FirstOrDefault(preset => preset.Matches(hz, slope));
+
+    void SaveHpPreset_Click(object sender, RoutedEventArgs e)
+    {
+        _ = SaveHpPresetAsync();
+    }
+
+    async Task SaveHpPresetAsync()
+    {
+        var box = new TextBox { PlaceholderText = "プリセット名" };
+        if (_hpSelected is { BuiltIn: false })
+        {
+            box.Text = _hpSelected.Name;
+            box.SelectAll();
+        }
+
+        var error = new TextBlock
+        {
+            TextWrapping = TextWrapping.Wrap,
+            Visibility = Visibility.Collapsed,
+        };
+        if (Application.Current.Resources.TryGetValue("SystemFillColorCriticalBrush", out var brush) && brush is Brush paint)
+            error.Foreground = paint;
+        var panel = new StackPanel { Spacing = 8, MinWidth = 280 };
+        panel.Children.Add(new TextBlock
+        {
+            Text = "この設定につける名前を入力してください。",
+            TextWrapping = TextWrapping.Wrap,
+        });
+        panel.Children.Add(box);
+        panel.Children.Add(error);
+        var dialog = new ContentDialog
+        {
+            Title = "現在の設定を保存",
+            Content = panel,
+            PrimaryButtonText = "保存",
+            CloseButtonText = "キャンセル",
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = XamlRoot,
+        };
+        dialog.Opened += (_, _) => box.Focus(FocusState.Programmatic);
+        dialog.PrimaryButtonClick += (_, args) =>
+        {
+            var message = NameError(box.Text, HighPassPreset.IsReservedName);
+            if (message == null)
+                return;
+            args.Cancel = true;
+            error.Text = message;
+            error.Visibility = Visibility.Visible;
+        };
+        if (XamlRoot == null || await dialog.ShowAsync() != ContentDialogResult.Primary)
+            return;
+
+        var name = box.Text.Trim();
+        var existing = _hpPresets.FirstOrDefault(preset => preset.Name == name);
+        if (existing != null && !ReferenceEquals(existing, _hpSelected))
+        {
+            var confirm = new ContentDialog
+            {
+                Title = "プリセットを上書きしますか？",
+                Content = $"「{name}」は既にあります。いまの設定で置き換えます。",
+                PrimaryButtonText = "上書きする",
+                CloseButtonText = "キャンセル",
+                DefaultButton = ContentDialogButton.Close,
+                XamlRoot = XamlRoot,
+            };
+            if (await confirm.ShowAsync() != ContentDialogResult.Primary)
+                return;
+        }
+
+        var target = existing ?? new HighPassPreset { Name = name };
+        target.Frequency = _hp.Frequency;
+        target.Slope = _hp.Slope;
+        if (existing == null)
+            _hpPresets.Add(target);
+        try
+        {
+            HighPassPresetStore.Save(_hpPresets);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            await TellAsync("プリセットを保存できませんでした", ex.Message);
+            return;
+        }
+
+        RebuildHpPresetMenu();
+        SelectHpPreset(target);
     }
 
     void RebuildNormPresetMenu()
