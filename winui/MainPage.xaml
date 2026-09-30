@@ -256,7 +256,7 @@
                                 <TextBlock
                                     VerticalAlignment="Center"
                                     Style="{StaticResource BodyStrongTextBlockStyle}"
-                                    Text="設定" />
+                                    Text="oto調整" />
                             </Border>
                             <ContentControl x:Name="ConfigBody" Grid.Row="1" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch">
                             <Grid>
