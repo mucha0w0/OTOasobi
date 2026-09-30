@@ -23,6 +23,12 @@ public sealed partial class EffectRack : UserControl
         Curve.Edited += (_, _) => PullFromCurve();
         Curve.EditCompleted += OnCurveCompleted;
         Curve.InteractionStarted += (_, _) => HostScroll.VerticalScrollMode = ScrollMode.Disabled;
+        Curve.PointerEntered += (_, _) => HostScroll.VerticalScrollMode = ScrollMode.Disabled;
+        Curve.PointerExited += (_, _) =>
+        {
+            if (!Curve.IsDragging)
+                HostScroll.VerticalScrollMode = ScrollMode.Enabled;
+        };
         LoadPresets();
         LoadChain();
         EqToggle.Toggled += EqToggle_Toggled;

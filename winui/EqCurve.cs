@@ -15,35 +15,36 @@ public sealed class EqCurve : UserControl
 {
     const double FMin = 40;
     const double FMax = 16000;
-    const double GutterLeft = 36;
-    const double GutterRight = 10;
-    const double GutterTop = 8;
+    const double GutterLeft = 34;
+    const double GutterRight = 12;
+    const double GutterTop = 10;
     const double GutterBottom = 22;
-    const double SampleRate = EqualizerEffect.DisplayRate;
 
     static readonly double[] GridDb = [12, 6, 0, -6, -12];
+    static readonly Color CurveColor = Color.FromArgb(255, 72, 210, 214);
 
-    readonly Canvas _canvas = new() { IsHitTestVisible = false };
+    readonly Canvas _canvas = new() { Background = Brush(255, 20, 20, 20) };
     readonly double[] _gains = new double[EqualizerEffect.BandCount];
     readonly Line[] _hLines = new Line[GridDb.Length];
     readonly Line[] _vLines = new Line[EqualizerEffect.BandCount];
-    readonly Line[] _stems = new Line[EqualizerEffect.BandCount];
+    readonly Ellipse[] _halos = new Ellipse[EqualizerEffect.BandCount];
     readonly Ellipse[] _handles = new Ellipse[EqualizerEffect.BandCount];
     readonly TextBlock[] _freqLabels = new TextBlock[EqualizerEffect.BandCount];
     readonly TextBlock[] _dbLabels = new TextBlock[3];
     readonly Polygon _fill = new() { IsHitTestVisible = false };
     readonly Polyline _line = new()
     {
-        StrokeThickness = 2,
+        StrokeThickness = 2.25,
         StrokeLineJoin = PenLineJoin.Round,
         StrokeStartLineCap = PenLineCap.Round,
         StrokeEndLineCap = PenLineCap.Round,
         IsHitTestVisible = false,
     };
-    readonly SolidColorBrush _curve;
-    readonly SolidColorBrush _knob = Brush(255, 248, 248, 248);
-    readonly SolidColorBrush _label = Brush(210, 168, 168, 168);
-    readonly SolidColorBrush _labelHot = Brush(255, 245, 245, 245);
+    readonly SolidColorBrush _curve = new(CurveColor);
+    readonly SolidColorBrush _halo = new(Color.FromArgb(72, CurveColor.R, CurveColor.G, CurveColor.B));
+    readonly SolidColorBrush _knob = Brush(255, 232, 252, 252);
+    readonly SolidColorBrush _label = Brush(180, 150, 150, 150);
+    readonly SolidColorBrush _labelHot = Brush(255, 230, 244, 244);
     readonly InputCursor _arrow = InputSystemCursor.Create(InputSystemCursorShape.Arrow);
     readonly InputCursor _ns = InputSystemCursor.Create(InputSystemCursorShape.SizeNorthSouth);
 
@@ -62,24 +63,22 @@ public sealed class EqCurve : UserControl
 
     public EqCurve()
     {
-        var accent = AccentColor();
-        _curve = new SolidColorBrush(accent);
-        _fill.Fill = new SolidColorBrush(Color.FromArgb(58, accent.R, accent.G, accent.B));
+        _fill.Fill = new SolidColorBrush(Color.FromArgb(36, CurveColor.R, CurveColor.G, CurveColor.B));
         _line.Stroke = _curve;
         Build();
-        var root = new Grid();
+        var root = new Grid { Background = Brush(255, 20, 20, 20) };
         root.Children.Add(_canvas);
         Content = root;
-        Background = Brush(255, 22, 22, 22);
+        Background = Brush(255, 20, 20, 20);
         ManipulationMode = ManipulationModes.None;
         IsTabStop = true;
         UseLayoutRounding = true;
         AutomationProperties.SetName(this, "イコライザーのカーブ");
         AutomationProperties.SetHelpText(this, "点を上下にドラッグして、その周波数の大きさを変えます。");
-        PointerPressed += OnPressed;
-        PointerMoved += OnMoved;
-        PointerReleased += OnReleased;
-        PointerCanceled += OnReleased;
+        AddHandler(PointerPressedEvent, new PointerEventHandler(OnPressed), true);
+        AddHandler(PointerMovedEvent, new PointerEventHandler(OnMoved), true);
+        AddHandler(PointerReleasedEvent, new PointerEventHandler(OnReleased), true);
+        AddHandler(PointerCanceledEvent, new PointerEventHandler(OnReleased), true);
         PointerCaptureLost += OnCaptureLost;
         PointerExited += OnExited;
         KeyDown += OnKey;
@@ -90,6 +89,8 @@ public sealed class EqCurve : UserControl
     public IReadOnlyList<double> Gains => _gains;
 
     public int ActiveBand => _active;
+
+    public bool IsDragging => _drag >= 0;
 
     public event EventHandler? Edited;
 
@@ -111,15 +112,13 @@ public sealed class EqCurve : UserControl
 
     void Build()
     {
-        var limit = Brush(110, 255, 255, 255);
-        var grid = Brush(40, 255, 255, 255);
-        var zero = Brush(170, 255, 255, 255);
-        var band = Brush(32, 255, 255, 255);
+        var grid = Brush(32, 255, 255, 255);
+        var zero = Brush(90, 255, 255, 255);
         for (var i = 0; i < _vLines.Length; i++)
         {
             var line = new Line
             {
-                Stroke = band,
+                Stroke = grid,
                 StrokeThickness = 1,
                 IsHitTestVisible = false,
             };
@@ -132,8 +131,8 @@ public sealed class EqCurve : UserControl
             var db = GridDb[i];
             var line = new Line
             {
-                Stroke = db == 0 ? zero : Math.Abs(db) == 12 ? limit : grid,
-                StrokeThickness = db == 0 ? 1.25 : 1,
+                Stroke = db == 0 ? zero : grid,
+                StrokeThickness = 1,
                 IsHitTestVisible = false,
             };
             _hLines[i] = line;
@@ -141,29 +140,21 @@ public sealed class EqCurve : UserControl
         }
 
         _canvas.Children.Add(_fill);
-        for (var i = 0; i < _stems.Length; i++)
+        _canvas.Children.Add(_line);
+        for (var i = 0; i < _halos.Length; i++)
         {
-            var stem = new Line
+            var halo = new Ellipse
             {
-                Stroke = _curve,
-                StrokeThickness = 1.25,
-                Opacity = 0.4,
+                Fill = _halo,
                 IsHitTestVisible = false,
             };
-            _stems[i] = stem;
-            _canvas.Children.Add(stem);
-        }
-
-        _canvas.Children.Add(_line);
-        for (var i = 0; i < _handles.Length; i++)
-        {
+            _halos[i] = halo;
+            _canvas.Children.Add(halo);
             var handle = new Ellipse
             {
-                Width = 11,
-                Height = 11,
                 Fill = _knob,
                 Stroke = _curve,
-                StrokeThickness = 1.75,
+                StrokeThickness = 2,
                 IsHitTestVisible = false,
             };
             _handles[i] = handle;
@@ -175,7 +166,7 @@ public sealed class EqCurve : UserControl
             var label = new TextBlock
             {
                 Text = EqualizerEffect.FormatTick(EqualizerEffect.Frequencies[i]),
-                FontSize = 11,
+                FontSize = 10,
                 Foreground = _label,
                 IsHitTestVisible = false,
             };
@@ -183,13 +174,13 @@ public sealed class EqCurve : UserControl
             _canvas.Children.Add(label);
         }
 
-        string[] captions = ["+12", "0", "-12"];
+        string[] captions = ["+12", "0", "−12"];
         for (var i = 0; i < _dbLabels.Length; i++)
         {
             var label = new TextBlock
             {
                 Text = captions[i],
-                FontSize = 11,
+                FontSize = 10,
                 Foreground = _label,
                 IsHitTestVisible = false,
             };
@@ -201,8 +192,10 @@ public sealed class EqCurve : UserControl
     void OnPressed(object sender, PointerRoutedEventArgs e)
     {
         var point = e.GetCurrentPoint(this);
-        if (point.Properties.IsRightButtonPressed || point.Properties.IsMiddleButtonPressed)
+        if (!point.Properties.IsLeftButtonPressed)
             return;
+        if (_plotWidth < 16)
+            Redraw();
         var index = BandAt(point.Position);
         if (index < 0)
             return;
@@ -229,6 +222,7 @@ public sealed class EqCurve : UserControl
         _active = index;
         _drag = index;
         ProtectedCursor = _ns;
+        CancelDirectManipulations();
         InteractionStarted?.Invoke(this, EventArgs.Empty);
         _captured = CapturePointer(e.Pointer);
         ApplyGain(index, point.Position.Y);
@@ -240,7 +234,7 @@ public sealed class EqCurve : UserControl
         var point = e.GetCurrentPoint(this).Position;
         if (_drag >= 0)
         {
-            if (Math.Abs(point.Y - _pressY) > 4)
+            if (Math.Abs(point.Y - _pressY) > 3)
                 _moved = true;
             ApplyGain(_drag, point.Y);
             e.Handled = true;
@@ -335,7 +329,7 @@ public sealed class EqCurve : UserControl
         if (_plotWidth < 16 || _plotHeight < 16)
             return -1;
         var best = -1;
-        var bestDist = 20.0;
+        var bestDist = 26.0;
         for (var i = 0; i < EqualizerEffect.BandCount; i++)
         {
             var dx = point.X - XOfFreq(EqualizerEffect.Frequencies[i]);
@@ -349,9 +343,11 @@ public sealed class EqCurve : UserControl
 
         if (best >= 0)
             return best;
-        if (point.Y < _plotTop - 12 || point.Y > _plotTop + _plotHeight + 12)
+        if (point.Y < _plotTop - 18 || point.Y > _plotTop + _plotHeight + 8)
             return -1;
-        bestDist = 28;
+        if (point.X < _plotLeft - 6 || point.X > _plotLeft + _plotWidth + 6)
+            return -1;
+        bestDist = double.MaxValue;
         for (var i = 0; i < EqualizerEffect.BandCount; i++)
         {
             var dx = Math.Abs(point.X - XOfFreq(EqualizerEffect.Frequencies[i]));
@@ -395,19 +391,11 @@ public sealed class EqCurve : UserControl
             _hLines[i].Y2 = y;
         }
 
-        var samples = Math.Clamp((int)Math.Round(_plotWidth / 2), 48, 220);
         var line = new PointCollection();
+        AddSmooth(line);
         var fill = new PointCollection();
-        for (var i = 0; i < samples; i++)
-        {
-            var t = samples == 1 ? 0 : i / (double)(samples - 1);
-            var freq = FMin * Math.Pow(FMax / FMin, t);
-            var db = EqualizerEffect.ResponseDb(_gains, freq, SampleRate);
-            var point = new Point(_plotLeft + t * _plotWidth, YOfDb(db));
-            line.Add(point);
+        foreach (var point in line)
             fill.Add(point);
-        }
-
         var zeroY = YOfDb(0);
         fill.Add(new Point(plotRight, zeroY));
         fill.Add(new Point(_plotLeft, zeroY));
@@ -418,29 +406,105 @@ public sealed class EqCurve : UserControl
         {
             var x = XOfFreq(EqualizerEffect.Frequencies[i]);
             var y = YOfDb(_gains[i]);
-            var stem = _stems[i];
-            var flat = Math.Abs(_gains[i]) < 0.05;
-            stem.Visibility = flat ? Visibility.Collapsed : Visibility.Visible;
-            stem.X1 = x;
-            stem.X2 = x;
-            stem.Y1 = zeroY;
-            stem.Y2 = y;
-            var size = i == _active ? 14.0 : 11.0;
+            var hot = i == _active;
+            var haloSize = hot ? 22.0 : 16.0;
+            var halo = _halos[i];
+            halo.Width = haloSize;
+            halo.Height = haloSize;
+            Canvas.SetLeft(halo, x - haloSize / 2);
+            Canvas.SetTop(halo, y - haloSize / 2);
+            var size = hot ? 12.0 : 10.0;
             var handle = _handles[i];
             handle.Width = size;
             handle.Height = size;
-            handle.Fill = i == _active ? _curve : _knob;
-            handle.Stroke = i == _active ? _knob : _curve;
+            handle.Fill = hot ? _curve : _knob;
+            handle.Stroke = hot ? _knob : _curve;
             Canvas.SetLeft(handle, x - size / 2);
             Canvas.SetTop(handle, y - size / 2);
             var caption = _freqLabels[i];
-            caption.Foreground = i == _active ? _labelHot : _label;
+            caption.Foreground = hot ? _labelHot : _label;
             Place(caption, x, plotBottom + 11, center: true, width);
         }
 
-        Place(_dbLabels[0], 4, YOfDb(12), center: false, width);
-        Place(_dbLabels[1], 4, YOfDb(0), center: false, width);
-        Place(_dbLabels[2], 4, YOfDb(-12), center: false, width);
+        Place(_dbLabels[0], 2, YOfDb(12), center: false, width);
+        Place(_dbLabels[1], 2, YOfDb(0), center: false, width);
+        Place(_dbLabels[2], 2, YOfDb(-12), center: false, width);
+    }
+
+    // 点を通り、区間の中で行き過ぎない三次曲線。
+    void AddSmooth(PointCollection dest)
+    {
+        var count = EqualizerEffect.BandCount + 2;
+        var xs = new double[count];
+        var ys = new double[count];
+        xs[0] = _plotLeft;
+        ys[0] = YOfDb(0);
+        for (var i = 0; i < EqualizerEffect.BandCount; i++)
+        {
+            xs[i + 1] = XOfFreq(EqualizerEffect.Frequencies[i]);
+            ys[i + 1] = YOfDb(_gains[i]);
+        }
+
+        xs[^1] = _plotLeft + _plotWidth;
+        ys[^1] = YOfDb(0);
+        for (var i = 1; i < count; i++)
+        {
+            if (xs[i] <= xs[i - 1])
+                xs[i] = xs[i - 1] + 0.5;
+        }
+
+        var slope = new double[count - 1];
+        for (var i = 0; i < slope.Length; i++)
+            slope[i] = (ys[i + 1] - ys[i]) / (xs[i + 1] - xs[i]);
+
+        var tangent = new double[count];
+        tangent[0] = slope[0];
+        tangent[^1] = slope[^1];
+        for (var i = 1; i < count - 1; i++)
+        {
+            if (slope[i - 1] == 0 || slope[i] == 0 || slope[i - 1] * slope[i] < 0)
+                tangent[i] = 0;
+            else
+                tangent[i] = (slope[i - 1] + slope[i]) * 0.5;
+        }
+
+        for (var i = 0; i < slope.Length; i++)
+        {
+            if (slope[i] == 0)
+            {
+                tangent[i] = 0;
+                tangent[i + 1] = 0;
+                continue;
+            }
+
+            var a = tangent[i] / slope[i];
+            var b = tangent[i + 1] / slope[i];
+            var sum = a * a + b * b;
+            if (sum <= 9)
+                continue;
+            var scale = 3 / Math.Sqrt(sum);
+            tangent[i] = scale * a * slope[i];
+            tangent[i + 1] = scale * b * slope[i];
+        }
+
+        var samples = Math.Max(2, (int)Math.Round(_plotWidth));
+        var span = count - 1;
+        var interval = 0;
+        for (var step = 0; step <= samples; step++)
+        {
+            var x = _plotLeft + _plotWidth * step / samples;
+            while (interval < span - 1 && x > xs[interval + 1])
+                interval++;
+            var width = xs[interval + 1] - xs[interval];
+            var t = width < 1e-6 ? 0 : (x - xs[interval]) / width;
+            var t2 = t * t;
+            var t3 = t2 * t;
+            var y = (2 * t3 - 3 * t2 + 1) * ys[interval]
+                + (t3 - 2 * t2 + t) * width * tangent[interval]
+                + (-2 * t3 + 3 * t2) * ys[interval + 1]
+                + (t3 - t2) * width * tangent[interval + 1];
+            dest.Add(new Point(x, y));
+        }
     }
 
     double XOfFreq(double freq)
@@ -465,26 +529,13 @@ public sealed class EqCurve : UserControl
 
     static void Place(TextBlock block, double x, double y, bool center, double width)
     {
-        block.Measure(new Size(120, 24));
+        block.Measure(new Size(80, 20));
         var w = block.DesiredSize.Width;
         var h = block.DesiredSize.Height;
         var left = center ? x - w / 2 : x;
         left = Math.Clamp(left, 0, Math.Max(0, width - w));
         Canvas.SetLeft(block, left);
         Canvas.SetTop(block, y - h / 2);
-    }
-
-    static Color AccentColor()
-    {
-        if (Application.Current?.Resources.TryGetValue("SystemAccentColor", out var value) == true
-            && value is Color color)
-        {
-            var luma = 0.2126 * color.R + 0.7152 * color.G + 0.0722 * color.B;
-            if (luma >= 80)
-                return color;
-        }
-
-        return Color.FromArgb(255, 96, 180, 255);
     }
 
     static SolidColorBrush Brush(byte a, byte r, byte g, byte b) =>

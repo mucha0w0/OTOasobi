@@ -17,23 +17,20 @@
         HorizontalScrollMode="Disabled"
         VerticalScrollBarVisibility="Auto"
         VerticalScrollMode="Enabled">
-        <StackPanel Padding="16,12,16,16" Spacing="12">
-            <StackPanel Spacing="2">
-                <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="エフェクト" />
-                <TextBlock
-                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                    Style="{StaticResource CaptionTextBlockStyle}"
-                    Text="上から順に音声へかけます。"
-                    TextWrapping="Wrap" />
-            </StackPanel>
+        <StackPanel Padding="12,12,12,16" Spacing="10">
+            <TextBlock
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                Style="{StaticResource CaptionTextBlockStyle}"
+                Text="上から順に音声へかけます。"
+                TextWrapping="Wrap" />
             <!-- カードの並びが、音声へかける順。 -->
             <Border
-                Padding="12,10,12,12"
+                Padding="12"
                 Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                 BorderThickness="1"
                 CornerRadius="8">
-                <StackPanel Spacing="10">
+                <StackPanel Spacing="8">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
@@ -48,6 +45,7 @@
                             Grid.Column="1"
                             MinWidth="0"
                             Margin="8,0,0,0"
+                            Padding="0"
                             VerticalAlignment="Center"
                             AutomationProperties.Name="イコライザーのオンオフ"
                             IsOn="True"
@@ -55,14 +53,10 @@
                             OnContent=""
                             ToolTipService.ToolTip="オフにすると、このイコライザーは音声にかかりません" />
                     </Grid>
-                    <Border
-                        Height="200"
-                        Background="#161616"
-                        BorderBrush="#333333"
-                        BorderThickness="1">
+                    <Border Height="208" Background="#141414" CornerRadius="6">
                         <local:EqCurve
                             x:Name="Curve"
-                            ToolTipService.ToolTip="点を上下にドラッグして、その周波数の大きさを変えます。ダブルクリックか Delete で、その帯域を 0 dB に戻します。左右キーで帯域を移ります。" />
+                            ToolTipService.ToolTip="点を上下にドラッグして、その周波数の大きさを変えます。ダブルクリックか Delete で、その帯域を 0 dB に戻します。" />
                     </Border>
                     <TextBlock
                         x:Name="EqReadout"
