@@ -10,6 +10,13 @@
             <Setter Property="Padding" Value="10,6" />
             <Setter Property="HorizontalAlignment" Value="Stretch" />
         </Style>
+        <Style x:Key="EffectCardStyle" TargetType="Border">
+            <Setter Property="Padding" Value="12" />
+            <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
+            <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="8" />
+        </Style>
     </UserControl.Resources>
     <ScrollViewer
         x:Name="HostScroll"
@@ -21,89 +28,176 @@
             <TextBlock
                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                 Style="{StaticResource CaptionTextBlockStyle}"
-                Text="上から順に音声へかけます。"
+                Text="上から順にかかります。左のつまみをドラッグすると、順番を入れ替えられます。"
                 TextWrapping="Wrap" />
-            <!-- カードの並びが、音声へかける順。 -->
-            <Border
-                Padding="12"
-                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                BorderThickness="1"
-                CornerRadius="8">
-                <StackPanel Spacing="8">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <TextBlock
-                            VerticalAlignment="Center"
-                            Style="{StaticResource BodyStrongTextBlockStyle}"
-                            Text="イコライザー" />
-                        <ToggleSwitch
-                            x:Name="EqToggle"
-                            Grid.Column="1"
-                            MinWidth="0"
-                            Margin="8,0,0,0"
-                            Padding="0"
-                            VerticalAlignment="Center"
-                            AutomationProperties.Name="イコライザーのオンオフ"
-                            IsOn="True"
-                            OffContent=""
-                            OnContent=""
-                            ToolTipService.ToolTip="オフにすると、このイコライザーは音声にかかりません" />
-                    </Grid>
-                    <Border Height="208" Background="#141414" CornerRadius="6">
-                        <local:EqCurve
-                            x:Name="Curve"
-                            ToolTipService.ToolTip="点を上下にドラッグして、その周波数の大きさを変えます。ダブルクリックか Delete で、その帯域を 0 dB に戻します。" />
-                    </Border>
-                    <TextBlock
-                        x:Name="EqReadout"
-                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                        Style="{StaticResource CaptionTextBlockStyle}"
-                        Text="点を上下にドラッグします"
-                        TextWrapping="Wrap" />
+            <StackPanel x:Name="EffectList" Spacing="10">
+                <Border x:Name="EqCard" Style="{StaticResource EffectCardStyle}">
                     <StackPanel Spacing="8">
-                        <TextBlock Text="プリセット" />
-                        <DropDownButton
-                            x:Name="PresetMenu"
-                            MinHeight="32"
-                            HorizontalAlignment="Stretch"
-                            HorizontalContentAlignment="Stretch"
-                            AutomationProperties.Name="イコライザーのプリセット">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <TextBlock
-                                    x:Name="PresetNameText"
-                                    VerticalAlignment="Center"
-                                    Text="フラット"
-                                    TextTrimming="CharacterEllipsis" />
-                                <TextBlock
-                                    x:Name="PresetDirtyMark"
-                                    Grid.Column="1"
-                                    Margin="6,0,0,0"
-                                    VerticalAlignment="Center"
-                                    AutomationProperties.Name="変更あり"
-                                    Text="*"
-                                    ToolTipService.ToolTip="このプリセットから変更しています"
-                                    Visibility="Collapsed" />
-                            </Grid>
-                            <DropDownButton.Flyout>
-                                <MenuFlyout x:Name="PresetFlyout" />
-                            </DropDownButton.Flyout>
-                        </DropDownButton>
-                        <Button
-                            Click="SavePreset_Click"
-                            Content="現在のカーブを保存"
-                            Style="{StaticResource RackButtonStyle}"
-                            ToolTipService.ToolTip="いまのカーブを、名前をつけて保存します" />
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Border
+                                x:Name="EqGrip"
+                                Width="28"
+                                Margin="-4,0,4,0"
+                                VerticalAlignment="Stretch"
+                                Background="Transparent"
+                                PointerCanceled="Grip_Released"
+                                PointerCaptureLost="Grip_CaptureLost"
+                                PointerMoved="Grip_Moved"
+                                PointerPressed="Grip_Pressed"
+                                PointerReleased="Grip_Released"
+                                ToolTipService.ToolTip="ドラッグして順番を入れ替えます">
+                                <StackPanel VerticalAlignment="Center" Spacing="3" IsHitTestVisible="False">
+                                    <Border Width="14" Height="2" Background="{ThemeResource TextFillColorSecondaryBrush}" CornerRadius="1" />
+                                    <Border Width="14" Height="2" Background="{ThemeResource TextFillColorSecondaryBrush}" CornerRadius="1" />
+                                    <Border Width="14" Height="2" Background="{ThemeResource TextFillColorSecondaryBrush}" CornerRadius="1" />
+                                </StackPanel>
+                            </Border>
+                            <TextBlock
+                                Grid.Column="1"
+                                VerticalAlignment="Center"
+                                Style="{StaticResource BodyStrongTextBlockStyle}"
+                                Text="イコライザー" />
+                            <ToggleSwitch
+                                x:Name="EqToggle"
+                                Grid.Column="2"
+                                MinWidth="0"
+                                Margin="8,0,0,0"
+                                Padding="0"
+                                VerticalAlignment="Center"
+                                AutomationProperties.Name="イコライザーのオンオフ"
+                                IsOn="True"
+                                OffContent=""
+                                OnContent=""
+                                ToolTipService.ToolTip="オフにすると、このイコライザーは音声にかかりません" />
+                        </Grid>
+                        <Border Height="208" Background="#141414" CornerRadius="6">
+                            <local:EqCurve
+                                x:Name="Curve"
+                                ToolTipService.ToolTip="点を上下にドラッグして、その周波数の大きさを変えます。ダブルクリックか Delete で、その帯域を 0 dB に戻します。" />
+                        </Border>
+                        <TextBlock
+                            x:Name="EqReadout"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Style="{StaticResource CaptionTextBlockStyle}"
+                            Text="点を上下にドラッグします"
+                            TextWrapping="Wrap" />
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="プリセット" />
+                            <DropDownButton
+                                x:Name="PresetMenu"
+                                MinHeight="32"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Stretch"
+                                AutomationProperties.Name="イコライザーのプリセット">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock
+                                        x:Name="PresetNameText"
+                                        VerticalAlignment="Center"
+                                        Text="フラット"
+                                        TextTrimming="CharacterEllipsis" />
+                                    <TextBlock
+                                        x:Name="PresetDirtyMark"
+                                        Grid.Column="1"
+                                        Margin="6,0,0,0"
+                                        VerticalAlignment="Center"
+                                        AutomationProperties.Name="変更あり"
+                                        Text="*"
+                                        ToolTipService.ToolTip="このプリセットから変更しています"
+                                        Visibility="Collapsed" />
+                                </Grid>
+                                <DropDownButton.Flyout>
+                                    <MenuFlyout x:Name="PresetFlyout" />
+                                </DropDownButton.Flyout>
+                            </DropDownButton>
+                            <Button
+                                Click="SavePreset_Click"
+                                Content="現在のカーブを保存"
+                                Style="{StaticResource RackButtonStyle}"
+                                ToolTipService.ToolTip="いまのカーブを、名前をつけて保存します" />
+                        </StackPanel>
                     </StackPanel>
-                </StackPanel>
-            </Border>
+                </Border>
+                <Border x:Name="NormCard" Style="{StaticResource EffectCardStyle}">
+                    <StackPanel Spacing="8">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Border
+                                x:Name="NormGrip"
+                                Width="28"
+                                Margin="-4,0,4,0"
+                                VerticalAlignment="Stretch"
+                                Background="Transparent"
+                                PointerCanceled="Grip_Released"
+                                PointerCaptureLost="Grip_CaptureLost"
+                                PointerMoved="Grip_Moved"
+                                PointerPressed="Grip_Pressed"
+                                PointerReleased="Grip_Released"
+                                ToolTipService.ToolTip="ドラッグして順番を入れ替えます">
+                                <StackPanel VerticalAlignment="Center" Spacing="3" IsHitTestVisible="False">
+                                    <Border Width="14" Height="2" Background="{ThemeResource TextFillColorSecondaryBrush}" CornerRadius="1" />
+                                    <Border Width="14" Height="2" Background="{ThemeResource TextFillColorSecondaryBrush}" CornerRadius="1" />
+                                    <Border Width="14" Height="2" Background="{ThemeResource TextFillColorSecondaryBrush}" CornerRadius="1" />
+                                </StackPanel>
+                            </Border>
+                            <TextBlock
+                                Grid.Column="1"
+                                VerticalAlignment="Center"
+                                Style="{StaticResource BodyStrongTextBlockStyle}"
+                                Text="ノーマライズ" />
+                            <ToggleSwitch
+                                x:Name="NormToggle"
+                                Grid.Column="2"
+                                MinWidth="0"
+                                Margin="8,0,0,0"
+                                Padding="0"
+                                VerticalAlignment="Center"
+                                AutomationProperties.Name="ノーマライズのオンオフ"
+                                IsOn="False"
+                                OffContent=""
+                                OnContent=""
+                                ToolTipService.ToolTip="オフにすると、ノーマライズは音声にかかりません" />
+                        </Grid>
+                        <StackPanel x:Name="NormBody" Spacing="4">
+                            <Grid>
+                                <TextBlock VerticalAlignment="Center" Text="ピーク" />
+                                <TextBlock
+                                    x:Name="NormValue"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Center"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Style="{StaticResource CaptionTextBlockStyle}"
+                                    Text="-1.0 dB" />
+                            </Grid>
+                            <Slider
+                                x:Name="NormSlider"
+                                AutomationProperties.Name="ノーマライズのピーク"
+                                Maximum="0"
+                                Minimum="-12"
+                                SnapsTo="StepValues"
+                                StepFrequency="0.1"
+                                Value="-1" />
+                            <TextBlock
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Text="ファイルの最大音量を、この大きさに揃えます。"
+                                TextWrapping="Wrap" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
         </StackPanel>
     </ScrollViewer>
 </UserControl>

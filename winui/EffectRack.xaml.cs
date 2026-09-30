@@ -1,6 +1,7 @@
 using System.Globalization;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 
 namespace Otoasobi;
@@ -9,9 +10,15 @@ public sealed partial class EffectRack : UserControl
 {
     readonly EffectChain _chain = new();
     readonly EqualizerEffect _eq = new();
+    readonly NormalizeEffect _norm = new() { Enabled = false };
     readonly List<EqPreset> _userPresets = [];
     StoredChain _stored = new();
     EqPreset? _selected;
+    Border? _dragCard;
+    int _dropIndex = -1;
+    Border? _marked;
+    Brush? _markedBrush;
+    Thickness _markedThickness;
     bool _ready;
     bool _dirty;
     bool _chainErrorShown;
@@ -19,21 +26,32 @@ public sealed partial class EffectRack : UserControl
     public EffectRack()
     {
         InitializeComponent();
-        _chain.Add(_eq);
+        EqGrip.Tag = EqCard;
+        NormGrip.Tag = NormCard;
+        _chain.SetOrder([_eq, _norm]);
         Curve.Edited += (_, _) => PullFromCurve();
         Curve.EditCompleted += OnCurveCompleted;
         Curve.InteractionStarted += (_, _) => HostScroll.VerticalScrollMode = ScrollMode.Disabled;
         Curve.PointerEntered += (_, _) => HostScroll.VerticalScrollMode = ScrollMode.Disabled;
         Curve.PointerExited += (_, _) =>
         {
-            if (!Curve.IsDragging)
+            if (!Curve.IsDragging && _dragCard == null)
                 HostScroll.VerticalScrollMode = ScrollMode.Enabled;
         };
         LoadPresets();
         LoadChain();
         EqToggle.Toggled += EqToggle_Toggled;
+        NormToggle.Toggled += NormToggle_Toggled;
+        NormSlider.ValueChanged += (_, _) =>
+        {
+            _norm.TargetDb = NormSlider.Value;
+            UpdateNormChrome();
+        };
+        NormSlider.PointerReleased += (_, _) => SaveChain();
+        NormSlider.LostFocus += (_, _) => SaveChain();
         _ready = true;
         UpdateChrome();
+        UpdateNormChrome();
     }
 
     public EffectChain Chain => _chain;
@@ -58,19 +76,50 @@ public sealed partial class EffectRack : UserControl
     void LoadChain()
     {
         var stored = EffectChainStore.Load();
-        if (stored == null)
-            return;
-        _stored = stored;
-        var entry = _stored.Effects.FirstOrDefault(effect => effect.Kind == EqualizerEffect.KindId);
-        if (entry == null)
-            return;
-        _eq.Enabled = entry.Enabled;
-        _eq.SetGains(entry.Gains);
-        EqToggle.IsOn = entry.Enabled;
-        Curve.SetGains(_eq.Gains);
-        var named = FindPreset(entry.Preset);
-        _selected = named ?? FindMatching(_eq.Gains);
+        if (stored != null)
+            _stored = stored;
+        var order = new List<AudioEffect>();
+        var seen = new HashSet<string>();
+        foreach (var entry in _stored.Effects)
+        {
+            if (entry.Kind == EqualizerEffect.KindId && seen.Add(entry.Kind))
+            {
+                _eq.Enabled = entry.Enabled;
+                _eq.SetGains(entry.Gains);
+                EqToggle.IsOn = entry.Enabled;
+                Curve.SetGains(_eq.Gains);
+                _selected = FindPreset(entry.Preset) ?? FindMatching(_eq.Gains);
+                order.Add(_eq);
+            }
+            else if (entry.Kind == NormalizeEffect.KindId && seen.Add(entry.Kind))
+            {
+                _norm.Enabled = entry.Enabled;
+                _norm.TargetDb = entry.Target;
+                NormToggle.IsOn = entry.Enabled;
+                NormSlider.Value = _norm.TargetDb;
+                order.Add(_norm);
+            }
+        }
+
+        if (seen.Add(EqualizerEffect.KindId))
+            order.Add(_eq);
+        if (seen.Add(NormalizeEffect.KindId))
+            order.Add(_norm);
+        _chain.SetOrder(order);
+        LayoutCards();
         UpdateDirty();
+    }
+
+    void LayoutCards()
+    {
+        EffectList.Children.Clear();
+        foreach (var effect in _chain.Effects)
+        {
+            if (ReferenceEquals(effect, _eq))
+                EffectList.Children.Add(EqCard);
+            else if (ReferenceEquals(effect, _norm))
+                EffectList.Children.Add(NormCard);
+        }
     }
 
     void EqToggle_Toggled(object sender, RoutedEventArgs e)
@@ -78,6 +127,136 @@ public sealed partial class EffectRack : UserControl
         _eq.Enabled = EqToggle.IsOn;
         UpdateChrome();
         SaveChain();
+    }
+
+    void NormToggle_Toggled(object sender, RoutedEventArgs e)
+    {
+        _norm.Enabled = NormToggle.IsOn;
+        UpdateNormChrome();
+        SaveChain();
+    }
+
+    void UpdateNormChrome()
+    {
+        NormBody.Opacity = NormToggle.IsOn ? 1 : 0.5;
+        NormValue.Text = FormatDb(_norm.TargetDb);
+    }
+
+    void Grip_Pressed(object sender, PointerRoutedEventArgs e)
+    {
+        if (sender is not Border grip || grip.Tag is not Border card)
+            return;
+        var point = e.GetCurrentPoint(grip);
+        if (!point.Properties.IsLeftButtonPressed)
+            return;
+        _dragCard = card;
+        _dropIndex = EffectList.Children.IndexOf(card);
+        card.Opacity = 0.55;
+        HostScroll.VerticalScrollMode = ScrollMode.Disabled;
+        grip.CancelDirectManipulations();
+        grip.CapturePointer(e.Pointer);
+        e.Handled = true;
+    }
+
+    void Grip_Moved(object sender, PointerRoutedEventArgs e)
+    {
+        if (_dragCard == null)
+            return;
+        _dropIndex = IndexAt(e.GetCurrentPoint(EffectList).Position);
+        MarkDrop(_dropIndex);
+        e.Handled = true;
+    }
+
+    void Grip_Released(object sender, PointerRoutedEventArgs e)
+    {
+        var from = _dragCard == null ? -1 : EffectList.Children.IndexOf(_dragCard);
+        var to = _dropIndex;
+        EndGrip();
+        if (sender is UIElement grip)
+        {
+            foreach (var captured in grip.PointerCaptures)
+            {
+                if (captured.PointerId == e.Pointer.PointerId)
+                {
+                    grip.ReleasePointerCapture(e.Pointer);
+                    break;
+                }
+            }
+        }
+
+        CommitGrip(from, to);
+        e.Handled = true;
+    }
+
+    void Grip_CaptureLost(object sender, PointerRoutedEventArgs e)
+    {
+        if (_dragCard == null)
+            return;
+        var from = EffectList.Children.IndexOf(_dragCard);
+        var to = _dropIndex;
+        EndGrip();
+        CommitGrip(from, to);
+    }
+
+    void EndGrip()
+    {
+        if (_dragCard != null)
+            _dragCard.Opacity = 1;
+        _dragCard = null;
+        RestoreMark();
+        if (!Curve.IsDragging)
+            HostScroll.VerticalScrollMode = ScrollMode.Enabled;
+    }
+
+    void CommitGrip(int from, int to)
+    {
+        if (from < 0 || to < 0 || from == to)
+            return;
+        _chain.Move(from, to);
+        LayoutCards();
+        SaveChain();
+    }
+
+    int IndexAt(Windows.Foundation.Point point)
+    {
+        var count = EffectList.Children.Count;
+        for (var i = 0; i < count; i++)
+        {
+            if (EffectList.Children[i] is not FrameworkElement element)
+                continue;
+            var top = element.TransformToVisual(EffectList).TransformPoint(default).Y;
+            if (point.Y < top + element.ActualHeight * 0.5)
+                return i;
+        }
+
+        return Math.Max(0, count - 1);
+    }
+
+    void MarkDrop(int index)
+    {
+        if (index < 0 || index >= EffectList.Children.Count || EffectList.Children[index] is not Border border)
+        {
+            RestoreMark();
+            return;
+        }
+
+        if (ReferenceEquals(_marked, border))
+            return;
+        RestoreMark();
+        _marked = border;
+        _markedBrush = border.BorderBrush;
+        _markedThickness = border.BorderThickness;
+        border.BorderBrush = Application.Current.Resources["AccentFillColorDefaultBrush"] as Brush ?? border.BorderBrush;
+    }
+
+    void RestoreMark()
+    {
+        if (_marked == null)
+            return;
+        _marked.BorderBrush = _markedBrush;
+        _marked.BorderThickness = _markedThickness;
+        _marked = null;
+        _markedBrush = null;
     }
 
     void OnCurveCompleted(object? sender, EventArgs e)
@@ -199,16 +378,39 @@ public sealed partial class EffectRack : UserControl
     {
         if (!_ready)
             return;
-        var entry = _stored.Effects.FirstOrDefault(effect => effect.Kind == EqualizerEffect.KindId);
-        if (entry == null)
+        var known = new HashSet<string>();
+        var list = new List<StoredEffect>();
+        foreach (var effect in _chain.Effects)
         {
-            entry = new StoredEffect { Kind = EqualizerEffect.KindId };
-            _stored.Effects.Add(entry);
+            known.Add(effect.Kind);
+            if (ReferenceEquals(effect, _eq))
+            {
+                list.Add(new StoredEffect
+                {
+                    Kind = EqualizerEffect.KindId,
+                    Enabled = _eq.Enabled,
+                    Preset = _selected?.Name ?? "",
+                    Gains = _eq.CopyGains(),
+                });
+            }
+            else if (ReferenceEquals(effect, _norm))
+            {
+                list.Add(new StoredEffect
+                {
+                    Kind = NormalizeEffect.KindId,
+                    Enabled = _norm.Enabled,
+                    Target = _norm.TargetDb,
+                });
+            }
         }
 
-        entry.Enabled = _eq.Enabled;
-        entry.Preset = _selected?.Name ?? "";
-        entry.Gains = _eq.CopyGains();
+        foreach (var old in _stored.Effects)
+        {
+            if (old.Kind.Length > 0 && !known.Contains(old.Kind))
+                list.Add(old);
+        }
+
+        _stored.Effects = list;
         try
         {
             EffectChainStore.Save(_stored);

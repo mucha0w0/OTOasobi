@@ -26,6 +26,12 @@ public sealed class EffectChain
 
     public void Add(AudioEffect effect) => _effects.Add(effect);
 
+    public void SetOrder(IEnumerable<AudioEffect> effects)
+    {
+        _effects.Clear();
+        _effects.AddRange(effects);
+    }
+
     public void Move(int from, int to)
     {
         if ((uint)from >= (uint)_effects.Count || (uint)to >= (uint)_effects.Count || from == to)
@@ -60,6 +66,8 @@ sealed class StoredEffect
     public string Preset { get; set; } = "";
 
     public double[] Gains { get; set; } = [];
+
+    public double Target { get; set; } = -1;
 }
 
 sealed class StoredChain
