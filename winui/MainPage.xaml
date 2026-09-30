@@ -90,7 +90,7 @@
                     TextAlignment="Center" />
                 <TextBlock
                     Margin="0,0,0,8"
-                    Text="フォルダ内の WAV を解析し、区間を直してから oto.ini を作ります。保存データがあるフォルダは、再解析せずに開きます。フォルダをこのウィンドウへドロップしても開けます。"
+                    Text="フォルダを開くと編集画面に入ります。保存データがあるときは、その区間を読み込みます。無いときは、解析してから区間を直せます。フォルダをこのウィンドウへドロップしても開けます。"
                     Style="{StaticResource BodyTextBlockStyle}"
                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                     TextAlignment="Center"
@@ -381,6 +381,43 @@
                             </ScrollViewer>
                         </Grid>
                     </Border>
+                    <Grid
+                        x:Name="AnalysisGate"
+                        Grid.Column="1"
+                        Grid.ColumnSpan="2"
+                        Background="{ThemeResource SmokeFillColorDefaultBrush}"
+                        Visibility="Collapsed">
+                        <Border
+                            MaxWidth="420"
+                            Padding="28,24"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            BorderThickness="1"
+                            CornerRadius="8">
+                            <StackPanel Spacing="12">
+                                <TextBlock
+                                    Style="{StaticResource SubtitleTextBlockStyle}"
+                                    Text="この機能を使うには、まずは音声を解析してね"
+                                    TextAlignment="Center"
+                                    TextWrapping="Wrap" />
+                                <TextBlock
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Text="区間の編集と oto.ini の作成は、解析したあとに使えます。"
+                                    TextAlignment="Center"
+                                    TextWrapping="Wrap" />
+                                <Button
+                                    MinWidth="160"
+                                    Margin="0,4,0,0"
+                                    HorizontalAlignment="Center"
+                                    AutomationProperties.Name="音声を解析"
+                                    Click="Analyze_Click"
+                                    Content="音声を解析"
+                                    Style="{StaticResource AccentButtonStyle}" />
+                            </StackPanel>
+                        </Border>
+                    </Grid>
                 </Grid>
             </Grid>
 

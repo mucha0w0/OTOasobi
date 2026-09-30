@@ -26,6 +26,9 @@ public sealed partial class MainPage : Page
     DispatcherQueueTimer? _viewportTimer;
     string _appliedKey = "";
     bool _configReady;
+    bool _analyzed;
+
+    const string CacheFileName = "OTOasibi_cache.json";
 
     // oto.py の子音部、OVERLAP_AT、ブランク 0 秒（上辺の右端からのずれ）。
     // オフセットの 0 は子音開始。スライダーは ±0.1 秒で、マイナスは手前。
@@ -50,7 +53,8 @@ public sealed partial class MainPage : Page
 
     void OnPageWheel(object sender, PointerRoutedEventArgs e)
     {
-        if (EditorView.Visibility != Visibility.Visible || Editor.ActualWidth < 2)
+        if (EditorView.Visibility != Visibility.Visible || AnalysisGate.Visibility == Visibility.Visible
+            || Editor.ActualWidth < 2)
             return;
         var point = e.GetCurrentPoint(Editor);
         if (point.Position.X < 0 || point.Position.Y < 0
@@ -81,7 +85,27 @@ public sealed partial class MainPage : Page
             return;
         }
 
-        _ = RunAsync(folder, force: false);
+        _ = OpenFolderAsync(folder);
+    }
+
+    async Task OpenFolderAsync(string folder)
+    {
+        if (_busy)
+            return;
+        var names = ListWavNames(folder);
+        if (names.Count == 0)
+        {
+            ShowError("フォルダ内にWAVファイルがありません。");
+            return;
+        }
+
+        if (HasCache(folder))
+        {
+            await RunAsync(folder, force: false);
+            return;
+        }
+
+        ShowUnanalyzed(folder, names);
     }
 
     async Task ConfirmReanalyzeAsync()
@@ -157,9 +181,24 @@ public sealed partial class MainPage : Page
         _ = WriteAsync();
     }
 
+    void Analyze_Click(object sender, RoutedEventArgs e)
+    {
+        _ = StartAnalysisAsync();
+    }
+
     void Reanalyze_Click(object sender, RoutedEventArgs e)
     {
-        _ = ConfirmReanalyzeAsync();
+        if (!_analyzed)
+            _ = StartAnalysisAsync();
+        else
+            _ = ConfirmReanalyzeAsync();
+    }
+
+    async Task StartAnalysisAsync()
+    {
+        if (_busy || _folder == null || _analyzed)
+            return;
+        await RunAsync(_folder, force: true);
     }
 
     void ReanalyzeSelected_Click(object sender, RoutedEventArgs e)
@@ -174,6 +213,12 @@ public sealed partial class MainPage : Page
         UpdateCommands();
         if (FileList.SelectedItem is not WavFile file)
             return;
+        if (!_analyzed)
+        {
+            ShowFile(file);
+            return;
+        }
+
         _ = LoadPreviewAsync(file);
     }
 
@@ -207,7 +252,10 @@ public sealed partial class MainPage : Page
             });
             if (!result.Ok || result.Files.Count == 0)
             {
-                ShowError(string.IsNullOrEmpty(result.Error) ? "解析に失敗しました。" : result.Error);
+                var message = string.IsNullOrEmpty(result.Error) ? "解析に失敗しました。" : result.Error;
+                if (RestoreUnanalyzed(folderPath, message))
+                    return;
+                ShowError(message);
                 return;
             }
 
@@ -217,7 +265,8 @@ public sealed partial class MainPage : Page
         }
         catch (Exception ex)
         {
-            ShowError(ex.Message);
+            if (!RestoreUnanalyzed(folderPath, ex.Message))
+                ShowError(ex.Message);
         }
         finally
         {
@@ -601,8 +650,53 @@ public sealed partial class MainPage : Page
         BusyProgress.Value = done;
     }
 
+    void ShowUnanalyzed(string folder, IReadOnlyList<string> names)
+    {
+        _analyzed = false;
+        _folder = folder;
+        _files.Clear();
+        _notice = null;
+        _wrote = false;
+        foreach (var name in names)
+            _files.Add(new WavFile { Name = name });
+        ShowOnly("editor");
+        HideStatus();
+        ClearNotice();
+        FolderLabel.Text = folder;
+        ToolTipService.SetToolTip(FolderLabel, folder);
+        FileCount.Text = $"{_files.Count} 件";
+        FileTitle.Text = "";
+        ToolTipService.SetToolTip(FileTitle, null);
+        Editor.Clear("");
+        Editor.IsEnabled = false;
+        ConfigBody.IsEnabled = false;
+        AnalysisGate.Visibility = Visibility.Visible;
+        Widen();
+        _suppressSelection = true;
+        FileList.ItemsSource = null;
+        FileList.ItemsSource = _files;
+        _suppressSelection = false;
+        UpdateCommands();
+    }
+
+    bool RestoreUnanalyzed(string folder, string message)
+    {
+        if (_analyzed)
+            return false;
+        var names = ListWavNames(folder);
+        if (names.Count == 0)
+            return false;
+        ShowUnanalyzed(folder, names);
+        ShowNotice("解析に失敗しました", message, InfoBarSeverity.Error);
+        return true;
+    }
+
     void ShowEditor(string folder, bool cached)
     {
+        _analyzed = true;
+        AnalysisGate.Visibility = Visibility.Collapsed;
+        Editor.IsEnabled = true;
+        ConfigBody.IsEnabled = true;
         ShowOnly("editor");
         HideStatus();
         FolderLabel.Text = folder;
@@ -649,11 +743,13 @@ public sealed partial class MainPage : Page
     void UpdateCommands()
     {
         var idle = !_busy;
-        var ready = idle && EditorView.Visibility == Visibility.Visible && _files.Count > 0;
+        var editing = idle && EditorView.Visibility == Visibility.Visible && _files.Count > 0;
+        var ready = editing && _analyzed;
         OpenMenuItem.IsEnabled = idle;
         WriteMenuItem.IsEnabled = ready;
         WriteButton.IsEnabled = ready;
-        ReanalyzeMenuItem.IsEnabled = ready;
+        ReanalyzeMenuItem.Text = _analyzed ? "再解析" : "解析";
+        ReanalyzeMenuItem.IsEnabled = editing;
         ReanalyzeSelectedMenuItem.IsEnabled = ready && FileList.SelectedItem is WavFile;
     }
 
@@ -726,6 +822,21 @@ public sealed partial class MainPage : Page
         var height = Math.Max(size.Height, 840);
         if (width != size.Width || height != size.Height)
             App.MainWindow.AppWindow.Resize(new SizeInt32(width, height));
+    }
+
+    static bool HasCache(string folder) => File.Exists(Path.Combine(folder, CacheFileName));
+
+    static List<string> ListWavNames(string folder)
+    {
+        var names = new List<string>();
+        foreach (var path in Directory.EnumerateFiles(folder))
+        {
+            if (path.EndsWith(".wav", StringComparison.OrdinalIgnoreCase))
+                names.Add(Path.GetFileName(path));
+        }
+
+        names.Sort(StringComparer.OrdinalIgnoreCase);
+        return names;
     }
 
     static int CountTargets(string folder)
