@@ -393,7 +393,23 @@
                                 IsClosable="False"
                                 HorizontalContentAlignment="Stretch"
                                 VerticalContentAlignment="Stretch">
-                                <local:EffectRack />
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="*" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                    <local:EffectRack x:Name="Effects" />
+                                    <Button
+                                        x:Name="ApplyEffectsButton"
+                                        Grid.Row="1"
+                                        Margin="16,8,16,16"
+                                        HorizontalAlignment="Stretch"
+                                        Click="ApplyEffects_Click"
+                                        Content="適用"
+                                        IsEnabled="False"
+                                        Style="{StaticResource ToolbarAccentButtonStyle}"
+                                        ToolTipService.ToolTip="original の音声に、オンのエフェクトをかけて、フォルダ直下の音声を上書きします。解析データは消えます。" />
+                                </Grid>
                             </TabViewItem>
                         </TabView>
                     </Border>

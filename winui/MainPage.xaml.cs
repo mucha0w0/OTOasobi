@@ -159,6 +159,21 @@ public sealed partial class MainPage : Page
             return;
         }
 
+        _busy = true;
+        ShowBusy(0, names.Count);
+        BusyTitle.Text = "元の音声を保存しています";
+        try
+        {
+            await Task.Run(() => OriginalLibrary.Ensure(folder));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _busy = false;
+            ShowError(ex.Message);
+            return;
+        }
+
+        _busy = false;
         if (HasCache(folder))
         {
             await RunAsync(folder, force: false);
@@ -307,6 +322,78 @@ public sealed partial class MainPage : Page
     void ReanalyzeSelected_Click(object sender, RoutedEventArgs e)
     {
         _ = ConfirmReanalyzeSelectedAsync();
+    }
+
+    void ApplyEffects_Click(object sender, RoutedEventArgs e)
+    {
+        _ = ApplyEffectsAsync();
+    }
+
+    async Task ApplyEffectsAsync()
+    {
+        if (_busy || _folder == null)
+            return;
+        var dialog = new ContentDialog
+        {
+            Title = "解析データはリセットされますがよろしいですか？",
+            Content = "original の音声に、オンのエフェクトをかけて、フォルダ直下の音声を上書きします。そのあと解析します。",
+            PrimaryButtonText = "はい",
+            CloseButtonText = "いいえ",
+            DefaultButton = ContentDialogButton.Close,
+            XamlRoot = XamlRoot,
+        };
+        dialog.Opened += (_, _) => PlaceAffirmativeOnTheRight(dialog);
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary || _busy || _folder == null)
+            return;
+
+        var folder = _folder;
+        _busy = true;
+        UpdateCommands();
+        ShowBusy(0, 1);
+        BusyTitle.Text = "エフェクトを適用しています";
+        var queue = DispatcherQueue;
+        try
+        {
+            await Task.Run(() => OriginalLibrary.Apply(folder, Effects.Chain, (name, index, count) =>
+            {
+                queue.TryEnqueue(() =>
+                {
+                    if (_busy && _folder == folder)
+                        UpdateFileStatus(name, count == 0 ? 0 : (double)index / count, "適用しています");
+                });
+            }));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
+        {
+            _busy = false;
+            if (_folder != folder)
+                return;
+            ShowOnly("editor");
+            HideStatus();
+            ShowNotice("適用できませんでした", ex.Message, InfoBarSeverity.Error);
+            return;
+        }
+
+        if (_folder != folder)
+        {
+            _busy = false;
+            return;
+        }
+
+        var cache = Path.Combine(folder, CacheFileName);
+        if (File.Exists(cache))
+        {
+            try
+            {
+                File.Delete(cache);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // 消せなくても、このあと force で解析し直す。
+            }
+        }
+
+        await RunAsync(folder, force: true);
     }
 
     void FileList_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -1061,6 +1148,7 @@ public sealed partial class MainPage : Page
         ReanalyzeMenuItem.Text = _analyzed ? "再解析" : "解析";
         ReanalyzeMenuItem.IsEnabled = editing;
         ReanalyzeSelectedMenuItem.IsEnabled = ready && FileList.SelectedItem is WavFile;
+        ApplyEffectsButton.IsEnabled = editing;
     }
 
     void UpdateFileStatus(string name, double done, string label)
