@@ -1,7 +1,9 @@
 using System.Globalization;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
@@ -33,10 +35,14 @@ public sealed partial class MainPage : Page
 
     // oto.py の子音部、OVERLAP_AT、ブランク 0 秒（上辺の右端からのずれ）。
     // オフセットの 0 は子音開始。スライダーは ±0.1 秒で、マイナスは手前。
+    // オーバーラップは子音ごと。0% が子音開始、100% が母音開始。
     const double DefaultOffsetSeconds = 0;
     const double DefaultConsonantSeconds = 0.2;
     const double DefaultBlankSeconds = 0;
     const double DefaultOverlapPercent = 50;
+
+    readonly Dictionary<string, Slider> _overlapSliders = [];
+    readonly Dictionary<string, TextBlock> _overlapValues = [];
 
     public MainPage()
     {
@@ -47,10 +53,51 @@ public sealed partial class MainPage : Page
         OffsetSlider.ValueChanged += (_, _) => OnConfigChanged();
         ConsonantSlider.ValueChanged += (_, _) => OnConfigChanged();
         BlankSlider.ValueChanged += (_, _) => OnConfigChanged();
-        OverlapSlider.ValueChanged += (_, _) => OnConfigChanged();
+        BuildOverlapSliders();
         _configReady = true;
         Editor.SetOtoSettings(CurrentExport());
         AddHandler(PointerWheelChangedEvent, new PointerEventHandler(OnPageWheel), true);
+    }
+
+    void BuildOverlapSliders()
+    {
+        var valueStyle = (Style)Resources["OverlapValueStyle"];
+        var groupStyle = (Style)Resources["OverlapGroupStyle"];
+        string? group = null;
+        StackPanel? rows = null;
+        foreach (var (name, key, caption) in ConsonantOverlap.Kinds)
+        {
+            if (name != group)
+            {
+                group = name;
+                rows = new StackPanel { Spacing = 12 };
+                var section = new StackPanel { Spacing = 6 };
+                section.Children.Add(new TextBlock { Text = name, Style = groupStyle });
+                section.Children.Add(rows);
+                OverlapList.Children.Add(section);
+            }
+
+            var value = new TextBlock { Text = FormatPercent(DefaultOverlapPercent), Style = valueStyle };
+            var head = new Grid();
+            head.Children.Add(new TextBlock { Text = caption, VerticalAlignment = VerticalAlignment.Center });
+            head.Children.Add(value);
+            var slider = new Slider
+            {
+                Maximum = 100,
+                Minimum = 0,
+                StepFrequency = 1,
+                SnapsTo = SliderSnapsTo.StepValues,
+                Value = DefaultOverlapPercent,
+            };
+            AutomationProperties.SetName(slider, "オーバーラップ " + caption);
+            slider.ValueChanged += (_, _) => OnConfigChanged();
+            var row = new StackPanel { Spacing = 2 };
+            row.Children.Add(head);
+            row.Children.Add(slider);
+            rows!.Children.Add(row);
+            _overlapSliders[key] = slider;
+            _overlapValues[key] = value;
+        }
     }
 
     void OnPageWheel(object sender, PointerRoutedEventArgs e)
@@ -566,18 +613,25 @@ public sealed partial class MainPage : Page
         }
     }
 
-    OtoExport CurrentExport() => new(
-        Math.Round(-OffsetSlider.Value * 1000.0),
-        Math.Round(ConsonantSlider.Value * 1000.0),
-        BlankSlider.Value,
-        OverlapSlider.Value / 100.0);
+    OtoExport CurrentExport()
+    {
+        var overlap = new Dictionary<string, double>(_overlapSliders.Count);
+        foreach (var (key, slider) in _overlapSliders)
+            overlap[key] = slider.Value / 100.0;
+        return new(
+            Math.Round(-OffsetSlider.Value * 1000.0),
+            Math.Round(ConsonantSlider.Value * 1000.0),
+            BlankSlider.Value,
+            overlap);
+    }
 
     void OnConfigChanged()
     {
         OffsetValue.Text = FormatSignedSeconds(OffsetSlider.Value);
         ConsonantValue.Text = FormatSeconds(ConsonantSlider.Value);
         BlankValue.Text = FormatSignedSeconds(BlankSlider.Value);
-        OverlapValue.Text = FormatPercent(OverlapSlider.Value);
+        foreach (var (key, slider) in _overlapSliders)
+            _overlapValues[key].Text = FormatPercent(slider.Value);
         Editor.SetOtoSettings(CurrentExport());
         if (!_configReady || !_wrote)
             return;
@@ -593,7 +647,8 @@ public sealed partial class MainPage : Page
         OffsetSlider.Value = DefaultOffsetSeconds;
         ConsonantSlider.Value = DefaultConsonantSeconds;
         BlankSlider.Value = DefaultBlankSeconds;
-        OverlapSlider.Value = DefaultOverlapPercent;
+        foreach (var slider in _overlapSliders.Values)
+            slider.Value = DefaultOverlapPercent;
     }
 
     static string FormatSeconds(double value) =>

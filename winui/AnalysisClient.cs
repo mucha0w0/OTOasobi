@@ -385,4 +385,8 @@ sealed class AnalysisClient : IDisposable
 
 sealed record AnalyzeResult(bool Ok, string? Txt, string? Error, string? Notice);
 
-sealed record OtoExport(double OffsetMs, double ConsonantMs, double Blank, double Overlap);
+sealed record OtoExport(
+    double OffsetMs,
+    double ConsonantMs,
+    double Blank,
+    IReadOnlyDictionary<string, double> Overlap);

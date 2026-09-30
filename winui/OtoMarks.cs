@@ -33,7 +33,6 @@ static class OtoMarks
         var offsetMs = Bounded(settings.OffsetMs, 0, -MaxOffsetShiftMs, MaxOffsetShiftMs);
         var consonantMs = Bounded(settings.ConsonantMs, 200, 0, MaxPadMs);
         var blankAt = Bounded(settings.Blank, 0, -MaxBlankShiftS, MaxBlankShiftS);
-        var overlapAt = Bounded(settings.Overlap, 0.5, 0, 1);
         var spans = file.Spans;
         for (var i = 0; i < spans.Count; i++)
         {
@@ -47,7 +46,7 @@ static class OtoMarks
                 offsetMs,
                 consonantMs,
                 blankAt,
-                overlapAt,
+                settings.Overlap,
                 loudness));
         }
     }
@@ -60,7 +59,7 @@ static class OtoMarks
         double offsetMs,
         double consonantMs,
         double blankAt,
-        double overlapAt,
+        IReadOnlyDictionary<string, double> overlap,
         double[]? loudness)
     {
         var vowel = spans[index];
@@ -77,7 +76,8 @@ static class OtoMarks
 
         var offset = Math.Max(0, Round3(c0 - offsetMs));
         var preutter = Math.Max(0, Round3(v0 - offset));
-        var overlap = Round3((c0 + (v0 - c0) * overlapAt) - offset);
+        var overlapAt = ConsonantOverlap.Ratio(overlap, ConsonantLabel(spans, index, vowel));
+        var overlapMs = Round3((c0 + (v0 - c0) * overlapAt) - offset);
         var consonant = Math.Max(0, Round3((v0 + consonantMs) - offset));
         var blankAtMs = Ms(BlankRelease.At(loudness, duration, spans, index, blankAt));
         var placed = PlaceBlank(blankAtMs, offset, consonant, dur);
@@ -87,10 +87,22 @@ static class OtoMarks
         return new OtoMark(
             alias,
             offset / 1000.0,
-            (offset + overlap) / 1000.0,
+            (offset + overlapMs) / 1000.0,
             (offset + preutter) / 1000.0,
             (offset + consonant) / 1000.0,
             (offset - blank) / 1000.0);
+    }
+
+    static string? ConsonantLabel(List<PhoneSpan> spans, int index, PhoneSpan vowel)
+    {
+        if (index <= 0)
+            return null;
+        var prev = spans[index - 1];
+        if (prev.Token != vowel.Token || string.IsNullOrEmpty(prev.Token))
+            return null;
+        if (IsVowelOnset(prev.Label) || prev.Label is "無音" or "息")
+            return null;
+        return prev.Label;
     }
 
     static double ConsonantStart(List<PhoneSpan> spans, int index, PhoneSpan vowel)

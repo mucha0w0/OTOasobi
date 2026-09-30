@@ -26,6 +26,14 @@
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
             <Setter Property="MinWidth" Value="0" />
         </Style>
+        <Style x:Key="OverlapValueStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionTextBlockStyle}">
+            <Setter Property="HorizontalAlignment" Value="Right" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+        </Style>
+        <Style x:Key="OverlapGroupStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionTextBlockStyle}">
+            <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+        </Style>
     </Page.Resources>
 
     <Grid>
@@ -255,99 +263,97 @@
                                     Style="{StaticResource BodyStrongTextBlockStyle}"
                                     Text="設定" />
                             </Border>
-                            <ScrollViewer
-                                x:Name="ConfigBody"
-                                Grid.Row="1"
-                                HorizontalScrollBarVisibility="Disabled"
-                                VerticalScrollBarVisibility="Auto">
-                                <StackPanel Padding="16,12,16,16" Spacing="18">
-                                    <Expander
-                                        Header="詳細設定"
-                                        IsExpanded="False"
-                                        Style="{StaticResource SettingsExpanderStyle}">
-                                        <StackPanel Spacing="18">
-                                            <StackPanel Spacing="2">
-                                                <Grid>
-                                                    <TextBlock VerticalAlignment="Center" Text="オフセット" />
-                                                    <TextBlock
-                                                        x:Name="OffsetValue"
-                                                        HorizontalAlignment="Right"
-                                                        VerticalAlignment="Center"
-                                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                        Style="{StaticResource CaptionTextBlockStyle}"
-                                                        Text="0.000 s" />
-                                                </Grid>
-                                                <Slider
-                                                    x:Name="OffsetSlider"
-                                                    AutomationProperties.Name="オフセット"
-                                                    Maximum="0.1"
-                                                    Minimum="-0.1"
-                                                    StepFrequency="0.001"
-                                                    SnapsTo="StepValues"
-                                                    Value="0" />
+                            <ContentControl x:Name="ConfigBody" Grid.Row="1" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="*" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+                                <ScrollViewer
+                                    HorizontalScrollBarVisibility="Disabled"
+                                    VerticalScrollBarVisibility="Auto">
+                                    <StackPanel Padding="16,12,16,12" Spacing="18">
+                                        <Expander
+                                            Header="詳細設定"
+                                            IsExpanded="False"
+                                            Style="{StaticResource SettingsExpanderStyle}">
+                                            <StackPanel Spacing="18">
+                                                <StackPanel Spacing="2">
+                                                    <Grid>
+                                                        <TextBlock VerticalAlignment="Center" Text="オフセット" />
+                                                        <TextBlock
+                                                            x:Name="OffsetValue"
+                                                            HorizontalAlignment="Right"
+                                                            VerticalAlignment="Center"
+                                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                            Style="{StaticResource CaptionTextBlockStyle}"
+                                                            Text="0.000 s" />
+                                                    </Grid>
+                                                    <Slider
+                                                        x:Name="OffsetSlider"
+                                                        AutomationProperties.Name="オフセット"
+                                                        Maximum="0.1"
+                                                        Minimum="-0.1"
+                                                        StepFrequency="0.001"
+                                                        SnapsTo="StepValues"
+                                                        Value="0" />
+                                                </StackPanel>
+                                                <StackPanel Spacing="2">
+                                                    <Grid>
+                                                        <TextBlock VerticalAlignment="Center" Text="子音部" />
+                                                        <TextBlock
+                                                            x:Name="ConsonantValue"
+                                                            HorizontalAlignment="Right"
+                                                            VerticalAlignment="Center"
+                                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                            Style="{StaticResource CaptionTextBlockStyle}"
+                                                            Text="0.200 s" />
+                                                    </Grid>
+                                                    <Slider
+                                                        x:Name="ConsonantSlider"
+                                                        AutomationProperties.Name="子音部"
+                                                        Maximum="0.2"
+                                                        Minimum="0"
+                                                        StepFrequency="0.001"
+                                                        SnapsTo="StepValues"
+                                                        Value="0.2" />
+                                                </StackPanel>
+                                                <StackPanel Spacing="2">
+                                                    <Grid>
+                                                        <TextBlock VerticalAlignment="Center" Text="ブランク" />
+                                                        <TextBlock
+                                                            x:Name="BlankValue"
+                                                            HorizontalAlignment="Right"
+                                                            VerticalAlignment="Center"
+                                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                            Style="{StaticResource CaptionTextBlockStyle}"
+                                                            Text="0.000 s" />
+                                                    </Grid>
+                                                    <Slider
+                                                        x:Name="BlankSlider"
+                                                        AutomationProperties.Name="ブランク"
+                                                        Maximum="0.1"
+                                                        Minimum="-0.1"
+                                                        StepFrequency="0.001"
+                                                        SnapsTo="StepValues"
+                                                        Value="0" />
+                                                </StackPanel>
                                             </StackPanel>
-                                            <StackPanel Spacing="2">
-                                                <Grid>
-                                                    <TextBlock VerticalAlignment="Center" Text="子音部" />
-                                                    <TextBlock
-                                                        x:Name="ConsonantValue"
-                                                        HorizontalAlignment="Right"
-                                                        VerticalAlignment="Center"
-                                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                        Style="{StaticResource CaptionTextBlockStyle}"
-                                                        Text="0.200 s" />
-                                                </Grid>
-                                                <Slider
-                                                    x:Name="ConsonantSlider"
-                                                    AutomationProperties.Name="子音部"
-                                                    Maximum="0.2"
-                                                    Minimum="0"
-                                                    StepFrequency="0.001"
-                                                    SnapsTo="StepValues"
-                                                    Value="0.2" />
-                                            </StackPanel>
-                                            <StackPanel Spacing="2">
-                                                <Grid>
-                                                    <TextBlock VerticalAlignment="Center" Text="ブランク" />
-                                                    <TextBlock
-                                                        x:Name="BlankValue"
-                                                        HorizontalAlignment="Right"
-                                                        VerticalAlignment="Center"
-                                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                        Style="{StaticResource CaptionTextBlockStyle}"
-                                                        Text="0.000 s" />
-                                                </Grid>
-                                                <Slider
-                                                    x:Name="BlankSlider"
-                                                    AutomationProperties.Name="ブランク"
-                                                    Maximum="0.1"
-                                                    Minimum="-0.1"
-                                                    StepFrequency="0.001"
-                                                    SnapsTo="StepValues"
-                                                    Value="0" />
-                                            </StackPanel>
-                                        </StackPanel>
-                                    </Expander>
-                                    <StackPanel Spacing="2">
-                                        <Grid>
-                                            <TextBlock VerticalAlignment="Center" Text="オーバーラップ" />
+                                        </Expander>
+                                        <StackPanel Spacing="8">
                                             <TextBlock
-                                                x:Name="OverlapValue"
-                                                HorizontalAlignment="Right"
-                                                VerticalAlignment="Center"
+                                                Style="{StaticResource BodyStrongTextBlockStyle}"
+                                                Text="オーバーラップ" />
+                                            <TextBlock
                                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                                 Style="{StaticResource CaptionTextBlockStyle}"
-                                                Text="50%" />
-                                        </Grid>
-                                        <Slider
-                                            x:Name="OverlapSlider"
-                                            AutomationProperties.Name="オーバーラップ"
-                                            Maximum="100"
-                                            Minimum="0"
-                                            StepFrequency="1"
-                                            SnapsTo="StepValues"
-                                            Value="50" />
+                                                Text="子音の開始から母音の開始までの割合です。子音ごとに別の値です。"
+                                                TextWrapping="Wrap" />
+                                            <StackPanel x:Name="OverlapList" Spacing="16" />
+                                        </StackPanel>
                                     </StackPanel>
+                                </ScrollViewer>
+                                <StackPanel Grid.Row="1" Padding="16,8,16,16" Spacing="8">
                                     <Button
                                         x:Name="WriteButton"
                                         HorizontalAlignment="Stretch"
@@ -365,7 +371,8 @@
                                         Content="初期値に戻す"
                                         Style="{StaticResource ToolbarButtonStyle}" />
                                 </StackPanel>
-                            </ScrollViewer>
+                            </Grid>
+                            </ContentControl>
                         </Grid>
                     </Border>
                 </Grid>

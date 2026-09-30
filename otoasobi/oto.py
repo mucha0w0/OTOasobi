@@ -12,7 +12,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
@@ -23,7 +23,7 @@ from otoasobi.segment import Span
 
 # 母音開始の後に置く子音部。画面の初期値。
 PAD_MS = 200.0
-# 子音の開始と終了（母音の開始）のあいだの位置。種類ごとの比率は後で足す。
+# 子音の開始と終了（母音の開始）のあいだの位置。子音ラベルが無いときの比率。
 OVERLAP_AT = 0.5
 # ブランクと子音部のあいだがこれより短いと、UTAU のエンジンが落ちる。
 MIN_GAP_MS = 1.0
@@ -48,6 +48,8 @@ class OtoSettings:
     # 上辺の右端からの秒。正は減衰側、負は手前。
     blank_at: float = 0.0
     overlap_at: float = OVERLAP_AT
+    # 子音ラベル（k, sh など）ごとの比率。無いラベルは overlap_at。
+    overlap_by: dict[str, float] = field(default_factory=dict)
 
 
 def _bounded(value: object, default: float, lo: float, hi: float) -> float:
@@ -59,10 +61,28 @@ def _bounded(value: object, default: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, number))
 
 
+def _overlap_by(raw: object) -> dict[str, float]:
+    """子音ラベルから 0〜1。数値が 1 個だけの古い config はここを空にして、全体の比率に任せる。"""
+    if not isinstance(raw, dict):
+        return {}
+    table: dict[str, float] = {}
+    for key, value in raw.items():
+        if isinstance(key, str) and key:
+            table[key] = _bounded(value, OVERLAP_AT, 0.0, 1.0)
+    return table
+
+
 def oto_settings_from(raw: object) -> OtoSettings:
     """画面からの config。無い欄と範囲外は初期値か、許す範囲の端に寄せる。"""
     if not isinstance(raw, dict):
         return OtoSettings()
+    overlap_raw = raw.get("overlap")
+    if isinstance(overlap_raw, dict):
+        overlap_at = OVERLAP_AT
+        overlap_by = _overlap_by(overlap_raw)
+    else:
+        overlap_at = _bounded(overlap_raw, OVERLAP_AT, 0.0, 1.0)
+        overlap_by = {}
     return OtoSettings(
         offset_ms=_bounded(
             raw.get("offset_ms"),
@@ -72,7 +92,8 @@ def oto_settings_from(raw: object) -> OtoSettings:
         ),
         consonant_ms=_bounded(raw.get("consonant_ms"), PAD_MS, 0.0, MAX_PAD_MS),
         blank_at=_bounded(raw.get("blank"), 0.0, -MAX_BLANK_SHIFT_S, MAX_BLANK_SHIFT_S),
-        overlap_at=_bounded(raw.get("overlap"), OVERLAP_AT, 0.0, 1.0),
+        overlap_at=overlap_at,
+        overlap_by=overlap_by,
     )
 
 
@@ -85,6 +106,24 @@ def _fmt(value: float) -> str:
     if abs(rounded) < 0.0005:
         rounded = 0.0
     return f"{rounded:.3f}"
+
+
+def _consonant_label(spans: list[Span], index: int, vowel: Span) -> str | None:
+    """同じモーラの直前区間が子音なら、そのラベル。母音だけと ん は None。"""
+    if index <= 0:
+        return None
+    prev = spans[index - 1]
+    if prev.token != vowel.token or not prev.token:
+        return None
+    if prev.label in VOWEL_ONSET_LABELS or prev.label in (SILENCE_LABEL, BREATH_LABEL):
+        return None
+    return prev.label
+
+
+def _overlap_ratio(settings: OtoSettings, consonant: str | None) -> float:
+    if consonant is not None and consonant in settings.overlap_by:
+        return settings.overlap_by[consonant]
+    return settings.overlap_at
 
 
 def _consonant_start(spans: list[Span], index: int, vowel: Span) -> float:
@@ -142,7 +181,8 @@ def mono_oto_line(
 
     offset = max(0.0, round(c0 - settings.offset_ms, 3))
     preutter = max(0.0, round(v0 - offset, 3))
-    overlap = round((c0 + (v0 - c0) * settings.overlap_at) - offset, 3)
+    ratio = _overlap_ratio(settings, _consonant_label(spans, index, vowel))
+    overlap = round((c0 + (v0 - c0) * ratio) - offset, 3)
     consonant = max(0.0, round((v0 + settings.consonant_ms) - offset, 3))
     blank_at = _ms(
         release_blank_seconds(loudness, duration, spans, index, settings.blank_at)

@@ -120,7 +120,7 @@ public sealed class SpanEditor : UserControl
     readonly List<Line> _otoLines = [];
     readonly List<Border> _otoPointChips = [];
     List<List<(int Index, bool IsStart)>> _groups = [];
-    OtoExport _oto = new(200, 200, 200, 0.5);
+    OtoExport _oto = new(0, 200, 0, new Dictionary<string, double>());
     int _hotOto = -1;
 
     DragKind _drag = DragKind.None;
