@@ -43,6 +43,17 @@ public sealed partial class MainPage : Page
 
     readonly Dictionary<string, Slider> _overlapSliders = [];
     readonly Dictionary<string, TextBlock> _overlapValues = [];
+    readonly OtoPreset _builtIn = new()
+    {
+        Name = OtoPreset.BuiltInName,
+        BuiltIn = true,
+        Offset = DefaultOffsetSeconds,
+        Consonant = DefaultConsonantSeconds,
+        Blank = DefaultBlankSeconds,
+    };
+    readonly List<OtoPreset> _userPresets = [];
+    OtoPreset? _selectedPreset;
+    bool _applyingPreset;
 
     public MainPage()
     {
@@ -54,6 +65,7 @@ public sealed partial class MainPage : Page
         ConsonantSlider.ValueChanged += (_, _) => OnConfigChanged();
         BlankSlider.ValueChanged += (_, _) => OnConfigChanged();
         BuildOverlapSliders();
+        LoadPresets();
         _configReady = true;
         Editor.SetOtoSettings(CurrentExport());
         AddHandler(PointerWheelChangedEvent, new PointerEventHandler(OnPageWheel), true);
@@ -633,6 +645,7 @@ public sealed partial class MainPage : Page
         foreach (var (key, slider) in _overlapSliders)
             _overlapValues[key].Text = FormatPercent(slider.Value);
         Editor.SetOtoSettings(CurrentExport());
+        UpdatePresetDirty();
         if (!_configReady || !_wrote)
             return;
         _wrote = false;
@@ -649,6 +662,200 @@ public sealed partial class MainPage : Page
         BlankSlider.Value = DefaultBlankSeconds;
         foreach (var slider in _overlapSliders.Values)
             slider.Value = DefaultOverlapPercent;
+    }
+
+    void LoadPresets()
+    {
+        _userPresets.Clear();
+        _userPresets.AddRange(OtoPresetStore.Load());
+        RebuildPresetMenu();
+        SelectPreset(_builtIn);
+    }
+
+    void RebuildPresetMenu()
+    {
+        PresetFlyout.Items.Clear();
+        AddPresetItem(_builtIn);
+        foreach (var preset in _userPresets)
+            AddPresetItem(preset);
+    }
+
+    void AddPresetItem(OtoPreset preset)
+    {
+        var item = new RadioMenuFlyoutItem
+        {
+            Text = preset.Name,
+            GroupName = "oto-preset",
+            Tag = preset,
+            IsChecked = ReferenceEquals(preset, _selectedPreset),
+        };
+        item.Click += (_, _) => SelectPreset(preset);
+        PresetFlyout.Items.Add(item);
+    }
+
+    void SelectPreset(OtoPreset preset)
+    {
+        _selectedPreset = preset;
+        PresetNameText.Text = preset.Name;
+        foreach (var entry in PresetFlyout.Items)
+        {
+            if (entry is RadioMenuFlyoutItem radio && ReferenceEquals(radio.Tag, preset))
+                radio.IsChecked = true;
+        }
+
+        ApplyPreset(preset);
+    }
+
+    void ApplyPreset(OtoPreset preset)
+    {
+        _applyingPreset = true;
+        OffsetSlider.Value = preset.Offset;
+        ConsonantSlider.Value = preset.Consonant;
+        BlankSlider.Value = preset.Blank;
+        foreach (var (key, slider) in _overlapSliders)
+            slider.Value = preset.Overlap.TryGetValue(key, out var value) ? value : DefaultOverlapPercent;
+        _applyingPreset = false;
+        UpdatePresetDirty();
+    }
+
+    void UpdatePresetDirty()
+    {
+        var dirty = !_applyingPreset && _selectedPreset != null && !PresetMatches(_selectedPreset);
+        PresetDirtyMark.Visibility = dirty ? Visibility.Visible : Visibility.Collapsed;
+        foreach (var entry in PresetFlyout.Items)
+        {
+            if (entry is not RadioMenuFlyoutItem radio || radio.Tag is not OtoPreset preset)
+                continue;
+            var text = dirty && ReferenceEquals(preset, _selectedPreset) ? preset.Name + " *" : preset.Name;
+            if (radio.Text != text)
+                radio.Text = text;
+        }
+    }
+
+    bool PresetMatches(OtoPreset preset)
+    {
+        if (Math.Round(OffsetSlider.Value, 3) != Math.Round(preset.Offset, 3))
+            return false;
+        if (Math.Round(ConsonantSlider.Value, 3) != Math.Round(preset.Consonant, 3))
+            return false;
+        if (Math.Round(BlankSlider.Value, 3) != Math.Round(preset.Blank, 3))
+            return false;
+        foreach (var (key, slider) in _overlapSliders)
+        {
+            var expected = preset.Overlap.TryGetValue(key, out var value) ? value : DefaultOverlapPercent;
+            if (Math.Round(slider.Value) != Math.Round(expected))
+                return false;
+        }
+
+        return true;
+    }
+
+    void CopyCurrentInto(OtoPreset preset)
+    {
+        preset.Offset = Math.Round(OffsetSlider.Value, 3);
+        preset.Consonant = Math.Round(ConsonantSlider.Value, 3);
+        preset.Blank = Math.Round(BlankSlider.Value, 3);
+        preset.Overlap.Clear();
+        foreach (var (key, slider) in _overlapSliders)
+            preset.Overlap[key] = Math.Round(slider.Value);
+    }
+
+    void SavePreset_Click(object sender, RoutedEventArgs e)
+    {
+        _ = SavePresetAsync();
+    }
+
+    async Task SavePresetAsync()
+    {
+        var box = new TextBox { PlaceholderText = "プリセット名" };
+        if (_selectedPreset is { BuiltIn: false })
+        {
+            box.Text = _selectedPreset.Name;
+            box.SelectAll();
+        }
+
+        var error = new TextBlock
+        {
+            TextWrapping = TextWrapping.Wrap,
+            Visibility = Visibility.Collapsed,
+        };
+        if (Application.Current.Resources.TryGetValue("SystemFillColorCriticalBrush", out var brush) && brush is Brush paint)
+            error.Foreground = paint;
+        var panel = new StackPanel { Spacing = 8, MinWidth = 280 };
+        panel.Children.Add(new TextBlock
+        {
+            Text = "この設定につける名前を入力してください。",
+            TextWrapping = TextWrapping.Wrap,
+        });
+        panel.Children.Add(box);
+        panel.Children.Add(error);
+        var dialog = new ContentDialog
+        {
+            Title = "現在の設定を保存",
+            Content = panel,
+            PrimaryButtonText = "保存",
+            CloseButtonText = "キャンセル",
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = XamlRoot,
+        };
+        dialog.Opened += (_, _) => box.Focus(FocusState.Programmatic);
+        dialog.PrimaryButtonClick += (_, args) =>
+        {
+            var message = PresetNameError(box.Text);
+            if (message == null)
+                return;
+            args.Cancel = true;
+            error.Text = message;
+            error.Visibility = Visibility.Visible;
+        };
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+            return;
+
+        var name = box.Text.Trim();
+        var existing = _userPresets.FirstOrDefault(preset => preset.Name == name);
+        if (existing != null && !ReferenceEquals(existing, _selectedPreset))
+        {
+            var confirm = new ContentDialog
+            {
+                Title = "プリセットを上書きしますか？",
+                Content = $"「{name}」は既にあります。いまの設定で置き換えます。",
+                PrimaryButtonText = "上書きする",
+                CloseButtonText = "キャンセル",
+                DefaultButton = ContentDialogButton.Close,
+                XamlRoot = XamlRoot,
+            };
+            if (await confirm.ShowAsync() != ContentDialogResult.Primary)
+                return;
+        }
+
+        var target = existing ?? new OtoPreset { Name = name };
+        CopyCurrentInto(target);
+        if (existing == null)
+            _userPresets.Add(target);
+        RebuildPresetMenu();
+        SelectPreset(target);
+        try
+        {
+            OtoPresetStore.Save(_userPresets);
+        }
+        catch (Exception ex)
+        {
+            ShowNotice("プリセットを保存できませんでした", ex.Message, InfoBarSeverity.Error);
+        }
+    }
+
+    static string? PresetNameError(string raw)
+    {
+        var name = raw.Trim();
+        if (name.Length == 0)
+            return "名前を入力してください。";
+        if (name.Length > 40)
+            return "名前は40文字までです。";
+        if (name.Any(char.IsControl))
+            return "名前に使えない文字があります。";
+        if (name == OtoPreset.BuiltInName)
+            return "初期値という名前は使えません。";
+        return null;
     }
 
     static string FormatSeconds(double value) =>

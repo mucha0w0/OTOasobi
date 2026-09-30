@@ -1201,9 +1201,18 @@ public sealed class SpanEditor : UserControl
             loudPx = ClampRange(loudPx - dy, minPx, area - wavePx - otoPx - minPx);
             _loudShare = loudPx / area;
         }
+        else if (HasLoudness)
+        {
+            var pair = loudPx + otoPx;
+            var floor = Math.Min(minPx, pair / 2);
+            otoPx = ClampRange(otoPx - dy, floor, pair - floor);
+            loudPx = pair - otoPx;
+            _loudShare = loudPx / area;
+            _otoShare = otoPx / area;
+        }
         else
         {
-            otoPx = ClampRange(otoPx - dy, minPx, area - wavePx - loudPx - minPx);
+            otoPx = ClampRange(otoPx - dy, minPx, area - wavePx - minPx);
             _otoShare = otoPx / area;
         }
 
