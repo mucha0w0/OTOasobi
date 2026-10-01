@@ -10,10 +10,10 @@
 先行発声は母音の開始です。
 
 単独音のオフセットは、子音の開始を基準に ±0.1 秒だけ前後へずらします。
-連続音のオフセットは、その音素の子音と直前の母音の境界を 0 とします。
-子音がない音素は、母音と母音の境界を 0 とします。ずらす幅は単独音と同じです。
+連続音のオフセットの 0 は、その音素の子音と直前の母音の境界から 0.15 秒手前です。
+子音がない音素は、母音と母音の境界から 0.15 秒手前です。ずらす幅は単独音と同じです。
 連続音のオーバーラップは、オフセットの位置を 0%、その音素の開始を 100% とした割合です。
-音素の開始は、オフセットの 0 と同じ境界です。
+音素の開始は、子音と直前の母音の境界です。子音がないときは、母音と母音の境界です。
 """
 
 from __future__ import annotations
@@ -37,6 +37,8 @@ MIN_GAP_MS = 1.0
 MAX_PAD_MS = 2000.0
 # 子音の開始から前後にこの幅。画面のオフセットスライダーと同じ。正は手前。
 MAX_OFFSET_SHIFT_MS = 100.0
+# 連続音のオフセットの 0。音素の開始から手前へこの幅。
+RENZOKU_OFFSET_LEAD_MS = 150.0
 # 上辺の右端からずらす幅。画面のブランクスライダーと同じ。
 MAX_BLANK_SHIFT_S = 0.1
 OTO_INI_NAME = "oto.ini"
@@ -48,7 +50,7 @@ ANSI = "cp932"
 class OtoSettings:
     """oto.ini の位置。未指定のときはいまの書き出しと同じ。"""
 
-    # ミリ秒。正は手前、負は後。0 は単独音では子音開始、連続音では音素の開始。
+    # ミリ秒。正は手前、負は後。0 は単独音では子音開始、連続音では音素の開始の 0.15 秒手前。
     offset_ms: float = 0.0
     consonant_ms: float = PAD_MS
     # 上辺の右端からの秒。正は減衰側、負は手前。
@@ -245,10 +247,11 @@ def _renzoku_alias(filename: str, spans: list[Span], index: int, vowel: Span) ->
 
 
 def _phoneme_start(spans: list[Span], index: int, vowel: Span) -> float:
-    """その音素の開始。連続音のオフセットの 0 と同じ点。
+    """その音素の開始。連続音のオーバーラップの 100%。
 
     子音があるときは、その子音と直前の母音の境界。
     子音がないときは、母音と母音の境界。直前の母音が無いときは、その開始そのもの。
+    オフセットの 0 は、この点から RENZOKU_OFFSET_LEAD_MS だけ手前です。
     """
     return _consonant_start(spans, index, vowel)
 
@@ -271,9 +274,9 @@ def renzoku_oto_line(
     v1 = _ms(vowel.end)
     dur = max(_ms(duration), v1, start)
 
-    offset = max(0.0, round(start - settings.offset_ms, 3))
+    offset = max(0.0, round(start - RENZOKU_OFFSET_LEAD_MS - settings.offset_ms, 3))
     preutter = max(0.0, round(v0 - offset, 3))
-    # 0% はオフセットの位置、100% は音素の開始。オフセットが 0 のときは同じ点。
+    # 0% はオフセットの位置、100% は音素の開始。
     overlap = round((start - offset) * settings.overlap_at, 3)
     consonant = max(0.0, round((v0 + settings.consonant_ms) - offset, 3))
     blank_at = _ms(

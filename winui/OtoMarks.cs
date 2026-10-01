@@ -26,6 +26,8 @@ static class OtoMarks
     const double MaxPadMs = 2000;
     const double MaxOffsetShiftMs = 100;
     const double MaxBlankShiftS = 0.1;
+    // 連続音のオフセットの 0。音素の開始から手前へこの幅。oto.py の RENZOKU_OFFSET_LEAD_MS。
+    const double RenzokuOffsetLeadMs = 150;
 
     public static void Fill(WavFile file, OtoExport settings, List<OtoMark> dest, double[]? loudness)
     {
@@ -82,8 +84,9 @@ static class OtoMarks
         var v1 = Ms(vowel.End);
         var dur = Math.Max(Ms(duration), Math.Max(v1, start));
 
-        var offset = Math.Max(0, Round3(start - offsetMs));
+        var offset = Math.Max(0, Round3(start - RenzokuOffsetLeadMs - offsetMs));
         var preutter = Math.Max(0, Round3(v0 - offset));
+        // 0% はオフセットの位置、100% は音素の開始。
         var overlapMs = Round3((start - offset) * overlapAt);
         var consonant = Math.Max(0, Round3((v0 + consonantMs) - offset));
         var blankAtMs = Ms(BlankRelease.At(loudness, duration, spans, index, blankAt));

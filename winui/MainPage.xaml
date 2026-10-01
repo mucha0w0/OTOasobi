@@ -623,7 +623,7 @@
                                                                 Minimum="-0.1"
                                                                 SnapsTo="StepValues"
                                                                 StepFrequency="0.001"
-                                                                ToolTipService.ToolTip="0 は、その音素の子音と直前の母音の境界です。子音がないときは、母音と母音の境界です。マイナスは手前、プラスは後です。"
+                                                                ToolTipService.ToolTip="0 は、その音素の子音と直前の母音の境界から 0.15 秒手前です。子音がないときは、母音と母音の境界から 0.15 秒手前です。マイナスは手前、プラスは後です。"
                                                                 Value="0" />
                                                             <Grid>
                                                                 <TextBlock VerticalAlignment="Center" Text="子音部" />
@@ -673,7 +673,7 @@
                                                             <TextBlock
                                                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                                                 Style="{StaticResource CaptionTextBlockStyle}"
-                                                                Text="0% はオフセットの位置、100% はその音素の開始です。オフセットが 0 のときは同じ位置です。"
+                                                                Text="0% はオフセットの位置、100% はその音素の開始です。音素の開始は、子音と直前の母音の境界です。"
                                                                 TextWrapping="Wrap" />
                                                             <Grid>
                                                                 <TextBlock VerticalAlignment="Center" Text="割合" />
