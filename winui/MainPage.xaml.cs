@@ -53,6 +53,7 @@ public sealed partial class MainPage : Page
     };
     readonly List<OtoPreset> _userPresets = [];
     OtoPreset? _selectedPreset;
+    OtoPreset _restPreset = null!;
     bool _applyingPreset;
 
     public MainPage()
@@ -69,6 +70,7 @@ public sealed partial class MainPage : Page
         RenzokuConsonantSlider.ValueChanged += (_, _) => OnConfigChanged();
         RenzokuBlankSlider.ValueChanged += (_, _) => OnConfigChanged();
         RenzokuOverlapSlider.ValueChanged += (_, _) => OnConfigChanged();
+        _restPreset = _builtIn;
         LoadPresets();
         _configReady = true;
         Editor.SetOtoSettings(CurrentExport());
@@ -809,7 +811,11 @@ public sealed partial class MainPage : Page
                 RenzokuBlankSlider.Value,
                 new Dictionary<string, double>(),
                 "renzoku",
-                RenzokuOverlapSlider.Value / 100.0);
+                RenzokuOverlapSlider.Value / 100.0,
+                Math.Round(-_restPreset.Offset * 1000.0),
+                Math.Round(_restPreset.Consonant * 1000.0),
+                _restPreset.Blank,
+                RestOverlap(_restPreset));
         }
 
         var overlap = new Dictionary<string, double>(ConsonantOverlap.Kinds.Length);
@@ -865,6 +871,58 @@ public sealed partial class MainPage : Page
         AddPresetItem(_builtIn);
         foreach (var preset in _userPresets)
             AddPresetItem(preset);
+        RebuildRestPresetMenu();
+    }
+
+    void RebuildRestPresetMenu()
+    {
+        if (_restPreset != _builtIn && !_userPresets.Contains(_restPreset))
+            _restPreset = _builtIn;
+        RestPresetFlyout.Items.Clear();
+        AddRestPresetItem(_builtIn);
+        foreach (var preset in _userPresets)
+            AddRestPresetItem(preset);
+        RestPresetNameText.Text = _restPreset.Name;
+    }
+
+    void AddRestPresetItem(OtoPreset preset)
+    {
+        var item = new RadioMenuFlyoutItem
+        {
+            Text = preset.Name,
+            GroupName = "renzoku-rest-preset",
+            Tag = preset,
+            IsChecked = ReferenceEquals(preset, _restPreset),
+        };
+        item.Click += (_, _) => SelectRestPreset(preset);
+        RestPresetFlyout.Items.Add(item);
+    }
+
+    void SelectRestPreset(OtoPreset preset)
+    {
+        _restPreset = preset;
+        RestPresetNameText.Text = preset.Name;
+        foreach (var entry in RestPresetFlyout.Items)
+        {
+            if (entry is RadioMenuFlyoutItem radio && ReferenceEquals(radio.Tag, preset))
+                radio.IsChecked = true;
+        }
+
+        if (_configReady)
+            OnConfigChanged();
+    }
+
+    static Dictionary<string, double> RestOverlap(OtoPreset preset)
+    {
+        var overlap = new Dictionary<string, double>(ConsonantOverlap.Kinds.Length);
+        foreach (var (_, key, _) in ConsonantOverlap.Kinds)
+        {
+            overlap[key] = preset.Overlap.TryGetValue(key, out var value)
+                ? value / 100.0
+                : ConsonantOverlap.Default;
+        }
+
+        return overlap;
     }
 
     void AddPresetItem(OtoPreset preset)

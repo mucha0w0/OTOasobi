@@ -14,6 +14,8 @@
 子音がない音素は、母音と母音の境界から 0.15 秒手前です。ずらす幅は単独音と同じです。
 連続音のオーバーラップは、オフセットの位置を 0%、その音素の開始を 100% とした割合です。
 音素の開始は、子音と直前の母音の境界です。子音がないときは、母音と母音の境界です。
+アンダーバーだけの無音の直後の音素は、単独音と同じ計算です。値は rest のプリセットです。
+エイリアスは連続音のままです。
 """
 
 from __future__ import annotations
@@ -60,6 +62,8 @@ class OtoSettings:
     overlap_by: dict[str, float] = field(default_factory=dict)
     # mono または renzoku。
     mode: str = "mono"
+    # 連続音で、アンダーバーの無音の直後にだけ使う単独音の値。
+    rest: OtoSettings | None = None
 
 
 def _bounded(value: object, default: float, lo: float, hi: float) -> float:
@@ -82,7 +86,7 @@ def _overlap_by(raw: object) -> dict[str, float]:
     return table
 
 
-def oto_settings_from(raw: object) -> OtoSettings:
+def oto_settings_from(raw: object, *, with_rest: bool = True) -> OtoSettings:
     """画面からの config。無い欄と範囲外は初期値か、許す範囲の端に寄せる。"""
     if not isinstance(raw, dict):
         return OtoSettings()
@@ -93,6 +97,9 @@ def oto_settings_from(raw: object) -> OtoSettings:
     else:
         overlap_at = _bounded(overlap_raw, OVERLAP_AT, 0.0, 1.0)
         overlap_by = {}
+    rest = None
+    if with_rest and isinstance(raw.get("rest"), dict):
+        rest = oto_settings_from(raw["rest"], with_rest=False)
     return OtoSettings(
         offset_ms=_bounded(
             raw.get("offset_ms"),
@@ -105,6 +112,7 @@ def oto_settings_from(raw: object) -> OtoSettings:
         overlap_at=overlap_at,
         overlap_by=overlap_by,
         mode="renzoku" if raw.get("mode") == "renzoku" else "mono",
+        rest=rest,
     )
 
 
@@ -178,13 +186,15 @@ def mono_oto_line(
     duration: float,
     settings: OtoSettings | None = None,
     loudness: np.ndarray | None = None,
+    alias: str | None = None,
 ) -> str | None:
     """1 エイリアス分の単独音 oto.ini 行。母音でも ん でもなければ None。"""
     settings = settings or OtoSettings()
     vowel = spans[index]
     if vowel.label not in VOWEL_ONSET_LABELS:
         return None
-    alias = vowel.token or Path(filename).stem
+    if alias is None:
+        alias = vowel.token or Path(filename).stem
     c0 = _ms(_consonant_start(spans, index, vowel))
     v0 = _ms(vowel.start)
     v1 = _ms(vowel.end)
@@ -246,6 +256,26 @@ def _renzoku_alias(filename: str, spans: list[Span], index: int, vowel: Span) ->
     return f"{_previous_vowel_letter(spans, index)} {alias}"
 
 
+def _follows_rest(spans: list[Span], index: int, vowel: Span) -> bool:
+    """このモーラの直前が、アンダーバーだけの無音か。子音と っ はそのモーラとして飛ばす。"""
+    cursor = index - 1
+    while cursor >= 0:
+        span = spans[cursor]
+        if (
+            span.token == vowel.token
+            and span.token
+            and span.label not in VOWEL_ONSET_LABELS
+            and span.label not in (SILENCE_LABEL, BREATH_LABEL)
+        ):
+            cursor -= 1
+            continue
+        break
+    if cursor < 0:
+        return False
+    prev = spans[cursor]
+    return prev.label == SILENCE_LABEL and _is_rest_token(prev.token)
+
+
 def _phoneme_start(spans: list[Span], index: int, vowel: Span) -> float:
     """その音素の開始。連続音のオーバーラップの 100%。
 
@@ -269,6 +299,16 @@ def renzoku_oto_line(
     vowel = spans[index]
     if vowel.label not in VOWEL_ONSET_LABELS:
         return None
+    if _follows_rest(spans, index, vowel):
+        return mono_oto_line(
+            filename,
+            spans,
+            index,
+            duration,
+            settings.rest or OtoSettings(),
+            loudness,
+            _renzoku_alias(filename, spans, index, vowel),
+        )
     start = _ms(_phoneme_start(spans, index, vowel))
     v0 = _ms(vowel.start)
     v1 = _ms(vowel.end)

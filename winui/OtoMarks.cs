@@ -37,6 +37,9 @@ static class OtoMarks
         var blankAt = Bounded(settings.Blank, 0, -MaxBlankShiftS, MaxBlankShiftS);
         var renzoku = settings.Mode == "renzoku";
         var overlapAt = Bounded(settings.OverlapAt, 0.5, 0, 1);
+        var restOffsetMs = Bounded(settings.RestOffsetMs, 0, -MaxOffsetShiftMs, MaxOffsetShiftMs);
+        var restConsonantMs = Bounded(settings.RestConsonantMs, 200, 0, MaxPadMs);
+        var restBlank = Bounded(settings.RestBlank, 0, -MaxBlankShiftS, MaxBlankShiftS);
         var spans = file.Spans;
         for (var i = 0; i < spans.Count; i++)
         {
@@ -52,6 +55,10 @@ static class OtoMarks
                     consonantMs,
                     blankAt,
                     overlapAt,
+                    restOffsetMs,
+                    restConsonantMs,
+                    restBlank,
+                    settings.RestOverlap,
                     loudness)
                 : Build(
                     file.Name,
@@ -75,10 +82,29 @@ static class OtoMarks
         double consonantMs,
         double blankAt,
         double overlapAt,
+        double restOffsetMs,
+        double restConsonantMs,
+        double restBlank,
+        IReadOnlyDictionary<string, double>? restOverlap,
         double[]? loudness)
     {
         var vowel = spans[index];
         var alias = RenzokuAlias(filename, spans, index, vowel);
+        if (FollowsRest(spans, index, vowel))
+        {
+            var mono = Build(
+                filename,
+                spans,
+                index,
+                duration,
+                restOffsetMs,
+                restConsonantMs,
+                restBlank,
+                restOverlap ?? new Dictionary<string, double>(),
+                loudness);
+            return mono with { Alias = alias };
+        }
+
         var start = Ms(ConsonantStart(spans, index, vowel));
         var v0 = Ms(vowel.Start);
         var v1 = Ms(vowel.End);
@@ -125,6 +151,30 @@ static class OtoMarks
         }
 
         return "-";
+    }
+
+    static bool FollowsRest(List<PhoneSpan> spans, int index, PhoneSpan vowel)
+    {
+        var cursor = index - 1;
+        while (cursor >= 0)
+        {
+            var span = spans[cursor];
+            if (span.Token == vowel.Token
+                && !string.IsNullOrEmpty(span.Token)
+                && !IsVowelOnset(span.Label)
+                && span.Label is not ("無音" or "息"))
+            {
+                cursor--;
+                continue;
+            }
+
+            break;
+        }
+
+        if (cursor < 0)
+            return false;
+        var prev = spans[cursor];
+        return prev.Label == "無音" && IsRestToken(prev.Token);
     }
 
     static bool IsRestToken(string token)

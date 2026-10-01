@@ -113,6 +113,15 @@ sealed class AnalysisClient : IDisposable
                 blank = config.Blank,
                 overlap = config.Mode == "renzoku" ? (object)config.OverlapAt : config.Overlap,
                 mode = config.Mode,
+                rest = config.Mode == "renzoku"
+                    ? new
+                    {
+                        offset_ms = config.RestOffsetMs,
+                        consonant_ms = config.RestConsonantMs,
+                        blank = config.RestBlank,
+                        overlap = config.RestOverlap,
+                    }
+                    : null,
             },
         }), null).ConfigureAwait(true);
         var root = doc.RootElement;
@@ -392,4 +401,8 @@ sealed record OtoExport(
     double Blank,
     IReadOnlyDictionary<string, double> Overlap,
     string Mode = "mono",
-    double OverlapAt = 0.5);
+    double OverlapAt = 0.5,
+    double RestOffsetMs = 0,
+    double RestConsonantMs = 200,
+    double RestBlank = 0,
+    IReadOnlyDictionary<string, double>? RestOverlap = null);

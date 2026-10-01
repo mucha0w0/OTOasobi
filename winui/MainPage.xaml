@@ -605,6 +605,34 @@
                                                         <StackPanel Spacing="8">
                                                             <TextBlock
                                                                 Style="{StaticResource BodyStrongTextBlockStyle}"
+                                                                Text="無音の直後" />
+                                                            <TextBlock
+                                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                                Style="{StaticResource CaptionTextBlockStyle}"
+                                                                Text="アンダーバーの無音の直後の音素は、選んだ単独音のプリセットで計算します。"
+                                                                TextWrapping="Wrap" />
+                                                            <DropDownButton
+                                                                x:Name="RestPresetMenu"
+                                                                MinHeight="32"
+                                                                HorizontalAlignment="Stretch"
+                                                                HorizontalContentAlignment="Stretch"
+                                                                AutomationProperties.HelpText="無音の直後に使う単独音のプリセット"
+                                                                AutomationProperties.Name="単独音のプリセット">
+                                                                <TextBlock
+                                                                    x:Name="RestPresetNameText"
+                                                                    VerticalAlignment="Center"
+                                                                    Text="初期値"
+                                                                    TextTrimming="CharacterEllipsis" />
+                                                                <DropDownButton.Flyout>
+                                                                    <MenuFlyout x:Name="RestPresetFlyout" />
+                                                                </DropDownButton.Flyout>
+                                                            </DropDownButton>
+                                                        </StackPanel>
+                                                    </Border>
+                                                    <Border Style="{StaticResource PanelCardStyle}">
+                                                        <StackPanel Spacing="8">
+                                                            <TextBlock
+                                                                Style="{StaticResource BodyStrongTextBlockStyle}"
                                                                 Text="区間" />
                                                             <Grid>
                                                                 <TextBlock VerticalAlignment="Center" Text="オフセット" />
