@@ -958,7 +958,7 @@ public sealed class SpanEditor : UserControl
 
         for (var i = 0; i < _lines.Count && i < _groups.Count; i++)
         {
-            if (IsOuterSilenceEdge(i))
+            if (IsQuietBoundary(i))
             {
                 _lines[i].Visibility = Visibility.Collapsed;
                 continue;
@@ -1337,7 +1337,7 @@ public sealed class SpanEditor : UserControl
         var bestDist = HitPx;
         for (var i = 0; i < _groups.Count; i++)
         {
-            if (IsOuterSilenceEdge(i))
+            if (IsQuietBoundary(i))
                 continue;
             var dist = Math.Abs(X(GroupTime(i)) - x);
             if (dist <= bestDist)
@@ -1372,23 +1372,18 @@ public sealed class SpanEditor : UserControl
         return best;
     }
 
-    bool IsOuterSilenceEdge(int group)
+    bool IsQuietBoundary(int group)
     {
         if (_file == null || group < 0 || group >= _groups.Count)
             return false;
         var spans = _file.Spans;
-        var members = _groups[group];
-        if (spans.Count == 0 || members.Count == 0)
-            return false;
-        foreach (var (index, isStart) in members)
+        foreach (var (index, _) in _groups[group])
         {
-            var leading = index == 0 && IsQuietSpan(spans[0].Label) && isStart;
-            var trailing = index == spans.Count - 1 && IsQuietSpan(spans[^1].Label) && !isStart;
-            if (!leading && !trailing)
-                return false;
+            if (index >= 0 && index < spans.Count && IsQuietSpan(spans[index].Label))
+                return true;
         }
 
-        return true;
+        return false;
     }
 
     double GroupTime(int group)
