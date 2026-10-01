@@ -449,6 +449,43 @@
                                             HorizontalScrollBarVisibility="Disabled"
                                             VerticalScrollBarVisibility="Auto">
                                             <StackPanel Padding="12,12,12,12" Spacing="10">
+                                                <Border
+                                                    Padding="3"
+                                                    Background="{ThemeResource ControlFillColorSecondaryBrush}"
+                                                    CornerRadius="8">
+                                                    <Grid ColumnSpacing="2">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="*" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <RadioButton
+                                                            x:Name="OtoModeStandalone"
+                                                            AutomationProperties.Name="単独音"
+                                                            Checked="OtoMode_Checked"
+                                                            Content="単独音"
+                                                            GroupName="OtoMode"
+                                                            IsChecked="True"
+                                                            Style="{StaticResource SegmentButtonStyle}" />
+                                                        <RadioButton
+                                                            x:Name="OtoModeRenzoku"
+                                                            Grid.Column="1"
+                                                            AutomationProperties.Name="連続音"
+                                                            Checked="OtoMode_Checked"
+                                                            Content="連続音"
+                                                            GroupName="OtoMode"
+                                                            Style="{StaticResource SegmentButtonStyle}" />
+                                                        <RadioButton
+                                                            x:Name="OtoModeCvvc"
+                                                            Grid.Column="2"
+                                                            AutomationProperties.Name="CVVC"
+                                                            Checked="OtoMode_Checked"
+                                                            Content="CVVC"
+                                                            GroupName="OtoMode"
+                                                            Style="{StaticResource SegmentButtonStyle}" />
+                                                    </Grid>
+                                                </Border>
+                                                <StackPanel x:Name="StandaloneOtoContent" Spacing="10">
                                                 <Border Style="{StaticResource PanelCardStyle}">
                                                     <StackPanel Spacing="8">
                                                         <TextBlock
@@ -561,6 +598,13 @@
                                                         <StackPanel x:Name="OverlapList" Spacing="16" />
                                                     </StackPanel>
                                                 </Border>
+                                                </StackPanel>
+                                                <StackPanel
+                                                    x:Name="RenzokuOtoContent"
+                                                    Visibility="Collapsed" />
+                                                <StackPanel
+                                                    x:Name="CvvcOtoContent"
+                                                    Visibility="Collapsed" />
                                             </StackPanel>
                                         </ScrollViewer>
                                         <Border

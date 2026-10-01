@@ -81,6 +81,21 @@ public sealed partial class MainPage : Page
         SourcePanel.Visibility = oto ? Visibility.Collapsed : Visibility.Visible;
     }
 
+    void OtoMode_Checked(object sender, RoutedEventArgs e)
+    {
+        if (StandaloneOtoContent == null || RenzokuOtoContent == null || CvvcOtoContent == null)
+            return;
+        StandaloneOtoContent.Visibility = OtoModeStandalone.IsChecked == true
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        RenzokuOtoContent.Visibility = OtoModeRenzoku.IsChecked == true
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        CvvcOtoContent.Visibility = OtoModeCvvc.IsChecked == true
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+    }
+
     void BuildOverlapSliders()
     {
         var valueStyle = (Style)Resources["OverlapValueStyle"];
