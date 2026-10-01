@@ -42,49 +42,6 @@
             VerticalScrollBarVisibility="Auto"
             VerticalScrollMode="Enabled">
         <StackPanel Padding="12,12,12,12" Spacing="10">
-            <Border Style="{StaticResource EffectCardStyle}">
-                <StackPanel Spacing="8">
-                    <TextBlock
-                        Style="{StaticResource BodyStrongTextBlockStyle}"
-                        Text="全体プリセット" />
-                    <DropDownButton
-                        x:Name="RackPresetMenu"
-                        MinHeight="32"
-                        HorizontalAlignment="Stretch"
-                        HorizontalContentAlignment="Stretch"
-                        AutomationProperties.Name="原音修正の全体プリセット"
-                        ToolTipService.ToolTip="エフェクトの並び順、オンオフ、各パラメータをまとめて切り替えます">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <TextBlock
-                                x:Name="RackPresetNameText"
-                                VerticalAlignment="Center"
-                                Text="標準"
-                                TextTrimming="CharacterEllipsis" />
-                            <TextBlock
-                                x:Name="RackPresetDirtyMark"
-                                Grid.Column="1"
-                                Margin="6,0,0,0"
-                                VerticalAlignment="Center"
-                                AutomationProperties.Name="変更あり"
-                                Text="*"
-                                ToolTipService.ToolTip="このプリセットから変更しています"
-                                Visibility="Collapsed" />
-                        </Grid>
-                        <DropDownButton.Flyout>
-                            <MenuFlyout x:Name="RackPresetFlyout" />
-                        </DropDownButton.Flyout>
-                    </DropDownButton>
-                    <Button
-                        Click="SaveRackPreset_Click"
-                        Content="現在のエフェクト設定を保存"
-                        Style="{StaticResource RackButtonStyle}"
-                        ToolTipService.ToolTip="並び順、オンオフ、各エフェクトの設定を名前をつけて保存します" />
-                </StackPanel>
-            </Border>
             <Border Padding="12,8" Style="{StaticResource EffectCardStyle}">
                 <StackPanel Spacing="4">
                     <TextBlock
@@ -155,6 +112,49 @@
                         Style="{StaticResource CaptionTextBlockStyle}"
                         TextWrapping="Wrap"
                         Visibility="Collapsed" />
+                </StackPanel>
+            </Border>
+            <Border Style="{StaticResource EffectCardStyle}">
+                <StackPanel Spacing="8">
+                    <TextBlock
+                        Style="{StaticResource BodyStrongTextBlockStyle}"
+                        Text="全体プリセット" />
+                    <DropDownButton
+                        x:Name="RackPresetMenu"
+                        MinHeight="32"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Stretch"
+                        AutomationProperties.Name="原音修正の全体プリセット"
+                        ToolTipService.ToolTip="エフェクトの並び順、オンオフ、各パラメータをまとめて切り替えます">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock
+                                x:Name="RackPresetNameText"
+                                VerticalAlignment="Center"
+                                Text="標準"
+                                TextTrimming="CharacterEllipsis" />
+                            <TextBlock
+                                x:Name="RackPresetDirtyMark"
+                                Grid.Column="1"
+                                Margin="6,0,0,0"
+                                VerticalAlignment="Center"
+                                AutomationProperties.Name="変更あり"
+                                Text="*"
+                                ToolTipService.ToolTip="このプリセットから変更しています"
+                                Visibility="Collapsed" />
+                        </Grid>
+                        <DropDownButton.Flyout>
+                            <MenuFlyout x:Name="RackPresetFlyout" />
+                        </DropDownButton.Flyout>
+                    </DropDownButton>
+                    <Button
+                        Click="SaveRackPreset_Click"
+                        Content="現在のエフェクト設定を保存"
+                        Style="{StaticResource RackButtonStyle}"
+                        ToolTipService.ToolTip="並び順、オンオフ、各エフェクトの設定を名前をつけて保存します" />
                 </StackPanel>
             </Border>
             <StackPanel x:Name="EffectList" Spacing="10">
