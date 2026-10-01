@@ -482,24 +482,24 @@ public sealed class SpanEditor : UserControl
         };
         foreach (var span in _file.Spans)
         {
-            var silence = span.Label == "無音";
+            var quiet = IsQuietSpan(span.Label);
             var waveRect = new Rectangle
             {
-                Fill = silence ? null : FillBrush(span.Label, wave: true),
+                Fill = quiet ? null : FillBrush(span.Label, wave: true),
                 ManipulationMode = ManipulationModes.None,
                 IsHitTestVisible = false,
-                Visibility = silence ? Visibility.Collapsed : Visibility.Visible,
+                Visibility = quiet ? Visibility.Collapsed : Visibility.Visible,
             };
             var specRect = new Rectangle
             {
-                Fill = silence ? null : FillBrush(span.Label, wave: false),
+                Fill = quiet ? null : FillBrush(span.Label, wave: false),
                 ManipulationMode = ManipulationModes.None,
                 IsHitTestVisible = false,
-                Visibility = silence ? Visibility.Collapsed : Visibility.Visible,
+                Visibility = quiet ? Visibility.Collapsed : Visibility.Visible,
             };
             var waveText = MakeLabel(span);
             var specText = MakeLabel(span);
-            if (silence)
+            if (quiet)
             {
                 waveText.Visibility = Visibility.Collapsed;
                 specText.Visibility = Visibility.Collapsed;
@@ -938,7 +938,7 @@ public sealed class SpanEditor : UserControl
         var spans = _file.Spans;
         for (var i = 0; i < spans.Count; i++)
         {
-            if (spans[i].Label == "無音")
+            if (IsQuietSpan(spans[i].Label))
             {
                 HideSpanChrome(_waveRects, _waveTexts, i);
                 HideSpanChrome(_specRects, _specTexts, i);
@@ -1382,8 +1382,8 @@ public sealed class SpanEditor : UserControl
             return false;
         foreach (var (index, isStart) in members)
         {
-            var leading = index == 0 && spans[0].Label == "無音" && isStart;
-            var trailing = index == spans.Count - 1 && spans[^1].Label == "無音" && !isStart;
+            var leading = index == 0 && IsQuietSpan(spans[0].Label) && isStart;
+            var trailing = index == spans.Count - 1 && IsQuietSpan(spans[^1].Label) && !isStart;
             if (!leading && !trailing)
                 return false;
         }
@@ -1742,6 +1742,8 @@ public sealed class SpanEditor : UserControl
         cache[label] = brush;
         return brush;
     }
+
+    static bool IsQuietSpan(string label) => label is "無音" or "息";
 
     static Color KindColor(string label)
     {

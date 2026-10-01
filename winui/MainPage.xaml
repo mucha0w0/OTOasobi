@@ -417,20 +417,20 @@
                                             <ColumnDefinition Width="*" />
                                         </Grid.ColumnDefinitions>
                                         <RadioButton
+                                            x:Name="SourceTab"
+                                            AutomationProperties.Name="原音修正"
+                                            Checked="SideTab_Checked"
+                                            Content="原音修正"
+                                            GroupName="EditorSideTab"
+                                            Style="{StaticResource SegmentButtonStyle}" />
+                                        <RadioButton
                                             x:Name="OtoTab"
+                                            Grid.Column="1"
                                             AutomationProperties.Name="oto調整"
                                             Checked="SideTab_Checked"
                                             Content="oto調整"
                                             GroupName="EditorSideTab"
                                             IsChecked="True"
-                                            Style="{StaticResource SegmentButtonStyle}" />
-                                        <RadioButton
-                                            x:Name="SourceTab"
-                                            Grid.Column="1"
-                                            AutomationProperties.Name="原音修正"
-                                            Checked="SideTab_Checked"
-                                            Content="原音修正"
-                                            GroupName="EditorSideTab"
                                             Style="{StaticResource SegmentButtonStyle}" />
                                     </Grid>
                                 </Border>
