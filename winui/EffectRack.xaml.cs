@@ -22,6 +22,7 @@ public sealed partial class EffectRack : UserControl
     readonly List<HighPassPreset> _hpPresets = [];
     readonly List<NoisePreset> _noisePresets = [];
     readonly List<CompressorPreset> _compPresets = [];
+    readonly List<EffectRackPreset> _rackPresets = [];
     readonly Slider[] _bandSliders = new Slider[EqualizerEffect.BandCount];
     readonly TextBlock[] _bandValues = new TextBlock[EqualizerEffect.BandCount];
     StoredChain _stored = new();
@@ -30,6 +31,7 @@ public sealed partial class EffectRack : UserControl
     HighPassPreset? _hpSelected;
     NoisePreset? _noiseSelected;
     CompressorPreset? _compSelected;
+    EffectRackPreset? _rackSelected;
     Border? _dragCard;
     int _dropIndex = -1;
     Border? _marked;
@@ -38,6 +40,7 @@ public sealed partial class EffectRack : UserControl
     bool _ready;
     bool _dirty;
     bool _applying;
+    bool _applyingRack;
     bool _chainErrorShown;
     string? _folder;
     float[]? _noiseMono;
@@ -65,6 +68,7 @@ public sealed partial class EffectRack : UserControl
         LoadHpPresets();
         LoadNoisePresets();
         LoadCompPresets();
+        LoadRackPresets();
         LoadChain();
         EqToggle.Toggled += EqToggle_Toggled;
         NormToggle.Toggled += NormToggle_Toggled;
@@ -191,9 +195,15 @@ public sealed partial class EffectRack : UserControl
         var stored = EffectChainStore.Load();
         if (stored != null)
             _stored = stored;
+        ApplyEffectSnapshot(_stored.Effects);
+        SyncRackPresetSelection();
+    }
+
+    void ApplyEffectSnapshot(IReadOnlyList<StoredEffect> entries)
+    {
         var order = new List<AudioEffect>();
         var seen = new HashSet<string>();
-        foreach (var entry in _stored.Effects)
+        foreach (var entry in entries)
         {
             if (entry.Kind == EqualizerEffect.KindId && seen.Add(entry.Kind))
             {
@@ -218,6 +228,7 @@ public sealed partial class EffectRack : UserControl
                 _hp.Enabled = entry.Enabled;
                 _hp.Frequency = entry.Frequency;
                 _hp.Slope = entry.Slope;
+                HpToggle.IsOn = entry.Enabled;
                 _hpSelected = FindHpPreset(entry.Preset) ?? FindMatchingHp(_hp.Frequency, _hp.Slope);
                 ShowHighPass();
                 order.Add(_hp);
@@ -259,11 +270,173 @@ public sealed partial class EffectRack : UserControl
         order.Insert(0, _noise);
         _chain.SetOrder(order);
         LayoutCards();
+        UpdateChrome();
         UpdateDirty();
         UpdateNormDirty();
         UpdateHpChrome();
         UpdateNoiseChrome();
         UpdateCompChrome();
+        if (!_applyingRack)
+            UpdateRackDirty();
+    }
+
+    void LoadRackPresets()
+    {
+        _rackPresets.Clear();
+        _rackPresets.AddRange(EffectRackPresetStore.Load());
+        RebuildRackPresetMenu();
+    }
+
+    void RebuildRackPresetMenu()
+    {
+        RackPresetFlyout.Items.Clear();
+        foreach (var preset in EffectRackPreset.BuiltIns)
+            AddRackPresetItem(preset);
+        if (_rackPresets.Count > 0)
+            RackPresetFlyout.Items.Add(new MenuFlyoutSeparator());
+        foreach (var preset in _rackPresets)
+            AddRackPresetItem(preset);
+    }
+
+    void AddRackPresetItem(EffectRackPreset preset)
+    {
+        var item = new RadioMenuFlyoutItem
+        {
+            Text = preset.Name,
+            GroupName = "rack-preset",
+            Tag = preset,
+            IsChecked = ReferenceEquals(preset, _rackSelected),
+        };
+        item.Click += (_, _) => SelectRackPreset(preset);
+        RackPresetFlyout.Items.Add(item);
+    }
+
+    void SelectRackPreset(EffectRackPreset preset)
+    {
+        _applyingRack = true;
+        _rackSelected = preset;
+        ApplyEffectSnapshot(preset.Effects);
+        _applyingRack = false;
+        UpdateRackDirty();
+        SaveChain();
+    }
+
+    void SyncRackPresetSelection()
+    {
+        var snapshot = CaptureCurrentSnapshot();
+        _rackSelected = EffectRackPreset.BuiltIns.FirstOrDefault(preset => preset.Matches(snapshot))
+            ?? _rackPresets.FirstOrDefault(preset => preset.Matches(snapshot));
+        UpdateRackDirty();
+        RebuildRackPresetMenu();
+    }
+
+    List<StoredEffect> CaptureCurrentSnapshot() => BuildStoredEffectList();
+
+    void UpdateRackDirty()
+    {
+        if (_applyingRack)
+            return;
+        var snapshot = CaptureCurrentSnapshot();
+        var dirty = _rackSelected != null && !_rackSelected.Matches(snapshot);
+        RackPresetNameText.Text = _rackSelected?.Name ?? EffectRackPreset.CustomName;
+        RackPresetDirtyMark.Visibility = dirty ? Visibility.Visible : Visibility.Collapsed;
+        foreach (var entry in RackPresetFlyout.Items)
+        {
+            if (entry is not RadioMenuFlyoutItem radio || radio.Tag is not EffectRackPreset preset)
+                continue;
+            radio.IsChecked = ReferenceEquals(preset, _rackSelected);
+            var text = dirty && ReferenceEquals(preset, _rackSelected) ? preset.Name + " *" : preset.Name;
+            if (radio.Text != text)
+                radio.Text = text;
+        }
+    }
+
+    void SaveRackPreset_Click(object sender, RoutedEventArgs e)
+    {
+        _ = SaveRackPresetAsync();
+    }
+
+    async Task SaveRackPresetAsync()
+    {
+        var box = new TextBox { PlaceholderText = "プリセット名" };
+        if (_rackSelected is { BuiltIn: false })
+        {
+            box.Text = _rackSelected.Name;
+            box.SelectAll();
+        }
+
+        var error = new TextBlock
+        {
+            TextWrapping = TextWrapping.Wrap,
+            Visibility = Visibility.Collapsed,
+        };
+        if (Application.Current.Resources.TryGetValue("SystemFillColorCriticalBrush", out var brush) && brush is Brush paint)
+            error.Foreground = paint;
+        var panel = new StackPanel { Spacing = 8, MinWidth = 280 };
+        panel.Children.Add(new TextBlock
+        {
+            Text = "エフェクト全体の設定につける名前を入力してください。",
+            TextWrapping = TextWrapping.Wrap,
+        });
+        panel.Children.Add(box);
+        panel.Children.Add(error);
+        var dialog = new ContentDialog
+        {
+            Title = "現在のエフェクト設定を保存",
+            Content = panel,
+            PrimaryButtonText = "保存",
+            CloseButtonText = "キャンセル",
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = XamlRoot,
+        };
+        dialog.Opened += (_, _) => box.Focus(FocusState.Programmatic);
+        dialog.PrimaryButtonClick += (_, args) =>
+        {
+            var message = NameError(box.Text, EffectRackPreset.IsReservedName);
+            if (message == null)
+                return;
+            args.Cancel = true;
+            error.Text = message;
+            error.Visibility = Visibility.Visible;
+        };
+        if (XamlRoot == null || await dialog.ShowAsync() != ContentDialogResult.Primary)
+            return;
+
+        var name = box.Text.Trim();
+        var existing = _rackPresets.FirstOrDefault(preset => preset.Name == name);
+        if (existing != null && !ReferenceEquals(existing, _rackSelected))
+        {
+            var confirm = new ContentDialog
+            {
+                Title = "プリセットを上書きしますか？",
+                Content = $"「{name}」は既にあります。いまの設定で置き換えます。",
+                PrimaryButtonText = "上書きする",
+                CloseButtonText = "キャンセル",
+                DefaultButton = ContentDialogButton.Close,
+                XamlRoot = XamlRoot,
+            };
+            if (await confirm.ShowAsync() != ContentDialogResult.Primary)
+                return;
+        }
+
+        var snapshot = CaptureCurrentSnapshot();
+        var target = existing ?? new EffectRackPreset { Name = name };
+        target.Effects = snapshot.Select(effect => effect.Clone()).ToList();
+        if (existing == null)
+            _rackPresets.Add(target);
+        try
+        {
+            EffectRackPresetStore.Save(_rackPresets);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            await TellAsync("プリセットを保存できませんでした", ex.Message);
+            return;
+        }
+
+        RebuildRackPresetMenu();
+        _rackSelected = target;
+        UpdateRackDirty();
     }
 
     void LoadNormPresets()
@@ -1094,15 +1267,11 @@ public sealed partial class EffectRack : UserControl
         return true;
     }
 
-    void SaveChain()
+    List<StoredEffect> BuildStoredEffectList()
     {
-        if (!_ready)
-            return;
-        var known = new HashSet<string>();
         var list = new List<StoredEffect>();
         foreach (var effect in _chain.Effects)
         {
-            known.Add(effect.Kind);
             if (ReferenceEquals(effect, _eq))
             {
                 list.Add(new StoredEffect
@@ -1157,6 +1326,18 @@ public sealed partial class EffectRack : UserControl
             }
         }
 
+        return list;
+    }
+
+    void SaveChain()
+    {
+        if (!_ready)
+            return;
+        var known = new HashSet<string>();
+        var list = BuildStoredEffectList();
+        foreach (var entry in list)
+            known.Add(entry.Kind);
+
         foreach (var old in _stored.Effects)
         {
             if (old.Kind.Length > 0 && !known.Contains(old.Kind))
@@ -1176,6 +1357,8 @@ public sealed partial class EffectRack : UserControl
             _chainErrorShown = true;
             _ = TellAsync("状態を保存できませんでした", ex.Message);
         }
+
+        UpdateRackDirty();
     }
 
     void SavePreset_Click(object sender, RoutedEventArgs e)

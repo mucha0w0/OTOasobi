@@ -76,6 +76,20 @@ sealed class StoredEffect
     public double Reduction { get; set; } = NoiseSuppressorEffect.DefaultReductionDb;
 
     public double Ratio { get; set; } = CompressorEffect.DefaultRatio;
+
+    public StoredEffect Clone() =>
+        new()
+        {
+            Kind = Kind,
+            Enabled = Enabled,
+            Preset = Preset,
+            Gains = Gains.ToArray(),
+            Target = Target,
+            Frequency = Frequency,
+            Slope = Slope,
+            Reduction = Reduction,
+            Ratio = Ratio,
+        };
 }
 
 sealed class StoredChain
