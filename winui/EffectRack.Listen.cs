@@ -270,7 +270,7 @@ public sealed partial class EffectRack
         _preview?.Stop();
         _listenSide = ListenSide.None;
         _listenBusy = false;
-        ShowListenStatus(processed: true, "設定が変わりました。再生すると新しい音です。", error: false);
+        ClearListenStatus(wetOnly: true);
         UpdateListenButtons();
     }
 
@@ -289,7 +289,6 @@ public sealed partial class EffectRack
             DryPlayButton,
             DryPlayIcon,
             DryPlayRing,
-            DryPlayLabel,
             active: _listenSide == ListenSide.Dry,
             hasFile,
             "処理前を再生",
@@ -298,7 +297,6 @@ public sealed partial class EffectRack
             WetPlayButton,
             WetPlayIcon,
             WetPlayRing,
-            WetPlayLabel,
             active: _listenSide == ListenSide.Wet,
             hasFile,
             "処理後を再生",
@@ -309,7 +307,6 @@ public sealed partial class EffectRack
         Button button,
         SymbolIcon icon,
         ProgressRing ring,
-        TextBlock label,
         bool active,
         bool hasFile,
         string playName,
@@ -321,13 +318,21 @@ public sealed partial class EffectRack
         icon.Symbol = active ? Symbol.Stop : Symbol.Play;
         ring.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
         ring.IsActive = busy;
-        label.Text = active ? "停止" : "再生";
-        AutomationProperties.SetName(button, active ? stopName : playName);
+        var name = active ? stopName : playName;
+        AutomationProperties.SetName(button, name);
+        ToolTipService.SetToolTip(button, active ? "停止" : "再生");
     }
 
     void ShowListenStatus(bool processed, string text, bool error)
     {
         var block = processed ? WetStatus : DryStatus;
+        if (!error)
+        {
+            block.Text = "";
+            block.Visibility = Visibility.Collapsed;
+            return;
+        }
+
         block.Text = text;
         block.Visibility = string.IsNullOrEmpty(text) ? Visibility.Collapsed : Visibility.Visible;
         var key = error ? "SystemFillColorCriticalBrush" : "TextFillColorSecondaryBrush";
