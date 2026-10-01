@@ -288,6 +288,7 @@ public sealed partial class EffectRack
         PaintPlayButton(
             DryPlayButton,
             DryPlayIcon,
+            DryStopIcon,
             DryPlayRing,
             active: _listenSide == ListenSide.Dry,
             hasFile,
@@ -296,6 +297,7 @@ public sealed partial class EffectRack
         PaintPlayButton(
             WetPlayButton,
             WetPlayIcon,
+            WetStopIcon,
             WetPlayRing,
             active: _listenSide == ListenSide.Wet,
             hasFile,
@@ -305,7 +307,8 @@ public sealed partial class EffectRack
 
     void PaintPlayButton(
         Button button,
-        SymbolIcon icon,
+        Microsoft.UI.Xaml.Shapes.Path play,
+        Microsoft.UI.Xaml.Shapes.Path stop,
         ProgressRing ring,
         bool active,
         bool hasFile,
@@ -314,8 +317,8 @@ public sealed partial class EffectRack
     {
         var busy = active && _listenBusy;
         button.IsEnabled = hasFile;
-        icon.Visibility = busy ? Visibility.Collapsed : Visibility.Visible;
-        icon.Symbol = active ? Symbol.Stop : Symbol.Play;
+        play.Visibility = !busy && !active ? Visibility.Visible : Visibility.Collapsed;
+        stop.Visibility = !busy && active ? Visibility.Visible : Visibility.Collapsed;
         ring.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
         ring.IsActive = busy;
         var name = active ? stopName : playName;
