@@ -79,6 +79,7 @@ public sealed partial class EffectRack : UserControl
                 return;
             _hp.Frequency = HpFrequency.Value;
             UpdateHpChrome();
+            InvalidateProcessedPreview();
         };
         HpFrequency.PointerReleased += (_, _) => SaveChain();
         HpFrequency.LostFocus += (_, _) => SaveChain();
@@ -90,6 +91,7 @@ public sealed partial class EffectRack : UserControl
                 return;
             _norm.TargetDb = NormSlider.Value;
             UpdateNormChrome();
+            InvalidateProcessedPreview();
         };
         NormSlider.PointerReleased += (_, _) => SaveChain();
         NormSlider.LostFocus += (_, _) => SaveChain();
@@ -100,6 +102,7 @@ public sealed partial class EffectRack : UserControl
                 return;
             _noise.ReductionDb = NoiseReduction.Value;
             UpdateNoiseChrome();
+            InvalidateProcessedPreview();
         };
         NoiseReduction.PointerReleased += (_, _) => SaveChain();
         NoiseReduction.LostFocus += (_, _) => SaveChain();
@@ -110,6 +113,7 @@ public sealed partial class EffectRack : UserControl
                 return;
             _comp.Ratio = CompRatio.Value;
             UpdateCompChrome();
+            InvalidateProcessedPreview();
         };
         CompRatio.PointerReleased += (_, _) => SaveChain();
         CompRatio.LostFocus += (_, _) => SaveChain();
@@ -119,6 +123,7 @@ public sealed partial class EffectRack : UserControl
                 return;
             _comp.ReductionDb = CompReduction.Value;
             UpdateCompChrome();
+            InvalidateProcessedPreview();
         };
         CompReduction.PointerReleased += (_, _) => SaveChain();
         CompReduction.LostFocus += (_, _) => SaveChain();
@@ -128,6 +133,7 @@ public sealed partial class EffectRack : UserControl
         UpdateHpChrome();
         UpdateNoiseChrome();
         UpdateCompChrome();
+        BindPreviewPlayer();
     }
 
     public bool NeedsNoiseRange => _noise.Enabled && !_noise.HasProfile;
@@ -148,6 +154,7 @@ public sealed partial class EffectRack : UserControl
         var next = string.IsNullOrWhiteSpace(folder) ? null : Path.GetFullPath(folder);
         if (string.Equals(_folder, next, StringComparison.OrdinalIgnoreCase))
             return;
+        StopListening();
         _folder = next;
         _noiseGeneration++;
         _noise.ClearProfile();
@@ -318,6 +325,7 @@ public sealed partial class EffectRack : UserControl
         ApplyEffectSnapshot(preset.Effects);
         _applyingRack = false;
         UpdateRackDirty();
+        InvalidateProcessedPreview();
         SaveChain();
     }
 
@@ -473,6 +481,7 @@ public sealed partial class EffectRack : UserControl
     {
         _eq.Enabled = EqToggle.IsOn;
         UpdateChrome();
+        InvalidateProcessedPreview();
         SaveChain();
     }
 
@@ -480,6 +489,7 @@ public sealed partial class EffectRack : UserControl
     {
         _norm.Enabled = NormToggle.IsOn;
         UpdateNormChrome();
+        InvalidateProcessedPreview();
         SaveChain();
     }
 
@@ -487,6 +497,7 @@ public sealed partial class EffectRack : UserControl
     {
         _hp.Enabled = HpToggle.IsOn;
         UpdateHpChrome();
+        InvalidateProcessedPreview();
         SaveChain();
     }
 
@@ -494,6 +505,7 @@ public sealed partial class EffectRack : UserControl
     {
         _noise.Enabled = NoiseToggle.IsOn;
         UpdateNoiseChrome();
+        InvalidateProcessedPreview();
         SaveChain();
     }
 
@@ -554,6 +566,7 @@ public sealed partial class EffectRack : UserControl
         _noise.ReductionDb = preset.Reduction;
         ShowNoise();
         UpdateNoiseChrome();
+        InvalidateProcessedPreview();
         SaveChain();
     }
 
@@ -688,6 +701,7 @@ public sealed partial class EffectRack : UserControl
             NoiseFileMenu.IsEnabled = hasFiles;
             NoiseFileMenu.PlaceholderText = hasFiles ? "原音を選ぶ" : "WAV がありません";
             ToolTipService.SetToolTip(NoiseFileMenu, "original フォルダの WAV を選びます");
+            FillListenMenus();
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -695,6 +709,7 @@ public sealed partial class EffectRack : UserControl
             NoiseFileMenu.PlaceholderText = "WAV がありません";
             NoiseMessage.Text = ex.Message;
             PaintNoiseMessage(error: true);
+            FillListenMenus();
         }
         finally
         {
@@ -794,6 +809,7 @@ public sealed partial class EffectRack : UserControl
         _noiseRate = audio.SampleRate;
         _noiseFile = source.Name;
         _noise.ClearProfile();
+        InvalidateProcessedPreview();
         _noiseStart = null;
         _noiseEnd = null;
         ShowNoiseFile(source.Name);
@@ -871,6 +887,7 @@ public sealed partial class EffectRack : UserControl
         if (end < start)
             (start, end) = (end, start);
         _noise.SetProfile(profile);
+        InvalidateProcessedPreview();
         _noiseStart = start;
         _noiseEnd = end;
         _wave.SetRange(start, end);
@@ -913,6 +930,7 @@ public sealed partial class EffectRack : UserControl
             return;
         _hp.Slope = slope;
         UpdateHpDirty();
+        InvalidateProcessedPreview();
         SaveChain();
     }
 
@@ -960,6 +978,7 @@ public sealed partial class EffectRack : UserControl
     {
         _comp.Enabled = CompToggle.IsOn;
         UpdateCompChrome();
+        InvalidateProcessedPreview();
         SaveChain();
     }
 
@@ -1068,6 +1087,7 @@ public sealed partial class EffectRack : UserControl
         _chain.Move(from, to);
         PinNoise();
         LayoutCards();
+        InvalidateProcessedPreview();
         SaveChain();
     }
 
@@ -1171,6 +1191,7 @@ public sealed partial class EffectRack : UserControl
         _eq.SetGains(gains);
         _bandValues[index].Text = FormatDb(_eq.Gains[index]);
         UpdateDirty();
+        InvalidateProcessedPreview();
     }
 
     void ShowGains()
@@ -1221,6 +1242,7 @@ public sealed partial class EffectRack : UserControl
         ShowGains();
         UpdateChrome();
         UpdateDirty();
+        InvalidateProcessedPreview();
         SaveChain();
     }
 
@@ -1478,6 +1500,7 @@ public sealed partial class EffectRack : UserControl
         _hp.Slope = preset.Slope;
         ShowHighPass();
         UpdateHpChrome();
+        InvalidateProcessedPreview();
         SaveChain();
     }
 
@@ -1627,6 +1650,7 @@ public sealed partial class EffectRack : UserControl
         _comp.ReductionDb = preset.Reduction;
         ShowCompressor();
         UpdateCompChrome();
+        InvalidateProcessedPreview();
         SaveChain();
     }
 
@@ -1777,6 +1801,7 @@ public sealed partial class EffectRack : UserControl
         NormSlider.Value = _norm.TargetDb;
         _applying = false;
         UpdateNormChrome();
+        InvalidateProcessedPreview();
         SaveChain();
     }
 

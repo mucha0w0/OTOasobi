@@ -38,8 +38,7 @@ static class OriginalLibrary
                 try
                 {
                     var audio = WavAudio.Read(Path.Combine(original, name));
-                    chain.Reset();
-                    chain.Process(audio.Samples, audio.Channels, audio.SampleRate);
+                    chain.Render(audio.Samples, audio.Channels, audio.SampleRate);
                     WavAudio.Write(temp, audio);
                     staged.Add((temp, dest));
                 }

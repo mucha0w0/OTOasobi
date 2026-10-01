@@ -20,6 +20,7 @@ public abstract class AudioEffect
 
 public sealed class EffectChain
 {
+    readonly object _gate = new();
     readonly List<AudioEffect> _effects = [];
 
     public IReadOnlyList<AudioEffect> Effects => _effects;
@@ -43,11 +44,33 @@ public sealed class EffectChain
 
     public void Reset()
     {
+        lock (_gate)
+            ResetCore();
+    }
+
+    public void Process(Span<float> interleaved, int channels, int sampleRate)
+    {
+        lock (_gate)
+            ProcessCore(interleaved, channels, sampleRate);
+    }
+
+    // リセットしてから一度だけ通す。プレビューと適用が同時でも、状態が混ざらない。
+    public void Render(Span<float> interleaved, int channels, int sampleRate)
+    {
+        lock (_gate)
+        {
+            ResetCore();
+            ProcessCore(interleaved, channels, sampleRate);
+        }
+    }
+
+    void ResetCore()
+    {
         foreach (var effect in _effects)
             effect.Reset();
     }
 
-    public void Process(Span<float> interleaved, int channels, int sampleRate)
+    void ProcessCore(Span<float> interleaved, int channels, int sampleRate)
     {
         foreach (var effect in _effects)
         {

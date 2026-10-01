@@ -2,7 +2,8 @@
 <UserControl
     x:Class="Otoasobi.EffectRack"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Unloaded="Rack_Unloaded">
     <UserControl.Resources>
         <Style x:Key="RackButtonStyle" TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
             <Setter Property="MinHeight" Value="32" />
@@ -22,12 +23,17 @@
             <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
         </Style>
     </UserControl.Resources>
-    <ScrollViewer
-        x:Name="HostScroll"
-        HorizontalScrollBarVisibility="Disabled"
-        HorizontalScrollMode="Disabled"
-        VerticalScrollBarVisibility="Auto"
-        VerticalScrollMode="Enabled">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <ScrollViewer
+            x:Name="HostScroll"
+            HorizontalScrollBarVisibility="Disabled"
+            HorizontalScrollMode="Disabled"
+            VerticalScrollBarVisibility="Auto"
+            VerticalScrollMode="Enabled">
         <StackPanel Padding="12,12,12,12" Spacing="10">
             <Border Style="{StaticResource EffectCardStyle}">
                 <StackPanel Spacing="8">
@@ -70,6 +76,60 @@
                         Content="現在のエフェクト設定を保存"
                         Style="{StaticResource RackButtonStyle}"
                         ToolTipService.ToolTip="並び順、オンオフ、各エフェクトの設定を名前をつけて保存します" />
+                </StackPanel>
+            </Border>
+            <Border Style="{StaticResource EffectCardStyle}">
+                <StackPanel Spacing="8">
+                    <TextBlock
+                        Style="{StaticResource BodyStrongTextBlockStyle}"
+                        Text="処理前" />
+                    <TextBlock
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Style="{StaticResource CaptionTextBlockStyle}"
+                        Text="エフェクトをかける前の音声です。"
+                        TextWrapping="Wrap" />
+                    <ComboBox
+                        x:Name="DryFileMenu"
+                        MinHeight="32"
+                        HorizontalAlignment="Stretch"
+                        MaxDropDownHeight="360"
+                        PlaceholderText="原音を選ぶ"
+                        AutomationProperties.Name="処理前に聴く原音"
+                        IsEnabled="False"
+                        SelectionChanged="ListenFile_SelectionChanged"
+                        ToolTipService.ToolTip="original フォルダの WAV を選びます">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding}" TextTrimming="CharacterEllipsis" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <Button
+                        x:Name="DryPlayButton"
+                        AutomationProperties.Name="処理前を再生"
+                        Click="DryPlay_Click"
+                        IsEnabled="False"
+                        Style="{StaticResource RackButtonStyle}"
+                        ToolTipService.ToolTip="選んだ original の音声を、エフェクトをかけずに再生します">
+                        <StackPanel HorizontalAlignment="Center" Orientation="Horizontal" Spacing="8">
+                            <Grid Width="16" Height="16" VerticalAlignment="Center">
+                                <SymbolIcon x:Name="DryPlayIcon" Symbol="Play" />
+                                <ProgressRing
+                                    x:Name="DryPlayRing"
+                                    Width="16"
+                                    Height="16"
+                                    IsActive="False"
+                                    Visibility="Collapsed" />
+                            </Grid>
+                            <TextBlock x:Name="DryPlayLabel" Text="再生" />
+                        </StackPanel>
+                    </Button>
+                    <TextBlock
+                        x:Name="DryStatus"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Style="{StaticResource CaptionTextBlockStyle}"
+                        TextWrapping="Wrap"
+                        Visibility="Collapsed" />
                 </StackPanel>
             </Border>
             <StackPanel x:Name="EffectList" Spacing="10">
@@ -620,5 +680,66 @@
                 </Border>
             </StackPanel>
         </StackPanel>
-    </ScrollViewer>
+        </ScrollViewer>
+        <Border
+            Grid.Row="1"
+            Padding="12,10,12,12"
+            BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+            BorderThickness="0,1,0,0">
+            <Border Style="{StaticResource EffectCardStyle}">
+                <StackPanel Spacing="8">
+                    <TextBlock
+                        Style="{StaticResource BodyStrongTextBlockStyle}"
+                        Text="処理後" />
+                    <TextBlock
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Style="{StaticResource CaptionTextBlockStyle}"
+                        Text="いまの設定を通した音です。ファイルは変わりません。"
+                        TextWrapping="Wrap" />
+                    <ComboBox
+                        x:Name="WetFileMenu"
+                        MinHeight="32"
+                        HorizontalAlignment="Stretch"
+                        MaxDropDownHeight="360"
+                        PlaceholderText="原音を選ぶ"
+                        AutomationProperties.Name="処理後に聴く原音"
+                        IsEnabled="False"
+                        SelectionChanged="ListenFile_SelectionChanged"
+                        ToolTipService.ToolTip="original フォルダの WAV を選びます">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding}" TextTrimming="CharacterEllipsis" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <Button
+                        x:Name="WetPlayButton"
+                        AutomationProperties.Name="処理後を再生"
+                        Click="WetPlay_Click"
+                        IsEnabled="False"
+                        Style="{StaticResource RackButtonStyle}"
+                        ToolTipService.ToolTip="選んだ original に、いまオンのエフェクトをかけて再生します。ファイルは変更しません">
+                        <StackPanel HorizontalAlignment="Center" Orientation="Horizontal" Spacing="8">
+                            <Grid Width="16" Height="16" VerticalAlignment="Center">
+                                <SymbolIcon x:Name="WetPlayIcon" Symbol="Play" />
+                                <ProgressRing
+                                    x:Name="WetPlayRing"
+                                    Width="16"
+                                    Height="16"
+                                    IsActive="False"
+                                    Visibility="Collapsed" />
+                            </Grid>
+                            <TextBlock x:Name="WetPlayLabel" Text="再生" />
+                        </StackPanel>
+                    </Button>
+                    <TextBlock
+                        x:Name="WetStatus"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Style="{StaticResource CaptionTextBlockStyle}"
+                        TextWrapping="Wrap"
+                        Visibility="Collapsed" />
+                </StackPanel>
+            </Border>
+        </Border>
+    </Grid>
 </UserControl>

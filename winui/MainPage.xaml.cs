@@ -426,6 +426,7 @@ public sealed partial class MainPage : Page
             return;
 
         var folder = _folder;
+        Effects.StopListening();
         _busy = true;
         UpdateCommands();
         ShowBusy(0, 1);
