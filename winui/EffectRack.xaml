@@ -29,11 +29,6 @@
         VerticalScrollBarVisibility="Auto"
         VerticalScrollMode="Enabled">
         <StackPanel Padding="12,12,12,16" Spacing="10">
-            <TextBlock
-                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                Style="{StaticResource CaptionTextBlockStyle}"
-                Text="上から順にかかります。ノイズサプレッサーは先頭に固定です。ほかは左のつまみをドラッグすると、順番を入れ替えられます。"
-                TextWrapping="Wrap" />
             <StackPanel x:Name="EffectList" Spacing="10">
                 <Border x:Name="NoiseCard" Style="{StaticResource EffectCardStyle}">
                     <StackPanel Spacing="8">
@@ -63,11 +58,6 @@
                                 ToolTipService.ToolTip="オフにすると、ノイズサプレッサーは音声にかかりません" />
                         </Grid>
                         <StackPanel x:Name="NoiseBody" Spacing="8">
-                            <TextBlock
-                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                Style="{StaticResource CaptionTextBlockStyle}"
-                                Text="最初にかかります。順番は変えられません。"
-                                TextWrapping="Wrap" />
                             <Grid>
                                 <TextBlock VerticalAlignment="Center" Text="抑える量" />
                                 <TextBlock
@@ -87,11 +77,6 @@
                                 StepFrequency="0.5"
                                 ToolTipService.ToolTip="無音にある定常的な音を、この量だけ下げます"
                                 Value="8" />
-                            <TextBlock
-                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                Style="{StaticResource CaptionTextBlockStyle}"
-                                Text="無音にある定常的な音を、この量だけ下げます。最大でも少し残します。"
-                                TextWrapping="Wrap" />
                             <Button
                                 x:Name="PickNoiseButton"
                                 AutomationProperties.Name="原音からノイズを採る"
@@ -233,11 +218,6 @@
                                     Content="24 dB/oct"
                                     GroupName="HpSlope" />
                             </StackPanel>
-                            <TextBlock
-                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                Style="{StaticResource CaptionTextBlockStyle}"
-                                Text="声に含まれない低い音を落とします。空調のブーンという音や、マイクスタンドの振動が対象です。80〜100 Hz、12〜24 dB/oct が目安です。"
-                                TextWrapping="Wrap" />
                         </StackPanel>
                         <StackPanel Spacing="8">
                             <TextBlock Text="プリセット" />
@@ -447,11 +427,6 @@
                                 StepFrequency="0.5"
                                 ToolTipService.ToolTip="大きめの部分を、最大でこの量だけ下げます。2〜4 dB が目安です"
                                 Value="3" />
-                            <TextBlock
-                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                Style="{StaticResource CaptionTextBlockStyle}"
-                                Text="ファイルの中の大きめの部分だけを、2〜4 dB ほど軽く下げて強弱を揃えます。立ち上がりは遅めなので子音の頭は残り、息や小さい音は持ち上げません。強くかけすぎると息が持ち上がり、再合成のノイズになります。"
-                                TextWrapping="Wrap" />
                         </StackPanel>
                         <StackPanel Spacing="8">
                             <TextBlock Text="プリセット" />
@@ -556,11 +531,6 @@
                                 SnapsTo="StepValues"
                                 StepFrequency="0.1"
                                 Value="-1" />
-                            <TextBlock
-                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                Style="{StaticResource CaptionTextBlockStyle}"
-                                Text="ファイルの最大音量を、この大きさに揃えます。"
-                                TextWrapping="Wrap" />
                         </StackPanel>
                         <StackPanel Spacing="8">
                             <TextBlock Text="プリセット" />
