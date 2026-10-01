@@ -7,10 +7,14 @@ namespace Otoasobi;
 
 public sealed partial class MainWindow : Window
 {
+    public const string AppDisplayTitle = "オトアソビ — OTOasobi";
+
     public MainWindow()
     {
         InitializeComponent();
 
+        Title = AppDisplayTitle;
+        AppWindow.Title = AppDisplayTitle;
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(AppTitleBar);
         AppWindow.SetIcon("Assets/AppIcon.ico");
@@ -34,6 +38,6 @@ public sealed partial class MainWindow : Window
     {
         if (menuBar.Parent is Panel panel)
             panel.Children.Remove(menuBar);
-        AppTitleBar.LeftHeader = menuBar;
+        TitleBarLeading.Children.Add(menuBar);
     }
 }

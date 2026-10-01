@@ -5,6 +5,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    Title="オトアソビ — OTOasobi"
     mc:Ignorable="d">
     <Window.SystemBackdrop>
         <MicaBackdrop />
@@ -17,9 +18,19 @@
         </Grid.RowDefinitions>
 
         <TitleBar x:Name="AppTitleBar">
-            <TitleBar.IconSource>
-                <ImageIconSource ImageSource="Assets/AppIcon.ico" />
-            </TitleBar.IconSource>
+            <TitleBar.LeftHeader>
+                <StackPanel
+                    x:Name="TitleBarLeading"
+                    Orientation="Horizontal"
+                    Spacing="0"
+                    VerticalAlignment="Center">
+                    <ImageIcon
+                        Width="16"
+                        Height="16"
+                        Margin="12,0,4,0"
+                        Source="ms-appx:///Assets/AppIcon.ico" />
+                </StackPanel>
+            </TitleBar.LeftHeader>
         </TitleBar>
 
         <Frame x:Name="RootFrame" Grid.Row="1" Background="Transparent" />
