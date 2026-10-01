@@ -44,6 +44,7 @@ public sealed partial class EffectRack : UserControl
     int _noiseRate;
     string? _noiseFile;
     int _noiseGeneration;
+    bool _syncingNoiseMenu;
     double? _noiseStart;
     double? _noiseEnd;
 
@@ -151,7 +152,7 @@ public sealed partial class EffectRack : UserControl
         _noiseStart = null;
         _noiseEnd = null;
         _wave.Clear();
-        NoiseFileName.Visibility = Visibility.Collapsed;
+        FillNoiseMenu();
         NoiseWaveHost.Visibility = Visibility.Collapsed;
         NoiseDuration.Text = "";
         NoiseMessage.Text = "";
@@ -497,61 +498,91 @@ public sealed partial class EffectRack : UserControl
         SelectNoisePreset(target);
     }
 
-    void PickNoise_Click(object sender, RoutedEventArgs e)
+    void FillNoiseMenu()
     {
-        _ = PickNoiseAsync();
+        _syncingNoiseMenu = true;
+        try
+        {
+            NoiseFileMenu.Items.Clear();
+            NoiseFileMenu.SelectedItem = null;
+            if (_folder != null)
+            {
+                foreach (var file in NoiseSources.ListOriginal(_folder))
+                    NoiseFileMenu.Items.Add(file.Name);
+            }
+
+            var hasFiles = NoiseFileMenu.Items.Count > 0;
+            NoiseFileMenu.IsEnabled = hasFiles;
+            NoiseFileMenu.PlaceholderText = hasFiles ? "原音を選ぶ" : "WAV がありません";
+            ToolTipService.SetToolTip(NoiseFileMenu, "original フォルダの WAV を選びます");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            NoiseFileMenu.IsEnabled = false;
+            NoiseFileMenu.PlaceholderText = "WAV がありません";
+            NoiseMessage.Text = ex.Message;
+            PaintNoiseMessage(error: true);
+        }
+        finally
+        {
+            _syncingNoiseMenu = false;
+        }
     }
 
-    async Task PickNoiseAsync()
+    void ShowNoiseFile(string? name)
     {
-        if (_folder == null)
+        _syncingNoiseMenu = true;
+        try
         {
-            await TellAsync("フォルダを開いてください", "音源フォルダを開いてから、原音を選べます。");
-            return;
-        }
+            if (string.IsNullOrEmpty(name))
+            {
+                NoiseFileMenu.SelectedItem = null;
+                ToolTipService.SetToolTip(NoiseFileMenu, "original フォルダの WAV を選びます");
+                return;
+            }
 
-        if (XamlRoot == null)
-            return;
-        var files = NoiseSources.List(_folder);
-        if (files.Count == 0)
-        {
-            await TellAsync("原音がありません", "original にも、フォルダ直下にも WAV がありません。");
-            return;
-        }
+            string? match = null;
+            foreach (var item in NoiseFileMenu.Items)
+            {
+                if (item is string text && string.Equals(text, name, StringComparison.OrdinalIgnoreCase))
+                {
+                    match = text;
+                    break;
+                }
+            }
 
-        var list = new ListView
+            if (match == null)
+            {
+                NoiseFileMenu.Items.Add(name);
+                match = name;
+                NoiseFileMenu.IsEnabled = true;
+            }
+
+            NoiseFileMenu.SelectedItem = match;
+            ToolTipService.SetToolTip(NoiseFileMenu, name);
+        }
+        finally
         {
-            SelectionMode = ListViewSelectionMode.Single,
-            MaxHeight = 360,
-            MinWidth = 280,
-        };
-        foreach (var file in files)
-            list.Items.Add(file.Name);
-        var current = files.ToList().FindIndex(file => string.Equals(file.Name, _noiseFile, StringComparison.OrdinalIgnoreCase));
-        list.SelectedIndex = current >= 0 ? current : 0;
-        var note = new TextBlock
-        {
-            Text = files[0].FromOriginal
-                ? "original フォルダの WAV です。"
-                : "original がまだ無いので、フォルダ直下の WAV を出しています。",
-            TextWrapping = TextWrapping.Wrap,
-            Margin = new Thickness(0, 0, 0, 8),
-        };
-        var panel = new StackPanel { Spacing = 0 };
-        panel.Children.Add(note);
-        panel.Children.Add(list);
-        var dialog = new ContentDialog
-        {
-            Title = "原音からノイズを採る",
-            Content = panel,
-            PrimaryButtonText = "開く",
-            CloseButtonText = "キャンセル",
-            DefaultButton = ContentDialogButton.Primary,
-            XamlRoot = XamlRoot,
-        };
-        if (await dialog.ShowAsync() != ContentDialogResult.Primary || list.SelectedItem is not string name)
+            _syncingNoiseMenu = false;
+        }
+    }
+
+    void NoiseFile_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_syncingNoiseMenu || _folder == null || NoiseFileMenu.SelectedItem is not string name)
             return;
-        var source = files.First(file => file.Name == name);
+        _ = OpenNoiseFileAsync(name);
+    }
+
+    async Task OpenNoiseFileAsync(string name)
+    {
+        var folder = _folder;
+        if (folder == null)
+            return;
+        var path = NoiseSources.Resolve(folder, name);
+        if (path == null)
+            return;
+        var source = new NoiseSource(name, path, true);
         if (string.Equals(source.Name, _noiseFile, StringComparison.OrdinalIgnoreCase)
             && _noiseStart is double keptStart
             && _noiseEnd is double keptEnd)
@@ -580,6 +611,7 @@ public sealed partial class EffectRack : UserControl
                 return;
             NoiseMessage.Text = ex.Message;
             PaintNoiseMessage(error: true);
+            ShowNoiseFile(_noiseFile);
             return;
         }
 
@@ -591,9 +623,7 @@ public sealed partial class EffectRack : UserControl
         _noise.ClearProfile();
         _noiseStart = null;
         _noiseEnd = null;
-        NoiseFileName.Text = source.Name;
-        ToolTipService.SetToolTip(NoiseFileName, source.Name);
-        NoiseFileName.Visibility = Visibility.Visible;
+        ShowNoiseFile(source.Name);
         NoiseWaveHost.Visibility = Visibility.Visible;
         _wave.SetAudio(_noiseMono, audio.SampleRate);
         if (start is double rangeStart && end is double rangeEnd)

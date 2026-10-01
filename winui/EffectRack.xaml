@@ -28,7 +28,7 @@
         HorizontalScrollMode="Disabled"
         VerticalScrollBarVisibility="Auto"
         VerticalScrollMode="Enabled">
-        <StackPanel Padding="12,12,12,16" Spacing="10">
+        <StackPanel Padding="12,12,12,12" Spacing="10">
             <StackPanel x:Name="EffectList" Spacing="10">
                 <Border x:Name="NoiseCard" Style="{StaticResource EffectCardStyle}">
                     <StackPanel Spacing="8">
@@ -77,18 +77,21 @@
                                 StepFrequency="0.5"
                                 ToolTipService.ToolTip="無音にある定常的な音を、この量だけ下げます"
                                 Value="8" />
-                            <Button
-                                x:Name="PickNoiseButton"
-                                AutomationProperties.Name="原音からノイズを採る"
-                                Click="PickNoise_Click"
-                                Content="原音からノイズを採る"
-                                Style="{StaticResource RackButtonStyle}"
-                                ToolTipService.ToolTip="original の WAV を開き、無音の範囲を選びます" />
-                            <TextBlock
-                                x:Name="NoiseFileName"
-                                Style="{StaticResource BodyTextBlockStyle}"
-                                TextTrimming="CharacterEllipsis"
-                                Visibility="Collapsed" />
+                            <ComboBox
+                                x:Name="NoiseFileMenu"
+                                MinHeight="32"
+                                HorizontalAlignment="Stretch"
+                                MaxDropDownHeight="360"
+                                PlaceholderText="原音を選ぶ"
+                                AutomationProperties.Name="ノイズを採る原音"
+                                SelectionChanged="NoiseFile_SelectionChanged"
+                                ToolTipService.ToolTip="original フォルダの WAV を選びます">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding}" TextTrimming="CharacterEllipsis" />
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
                             <Border x:Name="NoiseWaveHost" Visibility="Collapsed" />
                             <TextBlock
                                 x:Name="NoiseDuration"

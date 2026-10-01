@@ -388,15 +388,16 @@ static class NoiseSources
 {
     public static IReadOnlyList<NoiseSource> List(string folder)
     {
-        var original = Path.Combine(folder, OriginalLibrary.FolderName);
-        if (Directory.Exists(original))
-        {
-            var found = WavFiles(original, fromOriginal: true);
-            if (found.Count > 0)
-                return found;
-        }
-
+        var found = ListOriginal(folder);
+        if (found.Count > 0)
+            return found;
         return WavFiles(folder, fromOriginal: false);
+    }
+
+    public static IReadOnlyList<NoiseSource> ListOriginal(string folder)
+    {
+        var original = Path.Combine(folder, OriginalLibrary.FolderName);
+        return WavFiles(original, fromOriginal: true);
     }
 
     public static string? Resolve(string folder, string name)

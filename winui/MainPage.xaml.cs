@@ -69,6 +69,16 @@ public sealed partial class MainPage : Page
         _configReady = true;
         Editor.SetOtoSettings(CurrentExport());
         AddHandler(PointerWheelChangedEvent, new PointerEventHandler(OnPageWheel), true);
+        BindRecentFolders();
+    }
+
+    void SideTab_Checked(object sender, RoutedEventArgs e)
+    {
+        if (SourcePanel == null || ConfigBody == null)
+            return;
+        var oto = OtoTab.IsChecked == true;
+        ConfigBody.Visibility = oto ? Visibility.Visible : Visibility.Collapsed;
+        SourcePanel.Visibility = oto ? Visibility.Collapsed : Visibility.Visible;
     }
 
     void BuildOverlapSliders()
@@ -82,8 +92,8 @@ public sealed partial class MainPage : Page
             if (name != group)
             {
                 group = name;
-                rows = new StackPanel { Spacing = 12 };
-                var section = new StackPanel { Spacing = 6 };
+                rows = new StackPanel { Spacing = 8 };
+                var section = new StackPanel { Spacing = 8 };
                 section.Children.Add(new TextBlock { Text = name, Style = groupStyle });
                 section.Children.Add(rows);
                 OverlapList.Children.Add(section);
@@ -105,7 +115,7 @@ public sealed partial class MainPage : Page
             _overlapSliders[key] = slider;
             _overlapValues[key] = value;
             slider.ValueChanged += (_, _) => OnConfigChanged();
-            var row = new StackPanel { Spacing = 2 };
+            var row = new StackPanel { Spacing = 4 };
             row.Children.Add(head);
             row.Children.Add(slider);
             rows!.Children.Add(row);
@@ -152,12 +162,32 @@ public sealed partial class MainPage : Page
     {
         if (_busy)
             return;
-        var names = ListWavNames(folder);
+        List<string> names;
+        try
+        {
+            names = ListWavNames(folder);
+        }
+        catch (DirectoryNotFoundException)
+        {
+            RecentFolders.Forget(folder);
+            BindRecentFolders();
+            ShowError("フォルダが見つかりません。");
+            return;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            ShowError(ex.Message);
+            return;
+        }
+
         if (names.Count == 0)
         {
             ShowError("フォルダ内にWAVファイルがありません。");
             return;
         }
+
+        RecentFolders.Remember(folder);
+        BindRecentFolders();
 
         _busy = true;
         ShowBusy(0, names.Count);
@@ -221,14 +251,23 @@ public sealed partial class MainPage : Page
         await ReanalyzeSelectedAsync(file);
     }
 
-    public void ChooseFolder()
+    void IdleView_Click(object sender, RoutedEventArgs e)
     {
         _ = PickFolderAsync();
     }
 
-    void IdleView_Click(object sender, RoutedEventArgs e)
+    void RecentList_ItemClick(object sender, ItemClickEventArgs e)
     {
-        _ = PickFolderAsync();
+        if (e.ClickedItem is not RecentFolder item)
+            return;
+        OpenFolder([item.Path]);
+    }
+
+    void BindRecentFolders()
+    {
+        var items = RecentFolders.Load().Select(path => new RecentFolder(path)).ToList();
+        RecentList.ItemsSource = items;
+        RecentSection.Visibility = items.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
     }
 
     void Exit_Click(object sender, RoutedEventArgs e)
@@ -1067,6 +1106,7 @@ public sealed partial class MainPage : Page
     {
         _analyzed = false;
         _folder = folder;
+        Effects.SetFolder(folder);
         _files.Clear();
         _notice = null;
         _wrote = false;

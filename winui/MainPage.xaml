@@ -29,6 +29,110 @@
         <Style x:Key="OverlapGroupStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionTextBlockStyle}">
             <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
         </Style>
+        <Style x:Key="PanelCardStyle" TargetType="Border">
+            <Setter Property="Padding" Value="12" />
+            <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
+            <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="8" />
+        </Style>
+        <Style x:Key="SegmentButtonStyle" TargetType="RadioButton">
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="MinHeight" Value="32" />
+            <Setter Property="Padding" Value="8,4" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="VerticalAlignment" Value="Stretch" />
+            <Setter Property="CornerRadius" Value="5" />
+            <Setter Property="FontWeight" Value="Normal" />
+            <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+            <Setter Property="UseSystemFocusVisuals" Value="False" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Grid Background="Transparent">
+                            <VisualStateManager.VisualStateGroups>
+                                <VisualStateGroup x:Name="CommonStates">
+                                    <VisualState x:Name="Normal" />
+                                    <VisualState x:Name="PointerOver">
+                                        <VisualState.Setters>
+                                            <Setter Target="HoverFill.Opacity" Value="1" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="Pressed">
+                                        <VisualState.Setters>
+                                            <Setter Target="PressFill.Opacity" Value="1" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="Disabled">
+                                        <VisualState.Setters>
+                                            <Setter Target="Label.Foreground" Value="{ThemeResource TextFillColorDisabledBrush}" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                </VisualStateGroup>
+                                <VisualStateGroup x:Name="CheckStates">
+                                    <VisualState x:Name="Checked">
+                                        <VisualState.Setters>
+                                            <Setter Target="Selection.Opacity" Value="1" />
+                                            <Setter Target="Label.Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
+                                            <Setter Target="Label.FontWeight" Value="SemiBold" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="Unchecked" />
+                                    <VisualState x:Name="Indeterminate" />
+                                </VisualStateGroup>
+                                <VisualStateGroup x:Name="FocusStates">
+                                    <VisualState x:Name="Focused">
+                                        <VisualState.Setters>
+                                            <Setter Target="FocusRing.Opacity" Value="1" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="Unfocused" />
+                                    <VisualState x:Name="PointerFocused" />
+                                </VisualStateGroup>
+                            </VisualStateManager.VisualStateGroups>
+                            <Border
+                                x:Name="HoverFill"
+                                Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                                CornerRadius="{TemplateBinding CornerRadius}"
+                                IsHitTestVisible="False"
+                                Opacity="0" />
+                            <Border
+                                x:Name="PressFill"
+                                Background="{ThemeResource SubtleFillColorTertiaryBrush}"
+                                CornerRadius="{TemplateBinding CornerRadius}"
+                                IsHitTestVisible="False"
+                                Opacity="0" />
+                            <Border
+                                x:Name="Selection"
+                                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                BorderThickness="1"
+                                CornerRadius="{TemplateBinding CornerRadius}"
+                                IsHitTestVisible="False"
+                                Opacity="0" />
+                            <Border
+                                x:Name="FocusRing"
+                                BorderBrush="{ThemeResource AccentFillColorDefaultBrush}"
+                                BorderThickness="1"
+                                CornerRadius="{TemplateBinding CornerRadius}"
+                                IsHitTestVisible="False"
+                                Opacity="0" />
+                            <ContentPresenter
+                                x:Name="Label"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Margin="{TemplateBinding Padding}"
+                                Content="{TemplateBinding Content}"
+                                FontFamily="{TemplateBinding FontFamily}"
+                                FontSize="{TemplateBinding FontSize}"
+                                FontWeight="{TemplateBinding FontWeight}"
+                                Foreground="{TemplateBinding Foreground}"
+                                IsHitTestVisible="False" />
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Page.Resources>
 
     <Grid>
@@ -83,17 +187,21 @@
         <Grid Grid.Row="1">
             <StackPanel
                 x:Name="IdleView"
-                MaxWidth="440"
+                MaxWidth="480"
                 Padding="24"
-                Spacing="8"
+                Spacing="4"
                 HorizontalAlignment="Center"
                 VerticalAlignment="Center">
-                <Viewbox Width="40" Height="40" Margin="0,0,0,8" HorizontalAlignment="Center">
-                    <SymbolIcon Symbol="Folder" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
-                </Viewbox>
                 <TextBlock
-                    Text="音源フォルダを開く"
+                    Text="オトアソビ"
+                    Style="{StaticResource TitleTextBlockStyle}"
+                    HorizontalAlignment="Center"
+                    TextAlignment="Center" />
+                <TextBlock
+                    Margin="0,0,0,16"
+                    Text="OTOasobi"
                     Style="{StaticResource SubtitleTextBlockStyle}"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                     HorizontalAlignment="Center"
                     TextAlignment="Center" />
                 <TextBlock
@@ -104,12 +212,58 @@
                     TextAlignment="Center"
                     TextWrapping="Wrap" />
                 <Button
-                    MinWidth="160"
+                    MinWidth="200"
                     Margin="0,8,0,0"
                     HorizontalAlignment="Center"
                     Click="IdleView_Click"
-                    Content="フォルダを開く"
+                    Content="既存のフォルダを選ぶ"
                     Style="{StaticResource AccentButtonStyle}" />
+                <StackPanel
+                    x:Name="RecentSection"
+                    Margin="0,28,0,0"
+                    Spacing="8"
+                    Visibility="Collapsed">
+                    <TextBlock
+                        HorizontalAlignment="Left"
+                        Style="{StaticResource BodyStrongTextBlockStyle}"
+                        Text="最近使用したフォルダ" />
+                    <Border Padding="4" Style="{StaticResource PanelCardStyle}">
+                        <ListView
+                            x:Name="RecentList"
+                            MaxHeight="280"
+                            AutomationProperties.Name="最近使用したフォルダ"
+                            IsItemClickEnabled="True"
+                            ItemClick="RecentList_ItemClick"
+                            ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                            ScrollViewer.VerticalScrollBarVisibility="Auto"
+                            SelectionMode="None">
+                            <ListView.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Padding="4,2" ColumnSpacing="10">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <SymbolIcon
+                                            VerticalAlignment="Center"
+                                            Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                            Symbol="Folder" />
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                            <TextBlock
+                                                Text="{Binding Name}"
+                                                TextTrimming="CharacterEllipsis" />
+                                            <TextBlock
+                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                Style="{StaticResource CaptionTextBlockStyle}"
+                                                Text="{Binding Path}"
+                                                TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                        </ListView>
+                    </Border>
+                </StackPanel>
             </StackPanel>
 
             <StackPanel
@@ -244,174 +398,220 @@
                         Grid.Column="2"
                         BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
                         BorderThickness="1,0,0,0">
-                        <TabView
-                            IsAddTabButtonVisible="False"
-                            CanDragTabs="False"
-                            CanReorderTabs="False"
-                            AllowDropTabs="False"
-                            TabWidthMode="Equal">
-                            <TabViewItem
-                                Header="oto調整"
-                                IsClosable="False"
-                                HorizontalContentAlignment="Stretch"
-                                VerticalContentAlignment="Stretch">
-                            <ContentControl x:Name="ConfigBody" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch">
-                            <Grid>
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="*" />
-                                    <RowDefinition Height="Auto" />
-                                </Grid.RowDefinitions>
-                                <ScrollViewer
-                                    HorizontalScrollBarVisibility="Disabled"
-                                    VerticalScrollBarVisibility="Auto">
-                                    <StackPanel Padding="16,12,16,12" Spacing="18">
-                                        <StackPanel Spacing="8">
-                                            <TextBlock Text="プリセット" />
-                                            <DropDownButton
-                                                x:Name="PresetMenu"
-                                                HorizontalAlignment="Stretch"
-                                                HorizontalContentAlignment="Stretch"
-                                                MinHeight="32"
-                                                AutomationProperties.HelpText="プリセット">
-                                                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                                                    <TextBlock
-                                                        x:Name="PresetNameText"
-                                                        MaxWidth="148"
-                                                        VerticalAlignment="Center"
-                                                        Text="初期値"
-                                                        TextTrimming="CharacterEllipsis" />
-                                                    <TextBlock
-                                                        x:Name="PresetDirtyMark"
-                                                        VerticalAlignment="Center"
-                                                        Text="*"
-                                                        Visibility="Collapsed"
-                                                        AutomationProperties.Name="変更あり"
-                                                        ToolTipService.ToolTip="このプリセットから変更しています" />
-                                                </StackPanel>
-                                                <DropDownButton.Flyout>
-                                                    <MenuFlyout x:Name="PresetFlyout" />
-                                                </DropDownButton.Flyout>
-                                            </DropDownButton>
-                                            <Button
-                                                HorizontalAlignment="Stretch"
-                                                Click="SavePreset_Click"
-                                                Content="現在の設定を保存"
-                                                Style="{StaticResource ToolbarButtonStyle}"
-                                                ToolTipService.ToolTip="いまのスライダーの値を、名前をつけて保存します" />
-                                        </StackPanel>
-                                        <StackPanel Spacing="2">
-                                            <Grid>
-                                                <TextBlock VerticalAlignment="Center" Text="オフセット" />
-                                                <TextBlock
-                                                    x:Name="OffsetValue"
-                                                    HorizontalAlignment="Right"
-                                                    VerticalAlignment="Center"
-                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                    Style="{StaticResource CaptionTextBlockStyle}"
-                                                    Text="0.000 s" />
-                                            </Grid>
-                                            <Slider
-                                                x:Name="OffsetSlider"
-                                                AutomationProperties.Name="オフセット"
-                                                Maximum="0.1"
-                                                Minimum="-0.1"
-                                                StepFrequency="0.001"
-                                                SnapsTo="StepValues"
-                                                Value="0" />
-                                        </StackPanel>
-                                        <StackPanel Spacing="2">
-                                            <Grid>
-                                                <TextBlock VerticalAlignment="Center" Text="子音部" />
-                                                <TextBlock
-                                                    x:Name="ConsonantValue"
-                                                    HorizontalAlignment="Right"
-                                                    VerticalAlignment="Center"
-                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                    Style="{StaticResource CaptionTextBlockStyle}"
-                                                    Text="0.200 s" />
-                                            </Grid>
-                                            <Slider
-                                                x:Name="ConsonantSlider"
-                                                AutomationProperties.Name="子音部"
-                                                Maximum="0.2"
-                                                Minimum="0"
-                                                StepFrequency="0.001"
-                                                SnapsTo="StepValues"
-                                                Value="0.2" />
-                                        </StackPanel>
-                                        <StackPanel Spacing="2">
-                                            <Grid>
-                                                <TextBlock VerticalAlignment="Center" Text="ブランク" />
-                                                <TextBlock
-                                                    x:Name="BlankValue"
-                                                    HorizontalAlignment="Right"
-                                                    VerticalAlignment="Center"
-                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                    Style="{StaticResource CaptionTextBlockStyle}"
-                                                    Text="0.000 s" />
-                                            </Grid>
-                                            <Slider
-                                                x:Name="BlankSlider"
-                                                AutomationProperties.Name="ブランク"
-                                                Maximum="0.1"
-                                                Minimum="-0.1"
-                                                StepFrequency="0.001"
-                                                SnapsTo="StepValues"
-                                                Value="0" />
-                                        </StackPanel>
-                                        <StackPanel Spacing="8">
-                                            <TextBlock
-                                                Style="{StaticResource BodyStrongTextBlockStyle}"
-                                                Text="オーバーラップ" />
-                                            <StackPanel x:Name="OverlapList" Spacing="16" />
-                                        </StackPanel>
-                                    </StackPanel>
-                                </ScrollViewer>
-                                <StackPanel Grid.Row="1" Padding="16,8,16,16" Spacing="8">
-                                    <Button
-                                        x:Name="WriteButton"
-                                        HorizontalAlignment="Stretch"
-                                        Click="WriteOto_Click"
-                                        Style="{StaticResource ToolbarAccentButtonStyle}"
-                                        ToolTipService.ToolTip="直した区間から oto.ini を計算して、フォルダに保存します（Ctrl+S）">
-                                        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
-                                            <SymbolIcon Symbol="Save" />
-                                            <TextBlock Text="oto.iniを作成" />
-                                        </StackPanel>
-                                    </Button>
-                                    <Button
-                                        HorizontalAlignment="Stretch"
-                                        Click="ResetConfig_Click"
-                                        Content="初期値に戻す"
-                                        Style="{StaticResource ToolbarButtonStyle}" />
-                                </StackPanel>
-                            </Grid>
-                            </ContentControl>
-                            </TabViewItem>
-                            <TabViewItem
-                                Header="原音修正"
-                                IsClosable="False"
-                                HorizontalContentAlignment="Stretch"
-                                VerticalContentAlignment="Stretch">
-                                <Grid>
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+                            <Border
+                                Padding="12,10"
+                                BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                                BorderThickness="0,0,0,1">
+                                <Border
+                                    Padding="3"
+                                    Background="{ThemeResource ControlFillColorSecondaryBrush}"
+                                    CornerRadius="8">
+                                    <Grid ColumnSpacing="2">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <RadioButton
+                                            x:Name="OtoTab"
+                                            AutomationProperties.Name="oto調整"
+                                            Checked="SideTab_Checked"
+                                            Content="oto調整"
+                                            GroupName="EditorSideTab"
+                                            IsChecked="True"
+                                            Style="{StaticResource SegmentButtonStyle}" />
+                                        <RadioButton
+                                            x:Name="SourceTab"
+                                            Grid.Column="1"
+                                            AutomationProperties.Name="原音修正"
+                                            Checked="SideTab_Checked"
+                                            Content="原音修正"
+                                            GroupName="EditorSideTab"
+                                            Style="{StaticResource SegmentButtonStyle}" />
+                                    </Grid>
+                                </Border>
+                            </Border>
+                            <Grid Grid.Row="1">
+                                <ContentControl
+                                    x:Name="ConfigBody"
+                                    HorizontalContentAlignment="Stretch"
+                                    VerticalContentAlignment="Stretch">
+                                    <Grid>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="*" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+                                        <ScrollViewer
+                                            HorizontalScrollBarVisibility="Disabled"
+                                            VerticalScrollBarVisibility="Auto">
+                                            <StackPanel Padding="12,12,12,12" Spacing="10">
+                                                <Border Style="{StaticResource PanelCardStyle}">
+                                                    <StackPanel Spacing="8">
+                                                        <TextBlock
+                                                            Style="{StaticResource BodyStrongTextBlockStyle}"
+                                                            Text="プリセット" />
+                                                        <DropDownButton
+                                                            x:Name="PresetMenu"
+                                                            MinHeight="32"
+                                                            HorizontalAlignment="Stretch"
+                                                            HorizontalContentAlignment="Stretch"
+                                                            AutomationProperties.HelpText="プリセット">
+                                                            <Grid>
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="*" />
+                                                                    <ColumnDefinition Width="Auto" />
+                                                                </Grid.ColumnDefinitions>
+                                                                <TextBlock
+                                                                    x:Name="PresetNameText"
+                                                                    VerticalAlignment="Center"
+                                                                    Text="初期値"
+                                                                    TextTrimming="CharacterEllipsis" />
+                                                                <TextBlock
+                                                                    x:Name="PresetDirtyMark"
+                                                                    Grid.Column="1"
+                                                                    Margin="6,0,0,0"
+                                                                    VerticalAlignment="Center"
+                                                                    AutomationProperties.Name="変更あり"
+                                                                    Text="*"
+                                                                    ToolTipService.ToolTip="このプリセットから変更しています"
+                                                                    Visibility="Collapsed" />
+                                                            </Grid>
+                                                            <DropDownButton.Flyout>
+                                                                <MenuFlyout x:Name="PresetFlyout" />
+                                                            </DropDownButton.Flyout>
+                                                        </DropDownButton>
+                                                        <Button
+                                                            HorizontalAlignment="Stretch"
+                                                            Click="SavePreset_Click"
+                                                            Content="現在の設定を保存"
+                                                            Style="{StaticResource ToolbarButtonStyle}"
+                                                            ToolTipService.ToolTip="いまのスライダーの値を、名前をつけて保存します" />
+                                                    </StackPanel>
+                                                </Border>
+                                                <Border Style="{StaticResource PanelCardStyle}">
+                                                    <StackPanel Spacing="8">
+                                                        <TextBlock
+                                                            Style="{StaticResource BodyStrongTextBlockStyle}"
+                                                            Text="区間" />
+                                                        <Grid>
+                                                            <TextBlock VerticalAlignment="Center" Text="オフセット" />
+                                                            <TextBlock
+                                                                x:Name="OffsetValue"
+                                                                HorizontalAlignment="Right"
+                                                                VerticalAlignment="Center"
+                                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                                Style="{StaticResource CaptionTextBlockStyle}"
+                                                                Text="0.000 s" />
+                                                        </Grid>
+                                                        <Slider
+                                                            x:Name="OffsetSlider"
+                                                            AutomationProperties.Name="オフセット"
+                                                            Maximum="0.1"
+                                                            Minimum="-0.1"
+                                                            StepFrequency="0.001"
+                                                            SnapsTo="StepValues"
+                                                            Value="0" />
+                                                        <Grid>
+                                                            <TextBlock VerticalAlignment="Center" Text="子音部" />
+                                                            <TextBlock
+                                                                x:Name="ConsonantValue"
+                                                                HorizontalAlignment="Right"
+                                                                VerticalAlignment="Center"
+                                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                                Style="{StaticResource CaptionTextBlockStyle}"
+                                                                Text="0.200 s" />
+                                                        </Grid>
+                                                        <Slider
+                                                            x:Name="ConsonantSlider"
+                                                            AutomationProperties.Name="子音部"
+                                                            Maximum="0.2"
+                                                            Minimum="0"
+                                                            StepFrequency="0.001"
+                                                            SnapsTo="StepValues"
+                                                            Value="0.2" />
+                                                        <Grid>
+                                                            <TextBlock VerticalAlignment="Center" Text="ブランク" />
+                                                            <TextBlock
+                                                                x:Name="BlankValue"
+                                                                HorizontalAlignment="Right"
+                                                                VerticalAlignment="Center"
+                                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                                Style="{StaticResource CaptionTextBlockStyle}"
+                                                                Text="0.000 s" />
+                                                        </Grid>
+                                                        <Slider
+                                                            x:Name="BlankSlider"
+                                                            AutomationProperties.Name="ブランク"
+                                                            Maximum="0.1"
+                                                            Minimum="-0.1"
+                                                            StepFrequency="0.001"
+                                                            SnapsTo="StepValues"
+                                                            Value="0" />
+                                                    </StackPanel>
+                                                </Border>
+                                                <Border Style="{StaticResource PanelCardStyle}">
+                                                    <StackPanel Spacing="10">
+                                                        <TextBlock
+                                                            Style="{StaticResource BodyStrongTextBlockStyle}"
+                                                            Text="オーバーラップ" />
+                                                        <StackPanel x:Name="OverlapList" Spacing="16" />
+                                                    </StackPanel>
+                                                </Border>
+                                            </StackPanel>
+                                        </ScrollViewer>
+                                        <Border
+                                            Grid.Row="1"
+                                            Padding="12,10,12,12"
+                                            BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                                            BorderThickness="0,1,0,0">
+                                            <StackPanel Spacing="8">
+                                                <Button
+                                                    x:Name="WriteButton"
+                                                    HorizontalAlignment="Stretch"
+                                                    Click="WriteOto_Click"
+                                                    Style="{StaticResource ToolbarAccentButtonStyle}"
+                                                    ToolTipService.ToolTip="直した区間から oto.ini を計算して、フォルダに保存します（Ctrl+S）">
+                                                    <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
+                                                        <SymbolIcon Symbol="Save" />
+                                                        <TextBlock Text="oto.iniを作成" />
+                                                    </StackPanel>
+                                                </Button>
+                                                <Button
+                                                    HorizontalAlignment="Stretch"
+                                                    Click="ResetConfig_Click"
+                                                    Content="初期値に戻す"
+                                                    Style="{StaticResource ToolbarButtonStyle}" />
+                                            </StackPanel>
+                                        </Border>
+                                    </Grid>
+                                </ContentControl>
+                                <Grid x:Name="SourcePanel" Visibility="Collapsed">
                                     <Grid.RowDefinitions>
                                         <RowDefinition Height="*" />
                                         <RowDefinition Height="Auto" />
                                     </Grid.RowDefinitions>
                                     <local:EffectRack x:Name="Effects" />
-                                    <Button
-                                        x:Name="ApplyEffectsButton"
+                                    <Border
                                         Grid.Row="1"
-                                        Margin="16,8,16,16"
-                                        HorizontalAlignment="Stretch"
-                                        Click="ApplyEffects_Click"
-                                        Content="適用"
-                                        IsEnabled="False"
-                                        Style="{StaticResource ToolbarAccentButtonStyle}"
-                                        ToolTipService.ToolTip="original の音声に、オンのエフェクトをかけて、フォルダ直下の音声を上書きします。解析データは消えます。" />
+                                        Padding="12,10,12,12"
+                                        BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                                        BorderThickness="0,1,0,0">
+                                        <Button
+                                            x:Name="ApplyEffectsButton"
+                                            HorizontalAlignment="Stretch"
+                                            Click="ApplyEffects_Click"
+                                            Content="適用"
+                                            IsEnabled="False"
+                                            Style="{StaticResource ToolbarAccentButtonStyle}"
+                                            ToolTipService.ToolTip="original の音声に、オンのエフェクトをかけて、フォルダ直下の音声を上書きします。解析データは消えます。" />
+                                    </Border>
                                 </Grid>
-                            </TabViewItem>
-                        </TabView>
+                            </Grid>
+                        </Grid>
                     </Border>
                 </Grid>
             </Grid>

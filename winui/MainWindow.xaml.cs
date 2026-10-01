@@ -26,17 +26,6 @@ public sealed partial class MainWindow : Window
         {
             DispatcherQueue queue = DispatcherQueue;
             FileDrop.Attach(this, paths => queue.TryEnqueue(() => page.OpenFolder(paths)));
-            Activated += OnFirstActivated;
         }
-    }
-
-    void OnFirstActivated(object sender, WindowActivatedEventArgs e)
-    {
-        if (e.WindowActivationState == WindowActivationState.Deactivated)
-            return;
-        if (RootFrame.Content is not MainPage page)
-            return;
-        Activated -= OnFirstActivated;
-        DispatcherQueue.TryEnqueue(page.ChooseFolder);
     }
 }
