@@ -18,9 +18,12 @@ preview の t0/t1 は表示中の秒。columns/rows は画面のピクセル数�
 スペクトラムは同じ範囲をそのピクセル数へ最近傍で描き、拡大しても引き伸ばさない。
 要求: {"id": 3, "cmd": "save", "folder": "C:/音声フォルダ", "files": [...]}
 要求: {"id": 4, "cmd": "write", "folder": "C:/音声フォルダ", "files": [...], "config": {...}}
-config は offset_ms（ミリ秒。0 は子音開始。正は手前、負は後で、±100ms）、consonant_ms（ミリ秒）、blank（秒、-0.1 から 0.1）と overlap。overlap は子音ラベルから 0 から 1 の割合。1 個の数値なら全子音がその値で、無い子音は 0.5。
-blank の 0 は音量の上辺の右端。正は減衰側、負は手前へ、その秒数だけずらす。
-応答の txt は単独音モードの oto.ini。全区間は OTOasibi_log.txt、母音始まりは OTOasibi_out.txt。
+config は offset_ms（ミリ秒。正は手前、負は後で、±100ms）、consonant_ms（ミリ秒）、blank（秒、-0.1 から 0.1）、overlap、mode。
+mode が renzoku のときは連続音。それ以外は単独音。
+単独音の offset_ms の 0 は子音開始。overlap は子音ラベルから 0 から 1 の割合。1 個の数値なら全子音がその値で、無い子音は 0.5。
+連続音の offset_ms の 0 は、その音素の子音と直前の母音の境界。子音が無いときは母音と母音の境界。overlap は 1 個の数値で、0 がオフセットの位置、1 がその音素の開始。
+blank の 0 は音量の上辺の右端。正は減衰側、負は手前へ、その秒数だけずらす。子音部とブランクは両モードで同じ。
+応答の txt はそのモードの oto.ini。全区間は OTOasibi_log.txt、母音始まりは OTOasibi_out.txt。
 画面で区間を直したあとは save が保存データを更新し、write が oto.ini を計算して書く。
 """
 

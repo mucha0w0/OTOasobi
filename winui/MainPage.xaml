@@ -599,7 +599,104 @@
                                                 </StackPanel>
                                                 <StackPanel
                                                     x:Name="RenzokuOtoContent"
-                                                    Visibility="Collapsed" />
+                                                    Spacing="10"
+                                                    Visibility="Collapsed">
+                                                    <Border Style="{StaticResource PanelCardStyle}">
+                                                        <StackPanel Spacing="8">
+                                                            <TextBlock
+                                                                Style="{StaticResource BodyStrongTextBlockStyle}"
+                                                                Text="区間" />
+                                                            <Grid>
+                                                                <TextBlock VerticalAlignment="Center" Text="オフセット" />
+                                                                <TextBlock
+                                                                    x:Name="RenzokuOffsetValue"
+                                                                    HorizontalAlignment="Right"
+                                                                    VerticalAlignment="Center"
+                                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                                    Style="{StaticResource CaptionTextBlockStyle}"
+                                                                    Text="0.000 s" />
+                                                            </Grid>
+                                                            <Slider
+                                                                x:Name="RenzokuOffsetSlider"
+                                                                AutomationProperties.Name="オフセット"
+                                                                Maximum="0.1"
+                                                                Minimum="-0.1"
+                                                                SnapsTo="StepValues"
+                                                                StepFrequency="0.001"
+                                                                ToolTipService.ToolTip="0 は、その音素の子音と直前の母音の境界です。子音がないときは、母音と母音の境界です。マイナスは手前、プラスは後です。"
+                                                                Value="0" />
+                                                            <Grid>
+                                                                <TextBlock VerticalAlignment="Center" Text="子音部" />
+                                                                <TextBlock
+                                                                    x:Name="RenzokuConsonantValue"
+                                                                    HorizontalAlignment="Right"
+                                                                    VerticalAlignment="Center"
+                                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                                    Style="{StaticResource CaptionTextBlockStyle}"
+                                                                    Text="0.200 s" />
+                                                            </Grid>
+                                                            <Slider
+                                                                x:Name="RenzokuConsonantSlider"
+                                                                AutomationProperties.Name="子音部"
+                                                                Maximum="0.2"
+                                                                Minimum="0"
+                                                                SnapsTo="StepValues"
+                                                                StepFrequency="0.001"
+                                                                ToolTipService.ToolTip="母音の開始から後ろへずらします。幅は 0 から 0.2 秒です。"
+                                                                Value="0.2" />
+                                                            <Grid>
+                                                                <TextBlock VerticalAlignment="Center" Text="ブランク" />
+                                                                <TextBlock
+                                                                    x:Name="RenzokuBlankValue"
+                                                                    HorizontalAlignment="Right"
+                                                                    VerticalAlignment="Center"
+                                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                                    Style="{StaticResource CaptionTextBlockStyle}"
+                                                                    Text="0.000 s" />
+                                                            </Grid>
+                                                            <Slider
+                                                                x:Name="RenzokuBlankSlider"
+                                                                AutomationProperties.Name="ブランク"
+                                                                Maximum="0.1"
+                                                                Minimum="-0.1"
+                                                                SnapsTo="StepValues"
+                                                                StepFrequency="0.001"
+                                                                ToolTipService.ToolTip="0 は音量の上辺の右端です。プラスは減衰側、マイナスは手前です。"
+                                                                Value="0" />
+                                                        </StackPanel>
+                                                    </Border>
+                                                    <Border Style="{StaticResource PanelCardStyle}">
+                                                        <StackPanel Spacing="8">
+                                                            <TextBlock
+                                                                Style="{StaticResource BodyStrongTextBlockStyle}"
+                                                                Text="オーバーラップ" />
+                                                            <TextBlock
+                                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                                Style="{StaticResource CaptionTextBlockStyle}"
+                                                                Text="0% はオフセットの位置、100% はその音素の開始です。オフセットが 0 のときは同じ位置です。"
+                                                                TextWrapping="Wrap" />
+                                                            <Grid>
+                                                                <TextBlock VerticalAlignment="Center" Text="割合" />
+                                                                <TextBlock
+                                                                    x:Name="RenzokuOverlapValue"
+                                                                    HorizontalAlignment="Right"
+                                                                    VerticalAlignment="Center"
+                                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                                    Style="{StaticResource CaptionTextBlockStyle}"
+                                                                    Text="50%" />
+                                                            </Grid>
+                                                            <Slider
+                                                                x:Name="RenzokuOverlapSlider"
+                                                                AutomationProperties.Name="オーバーラップ"
+                                                                Maximum="100"
+                                                                Minimum="0"
+                                                                SnapsTo="StepValues"
+                                                                StepFrequency="1"
+                                                                ToolTipService.ToolTip="オフセットの位置を 0%、その音素の開始を 100% とした割合です。子音ごとのスライダーはありません。"
+                                                                Value="50" />
+                                                        </StackPanel>
+                                                    </Border>
+                                                </StackPanel>
                                                 <StackPanel
                                                     x:Name="CvvcOtoContent"
                                                     Visibility="Collapsed" />

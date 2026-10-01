@@ -1,4 +1,4 @@
-"""単独音モードの oto.ini。
+"""単独音と連続音の oto.ini。
 
 1 行は次の形です。値はミリ秒、小数第 3 位です。
 
@@ -6,8 +6,14 @@
 
 オフセットはファイル先頭から。子音部・先行発声・オーバーラップはオフセットから。
 ブランクは負の値で書き、オフセットからの時間に -1 を掛けたものです。
-オフセットは子音の開始を基準に、±0.1 秒だけ前後にずらします。
-ブランクの位置は音量の上辺の右端から、秒数で前後にずらします。
+子音部とブランクは、単独音も連続音も同じ位置です。
+先行発声は母音の開始です。
+
+単独音のオフセットは、子音の開始を基準に ±0.1 秒だけ前後へずらします。
+連続音のオフセットは、その音素の子音と直前の母音の境界を 0 とします。
+子音がない音素は、母音と母音の境界を 0 とします。ずらす幅は単独音と同じです。
+連続音のオーバーラップは、オフセットの位置を 0%、その音素の開始を 100% とした割合です。
+音素の開始は、オフセットの 0 と同じ境界です。
 """
 
 from __future__ import annotations
@@ -42,14 +48,16 @@ ANSI = "cp932"
 class OtoSettings:
     """oto.ini の位置。未指定のときはいまの書き出しと同じ。"""
 
-    # 子音開始からのミリ秒。正は手前、負は後。0 はその開始。
+    # ミリ秒。正は手前、負は後。0 は単独音では子音開始、連続音では音素の開始。
     offset_ms: float = 0.0
     consonant_ms: float = PAD_MS
     # 上辺の右端からの秒。正は減衰側、負は手前。
     blank_at: float = 0.0
     overlap_at: float = OVERLAP_AT
-    # 子音ラベル（k, sh など）ごとの比率。無いラベルは overlap_at。
+    # 子音ラベル（k, sh など）ごとの比率。無いラベルは overlap_at。連続音では使わない。
     overlap_by: dict[str, float] = field(default_factory=dict)
+    # mono または renzoku。
+    mode: str = "mono"
 
 
 def _bounded(value: object, default: float, lo: float, hi: float) -> float:
@@ -94,6 +102,7 @@ def oto_settings_from(raw: object) -> OtoSettings:
         blank_at=_bounded(raw.get("blank"), 0.0, -MAX_BLANK_SHIFT_S, MAX_BLANK_SHIFT_S),
         overlap_at=overlap_at,
         overlap_by=overlap_by,
+        mode="renzoku" if raw.get("mode") == "renzoku" else "mono",
     )
 
 
@@ -203,6 +212,90 @@ def mono_oto_lines(
     lines: list[str] = []
     for index in range(len(spans)):
         line = mono_oto_line(filename, spans, index, duration, settings, loudness)
+        if line is not None:
+            lines.append(line)
+    return lines
+
+
+def _vowel_letter(label: str) -> str:
+    """連続音エイリアスの、直前の母音。ん は n。"""
+    if label in ("N", "M"):
+        return "n"
+    return label
+
+
+def _is_rest_token(token: str) -> bool:
+    return bool(token) and set(token) <= {"_"}
+
+
+def _previous_vowel_letter(spans: list[Span], index: int) -> str:
+    """直前の母音。休符を越えたときと、ファイルの先頭は -。"""
+    for cursor in range(index - 1, -1, -1):
+        span = spans[cursor]
+        if span.label in VOWEL_ONSET_LABELS:
+            return _vowel_letter(span.label)
+        if span.label in (SILENCE_LABEL, BREATH_LABEL) and _is_rest_token(span.token):
+            return "-"
+    return "-"
+
+
+def _renzoku_alias(filename: str, spans: list[Span], index: int, vowel: Span) -> str:
+    alias = vowel.token or Path(filename).stem or vowel.label
+    return f"{_previous_vowel_letter(spans, index)} {alias}"
+
+
+def _phoneme_start(spans: list[Span], index: int, vowel: Span) -> float:
+    """その音素の開始。連続音のオフセットの 0 と同じ点。
+
+    子音があるときは、その子音と直前の母音の境界。
+    子音がないときは、母音と母音の境界。直前の母音が無いときは、その開始そのもの。
+    """
+    return _consonant_start(spans, index, vowel)
+
+
+def renzoku_oto_line(
+    filename: str,
+    spans: list[Span],
+    index: int,
+    duration: float,
+    settings: OtoSettings | None = None,
+    loudness: np.ndarray | None = None,
+) -> str | None:
+    """1 エイリアス分の連続音 oto.ini 行。母音でも ん でもなければ None。"""
+    settings = settings or OtoSettings()
+    vowel = spans[index]
+    if vowel.label not in VOWEL_ONSET_LABELS:
+        return None
+    start = _ms(_phoneme_start(spans, index, vowel))
+    v0 = _ms(vowel.start)
+    v1 = _ms(vowel.end)
+    dur = max(_ms(duration), v1, start)
+
+    offset = max(0.0, round(start - settings.offset_ms, 3))
+    preutter = max(0.0, round(v0 - offset, 3))
+    # 0% はオフセットの位置、100% は音素の開始。オフセットが 0 のときは同じ点。
+    overlap = round((start - offset) * settings.overlap_at, 3)
+    consonant = max(0.0, round((v0 + settings.consonant_ms) - offset, 3))
+    blank_at = _ms(
+        release_blank_seconds(loudness, duration, spans, index, settings.blank_at)
+    )
+    blank, consonant = _place_blank(blank_at, offset, consonant, dur)
+    alias = _renzoku_alias(filename, spans, index, vowel)
+    return (
+        f"{filename}={alias},{_fmt(offset)},{_fmt(consonant)},{_fmt(blank)},{_fmt(preutter)},{_fmt(overlap)}"
+    )
+
+
+def renzoku_oto_lines(
+    filename: str,
+    spans: list[Span],
+    duration: float,
+    settings: OtoSettings | None = None,
+    loudness: np.ndarray | None = None,
+) -> list[str]:
+    lines: list[str] = []
+    for index in range(len(spans)):
+        line = renzoku_oto_line(filename, spans, index, duration, settings, loudness)
         if line is not None:
             lines.append(line)
     return lines

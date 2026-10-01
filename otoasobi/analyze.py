@@ -9,7 +9,7 @@ import soundfile as sf
 
 from otoasobi.breath import apply_leading_breath
 from otoasobi.features import compute_features, loudness_db
-from otoasobi.oto import OTO_INI_NAME, OtoSettings, mono_oto_lines, write_oto_ini
+from otoasobi.oto import OTO_INI_NAME, OtoSettings, mono_oto_lines, renzoku_oto_lines, write_oto_ini
 from otoasobi.parser import Token, parse_stem, stem_from_path
 from otoasobi.phones import VOWEL_ONSET_LABELS
 from otoasobi.segment import Span, segment_tokens
@@ -260,9 +260,10 @@ def export_folder(
         raise RuntimeError("書き出す解析結果がありません。")
     span_entries = [(item.name, item.spans) for item in files]
     oto_lines: list[str] = []
+    write_lines = renzoku_oto_lines if settings is not None and settings.mode == "renzoku" else mono_oto_lines
     for item in files:
         oto_lines.extend(
-            mono_oto_lines(
+            write_lines(
                 item.name,
                 item.spans,
                 item.duration,

@@ -1,6 +1,6 @@
 namespace Otoasobi;
 
-// 単独音 oto.ini の位置。計算は oto.py の mono_oto_line に合わせる。
+// oto.ini の位置。計算は oto.py の mono_oto_line / renzoku_oto_line に合わせる。
 // 各値はファイル先頭からの秒で、設定スライダーを動かすたびに引き直す。
 readonly record struct OtoMark(
     string Alias,
@@ -33,22 +33,108 @@ static class OtoMarks
         var offsetMs = Bounded(settings.OffsetMs, 0, -MaxOffsetShiftMs, MaxOffsetShiftMs);
         var consonantMs = Bounded(settings.ConsonantMs, 200, 0, MaxPadMs);
         var blankAt = Bounded(settings.Blank, 0, -MaxBlankShiftS, MaxBlankShiftS);
+        var renzoku = settings.Mode == "renzoku";
+        var overlapAt = Bounded(settings.OverlapAt, 0.5, 0, 1);
         var spans = file.Spans;
         for (var i = 0; i < spans.Count; i++)
         {
             if (!IsVowelOnset(spans[i].Label))
                 continue;
-            dest.Add(Build(
-                file.Name,
-                spans,
-                i,
-                file.Duration,
-                offsetMs,
-                consonantMs,
-                blankAt,
-                settings.Overlap,
-                loudness));
+            dest.Add(renzoku
+                ? BuildRenzoku(
+                    file.Name,
+                    spans,
+                    i,
+                    file.Duration,
+                    offsetMs,
+                    consonantMs,
+                    blankAt,
+                    overlapAt,
+                    loudness)
+                : Build(
+                    file.Name,
+                    spans,
+                    i,
+                    file.Duration,
+                    offsetMs,
+                    consonantMs,
+                    blankAt,
+                    settings.Overlap,
+                    loudness));
         }
+    }
+
+    static OtoMark BuildRenzoku(
+        string filename,
+        List<PhoneSpan> spans,
+        int index,
+        double duration,
+        double offsetMs,
+        double consonantMs,
+        double blankAt,
+        double overlapAt,
+        double[]? loudness)
+    {
+        var vowel = spans[index];
+        var alias = RenzokuAlias(filename, spans, index, vowel);
+        var start = Ms(ConsonantStart(spans, index, vowel));
+        var v0 = Ms(vowel.Start);
+        var v1 = Ms(vowel.End);
+        var dur = Math.Max(Ms(duration), Math.Max(v1, start));
+
+        var offset = Math.Max(0, Round3(start - offsetMs));
+        var preutter = Math.Max(0, Round3(v0 - offset));
+        var overlapMs = Round3((start - offset) * overlapAt);
+        var consonant = Math.Max(0, Round3((v0 + consonantMs) - offset));
+        var blankAtMs = Ms(BlankRelease.At(loudness, duration, spans, index, blankAt));
+        var placed = PlaceBlank(blankAtMs, offset, consonant, dur);
+        var blank = placed.Blank;
+        consonant = placed.Consonant;
+
+        return new OtoMark(
+            alias,
+            offset / 1000.0,
+            (offset + overlapMs) / 1000.0,
+            (offset + preutter) / 1000.0,
+            (offset + consonant) / 1000.0,
+            (offset - blank) / 1000.0);
+    }
+
+    static string RenzokuAlias(string filename, List<PhoneSpan> spans, int index, PhoneSpan vowel)
+    {
+        var alias = vowel.Token;
+        if (string.IsNullOrEmpty(alias))
+            alias = Path.GetFileNameWithoutExtension(filename);
+        if (string.IsNullOrEmpty(alias))
+            alias = vowel.Label;
+        return PreviousVowelLetter(spans, index) + " " + alias;
+    }
+
+    static string PreviousVowelLetter(List<PhoneSpan> spans, int index)
+    {
+        for (var i = index - 1; i >= 0; i--)
+        {
+            var span = spans[i];
+            if (IsVowelOnset(span.Label))
+                return span.Label is "N" or "M" ? "n" : span.Label;
+            if (span.Label is "無音" or "息" && IsRestToken(span.Token))
+                return "-";
+        }
+
+        return "-";
+    }
+
+    static bool IsRestToken(string token)
+    {
+        if (string.IsNullOrEmpty(token))
+            return false;
+        foreach (var ch in token)
+        {
+            if (ch != '_')
+                return false;
+        }
+
+        return true;
     }
 
     static OtoMark Build(

@@ -65,6 +65,10 @@ public sealed partial class MainPage : Page
         OffsetSlider.ValueChanged += (_, _) => OnConfigChanged();
         ConsonantSlider.ValueChanged += (_, _) => OnConfigChanged();
         BlankSlider.ValueChanged += (_, _) => OnConfigChanged();
+        RenzokuOffsetSlider.ValueChanged += (_, _) => OnConfigChanged();
+        RenzokuConsonantSlider.ValueChanged += (_, _) => OnConfigChanged();
+        RenzokuBlankSlider.ValueChanged += (_, _) => OnConfigChanged();
+        RenzokuOverlapSlider.ValueChanged += (_, _) => OnConfigChanged();
         LoadPresets();
         _configReady = true;
         Editor.SetOtoSettings(CurrentExport());
@@ -103,6 +107,8 @@ public sealed partial class MainPage : Page
         CvvcOtoContent.Visibility = OtoModeCvvc.IsChecked == true
             ? Visibility.Visible
             : Visibility.Collapsed;
+        if (_configReady)
+            OnConfigChanged();
     }
 
     void BuildOverlapSliders()
@@ -795,6 +801,17 @@ public sealed partial class MainPage : Page
 
     OtoExport CurrentExport()
     {
+        if (OtoModeRenzoku.IsChecked == true)
+        {
+            return new(
+                Math.Round(-RenzokuOffsetSlider.Value * 1000.0),
+                Math.Round(RenzokuConsonantSlider.Value * 1000.0),
+                RenzokuBlankSlider.Value,
+                new Dictionary<string, double>(),
+                "renzoku",
+                RenzokuOverlapSlider.Value / 100.0);
+        }
+
         var overlap = new Dictionary<string, double>(ConsonantOverlap.Kinds.Length);
         foreach (var (_, key, _) in ConsonantOverlap.Kinds)
         {
@@ -817,6 +834,10 @@ public sealed partial class MainPage : Page
         BlankValue.Text = FormatSignedSeconds(BlankSlider.Value);
         foreach (var (key, slider) in _overlapSliders)
             _overlapValues[key].Text = FormatPercent(slider.Value);
+        RenzokuOffsetValue.Text = FormatSignedSeconds(RenzokuOffsetSlider.Value);
+        RenzokuConsonantValue.Text = FormatSeconds(RenzokuConsonantSlider.Value);
+        RenzokuBlankValue.Text = FormatSignedSeconds(RenzokuBlankSlider.Value);
+        RenzokuOverlapValue.Text = FormatPercent(RenzokuOverlapSlider.Value);
         if (!_configReady)
             return;
         Editor.SetOtoSettings(CurrentExport());
