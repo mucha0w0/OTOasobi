@@ -829,15 +829,6 @@ public sealed partial class MainPage : Page
             InfoBarSeverity.Warning);
     }
 
-    void ResetConfig_Click(object sender, RoutedEventArgs e)
-    {
-        OffsetSlider.Value = DefaultOffsetSeconds;
-        ConsonantSlider.Value = DefaultConsonantSeconds;
-        BlankSlider.Value = DefaultBlankSeconds;
-        foreach (var slider in _overlapSliders.Values)
-            slider.Value = DefaultOverlapPercent;
-    }
-
     void LoadPresets()
     {
         _userPresets.Clear();

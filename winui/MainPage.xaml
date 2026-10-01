@@ -622,11 +622,6 @@
                                                         <TextBlock Text="oto.iniを作成" />
                                                     </StackPanel>
                                                 </Button>
-                                                <Button
-                                                    HorizontalAlignment="Stretch"
-                                                    Click="ResetConfig_Click"
-                                                    Content="初期値に戻す"
-                                                    Style="{StaticResource ToolbarButtonStyle}" />
                                             </StackPanel>
                                         </Border>
                                     </Grid>
