@@ -1376,14 +1376,17 @@ public sealed class SpanEditor : UserControl
     {
         if (_file == null || group < 0 || group >= _groups.Count)
             return false;
+        var members = _groups[group];
+        if (members.Count == 0)
+            return false;
         var spans = _file.Spans;
-        foreach (var (index, _) in _groups[group])
+        foreach (var (index, _) in members)
         {
-            if (index >= 0 && index < spans.Count && IsQuietSpan(spans[index].Label))
-                return true;
+            if (index < 0 || index >= spans.Count || !IsQuietSpan(spans[index].Label))
+                return false;
         }
 
-        return false;
+        return true;
     }
 
     double GroupTime(int group)
