@@ -12,6 +12,8 @@ from otoasobi.phones import SILENCE_LABEL, MmsUnit, phone_name, token_mms_units
 from otoasobi.praat_refine import voicing_onset
 from otoasobi.segment import (
     Span,
+    _strongest_release,
+    affricate_closure_start,
     affricate_onset,
     chunk_time_bounds,
     clean_spans,
@@ -29,8 +31,10 @@ from otoasobi.segment import (
     sonorant_join,
     speech_threshold,
     split_leading_breath,
+    stop_burst_time,
     stop_closure_start,
     stop_vowel_start,
+    trim_obstruent_leading_silence,
     vowel_hiatus_onsets,
     weak_fricative_onset,
     weak_fricative_vowel_start,
@@ -81,7 +85,8 @@ def _mora_onset(
             i -= 1
         return float(times[i])
     if mora.is_stop:
-        return stop_closure_start(track, peak, t_lo)
+        burst = stop_burst_time(track, t_lo, t_hi, peak)
+        return stop_closure_start(track, burst, t_lo)
     if mora.is_nasal:
         return nasal_onset(track, peak, t_lo, t_hi)
     if mora.is_flap:
@@ -494,7 +499,15 @@ def segment_precision(
                 if split is not None and start < split[0] - 0.01:
                     start = c0
                 elif first_speech is not None and (first_speech.is_stop or first_speech.is_affricate):
-                    start = stop_closure_start(track, start, 0.0)
+                    burst = stop_burst_time(track, 0.0, chunk_bounds[0][1], start)
+                    if first_speech.is_affricate:
+                        release = _strongest_release(track, 0.0, chunk_bounds[0][1])
+                        if release is not None:
+                            burst = release
+                        onset = affricate_closure_start(track, burst, 0.0, max_closure=0.065)
+                    else:
+                        onset = stop_closure_start(track, burst, 0.0)
+                    start = max(start, onset)
                 chunk_bounds[0] = (start, chunk_bounds[0][1])
             _cl0, cl1 = chunk_bounds[-1]
             if abs(p1 - cl1) <= 0.12:
@@ -580,7 +593,7 @@ def segment_precision(
         if speech_end < duration:
             spans.append(Span(speech_start, duration, SILENCE_LABEL, tokens[-1].text if trailing_rest else ""))
         engine = "mms+praat" if "praat" in bits else "mms"
-        return clean_spans(spans, duration), engine
+        return clean_spans(trim_obstruent_leading_silence(spans, track), duration), engine
 
     group_total = max(1, len(group_chunks))
     for i, groups in enumerate(group_chunks):
@@ -622,4 +635,4 @@ def segment_precision(
         spans.append(Span(last_end, duration, SILENCE_LABEL, rest_text))
 
     engine = "mms+praat" if "praat" in bits else "mms"
-    return clean_spans(spans, duration), engine
+    return clean_spans(trim_obstruent_leading_silence(spans, track), duration), engine

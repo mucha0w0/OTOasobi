@@ -5,7 +5,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from otoasobi.features import FrameTrack, close_short_gaps, runs
-from otoasobi.parser import MoraGroup, Token, rest_layout, speech_chunks, speech_group_chunks
+from otoasobi.parser import AFFRICATE, MoraGroup, STOP, Token, rest_layout, speech_chunks, speech_group_chunks
 from otoasobi.phones import SILENCE_LABEL, phone_kind, phone_name
 
 
@@ -281,7 +281,15 @@ def chunk_time_bounds(tokens: list[Token], track: FrameTrack, duration: float) -
                 lo = max(lo, breath_end)
                 islands[i] = (max(islands[i][0], speech_start), islands[i][1])
         if moras[0].is_stop or moras[0].is_affricate:
-            islands[i] = (stop_closure_start(track, islands[i][0], lo), islands[i][1])
+            peak = stop_burst_time(track, lo, islands[i][1], islands[i][0])
+            if moras[0].is_affricate:
+                release = _strongest_release(track, lo, islands[i][1])
+                if release is not None:
+                    peak = release
+                onset = affricate_closure_start(track, peak, lo, max_closure=0.065)
+            else:
+                onset = stop_closure_start(track, peak, lo)
+            islands[i] = (max(islands[i][0], onset), islands[i][1])
         elif moras[0].is_weak_fricative:
             islands[i] = (weak_fricative_onset(track, islands[i][0], lo), islands[i][1])
     for i in range(1, len(islands)):
@@ -345,26 +353,69 @@ def _spaced_peaks(times: np.ndarray, score: np.ndarray, count: int, min_dt: floa
     return None
 
 
-def stop_closure_start(track: FrameTrack, burst: float, t_lo: float, max_closure: float = 0.12) -> float:
+def _flux_peak(track: FrameTrack, start: float, end: float) -> float | None:
+    sel = (track.times >= start) & (track.times <= end)
+    if int(np.count_nonzero(sel)) < 3:
+        return None
+    times = track.times[sel]
+    flux = track.flux[sel]
+    inner = slice(1, max(2, len(times) - 1))
+    if len(times[inner]) == 0:
+        return None
+    return float(times[inner][int(np.argmax(flux[inner]))])
+
+
+def stop_burst_time(track: FrameTrack, t_lo: float, t_hi: float, hint: float) -> float:
+    lo = max(t_lo, hint - 0.02)
+    hi = min(t_hi, max(hint, t_lo) + 0.18)
+    peak = _flux_peak(track, lo, hi)
+    return peak if peak is not None else max(t_lo, hint)
+
+
+def stop_closure_start(track: FrameTrack, burst: float, t_lo: float, max_closure: float = 0.065) -> float:
     """Start of a stop including the silent closure, without eating a long rest."""
     t_lo = max(0.0, t_lo)
     burst = max(burst, t_lo + 0.01)
     min_t = max(t_lo, burst - max_closure)
-    sel = (track.times >= min_t) & (track.times <= burst + 0.01)
+    sel = (track.times >= min_t) & (track.times <= burst + 0.012)
     if int(np.count_nonzero(sel)) < 3:
         return min_t
     times = track.times[sel]
     rms = track.rms[sel]
-    flux = track.flux[sel]
+    ratio = track.ratio[sel]
+    centroid = track.centroid[sel]
     peak_i = int(np.argmin(np.abs(times - burst)))
-    vowel_thr = max(float(np.max(rms)) * 0.38, speech_threshold(track))
-    flux_thr = max(float(np.percentile(flux, 65)), 1e-9)
+    speech_thr = speech_threshold(track)
+    quiet = speech_thr * 1.15
+    nasal_floor = speech_thr * 0.55
+    rest_thr = speech_thr * 0.22
+    hop = track.hop / track.sr if track.sr > 0 else 0.01
+    rest_frames = max(2, int(0.028 / max(hop, 1e-4)))
+    keep_frames = max(1, int(0.055 / max(hop, 1e-4)))
+
+    while peak_i > 0 and float(ratio[peak_i - 1]) >= 1.2 and float(rms[peak_i - 1]) >= quiet:
+        peak_i -= 1
     i = peak_i
-    while i > 0 and flux[i - 1] >= flux_thr * 0.35:
+    while i > 0:
+        prev_rms = float(rms[i - 1])
+        if prev_rms >= quiet:
+            break
+        if prev_rms >= nasal_floor and float(centroid[i - 1]) < 1500.0 and float(ratio[i - 1]) < 1.2:
+            break
         i -= 1
-    while i > 0 and rms[i - 1] < vowel_thr:
-        i -= 1
+
+    k = i
+    while k > 0 and float(rms[k - 1]) < rest_thr:
+        k -= 1
+    if i - k >= rest_frames:
+        onset_i = max(k, i - keep_frames)
+        while onset_i < i and float(rms[onset_i]) < rest_thr:
+            onset_i += 1
+        i = min(onset_i, peak_i)
     return max(min_t, float(times[i]))
+
+
+_OBSTRUENT_CLOSURE_LABELS = STOP | AFFRICATE
 
 
 def _scan_sibilant(track: FrameTrack, start: float, end: float) -> tuple[float | None, float | None]:
@@ -556,9 +607,7 @@ def _affricate_onsets(track: FrameTrack, start: float, end: float, count: int) -
         if release <= t_lo + 0.012:
             onsets.append(max(t_lo, release))
         else:
-            onsets.append(affricate_closure_start(track, release, t_lo, 0.12))
-    if onsets:
-        onsets[0] = start
+            onsets.append(affricate_closure_start(track, release, t_lo, 0.065))
     return onsets
 
 
@@ -910,8 +959,10 @@ def _stop_onsets(track: FrameTrack, start: float, end: float, count: int) -> lis
     peaks = _spaced_peaks(track.times[sel], track.flux[sel], count, min_dt=0.11)
     if peaks is None:
         return None
-    onsets = [stop_closure_start(track, peak, start if i == 0 else peaks[i - 1], 0.12) for i, peak in enumerate(peaks)]
-    onsets[0] = start
+    onsets = [
+        stop_closure_start(track, peak, start if i == 0 else peaks[i - 1], 0.065)
+        for i, peak in enumerate(peaks)
+    ]
     return onsets
 
 
@@ -1244,7 +1295,8 @@ def _onsets_to_bounds(onsets: list[float], start: float, end: float) -> list[tup
     for i, onset in enumerate(onsets):
         nxt = onsets[i + 1] if i + 1 < len(onsets) else end
         bounds.append((onset, nxt))
-    bounds[0] = (start, bounds[0][1])
+    first = max(start, onsets[0])
+    bounds[0] = (first, bounds[0][1])
     bounds[-1] = (bounds[-1][0], end)
     return bounds
 
@@ -1420,16 +1472,69 @@ def label_grouped_mora(
     return pieces[:-1] + split_vowel_time(group.parts, vowel.start, vowel.end)
 
 
+def _obstruent_consonant_start(
+    track: FrameTrack,
+    mora: Token,
+    start: float,
+    end: float,
+) -> float:
+    if mora.is_affricate:
+        release = _strongest_release(track, start, end)
+        peak = release if release is not None else stop_burst_time(track, start, end, start)
+        return affricate_closure_start(track, peak, start, max_closure=0.065)
+    if mora.is_stop:
+        peak = stop_burst_time(track, start, end, start)
+        return stop_closure_start(track, peak, start)
+    return start
+
+
+def trim_obstruent_leading_silence(spans: list[Span], track: FrameTrack) -> list[Span]:
+    """Pull stop/affricate consonant onsets to the closure; label earlier quiet as 無音."""
+    out: list[Span] = []
+    for span in spans:
+        if span.label not in _OBSTRUENT_CLOSURE_LABELS:
+            out.append(span)
+            continue
+        if span.end - span.start < 0.03:
+            out.append(span)
+            continue
+        if span.label in AFFRICATE:
+            release = _strongest_release(track, span.start, span.end)
+            peak = release if release is not None else stop_burst_time(
+                track, span.start, span.end, span.start
+            )
+            c0 = affricate_closure_start(track, peak, span.start, max_closure=0.065)
+        else:
+            peak = stop_burst_time(track, span.start, span.end, span.start)
+            c0 = stop_closure_start(track, peak, span.start)
+        c0 = max(span.start, min(c0, span.end - 0.01))
+        if c0 > span.start + 0.005:
+            out.append(Span(span.start, c0, SILENCE_LABEL, ""))
+            out.append(Span(c0, span.end, span.label, span.token))
+        else:
+            out.append(span)
+    return out
+
+
 def _label_mora(mora: Token, start: float, end: float, track: FrameTrack) -> list[Span]:
     if mora.kind in {"N", "Q"}:
         return [Span(start, end, phone_name(mora, "C"), mora.text)]
     if mora.kind == "V" or not mora.needs_cv_split:
         return [Span(start, end, phone_name(mora, "V"), mora.text)]
     cut = cv_cut(track, mora, start, end)
-    return [
-        Span(start, cut, phone_name(mora, "C"), mora.text),
-        Span(cut, end, phone_name(mora, "V"), mora.text),
-    ]
+    c0 = start
+    if mora.is_stop or mora.is_affricate:
+        c0 = max(start, min(_obstruent_consonant_start(track, mora, start, end), cut - 0.005))
+    pieces: list[Span] = []
+    if c0 > start + 0.005:
+        pieces.append(Span(start, c0, SILENCE_LABEL, ""))
+    pieces.extend(
+        [
+            Span(c0, cut, phone_name(mora, "C"), mora.text),
+            Span(cut, end, phone_name(mora, "V"), mora.text),
+        ]
+    )
+    return pieces
 
 
 def segment_tokens(tokens: list[Token], track: FrameTrack, duration: float) -> list[Span]:
@@ -1452,7 +1557,7 @@ def segment_tokens(tokens: list[Token], track: FrameTrack, duration: float) -> l
             spans.append(Span(0.0, duration, SILENCE_LABEL, "_"))
         elif speech_start < duration:
             spans.append(Span(speech_start, duration, SILENCE_LABEL, tokens[-1].text if trailing_rest else ""))
-        return clean_spans(spans, duration)
+        return clean_spans(trim_obstruent_leading_silence(spans, track), duration)
 
     for i, groups in enumerate(chunks):
         c0, c1 = chunk_bounds[i]
@@ -1470,7 +1575,7 @@ def segment_tokens(tokens: list[Token], track: FrameTrack, duration: float) -> l
     if last_end < duration - 0.01:
         rest_text = tokens[-1].text if trailing_rest else ""
         spans.append(Span(last_end, duration, SILENCE_LABEL, rest_text))
-    return clean_spans(spans, duration)
+    return clean_spans(trim_obstruent_leading_silence(spans, track), duration)
 
 
 def clean_spans(spans: list[Span], duration: float) -> list[Span]:
