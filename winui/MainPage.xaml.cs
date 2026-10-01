@@ -70,6 +70,15 @@ public sealed partial class MainPage : Page
         Editor.SetOtoSettings(CurrentExport());
         AddHandler(PointerWheelChangedEvent, new PointerEventHandler(OnPageWheel), true);
         BindRecentFolders();
+        Loaded += (_, _) => AttachMenuToTitleBar();
+    }
+
+    void AttachMenuToTitleBar()
+    {
+        if (App.MainWindow is not MainWindow window)
+            return;
+        window.PlaceMenuInTitleBar(AppMenuBar);
+        AppMenuBar.Visibility = Visibility.Visible;
     }
 
     void SideTab_Checked(object sender, RoutedEventArgs e)

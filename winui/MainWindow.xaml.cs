@@ -1,5 +1,6 @@
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 using Windows.Graphics;
 
 namespace Otoasobi;
@@ -27,5 +28,12 @@ public sealed partial class MainWindow : Window
             DispatcherQueue queue = DispatcherQueue;
             FileDrop.Attach(this, paths => queue.TryEnqueue(() => page.OpenFolder(paths)));
         }
+    }
+
+    internal void PlaceMenuInTitleBar(MenuBar menuBar)
+    {
+        if (menuBar.Parent is Panel panel)
+            panel.Children.Remove(menuBar);
+        AppTitleBar.LeftHeader = menuBar;
     }
 }
