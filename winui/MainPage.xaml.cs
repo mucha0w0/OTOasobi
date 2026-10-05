@@ -36,19 +36,19 @@ public sealed partial class MainPage : Page
     // oto.py の子音部、OVERLAP_AT、ブランク 0 秒（上辺の右端からのずれ）。
     // オフセットの 0 は子音開始。スライダーは ±0.1 秒で、マイナスは手前。
     // オーバーラップは子音ごと。0% が子音開始、100% が母音開始。中央が 50%。
-    // 0% からさらに左へ引くと開始より前の秒。離すとその行だけ秒のスライダーになる。
+    // 0% で左へ引いて離すと、その行だけ秒のスライダーになる。引いているあいだ値は変えない。
     const double DefaultOffsetSeconds = 0;
     const double DefaultConsonantSeconds = 0.2;
     const double DefaultBlankSeconds = 0;
     const double DefaultOverlapPercent = 50;
-    const double OverlapPixelsPerMillisecond = 4;
-    const string OverlapScaleTip = "0% は子音の開始、100% は母音の開始です。0% からさらに左へ引くと、開始より前の秒数になります。離すとその目盛りに切り替わります。";
+    const string OverlapScaleTip = "0% は子音の開始、100% は母音の開始です。0% で左へ引いて離すと、開始より前を秒で置けるスライダーになります。";
 
     readonly Dictionary<string, Slider> _overlapSliders = [];
     readonly Dictionary<string, TextBlock> _overlapValues = [];
     readonly Dictionary<string, double> _overlapIntent = [];
     bool _overlapWrite;
     string? _overlapDragKey;
+    bool _overlapArmLeft;
     readonly OtoPreset _builtIn = new()
     {
         Name = OtoPreset.BuiltInName,
@@ -197,36 +197,30 @@ public sealed partial class MainPage : Page
 
     void OnOverlapPointerPressed(object sender, PointerRoutedEventArgs e)
     {
-        if (sender is Slider slider && slider.Tag is string key)
-            _overlapDragKey = key;
+        if (sender is not Slider slider || slider.Tag is not string key)
+            return;
+        _overlapDragKey = key;
+        _overlapArmLeft = false;
     }
 
     void OnOverlapPointerMoved(object sender, PointerRoutedEventArgs e)
     {
         if (sender is not Slider slider || slider.Tag is not string key || _overlapDragKey != key)
             return;
-        if (_overlapWrite || _applyingPreset || slider.Minimum < 0)
+        if (slider.Minimum < 0)
             return;
         var intent = _overlapIntent.TryGetValue(key, out var stored) ? stored : DefaultOverlapPercent;
-        if (intent > 0)
-            return;
-
-        var overscroll = -e.GetCurrentPoint(slider).Position.X;
-        var milliseconds = overscroll > 0
-            ? Math.Min(ConsonantOverlap.MaxBeforeSeconds * 1000.0, Math.Floor(overscroll / OverlapPixelsPerMillisecond))
-            : 0;
-        var seconds = milliseconds >= 1 ? -milliseconds / 1000.0 : 0;
-        if (Math.Abs(seconds - intent) < 0.0005)
-            return;
-        _overlapIntent[key] = seconds;
-        if (slider.Value != 0)
+        if (intent > 0 || slider.Value > 0.5)
         {
-            _overlapWrite = true;
-            slider.Value = 0;
-            _overlapWrite = false;
+            _overlapArmLeft = false;
+            return;
         }
 
-        OnConfigChanged();
+        var x = e.GetCurrentPoint(slider).Position.X;
+        if (x < -2)
+            _overlapArmLeft = true;
+        else if (x > 8)
+            _overlapArmLeft = false;
     }
 
     void OnOverlapPointerEnded(object sender, PointerRoutedEventArgs e)
@@ -234,12 +228,22 @@ public sealed partial class MainPage : Page
         if (sender is not Slider slider || slider.Tag is not string key || _overlapDragKey != key)
             return;
         _overlapDragKey = null;
+        var armed = _overlapArmLeft;
+        _overlapArmLeft = false;
         var intent = _overlapIntent.TryGetValue(key, out var stored) ? stored : DefaultOverlapPercent;
         var secondsMode = slider.Minimum < 0;
-        if (intent < 0 && !secondsMode)
-            ShowOverlapSlider(slider, intent);
-        else if (intent >= 0 && secondsMode)
+        if (!secondsMode && armed && intent <= 0.0005)
+        {
+            _overlapIntent[key] = 0;
+            ShowOverlapSeconds(slider, 0);
+            OnConfigChanged();
+        }
+        else if (secondsMode && intent >= -0.0005)
+        {
+            _overlapIntent[key] = 0;
             ShowOverlapSlider(slider, 0);
+            OnConfigChanged();
+        }
     }
 
     void OnOverlapKey(object sender, KeyRoutedEventArgs e)
@@ -278,27 +282,111 @@ public sealed partial class MainPage : Page
 
     void ShowOverlapSlider(Slider slider, double intent)
     {
-        _overlapWrite = true;
         if (intent < 0)
-        {
-            slider.Minimum = -ConsonantOverlap.MaxBeforeSeconds;
-            slider.Maximum = 0;
-            slider.StepFrequency = 0.001;
-            slider.SmallChange = 0.001;
-            slider.SnapsTo = SliderSnapsTo.StepValues;
-            slider.Value = Math.Clamp(intent, -ConsonantOverlap.MaxBeforeSeconds, -0.001);
-        }
+            ShowOverlapSeconds(slider, intent);
         else
+            ShowOverlapPercent(slider, intent);
+    }
+
+    void ShowOverlapSeconds(Slider slider, double seconds)
+    {
+        _overlapWrite = true;
+        slider.Minimum = -ConsonantOverlap.MaxBeforeSeconds;
+        slider.Maximum = 0;
+        slider.StepFrequency = 0.001;
+        slider.SmallChange = 0.001;
+        slider.SnapsTo = SliderSnapsTo.StepValues;
+        slider.Value = Math.Clamp(seconds, -ConsonantOverlap.MaxBeforeSeconds, 0);
+        _overlapWrite = false;
+        PaintOverlapSlider(slider, seconds: true);
+    }
+
+    void ShowOverlapPercent(Slider slider, double percent)
+    {
+        _overlapWrite = true;
+        slider.Minimum = 0;
+        slider.Maximum = 100;
+        slider.StepFrequency = 1;
+        slider.SmallChange = 1;
+        slider.SnapsTo = SliderSnapsTo.StepValues;
+        slider.Value = Math.Clamp(Math.Round(percent, MidpointRounding.AwayFromZero), 0, 100);
+        _overlapWrite = false;
+        PaintOverlapSlider(slider, seconds: false);
+    }
+
+    void PaintOverlapSlider(Slider slider, bool seconds)
+    {
+        if (slider.Tag is string key && _overlapValues.TryGetValue(key, out var value))
         {
-            slider.Minimum = 0;
-            slider.Maximum = 100;
-            slider.StepFrequency = 1;
-            slider.SmallChange = 1;
-            slider.SnapsTo = SliderSnapsTo.StepValues;
-            slider.Value = Math.Clamp(Math.Round(intent, MidpointRounding.AwayFromZero), 0, 100);
+            if (seconds && ThemeBrush("AccentTextFillColorPrimaryBrush") is Brush accentText)
+                value.Foreground = accentText;
+            else
+                value.ClearValue(TextBlock.ForegroundProperty);
         }
 
-        _overlapWrite = false;
+        var accent = ThemeBrush("AccentFillColorDefaultBrush");
+        string[] resources =
+        [
+            "SliderTrackFill",
+            "SliderTrackFillPointerOver",
+            "SliderTrackFillPressed",
+            "SliderTrackValueFill",
+            "SliderTrackValueFillPointerOver",
+            "SliderTrackValueFillPressed",
+            "SliderThumbBackground",
+            "SliderThumbBackgroundPointerOver",
+            "SliderThumbBackgroundPressed",
+        ];
+        foreach (var resource in resources)
+        {
+            if (seconds && accent != null)
+                slider.Resources[resource] = accent;
+            else
+                slider.Resources.Remove(resource);
+        }
+
+        slider.ApplyTemplate();
+        foreach (var element in Descendants(slider))
+        {
+            if (element is Microsoft.UI.Xaml.Shapes.Shape shape
+                && element.Name is "HorizontalDecreaseRect" or "HorizontalTrackRect")
+            {
+                if (seconds && accent != null)
+                    shape.Fill = accent;
+                else
+                    shape.ClearValue(Microsoft.UI.Xaml.Shapes.Shape.FillProperty);
+            }
+            else if (element is Control thumb && element.Name == "HorizontalThumb")
+            {
+                thumb.ApplyTemplate();
+                foreach (var inner in Descendants(thumb))
+                {
+                    if (inner is Border border && inner.Name == "ThumbBorder")
+                    {
+                        if (seconds && accent != null)
+                            border.Background = accent;
+                        else
+                            border.ClearValue(Border.BackgroundProperty);
+                    }
+                }
+            }
+        }
+    }
+
+    static Brush? ThemeBrush(string key) =>
+        Application.Current.Resources.TryGetValue(key, out var value) ? value as Brush : null;
+
+    static IEnumerable<FrameworkElement> Descendants(DependencyObject root)
+    {
+        var count = VisualTreeHelper.GetChildrenCount(root);
+        for (var i = 0; i < count; i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+            if (child is FrameworkElement element)
+                yield return element;
+            foreach (var nested in Descendants(child))
+                yield return nested;
+        }
     }
 
     static double StepOverlap(double intent, int direction, int steps)
@@ -1018,7 +1106,10 @@ public sealed partial class MainPage : Page
         foreach (var (key, value) in _overlapValues)
         {
             var intent = _overlapIntent.TryGetValue(key, out var stored) ? stored : DefaultOverlapPercent;
-            value.Text = intent < 0 ? FormatSignedSeconds(intent) : FormatPercent(intent);
+            var secondsMode = _overlapSliders.TryGetValue(key, out var slider) && slider.Minimum < 0;
+            value.Text = secondsMode
+                ? FormatSignedSeconds(intent < 0 ? intent : 0)
+                : FormatPercent(intent);
             value.Opacity = 1;
             ToolTipService.SetToolTip(value, null);
         }
