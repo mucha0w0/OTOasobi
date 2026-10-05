@@ -224,11 +224,23 @@ public sealed partial class MainPage : Page
         _busy = true;
         ShowBusy(0, names.Count);
         BusyTitle.Text = "元の音声を保存しています";
+        FileStatusText.Text = "original へ控えています";
+        var queue = DispatcherQueue;
         try
         {
-            await Task.Run(() => OriginalLibrary.Ensure(folder));
+            await Task.Run(() => OriginalLibrary.Prepare(folder, (name, index, count) =>
+            {
+                queue.TryEnqueue(() =>
+                {
+                    if (!_busy)
+                        return;
+                    BusyTitle.Text = "音声形式を揃えています";
+                    SetProgress(index, count);
+                    UpdateFileStatus(name, count == 0 ? 0 : (double)index / count, "形式を揃えています");
+                });
+            }));
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
         {
             _busy = false;
             ShowError(ex.Message);

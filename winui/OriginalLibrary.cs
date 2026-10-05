@@ -1,6 +1,7 @@
 namespace Otoasobi;
 
 // 選んだフォルダの original に、直下の WAV の控えを置く。すでにあるファイルは上書きしない。
+// フォルダ読込み時は、直下と original の WAV を 44100Hz・16bit・モノラルへ揃える。
 static class OriginalLibrary
 {
     public const string FolderName = "original";
@@ -17,6 +18,37 @@ static class OriginalLibrary
                 continue;
             File.Copy(source, dest, overwrite: false);
         }
+    }
+
+    public static void Prepare(string folder, Action<string, int, int>? progress)
+    {
+        Ensure(folder);
+        var jobs = new List<(string Path, string Label)>();
+        foreach (var name in WavNames(folder))
+            jobs.Add((Path.Combine(folder, name), name));
+        var original = Path.Combine(folder, FolderName);
+        if (Directory.Exists(original))
+        {
+            foreach (var name in WavNames(original))
+                jobs.Add((Path.Combine(original, name), "original/" + name));
+        }
+
+        for (var i = 0; i < jobs.Count; i++)
+        {
+            var (path, label) = jobs[i];
+            progress?.Invoke(label, i, jobs.Count);
+            try
+            {
+                WavStandard.Convert(path);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
+            {
+                throw new IOException($"{label} を変換できませんでした。{ex.Message}", ex);
+            }
+        }
+
+        if (jobs.Count > 0)
+            progress?.Invoke(jobs[^1].Label, jobs.Count, jobs.Count);
     }
 
     public static void Apply(string folder, EffectChain chain, Action<string, int, int>? progress)
