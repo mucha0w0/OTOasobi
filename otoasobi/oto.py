@@ -11,7 +11,7 @@
 
 単独音のオフセットは、子音の開始を基準に ±0.1 秒だけ前後へずらします。
 単独音のオーバーラップは、0 が子音の開始、1 が母音の開始です。
-負の数は、子音の開始より前の秒です。オフセットより前には置かず、オフセットの位置に戻します。
+負の数は、子音の開始より前の秒です。その位置がオフセットより前でも、そのまま置きます。
 連続音のオフセットの 0 は、その音素の子音と直前の母音の境界から 0.15 秒手前です。
 子音がない音素は、母音と母音の境界から 0.15 秒手前です。ずらす幅は単独音と同じです。
 連続音のオーバーラップは、オフセットの位置を 0%、その音素の開始を 100% とした割合です。
@@ -79,7 +79,7 @@ def _bounded(value: object, default: float, lo: float, hi: float) -> float:
 
 
 def _overlap_setting(value: object) -> float:
-    """0〜1 は比率。負の数は子音開始より前の秒で、オフセットの幅まで。"""
+    """0〜1 は比率。負の数は子音開始より前の秒で、最大 0.1 秒。"""
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return OVERLAP_AT
     number = float(value)
@@ -161,12 +161,9 @@ def _overlap_value(settings: OtoSettings, consonant: str | None) -> float:
 
 
 def _overlap_ms(c0: float, v0: float, offset: float, setting: float) -> float:
-    """オフセットからのミリ秒。負の setting は子音開始より前の秒で、オフセットより前には置かない。"""
+    """オフセットからのミリ秒。負の setting は子音開始より前の秒で、オフセットより前にも置く。"""
     if setting < 0.0:
-        point = c0 + setting * 1000.0
-        if point < offset:
-            point = offset
-        return round(point - offset, 3)
+        return round((c0 + setting * 1000.0) - offset, 3)
     return round((c0 + (v0 - c0) * setting) - offset, 3)
 
 

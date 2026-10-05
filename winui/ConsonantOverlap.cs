@@ -4,7 +4,7 @@ namespace Otoasobi;
 static class ConsonantOverlap
 {
     public const double Default = 0.5;
-    // オフセットスライダーの手前幅。開始より前に置ける秒の上限。
+    // 子音開始より前に置ける秒の上限。オフセットより前にもこの幅まで置ける。
     public const double MaxBeforeSeconds = 0.1;
 
     public static readonly (string Group, string Key, string Caption)[] Kinds =
@@ -82,21 +82,12 @@ static class ConsonantOverlap
         return Default;
     }
 
-    // オフセットからのミリ秒。負の setting は子音開始より前の秒で、オフセットより前には置かない。
+    // オフセットからのミリ秒。負の setting は子音開始より前の秒で、オフセットより前にも置く。
     public static double FromOffset(double c0Ms, double v0Ms, double offsetMs, double setting)
     {
-        double point;
-        if (setting < 0)
-        {
-            point = c0Ms + setting * 1000.0;
-            if (point < offsetMs)
-                point = offsetMs;
-        }
-        else
-        {
-            point = c0Ms + (v0Ms - c0Ms) * Math.Clamp(setting, 0, 1);
-        }
-
+        var point = setting < 0
+            ? c0Ms + setting * 1000.0
+            : c0Ms + (v0Ms - c0Ms) * Math.Clamp(setting, 0, 1);
         return Math.Round(point - offsetMs, 3, MidpointRounding.ToEven);
     }
 }

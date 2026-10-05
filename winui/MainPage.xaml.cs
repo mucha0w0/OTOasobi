@@ -45,14 +45,11 @@ public sealed partial class MainPage : Page
     // トラックの左 22% が開始より前。その右寄り 8% は 0% のままにして、軽いドラッグでは入らない。
     const double OverlapBeforeShare = 0.22;
     const double OverlapDeadShare = 0.08;
-    const string OverlapScaleTip = "0% は子音の開始、100% は母音の開始です。0% より左は、子音の開始より前の秒数で、オフセットまでです。";
-    const string OverlapNeedOffsetTip = "0% は子音の開始、100% は母音の開始です。オフセットを手前にすると、その範囲まで置けます。";
-    const string OverlapClampedTip = "オフセットの位置に置いています";
+    const string OverlapScaleTip = "0% は子音の開始、100% は母音の開始です。0% より左は、子音の開始より前の秒数で、オフセットより前にも置けます。";
 
     readonly Dictionary<string, Slider> _overlapSliders = [];
     readonly Dictionary<string, TextBlock> _overlapValues = [];
     readonly Dictionary<string, double> _overlapIntent = [];
-    double _overlapLead;
     bool _overlapWrite;
     string? _overlapDragKey;
     readonly OtoPreset _builtIn = new()
@@ -154,10 +151,10 @@ public sealed partial class MainPage : Page
                 StepFrequency = 1,
                 SmallChange = 1,
                 Tag = key,
-                Value = OverlapPosition(DefaultOverlapPercent, 0),
+                Value = OverlapPosition(DefaultOverlapPercent),
             };
             AutomationProperties.SetName(slider, "オーバーラップ " + caption);
-            ToolTipService.SetToolTip(slider, OverlapNeedOffsetTip);
+            ToolTipService.SetToolTip(slider, OverlapScaleTip);
             _overlapSliders[key] = slider;
             _overlapValues[key] = value;
             _overlapIntent[key] = DefaultOverlapPercent;
@@ -178,8 +175,7 @@ public sealed partial class MainPage : Page
     {
         if (_overlapWrite || _applyingPreset)
             return;
-        var lead = OverlapLead();
-        _overlapIntent[key] = ReadOverlap(slider.Value, lead);
+        _overlapIntent[key] = ReadOverlap(slider.Value);
         OnConfigChanged();
     }
 
@@ -211,25 +207,23 @@ public sealed partial class MainPage : Page
         if (direction == 0)
             return;
         e.Handled = true;
-        var lead = OverlapLead();
         var intent = _overlapIntent.TryGetValue(key, out var stored) ? stored : DefaultOverlapPercent;
-        SetOverlapIntent(key, slider, StepOverlap(intent, direction, page ? 10 : 1, lead), lead);
+        SetOverlapIntent(key, slider, StepOverlap(intent, direction, page ? 10 : 1));
     }
 
-    void SetOverlapIntent(string key, Slider slider, double intent, double lead)
+    void SetOverlapIntent(string key, Slider slider, double intent)
     {
         _overlapIntent[key] = intent;
         _overlapWrite = true;
-        slider.Value = OverlapPosition(intent, lead);
+        slider.Value = OverlapPosition(intent);
         _overlapWrite = false;
         OnConfigChanged();
     }
 
     void ParkOverlapThumb(string key, Slider slider)
     {
-        var lead = OverlapLead();
         var intent = _overlapIntent.TryGetValue(key, out var stored) ? stored : DefaultOverlapPercent;
-        var parked = OverlapPosition(intent, lead);
+        var parked = OverlapPosition(intent);
         if (Math.Abs(slider.Value - parked) < 0.5)
             return;
         _overlapWrite = true;
@@ -237,26 +231,19 @@ public sealed partial class MainPage : Page
         _overlapWrite = false;
     }
 
-    void RepositionOverlapSliders(double lead)
+    void RepositionOverlapSliders()
     {
         _overlapWrite = true;
         foreach (var (key, slider) in _overlapSliders)
         {
             var intent = _overlapIntent.TryGetValue(key, out var stored) ? stored : DefaultOverlapPercent;
-            slider.Value = OverlapPosition(intent, lead);
+            slider.Value = OverlapPosition(intent);
         }
 
         _overlapWrite = false;
     }
 
-    void UpdateOverlapChrome(double lead)
-    {
-        var tip = lead > 0 ? OverlapScaleTip : OverlapNeedOffsetTip;
-        foreach (var slider in _overlapSliders.Values)
-            ToolTipService.SetToolTip(slider, tip);
-    }
-
-    static double StepOverlap(double intent, int direction, int steps, double lead)
+    static double StepOverlap(double intent, int direction, int steps)
     {
         if (direction > 0)
         {
@@ -271,64 +258,40 @@ public sealed partial class MainPage : Page
 
         if (intent > 0)
             return Math.Max(0, intent - steps);
-        if (lead <= 0)
-            return 0;
         var before = Math.Round(intent - 0.001 * steps, 3, MidpointRounding.AwayFromZero);
-        return Math.Max(before, -lead);
+        return Math.Max(before, -ConsonantOverlap.MaxBeforeSeconds);
     }
 
-    double OverlapLead()
+    static double OverlapBoundary() => OverlapBeforeShare * OverlapTrack;
+
+    static double OverlapCatch() => (OverlapBeforeShare - OverlapDeadShare) * OverlapTrack;
+
+    static double OverlapPosition(double semantic)
     {
-        var lead = Math.Round(-OffsetSlider.Value, 3, MidpointRounding.AwayFromZero);
-        return lead > 0 ? lead : 0;
+        var boundary = OverlapBoundary();
+        if (semantic >= 0)
+            return boundary + Math.Clamp(semantic, 0, 100) / 100.0 * (OverlapTrack - boundary);
+
+        var before = Math.Clamp(semantic, -ConsonantOverlap.MaxBeforeSeconds, 0);
+        var catchPoint = OverlapCatch();
+        return (1 - (-before / ConsonantOverlap.MaxBeforeSeconds)) * catchPoint;
     }
 
-    static double OverlapBoundary(double lead) =>
-        lead > 0 ? OverlapBeforeShare * OverlapTrack : 0;
-
-    static double OverlapCatch(double lead) =>
-        lead > 0 ? (OverlapBeforeShare - OverlapDeadShare) * OverlapTrack : 0;
-
-    static double OverlapPosition(double semantic, double lead)
-    {
-        if (semantic >= 0 || lead <= 0)
-        {
-            var percent = Math.Clamp(semantic, 0, 100);
-            if (lead <= 0)
-                return percent / 100.0 * OverlapTrack;
-            var boundary = OverlapBoundary(lead);
-            return boundary + percent / 100.0 * (OverlapTrack - boundary);
-        }
-
-        var before = Math.Clamp(semantic, -lead, 0);
-        var catchPoint = OverlapCatch(lead);
-        if (catchPoint <= 0)
-            return OverlapBoundary(lead);
-        return (1 - (-before / lead)) * catchPoint;
-    }
-
-    static double ReadOverlap(double position, double lead)
+    static double ReadOverlap(double position)
     {
         position = Math.Clamp(position, 0, OverlapTrack);
+        var boundary = OverlapBoundary();
         double raw;
-        if (lead <= 0)
+        if (position >= boundary)
         {
-            raw = position / OverlapTrack * 100.0;
+            raw = (position - boundary) / (OverlapTrack - boundary) * 100.0;
         }
         else
         {
-            var boundary = OverlapBoundary(lead);
-            if (position >= boundary)
-            {
-                raw = (position - boundary) / (OverlapTrack - boundary) * 100.0;
-            }
-            else
-            {
-                var catchPoint = OverlapCatch(lead);
-                if (position >= catchPoint || catchPoint <= 0)
-                    return 0;
-                raw = -lead * (1 - position / catchPoint);
-            }
+            var catchPoint = OverlapCatch();
+            if (position >= catchPoint)
+                return 0;
+            raw = -ConsonantOverlap.MaxBeforeSeconds * (1 - position / catchPoint);
         }
 
         if (raw >= -1e-9)
@@ -336,7 +299,7 @@ public sealed partial class MainPage : Page
         var seconds = Math.Round(raw, 3, MidpointRounding.AwayFromZero);
         if (seconds > -0.0005)
             return 0;
-        return Math.Max(seconds, -lead);
+        return Math.Max(seconds, -ConsonantOverlap.MaxBeforeSeconds);
     }
 
     void OnPageWheel(object sender, PointerRoutedEventArgs e)
@@ -1031,24 +994,15 @@ public sealed partial class MainPage : Page
 
     void OnConfigChanged()
     {
-        var lead = OverlapLead();
-        if (Math.Abs(lead - _overlapLead) > 0.0001)
-        {
-            _overlapLead = lead;
-            RepositionOverlapSliders(lead);
-            UpdateOverlapChrome(lead);
-        }
-
         OffsetValue.Text = FormatSignedSeconds(OffsetSlider.Value);
         ConsonantValue.Text = FormatSeconds(ConsonantSlider.Value);
         BlankValue.Text = FormatSignedSeconds(BlankSlider.Value);
         foreach (var (key, value) in _overlapValues)
         {
             var intent = _overlapIntent.TryGetValue(key, out var stored) ? stored : DefaultOverlapPercent;
-            var clamped = intent < -lead - 0.0005;
             value.Text = intent < 0 ? FormatSignedSeconds(intent) : FormatPercent(intent);
-            value.Opacity = clamped ? 0.45 : 1;
-            ToolTipService.SetToolTip(value, clamped ? OverlapClampedTip : null);
+            value.Opacity = 1;
+            ToolTipService.SetToolTip(value, null);
         }
         RenzokuOffsetValue.Text = FormatSignedSeconds(RenzokuOffsetSlider.Value);
         RenzokuConsonantValue.Text = FormatSeconds(RenzokuConsonantSlider.Value);
@@ -1173,9 +1127,7 @@ public sealed partial class MainPage : Page
         OffsetSlider.Value = preset.Offset;
         ConsonantSlider.Value = preset.Consonant;
         BlankSlider.Value = preset.Blank;
-        _overlapLead = OverlapLead();
-        RepositionOverlapSliders(_overlapLead);
-        UpdateOverlapChrome(_overlapLead);
+        RepositionOverlapSliders();
         _applyingPreset = false;
         OnConfigChanged();
     }
