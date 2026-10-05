@@ -593,6 +593,11 @@
                                                         <TextBlock
                                                             Style="{StaticResource BodyStrongTextBlockStyle}"
                                                             Text="オーバーラップ" />
+                                                        <TextBlock
+                                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                            Style="{StaticResource CaptionTextBlockStyle}"
+                                                            Text="0% は子音の開始、100% は母音の開始です。0% より左は、開始より前の秒数で、オフセットまでです。"
+                                                            TextWrapping="Wrap" />
                                                         <StackPanel x:Name="OverlapList" Spacing="16" />
                                                     </StackPanel>
                                                 </Border>

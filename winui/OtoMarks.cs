@@ -215,8 +215,11 @@ static class OtoMarks
 
         var offset = Math.Max(0, Round3(c0 - offsetMs));
         var preutter = Math.Max(0, Round3(v0 - offset));
-        var overlapAt = ConsonantOverlap.Ratio(overlap, ConsonantLabel(spans, index, vowel));
-        var overlapMs = Round3((c0 + (v0 - c0) * overlapAt) - offset);
+        var overlapMs = ConsonantOverlap.FromOffset(
+            c0,
+            v0,
+            offset,
+            ConsonantOverlap.EngineSetting(overlap, ConsonantLabel(spans, index, vowel)));
         var consonant = Math.Max(0, Round3((v0 + consonantMs) - offset));
         var blankAtMs = Ms(BlankRelease.At(loudness, duration, spans, index, blankAt));
         var placed = PlaceBlank(blankAtMs, offset, consonant, dur);

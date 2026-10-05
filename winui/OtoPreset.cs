@@ -57,7 +57,7 @@ static class OtoPresetStore
                 preset.Blank = Clamp(preset.Blank, -0.1, 0.1, 0, 3);
                 preset.Overlap ??= [];
                 foreach (var key in preset.Overlap.Keys.ToList())
-                    preset.Overlap[key] = Clamp(preset.Overlap[key], 0, 100, 50, 0);
+                    preset.Overlap[key] = ConsonantOverlap.Stored(preset.Overlap[key]);
                 result.Add(preset);
             }
 

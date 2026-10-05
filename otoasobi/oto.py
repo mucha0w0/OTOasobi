@@ -10,6 +10,8 @@
 先行発声は母音の開始です。
 
 単独音のオフセットは、子音の開始を基準に ±0.1 秒だけ前後へずらします。
+単独音のオーバーラップは、0 が子音の開始、1 が母音の開始です。
+負の数は、子音の開始より前の秒です。オフセットより前には置かず、オフセットの位置に戻します。
 連続音のオフセットの 0 は、その音素の子音と直前の母音の境界から 0.15 秒手前です。
 子音がない音素は、母音と母音の境界から 0.15 秒手前です。ずらす幅は単独音と同じです。
 連続音のオーバーラップは、オフセットの位置を 0%、その音素の開始を 100% とした割合です。
@@ -58,7 +60,8 @@ class OtoSettings:
     # 上辺の右端からの秒。正は減衰側、負は手前。
     blank_at: float = 0.0
     overlap_at: float = OVERLAP_AT
-    # 子音ラベル（k, sh など）ごとの比率。無いラベルは overlap_at。連続音では使わない。
+    # 子音ラベル（k, sh など）ごと。0〜1 は子音開始から母音開始までの比率。
+    # 負の数は、子音開始より前の秒。無いラベルは overlap_at。連続音では使わない。
     overlap_by: dict[str, float] = field(default_factory=dict)
     # mono または renzoku。
     mode: str = "mono"
@@ -75,14 +78,26 @@ def _bounded(value: object, default: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, number))
 
 
+def _overlap_setting(value: object) -> float:
+    """0〜1 は比率。負の数は子音開始より前の秒で、オフセットの幅まで。"""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return OVERLAP_AT
+    number = float(value)
+    if number != number:
+        return OVERLAP_AT
+    if number < 0.0:
+        return max(-MAX_OFFSET_SHIFT_MS / 1000.0, number)
+    return max(0.0, min(1.0, number))
+
+
 def _overlap_by(raw: object) -> dict[str, float]:
-    """子音ラベルから 0〜1。数値が 1 個だけの古い config はここを空にして、全体の比率に任せる。"""
+    """子音ラベルごとのオーバーラップ。数値が 1 個だけの古い config は空にして、全体の比率に任せる。"""
     if not isinstance(raw, dict):
         return {}
     table: dict[str, float] = {}
     for key, value in raw.items():
         if isinstance(key, str) and key:
-            table[key] = _bounded(value, OVERLAP_AT, 0.0, 1.0)
+            table[key] = _overlap_setting(value)
     return table
 
 
@@ -139,10 +154,20 @@ def _consonant_label(spans: list[Span], index: int, vowel: Span) -> str | None:
     return prev.label
 
 
-def _overlap_ratio(settings: OtoSettings, consonant: str | None) -> float:
+def _overlap_value(settings: OtoSettings, consonant: str | None) -> float:
     if consonant is not None and consonant in settings.overlap_by:
         return settings.overlap_by[consonant]
     return settings.overlap_at
+
+
+def _overlap_ms(c0: float, v0: float, offset: float, setting: float) -> float:
+    """オフセットからのミリ秒。負の setting は子音開始より前の秒で、オフセットより前には置かない。"""
+    if setting < 0.0:
+        point = c0 + setting * 1000.0
+        if point < offset:
+            point = offset
+        return round(point - offset, 3)
+    return round((c0 + (v0 - c0) * setting) - offset, 3)
 
 
 def _consonant_start(spans: list[Span], index: int, vowel: Span) -> float:
@@ -202,8 +227,7 @@ def mono_oto_line(
 
     offset = max(0.0, round(c0 - settings.offset_ms, 3))
     preutter = max(0.0, round(v0 - offset, 3))
-    ratio = _overlap_ratio(settings, _consonant_label(spans, index, vowel))
-    overlap = round((c0 + (v0 - c0) * ratio) - offset, 3)
+    overlap = _overlap_ms(c0, v0, offset, _overlap_value(settings, _consonant_label(spans, index, vowel)))
     consonant = max(0.0, round((v0 + settings.consonant_ms) - offset, 3))
     blank_at = _ms(
         release_blank_seconds(loudness, duration, spans, index, settings.blank_at)
