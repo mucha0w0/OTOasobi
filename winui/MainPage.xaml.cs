@@ -18,6 +18,7 @@ public sealed partial class MainPage : Page
     static AnalysisClient? _analysis;
 
     readonly List<WavFile> _files = [];
+    readonly List<string> _log = [];
     string? _folder;
     string? _notice;
     bool _busy;
@@ -512,7 +513,7 @@ public sealed partial class MainPage : Page
             Content = "保存データを使わず、フォルダの WAV を解析し直します。いまの区間は置き換わります。",
             PrimaryButtonText = "再解析する",
             CloseButtonText = "キャンセル",
-            DefaultButton = ContentDialogButton.Close,
+            DefaultButton = ContentDialogButton.Primary,
             XamlRoot = XamlRoot,
         };
         if (await dialog.ShowAsync() != ContentDialogResult.Primary || _busy || _folder == null)
@@ -530,7 +531,7 @@ public sealed partial class MainPage : Page
             Content = $"{file.Name} だけを解析し直します。この音声のいまの区間は置き換わります。ほかの音声はそのままです。",
             PrimaryButtonText = "再解析する",
             CloseButtonText = "キャンセル",
-            DefaultButton = ContentDialogButton.Close,
+            DefaultButton = ContentDialogButton.Primary,
             XamlRoot = XamlRoot,
         };
         if (await dialog.ShowAsync() != ContentDialogResult.Primary || _busy || _folder == null)
@@ -562,11 +563,6 @@ public sealed partial class MainPage : Page
     void Exit_Click(object sender, RoutedEventArgs e)
     {
         App.MainWindow?.Close();
-    }
-
-    void NoticeBar_Closed(InfoBar sender, InfoBarClosedEventArgs args)
-    {
-        NoticeHost.Visibility = Visibility.Collapsed;
     }
 
     async Task PickFolderAsync()
@@ -610,41 +606,9 @@ public sealed partial class MainPage : Page
             DefaultButton = ContentDialogButton.Primary,
             XamlRoot = XamlRoot,
         };
-        dialog.Opened += (_, _) => PlaceAffirmativeOnTheRight(dialog);
         if (await dialog.ShowAsync() != ContentDialogResult.Primary || _busy || _folder == null || _analyzed)
             return;
         await RunAsync(_folder, force: true);
-    }
-
-    static void PlaceAffirmativeOnTheRight(DependencyObject root)
-    {
-        Button? yes = null;
-        Button? no = null;
-        foreach (var button in Descendants<Button>(root))
-        {
-            if (button.Content as string == "はい")
-                yes = button;
-            else if (button.Content as string == "いいえ")
-                no = button;
-        }
-
-        if (yes == null || no == null)
-            return;
-        Grid.SetColumn(no, 0);
-        Grid.SetColumn(yes, 4);
-    }
-
-    static IEnumerable<T> Descendants<T>(DependencyObject root) where T : DependencyObject
-    {
-        var count = VisualTreeHelper.GetChildrenCount(root);
-        for (var i = 0; i < count; i++)
-        {
-            var child = VisualTreeHelper.GetChild(root, i);
-            if (child is T match)
-                yield return match;
-            foreach (var nested in Descendants<T>(child))
-                yield return nested;
-        }
     }
 
     void ReanalyzeSelected_Click(object sender, RoutedEventArgs e)
@@ -683,10 +647,9 @@ public sealed partial class MainPage : Page
             Content = applyText,
             PrimaryButtonText = "はい",
             CloseButtonText = "いいえ",
-            DefaultButton = ContentDialogButton.Close,
+            DefaultButton = ContentDialogButton.Primary,
             XamlRoot = XamlRoot,
         };
-        dialog.Opened += (_, _) => PlaceAffirmativeOnTheRight(dialog);
         if (await dialog.ShowAsync() != ContentDialogResult.Primary || _busy || _folder == null)
             return;
 
@@ -715,7 +678,7 @@ public sealed partial class MainPage : Page
                 return;
             ShowOnly("editor");
             HideStatus();
-            ShowNotice("適用できませんでした", ex.Message, InfoBarSeverity.Error);
+            ShowNotice("適用できませんでした", ex.Message);
             return;
         }
 
@@ -841,8 +804,7 @@ public sealed partial class MainPage : Page
                 HideStatus();
                 ShowNotice(
                     "再解析できませんでした",
-                    string.IsNullOrEmpty(result.Error) ? $"{file.Name} を解析できませんでした。" : result.Error,
-                    InfoBarSeverity.Error);
+                    string.IsNullOrEmpty(result.Error) ? $"{file.Name} を解析できませんでした。" : result.Error);
                 return;
             }
 
@@ -861,8 +823,7 @@ public sealed partial class MainPage : Page
             {
                 ShowNotice(
                     "選択した音声を再解析しました",
-                    $"{file.Name} の区間を置き換えました。ほかの音声はそのままです。",
-                    InfoBarSeverity.Success);
+                    $"{file.Name} の区間を置き換えました。ほかの音声はそのままです。");
             }
 
             if (FileList.SelectedItem != file)
@@ -876,7 +837,7 @@ public sealed partial class MainPage : Page
                 return;
             ShowOnly("editor");
             HideStatus();
-            ShowNotice("再解析できませんでした", ex.Message, InfoBarSeverity.Error);
+            ShowNotice("再解析できませんでした", ex.Message);
         }
         finally
         {
@@ -1026,8 +987,7 @@ public sealed partial class MainPage : Page
             {
                 ShowNotice(
                     "oto.iniを作成できませんでした",
-                    string.IsNullOrEmpty(result.Error) ? null : result.Error,
-                    InfoBarSeverity.Error);
+                    string.IsNullOrEmpty(result.Error) ? null : result.Error);
                 return;
             }
 
@@ -1039,14 +999,11 @@ public sealed partial class MainPage : Page
                     : _notice + "\n" + result.Notice;
             }
 
-            var severity = string.IsNullOrWhiteSpace(_notice)
-                ? InfoBarSeverity.Success
-                : InfoBarSeverity.Warning;
-            ShowNotice("oto.iniを作成しました", WithSkip(null), severity);
+            ShowNotice("oto.iniを作成しました", WithSkip(null));
         }
         catch (Exception ex)
         {
-            ShowNotice("oto.iniを作成できませんでした", ex.Message, InfoBarSeverity.Error);
+            ShowNotice("oto.iniを作成できませんでした", ex.Message);
         }
         finally
         {
@@ -1117,8 +1074,7 @@ public sealed partial class MainPage : Page
         _wrote = false;
         ShowNotice(
             "修正はまだファイルに入っていません",
-            WithSkip("もう一度「oto.iniを作成」を押すと、oto.ini に反映されます。"),
-            InfoBarSeverity.Warning);
+            WithSkip("もう一度「oto.iniを作成」を押すと、oto.ini に反映されます。"));
     }
 
     void LoadPresets()
@@ -1341,7 +1297,7 @@ public sealed partial class MainPage : Page
                 Content = $"「{name}」は既にあります。いまの設定で置き換えます。",
                 PrimaryButtonText = "上書きする",
                 CloseButtonText = "キャンセル",
-                DefaultButton = ContentDialogButton.Close,
+                DefaultButton = ContentDialogButton.Primary,
                 XamlRoot = XamlRoot,
             };
             if (await confirm.ShowAsync() != ContentDialogResult.Primary)
@@ -1360,7 +1316,7 @@ public sealed partial class MainPage : Page
         }
         catch (Exception ex)
         {
-            ShowNotice("プリセットを保存できませんでした", ex.Message, InfoBarSeverity.Error);
+            ShowNotice("プリセットを保存できませんでした", ex.Message);
         }
     }
 
@@ -1403,8 +1359,7 @@ public sealed partial class MainPage : Page
         _wrote = false;
         ShowNotice(
             "修正はまだファイルに入っていません",
-            WithSkip("もう一度「oto.iniを作成」を押すと、oto.ini に反映されます。"),
-            InfoBarSeverity.Warning);
+            WithSkip("もう一度「oto.iniを作成」を押すと、oto.ini に反映されます。"));
     }
 
     async Task<bool> SaveCacheAsync()
@@ -1423,7 +1378,7 @@ public sealed partial class MainPage : Page
         {
             if (gen != _saveGen || folder != _folder)
                 return false;
-            ShowNotice("保存データを更新できませんでした", ex.Message, InfoBarSeverity.Error);
+            ShowNotice("保存データを更新できませんでした", ex.Message);
             return false;
         }
     }
@@ -1511,7 +1466,7 @@ public sealed partial class MainPage : Page
         if (names.Count == 0)
             return false;
         ShowUnanalyzed(folder, names);
-        ShowNotice("解析に失敗しました", message, InfoBarSeverity.Error);
+        ShowNotice("解析に失敗しました", message);
         return true;
     }
 
@@ -1526,14 +1481,11 @@ public sealed partial class MainPage : Page
         FolderLabel.Text = folder;
         ToolTipService.SetToolTip(FolderLabel, folder);
         FileCount.Text = $"{_files.Count} 件";
-        var severity = string.IsNullOrWhiteSpace(_notice)
-            ? InfoBarSeverity.Informational
-            : InfoBarSeverity.Warning;
         var title = cached ? "保存データから読み込みました" : "区間を確認してください";
         var body = cached
             ? "前回の区間を開きました。直すと保存データへ書き戻します。oto.ini へ反映するには「oto.iniを作成」を押してください。"
             : "位置を直したら「oto.iniを作成」を押してください。区間は OTOasibi_cache.json に保存してあり、次に開くときは再解析しません。";
-        ShowNotice(title, WithSkip(body), severity);
+        ShowNotice(title, WithSkip(body));
         Widen();
         _suppressSelection = true;
         FileList.ItemsSource = null;
@@ -1608,19 +1560,31 @@ public sealed partial class MainPage : Page
         FileProgress.IsIndeterminate = false;
     }
 
-    void ShowNotice(string title, string? body, InfoBarSeverity severity)
+    void ShowNotice(string title, string? body)
     {
-        NoticeBar.Title = title;
-        NoticeBar.Message = body ?? "";
-        NoticeBar.Severity = severity;
-        NoticeBar.IsOpen = true;
-        NoticeHost.Visibility = Visibility.Visible;
+        var detail = string.IsNullOrWhiteSpace(body)
+            ? ""
+            : body.Replace("\r\n", "\n").Trim();
+        var line = string.IsNullOrEmpty(detail) ? title : title + "　" + detail;
+        if (_log.Count == 0 || _log[^1] != line)
+        {
+            _log.Add(line);
+            const int maxLines = 40;
+            if (_log.Count > maxLines)
+                _log.RemoveRange(0, _log.Count - maxLines);
+        }
+
+        LogText.Text = string.Join("\n", _log);
+        LogHost.Visibility = Visibility.Visible;
+        DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, () =>
+            LogScroll.ChangeView(null, LogScroll.ScrollableHeight, null, true));
     }
 
     void ClearNotice()
     {
-        NoticeBar.IsOpen = false;
-        NoticeHost.Visibility = Visibility.Collapsed;
+        _log.Clear();
+        LogText.Text = "";
+        LogHost.Visibility = Visibility.Collapsed;
     }
 
     string WithSkip(string? body)

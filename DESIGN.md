@@ -98,6 +98,18 @@
 - `ListView`: 横スクロール無効、ファイル名は `CharacterEllipsis` + 必要なら `ToolTipService`。
 - 最近のフォルダ: カード内リスト、`SymbolIcon` **Folder** + **Accent** 色。2 行目にパス（Caption、二次色）。
 
+### モーダル（`ContentDialog`）
+
+WinUI のコマンド領域は **左が Primary、右が Close**。Accent（プライマリ色）は `DefaultButton` に指定したボタンだけに付く。列の入れ替え（`Grid.SetColumn`）はしない。
+
+| 役割 | スロット | 位置 | 色 | 例 |
+| --- | --- | --- | --- | --- |
+| 肯定 | `PrimaryButtonText` | 左 | プライマリ（`AccentButtonStyle`） | はい、保存、再解析する、上書きする |
+| 否定 | `CloseButtonText` | 右 | セカンダリ（`DefaultButtonStyle`） | いいえ、キャンセル |
+
+- 2 ボタンの確認は **`DefaultButton = Primary`**。これで左が Accent、右が通常ボタンになり、Enter も肯定側。
+- 通知だけの **「閉じる」** は Close のみ。右・セカンダリのまま（`DefaultButton` は付けない）。読むだけで、確定操作ではない。
+
 ## 色とタイポグラフィ（Fluent 領域）
 
 - **見出し階層**: `Title` → `Subtitle` → `BodyStrong` → `Body` → `Caption`（WinUI 既定スタイルをそのまま使用）。
@@ -138,6 +150,7 @@
 3. パネル右端の **主操作は Accent + フッター固定**、副操作はその上または同じフッター内の Default ボタン。
 4. 横幅が溢れる文字列は **Ellipsis**、全文が必要なら **ToolTip** または **IsTextSelectionEnabled**（パス表示）。
 5. スタイルは `MainPage.xaml` / `EffectRack.xaml` の既存 `Style` を **BasedOn** で再利用し、同じ `MinHeight 32` のタッチターゲットを維持する。
+6. 確認モーダルは **肯定を Primary（左・Accent・`DefaultButton`）**、**否定を Close（右・通常ボタン）**。ボタン列は入れ替えない。
 
 ## 参照ファイル
 

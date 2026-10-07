@@ -140,6 +140,7 @@
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <MenuBar
@@ -297,7 +298,6 @@
             <Grid x:Name="EditorView" Visibility="Collapsed">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
 
@@ -311,23 +311,7 @@
                     Style="{StaticResource CaptionTextBlockStyle}"
                     TextTrimming="CharacterEllipsis" />
 
-                <ScrollViewer
-                    x:Name="NoticeHost"
-                    Grid.Row="1"
-                    MaxHeight="132"
-                    Margin="16,8,16,0"
-                    HorizontalScrollBarVisibility="Disabled"
-                    VerticalScrollBarVisibility="Auto"
-                    Visibility="Collapsed">
-                    <InfoBar
-                        x:Name="NoticeBar"
-                        HorizontalAlignment="Stretch"
-                        IsClosable="True"
-                        IsOpen="False"
-                        Closed="NoticeBar_Closed" />
-                </ScrollViewer>
-
-                <Grid Grid.Row="2" Margin="0,8,0,0">
+                <Grid Grid.Row="1" Margin="0,8,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="280" />
                         <ColumnDefinition Width="*" />
@@ -866,6 +850,30 @@
                     VerticalAlignment="Center"
                     TextTrimming="CharacterEllipsis" />
             </Grid>
+        </Border>
+
+        <Border
+            x:Name="LogHost"
+            Grid.Row="3"
+            Padding="16,4,16,6"
+            BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+            BorderThickness="0,1,0,0"
+            Visibility="Collapsed">
+            <ScrollViewer
+                x:Name="LogScroll"
+                MaxHeight="64"
+                HorizontalScrollBarVisibility="Disabled"
+                IsTabStop="False"
+                VerticalScrollBarVisibility="Auto">
+                <TextBlock
+                    x:Name="LogText"
+                    AutomationProperties.LiveSetting="Polite"
+                    AutomationProperties.Name="ログ"
+                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                    IsTextSelectionEnabled="True"
+                    Style="{StaticResource CaptionTextBlockStyle}"
+                    TextWrapping="Wrap" />
+            </ScrollViewer>
         </Border>
     </Grid>
 </Page>

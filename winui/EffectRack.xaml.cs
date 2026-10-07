@@ -420,7 +420,7 @@ public sealed partial class EffectRack : UserControl
                 Content = $"「{name}」は既にあります。いまの設定で置き換えます。",
                 PrimaryButtonText = "上書きする",
                 CloseButtonText = "キャンセル",
-                DefaultButton = ContentDialogButton.Close,
+                DefaultButton = ContentDialogButton.Primary,
                 XamlRoot = XamlRoot,
             };
             if (await confirm.ShowAsync() != ContentDialogResult.Primary)
@@ -659,7 +659,7 @@ public sealed partial class EffectRack : UserControl
                 Content = $"「{name}」は既にあります。いまの抑える量で置き換えます。",
                 PrimaryButtonText = "上書きする",
                 CloseButtonText = "キャンセル",
-                DefaultButton = ContentDialogButton.Close,
+                DefaultButton = ContentDialogButton.Primary,
                 XamlRoot = XamlRoot,
             };
             if (await confirm.ShowAsync() != ContentDialogResult.Primary)
@@ -1444,7 +1444,7 @@ public sealed partial class EffectRack : UserControl
                 Content = $"「{name}」は既にあります。いまの設定で置き換えます。",
                 PrimaryButtonText = "上書きする",
                 CloseButtonText = "キャンセル",
-                DefaultButton = ContentDialogButton.Close,
+                DefaultButton = ContentDialogButton.Primary,
                 XamlRoot = XamlRoot,
             };
             if (await confirm.ShowAsync() != ContentDialogResult.Primary)
@@ -1593,7 +1593,7 @@ public sealed partial class EffectRack : UserControl
                 Content = $"「{name}」は既にあります。いまの設定で置き換えます。",
                 PrimaryButtonText = "上書きする",
                 CloseButtonText = "キャンセル",
-                DefaultButton = ContentDialogButton.Close,
+                DefaultButton = ContentDialogButton.Primary,
                 XamlRoot = XamlRoot,
             };
             if (await confirm.ShowAsync() != ContentDialogResult.Primary)
@@ -1743,7 +1743,7 @@ public sealed partial class EffectRack : UserControl
                 Content = $"「{name}」は既にあります。いまの設定で置き換えます。",
                 PrimaryButtonText = "上書きする",
                 CloseButtonText = "キャンセル",
-                DefaultButton = ContentDialogButton.Close,
+                DefaultButton = ContentDialogButton.Primary,
                 XamlRoot = XamlRoot,
             };
             if (await confirm.ShowAsync() != ContentDialogResult.Primary)
@@ -1894,7 +1894,7 @@ public sealed partial class EffectRack : UserControl
                 Content = $"「{name}」は既にあります。いまのピークで置き換えます。",
                 PrimaryButtonText = "上書きする",
                 CloseButtonText = "キャンセル",
-                DefaultButton = ContentDialogButton.Close,
+                DefaultButton = ContentDialogButton.Primary,
                 XamlRoot = XamlRoot,
             };
             if (await confirm.ShowAsync() != ContentDialogResult.Primary)
