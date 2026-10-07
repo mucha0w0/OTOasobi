@@ -859,21 +859,15 @@
             BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
             BorderThickness="0,1,0,0"
             Visibility="Collapsed">
-            <ScrollViewer
-                x:Name="LogScroll"
-                MaxHeight="64"
-                HorizontalScrollBarVisibility="Disabled"
-                IsTabStop="False"
-                VerticalScrollBarVisibility="Auto">
-                <TextBlock
-                    x:Name="LogText"
-                    AutomationProperties.LiveSetting="Polite"
-                    AutomationProperties.Name="ログ"
-                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                    IsTextSelectionEnabled="True"
-                    Style="{StaticResource CaptionTextBlockStyle}"
-                    TextWrapping="Wrap" />
-            </ScrollViewer>
+            <TextBlock
+                x:Name="LogText"
+                AutomationProperties.LiveSetting="Polite"
+                AutomationProperties.Name="ログ"
+                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                IsTextSelectionEnabled="True"
+                Style="{StaticResource CaptionTextBlockStyle}"
+                TextTrimming="CharacterEllipsis"
+                TextWrapping="NoWrap" />
         </Border>
     </Grid>
 </Page>

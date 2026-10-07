@@ -18,7 +18,6 @@ public sealed partial class MainPage : Page
     static AnalysisClient? _analysis;
 
     readonly List<WavFile> _files = [];
-    readonly List<string> _log = [];
     string? _folder;
     string? _notice;
     bool _busy;
@@ -1564,26 +1563,17 @@ public sealed partial class MainPage : Page
     {
         var detail = string.IsNullOrWhiteSpace(body)
             ? ""
-            : body.Replace("\r\n", "\n").Trim();
+            : string.Join(" ", body.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
         var line = string.IsNullOrEmpty(detail) ? title : title + "　" + detail;
-        if (_log.Count == 0 || _log[^1] != line)
-        {
-            _log.Add(line);
-            const int maxLines = 40;
-            if (_log.Count > maxLines)
-                _log.RemoveRange(0, _log.Count - maxLines);
-        }
-
-        LogText.Text = string.Join("\n", _log);
+        LogText.Text = line;
+        ToolTipService.SetToolTip(LogText, line);
         LogHost.Visibility = Visibility.Visible;
-        DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, () =>
-            LogScroll.ChangeView(null, LogScroll.ScrollableHeight, null, true));
     }
 
     void ClearNotice()
     {
-        _log.Clear();
         LogText.Text = "";
+        ToolTipService.SetToolTip(LogText, null);
         LogHost.Visibility = Visibility.Collapsed;
     }
 
