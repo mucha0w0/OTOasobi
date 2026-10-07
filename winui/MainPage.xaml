@@ -716,7 +716,224 @@
                                                 </StackPanel>
                                                 <StackPanel
                                                     x:Name="CvvcOtoContent"
-                                                    Visibility="Collapsed" />
+                                                    Spacing="10"
+                                                    Visibility="Collapsed">
+                                                    <Border Style="{StaticResource PanelCardStyle}">
+                                                        <StackPanel Spacing="8">
+                                                            <TextBlock
+                                                                Style="{StaticResource BodyStrongTextBlockStyle}"
+                                                                Text="先頭音素" />
+                                                            <TextBlock
+                                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                                Style="{StaticResource CaptionTextBlockStyle}"
+                                                                Text="ファイルの先頭と、アンダーバーの無音の直後は、選んだ単独音のプリセットで計算します。エイリアスは「- さ」の形です。"
+                                                                TextWrapping="Wrap" />
+                                                            <DropDownButton
+                                                                x:Name="CvvcLeadPresetMenu"
+                                                                MinHeight="32"
+                                                                HorizontalAlignment="Stretch"
+                                                                HorizontalContentAlignment="Stretch"
+                                                                AutomationProperties.HelpText="先頭音素に使う単独音のプリセット"
+                                                                AutomationProperties.Name="単独音のプリセット">
+                                                                <TextBlock
+                                                                    x:Name="CvvcLeadPresetNameText"
+                                                                    VerticalAlignment="Center"
+                                                                    Text="初期値"
+                                                                    TextTrimming="CharacterEllipsis" />
+                                                                <DropDownButton.Flyout>
+                                                                    <MenuFlyout x:Name="CvvcLeadPresetFlyout" />
+                                                                </DropDownButton.Flyout>
+                                                            </DropDownButton>
+                                                        </StackPanel>
+                                                    </Border>
+                                                    <Border Style="{StaticResource PanelCardStyle}">
+                                                        <StackPanel Spacing="8">
+                                                            <TextBlock
+                                                                Style="{StaticResource BodyStrongTextBlockStyle}"
+                                                                Text="プリセット" />
+                                                            <TextBlock
+                                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                                Style="{StaticResource CaptionTextBlockStyle}"
+                                                                Text="通常音素と子音音素のスライダーです。単独音のプリセットとは別です。"
+                                                                TextWrapping="Wrap" />
+                                                            <DropDownButton
+                                                                x:Name="CvvcPresetMenu"
+                                                                MinHeight="32"
+                                                                HorizontalAlignment="Stretch"
+                                                                HorizontalContentAlignment="Stretch"
+                                                                AutomationProperties.HelpText="CVVCのプリセット">
+                                                                <Grid>
+                                                                    <Grid.ColumnDefinitions>
+                                                                        <ColumnDefinition Width="*" />
+                                                                        <ColumnDefinition Width="Auto" />
+                                                                    </Grid.ColumnDefinitions>
+                                                                    <TextBlock
+                                                                        x:Name="CvvcPresetNameText"
+                                                                        VerticalAlignment="Center"
+                                                                        Text="初期値"
+                                                                        TextTrimming="CharacterEllipsis" />
+                                                                    <TextBlock
+                                                                        x:Name="CvvcPresetDirtyMark"
+                                                                        Grid.Column="1"
+                                                                        Margin="6,0,0,0"
+                                                                        VerticalAlignment="Center"
+                                                                        AutomationProperties.Name="変更あり"
+                                                                        Text="*"
+                                                                        ToolTipService.ToolTip="このプリセットから変更しています"
+                                                                        Visibility="Collapsed" />
+                                                                </Grid>
+                                                                <DropDownButton.Flyout>
+                                                                    <MenuFlyout x:Name="CvvcPresetFlyout" />
+                                                                </DropDownButton.Flyout>
+                                                            </DropDownButton>
+                                                            <Button
+                                                                HorizontalAlignment="Stretch"
+                                                                Click="SaveCvvcPreset_Click"
+                                                                Content="現在の設定を保存"
+                                                                Style="{StaticResource ToolbarButtonStyle}"
+                                                                ToolTipService.ToolTip="いまの CVVC のスライダーの値を、名前をつけて保存します" />
+                                                        </StackPanel>
+                                                    </Border>
+                                                    <Border Style="{StaticResource PanelCardStyle}">
+                                                        <StackPanel Spacing="8">
+                                                            <TextBlock
+                                                                Style="{StaticResource BodyStrongTextBlockStyle}"
+                                                                Text="通常音素" />
+                                                            <TextBlock
+                                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                                Style="{StaticResource CaptionTextBlockStyle}"
+                                                                Text="先頭以外の音素です。オフセットは子音の開始、先行発声は母音の開始に揃えます。エイリアスは「し」のように、そのモーラのかなです。"
+                                                                TextWrapping="Wrap" />
+                                                            <Grid>
+                                                                <TextBlock VerticalAlignment="Center" Text="子音部" />
+                                                                <TextBlock
+                                                                    x:Name="CvvcConsonantValue"
+                                                                    HorizontalAlignment="Right"
+                                                                    VerticalAlignment="Center"
+                                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                                    Style="{StaticResource CaptionTextBlockStyle}"
+                                                                    Text="0.200 s" />
+                                                            </Grid>
+                                                            <Slider
+                                                                x:Name="CvvcConsonantSlider"
+                                                                AutomationProperties.Name="通常音素の子音部"
+                                                                Maximum="0.2"
+                                                                Minimum="0"
+                                                                SnapsTo="StepValues"
+                                                                StepFrequency="0.001"
+                                                                ToolTipService.ToolTip="母音の開始から後ろへずらします。幅は 0 から 0.2 秒です。"
+                                                                Value="0.2" />
+                                                            <Grid>
+                                                                <TextBlock VerticalAlignment="Center" Text="ブランク" />
+                                                                <TextBlock
+                                                                    x:Name="CvvcBlankValue"
+                                                                    HorizontalAlignment="Right"
+                                                                    VerticalAlignment="Center"
+                                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                                    Style="{StaticResource CaptionTextBlockStyle}"
+                                                                    Text="0.000 s" />
+                                                            </Grid>
+                                                            <Slider
+                                                                x:Name="CvvcBlankSlider"
+                                                                AutomationProperties.Name="通常音素のブランク"
+                                                                Maximum="0.1"
+                                                                Minimum="-0.1"
+                                                                SnapsTo="StepValues"
+                                                                StepFrequency="0.001"
+                                                                ToolTipService.ToolTip="0 は音量の上辺の右端です。プラスは減衰側、マイナスは手前です。"
+                                                                Value="0" />
+                                                        </StackPanel>
+                                                    </Border>
+                                                    <Border Style="{StaticResource PanelCardStyle}">
+                                                        <StackPanel Spacing="10">
+                                                            <TextBlock
+                                                                Style="{StaticResource BodyStrongTextBlockStyle}"
+                                                                Text="通常音素のオーバーラップ" />
+                                                            <TextBlock
+                                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                                Style="{StaticResource CaptionTextBlockStyle}"
+                                                                Text="0% はオフセット（子音の開始）、100% は先行発声（母音の開始）です。"
+                                                                TextWrapping="Wrap" />
+                                                            <StackPanel x:Name="CvvcOverlapList" Spacing="16" />
+                                                        </StackPanel>
+                                                    </Border>
+                                                    <Border Style="{StaticResource PanelCardStyle}">
+                                                        <StackPanel Spacing="8">
+                                                            <TextBlock
+                                                                Style="{StaticResource BodyStrongTextBlockStyle}"
+                                                                Text="子音音素" />
+                                                            <TextBlock
+                                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                                Style="{StaticResource CaptionTextBlockStyle}"
+                                                                Text="直前の母音と、いまの子音です。エイリアスは「a sh」の形で、通常音素の前に並びます。先行発声はその子音の開始に揃えます。"
+                                                                TextWrapping="Wrap" />
+                                                            <Grid>
+                                                                <TextBlock VerticalAlignment="Center" Text="オフセット" />
+                                                                <TextBlock
+                                                                    x:Name="VcOffsetValue"
+                                                                    HorizontalAlignment="Right"
+                                                                    VerticalAlignment="Center"
+                                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                                    Style="{StaticResource CaptionTextBlockStyle}"
+                                                                    Text="0.000 s" />
+                                                            </Grid>
+                                                            <Slider
+                                                                x:Name="VcOffsetSlider"
+                                                                AutomationProperties.Name="子音音素のオフセット"
+                                                                Maximum="0.1"
+                                                                Minimum="-0.1"
+                                                                SnapsTo="StepValues"
+                                                                StepFrequency="0.001"
+                                                                ToolTipService.ToolTip="0 は、その子音の開始から 0.15 秒手前です。マイナスは手前、プラスは後です。"
+                                                                Value="0" />
+                                                            <Grid>
+                                                                <TextBlock VerticalAlignment="Center" Text="オーバーラップ" />
+                                                                <TextBlock
+                                                                    x:Name="VcOverlapValue"
+                                                                    HorizontalAlignment="Right"
+                                                                    VerticalAlignment="Center"
+                                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                                    Style="{StaticResource CaptionTextBlockStyle}"
+                                                                    Text="50%" />
+                                                            </Grid>
+                                                            <Slider
+                                                                x:Name="VcOverlapSlider"
+                                                                AutomationProperties.Name="子音音素のオーバーラップ"
+                                                                Maximum="100"
+                                                                Minimum="0"
+                                                                SnapsTo="StepValues"
+                                                                StepFrequency="1"
+                                                                ToolTipService.ToolTip="オフセットの位置を 0%、その子音の開始を 100% とした割合です。"
+                                                                Value="50" />
+                                                        </StackPanel>
+                                                    </Border>
+                                                    <Border Style="{StaticResource PanelCardStyle}">
+                                                        <StackPanel Spacing="10">
+                                                            <TextBlock
+                                                                Style="{StaticResource BodyStrongTextBlockStyle}"
+                                                                Text="子音音素の子音部" />
+                                                            <TextBlock
+                                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                                Style="{StaticResource CaptionTextBlockStyle}"
+                                                                Text="0% は先行発声（子音の開始）、100% はブランクの位置です。"
+                                                                TextWrapping="Wrap" />
+                                                            <StackPanel x:Name="VcConsonantList" Spacing="16" />
+                                                        </StackPanel>
+                                                    </Border>
+                                                    <Border Style="{StaticResource PanelCardStyle}">
+                                                        <StackPanel Spacing="10">
+                                                            <TextBlock
+                                                                Style="{StaticResource BodyStrongTextBlockStyle}"
+                                                                Text="子音音素のブランク" />
+                                                            <TextBlock
+                                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                                Style="{StaticResource CaptionTextBlockStyle}"
+                                                                Text="0% はその子音の開始、100% は終了です。"
+                                                                TextWrapping="Wrap" />
+                                                            <StackPanel x:Name="VcBlankList" Spacing="16" />
+                                                        </StackPanel>
+                                                    </Border>
+                                                </StackPanel>
                                             </StackPanel>
                                         </ScrollViewer>
                                         <Border

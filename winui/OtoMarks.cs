@@ -1,6 +1,6 @@
 namespace Otoasobi;
 
-// oto.ini の位置。計算は oto.py の mono_oto_line / renzoku_oto_line に合わせる。
+// oto.ini の位置。計算は oto.py の mono_oto_line / renzoku_oto_line / cvvc_oto_lines に合わせる。
 // 各値はファイル先頭からの秒で、設定スライダーを動かすたびに引き直す。
 readonly record struct OtoMark(
     string Alias,
@@ -27,7 +27,10 @@ static class OtoMarks
     const double MaxOffsetShiftMs = 100;
     const double MaxBlankShiftS = 0.1;
     // 連続音のオフセットの 0。音素の開始から手前へこの幅。oto.py の RENZOKU_OFFSET_LEAD_MS。
+    // CVVC の子音音素も同じ。
     const double RenzokuOffsetLeadMs = 150;
+    // CVVC の子音音素。子音部とブランクの初期値。oto.py の VC_PART_AT。
+    const double VcPartAt = 1;
 
     public static void Fill(WavFile file, OtoExport settings, List<OtoMark> dest, double[]? loudness)
     {
@@ -36,15 +39,44 @@ static class OtoMarks
         var consonantMs = Bounded(settings.ConsonantMs, 200, 0, MaxPadMs);
         var blankAt = Bounded(settings.Blank, 0, -MaxBlankShiftS, MaxBlankShiftS);
         var renzoku = settings.Mode == "renzoku";
+        var cvvc = settings.Mode == "cvvc";
         var overlapAt = Bounded(settings.OverlapAt, 0.5, 0, 1);
         var restOffsetMs = Bounded(settings.RestOffsetMs, 0, -MaxOffsetShiftMs, MaxOffsetShiftMs);
         var restConsonantMs = Bounded(settings.RestConsonantMs, 200, 0, MaxPadMs);
         var restBlank = Bounded(settings.RestBlank, 0, -MaxBlankShiftS, MaxBlankShiftS);
+        var leadOffsetMs = Bounded(settings.LeadOffsetMs, 0, -MaxOffsetShiftMs, MaxOffsetShiftMs);
+        var leadConsonantMs = Bounded(settings.LeadConsonantMs, 200, 0, MaxPadMs);
+        var leadBlank = Bounded(settings.LeadBlank, 0, -MaxBlankShiftS, MaxBlankShiftS);
+        var vcOffsetMs = Bounded(settings.VcOffsetMs, 0, -MaxOffsetShiftMs, MaxOffsetShiftMs);
+        var vcOverlapAt = Bounded(settings.VcOverlapAt, 0.5, 0, 1);
         var spans = file.Spans;
         for (var i = 0; i < spans.Count; i++)
         {
             if (!IsVowelOnset(spans[i].Label))
                 continue;
+            if (cvvc)
+            {
+                AddCvvc(
+                    dest,
+                    file.Name,
+                    spans,
+                    i,
+                    file.Duration,
+                    consonantMs,
+                    blankAt,
+                    settings.Overlap,
+                    leadOffsetMs,
+                    leadConsonantMs,
+                    leadBlank,
+                    settings.LeadOverlap,
+                    vcOffsetMs,
+                    settings.VcConsonant,
+                    settings.VcBlank,
+                    vcOverlapAt,
+                    loudness);
+                continue;
+            }
+
             dest.Add(renzoku
                 ? BuildRenzoku(
                     file.Name,
@@ -71,6 +103,112 @@ static class OtoMarks
                     settings.Overlap,
                     loudness));
         }
+    }
+
+    static void AddCvvc(
+        List<OtoMark> dest,
+        string filename,
+        List<PhoneSpan> spans,
+        int index,
+        double duration,
+        double consonantMs,
+        double blankAt,
+        IReadOnlyDictionary<string, double> overlap,
+        double leadOffsetMs,
+        double leadConsonantMs,
+        double leadBlank,
+        IReadOnlyDictionary<string, double>? leadOverlap,
+        double vcOffsetMs,
+        IReadOnlyDictionary<string, double>? vcConsonant,
+        IReadOnlyDictionary<string, double>? vcBlank,
+        double vcOverlapAt,
+        double[]? loudness)
+    {
+        var vowel = spans[index];
+        var alias = MoraAlias(filename, vowel);
+        if (PreviousVowelLetter(spans, index) == "-")
+        {
+            dest.Add(Build(
+                filename,
+                spans,
+                index,
+                duration,
+                leadOffsetMs,
+                leadConsonantMs,
+                leadBlank,
+                leadOverlap ?? new Dictionary<string, double>(),
+                loudness,
+                "- " + alias));
+            return;
+        }
+
+        var cons = ConsonantSpan(spans, index, vowel);
+        if (cons != null)
+        {
+            dest.Add(BuildVc(
+                spans,
+                index,
+                cons,
+                duration,
+                vcOffsetMs,
+                vcConsonant,
+                vcBlank,
+                vcOverlapAt));
+        }
+
+        dest.Add(Build(
+            filename,
+            spans,
+            index,
+            duration,
+            0,
+            consonantMs,
+            blankAt,
+            overlap,
+            loudness,
+            alias));
+    }
+
+    static OtoMark BuildVc(
+        List<PhoneSpan> spans,
+        int index,
+        PhoneSpan cons,
+        double duration,
+        double vcOffsetMs,
+        IReadOnlyDictionary<string, double>? vcConsonant,
+        IReadOnlyDictionary<string, double>? vcBlank,
+        double vcOverlapAt)
+    {
+        var c0 = Ms(cons.Start);
+        var c1 = Ms(cons.End);
+        if (c1 < c0)
+            c1 = c0;
+        var dur = Math.Max(Ms(duration), Math.Max(c1, c0));
+        var offset = Math.Max(0, Round3(c0 - RenzokuOffsetLeadMs - vcOffsetMs));
+        var preutter = Math.Max(0, Round3(c0 - offset));
+        var overlapMs = Round3((c0 - offset) * vcOverlapAt);
+        var blankAt = Round3(c0 + (c1 - c0) * Ratio(vcBlank, cons.Label, VcPartAt));
+        var fixedAt = Round3(c0 + (blankAt - c0) * Ratio(vcConsonant, cons.Label, VcPartAt));
+        var consonant = Math.Max(0, Round3(fixedAt - offset));
+        var placed = PlaceBlank(blankAt, offset, consonant, dur);
+        var blank = placed.Blank;
+        consonant = placed.Consonant;
+        var alias = PreviousVowelLetter(spans, index) + " " + cons.Label;
+        return new OtoMark(
+            alias,
+            offset / 1000.0,
+            (offset + overlapMs) / 1000.0,
+            (offset + preutter) / 1000.0,
+            (offset + consonant) / 1000.0,
+            (offset - blank) / 1000.0);
+    }
+
+    static double Ratio(IReadOnlyDictionary<string, double>? table, string key, double fallback)
+    {
+        if (table != null && table.TryGetValue(key, out var value)
+            && !double.IsNaN(value) && !double.IsInfinity(value))
+            return Math.Clamp(value, 0, 1);
+        return fallback;
     }
 
     static OtoMark BuildRenzoku(
@@ -129,14 +267,19 @@ static class OtoMarks
             (offset - blank) / 1000.0);
     }
 
-    static string RenzokuAlias(string filename, List<PhoneSpan> spans, int index, PhoneSpan vowel)
+    static string MoraAlias(string filename, PhoneSpan vowel)
     {
         var alias = vowel.Token;
         if (string.IsNullOrEmpty(alias))
             alias = Path.GetFileNameWithoutExtension(filename);
         if (string.IsNullOrEmpty(alias))
             alias = vowel.Label;
-        return PreviousVowelLetter(spans, index) + " " + alias;
+        return alias;
+    }
+
+    static string RenzokuAlias(string filename, List<PhoneSpan> spans, int index, PhoneSpan vowel)
+    {
+        return PreviousVowelLetter(spans, index) + " " + MoraAlias(filename, vowel);
     }
 
     static string PreviousVowelLetter(List<PhoneSpan> spans, int index)
@@ -199,14 +342,11 @@ static class OtoMarks
         double consonantMs,
         double blankAt,
         IReadOnlyDictionary<string, double> overlap,
-        double[]? loudness)
+        double[]? loudness,
+        string? alias = null)
     {
         var vowel = spans[index];
-        var alias = vowel.Token;
-        if (string.IsNullOrEmpty(alias))
-            alias = Path.GetFileNameWithoutExtension(filename);
-        if (string.IsNullOrEmpty(alias))
-            alias = vowel.Label;
+        alias ??= MoraAlias(filename, vowel);
 
         var c0 = Ms(ConsonantStart(spans, index, vowel));
         var v0 = Ms(vowel.Start);
@@ -235,7 +375,7 @@ static class OtoMarks
             (offset - blank) / 1000.0);
     }
 
-    static string? ConsonantLabel(List<PhoneSpan> spans, int index, PhoneSpan vowel)
+    static PhoneSpan? ConsonantSpan(List<PhoneSpan> spans, int index, PhoneSpan vowel)
     {
         if (index <= 0)
             return null;
@@ -244,7 +384,12 @@ static class OtoMarks
             return null;
         if (IsVowelOnset(prev.Label) || prev.Label is "無音" or "息")
             return null;
-        return prev.Label;
+        return prev;
+    }
+
+    static string? ConsonantLabel(List<PhoneSpan> spans, int index, PhoneSpan vowel)
+    {
+        return ConsonantSpan(spans, index, vowel)?.Label;
     }
 
     static double ConsonantStart(List<PhoneSpan> spans, int index, PhoneSpan vowel)

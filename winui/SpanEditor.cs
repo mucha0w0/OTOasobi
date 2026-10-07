@@ -1788,55 +1788,7 @@ public sealed class SpanEditor : UserControl
 
         OtoMarks.Fill(_file, _oto, _otoMarks, _loudness);
         foreach (var _ in _otoMarks)
-        {
-            var rect = new Rectangle
-            {
-                Fill = OtoRegionBrush,
-                IsHitTestVisible = false,
-            };
-            var text = new TextBlock
-            {
-                Foreground = TextBrush,
-                FontSize = 12,
-                TextAlignment = TextAlignment.Center,
-                TextTrimming = TextTrimming.CharacterEllipsis,
-                IsHitTestVisible = false,
-            };
-            _otoRects.Add(rect);
-            _otoTexts.Add(text);
-            _plot.Children.Add(rect);
-            for (var point = 0; point < OtoPointCount; point++)
-            {
-                var line = new Line
-                {
-                    Stroke = OtoBrush(point),
-                    StrokeThickness = 2,
-                    IsHitTestVisible = false,
-                };
-                var name = new TextBlock
-                {
-                    Text = OtoPointName(point),
-                    Foreground = OtoBrush(point),
-                    FontSize = 10,
-                    IsHitTestVisible = false,
-                };
-                var chip = new Border
-                {
-                    Background = OtoChipBrush,
-                    Padding = new Thickness(3, 0, 3, 0),
-                    IsHitTestVisible = false,
-                    Child = name,
-                };
-                _otoLines.Add(line);
-                _otoPointChips.Add(chip);
-                _plot.Children.Add(line);
-            }
-
-            _plot.Children.Add(text);
-        }
-
-        foreach (var chip in _otoPointChips)
-            _plot.Children.Add(chip);
+            AddOtoMarkVisual();
 
         _otoCaption = new Border
         {
@@ -1851,6 +1803,78 @@ public sealed class SpanEditor : UserControl
             },
         };
         _plot.Children.Add(_otoCaption);
+        LiftOtoChrome();
+    }
+
+    void EnsureOtoVisuals(int count)
+    {
+        if (count <= _otoRects.Count)
+            return;
+        while (_otoRects.Count < count)
+            AddOtoMarkVisual();
+        LiftOtoChrome();
+    }
+
+    void AddOtoMarkVisual()
+    {
+        var rect = new Rectangle
+        {
+            Fill = OtoRegionBrush,
+            IsHitTestVisible = false,
+        };
+        var text = new TextBlock
+        {
+            Foreground = TextBrush,
+            FontSize = 12,
+            TextAlignment = TextAlignment.Center,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            IsHitTestVisible = false,
+        };
+        _otoRects.Add(rect);
+        _otoTexts.Add(text);
+        _plot.Children.Add(rect);
+        for (var point = 0; point < OtoPointCount; point++)
+        {
+            var line = new Line
+            {
+                Stroke = OtoBrush(point),
+                StrokeThickness = 2,
+                IsHitTestVisible = false,
+            };
+            var name = new TextBlock
+            {
+                Text = OtoPointName(point),
+                Foreground = OtoBrush(point),
+                FontSize = 10,
+                IsHitTestVisible = false,
+            };
+            var chip = new Border
+            {
+                Background = OtoChipBrush,
+                Padding = new Thickness(3, 0, 3, 0),
+                IsHitTestVisible = false,
+                Child = name,
+            };
+            _otoLines.Add(line);
+            _otoPointChips.Add(chip);
+            _plot.Children.Add(line);
+        }
+
+        _plot.Children.Add(text);
+    }
+
+    void LiftOtoChrome()
+    {
+        foreach (var chip in _otoPointChips)
+        {
+            _plot.Children.Remove(chip);
+            _plot.Children.Add(chip);
+        }
+
+        if (_otoCaption == null)
+            return;
+        _plot.Children.Remove(_otoCaption);
+        _plot.Children.Add(_otoCaption);
     }
 
     void ArrangeOtoLabels()
@@ -1858,6 +1882,7 @@ public sealed class SpanEditor : UserControl
         if (_file == null)
             return;
         OtoMarks.Fill(_file, _oto, _otoMarks, _loudness);
+        EnsureOtoVisuals(_otoMarks.Count);
         var count = Math.Min(_otoMarks.Count, _otoRects.Count);
         var lanes = LaneOf(_otoMarks, count);
         var laneCount = 1;

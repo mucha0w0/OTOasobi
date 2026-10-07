@@ -122,6 +122,19 @@ sealed class AnalysisClient : IDisposable
                         overlap = config.RestOverlap,
                     }
                     : null,
+                lead = config.Mode == "cvvc"
+                    ? new
+                    {
+                        offset_ms = config.LeadOffsetMs,
+                        consonant_ms = config.LeadConsonantMs,
+                        blank = config.LeadBlank,
+                        overlap = config.LeadOverlap,
+                    }
+                    : null,
+                vc_offset_ms = config.VcOffsetMs,
+                vc_consonant = config.VcConsonant,
+                vc_blank = config.VcBlank,
+                vc_overlap = config.VcOverlapAt,
             },
         }), null).ConfigureAwait(true);
         var root = doc.RootElement;
@@ -405,4 +418,12 @@ sealed record OtoExport(
     double RestOffsetMs = 0,
     double RestConsonantMs = 200,
     double RestBlank = 0,
-    IReadOnlyDictionary<string, double>? RestOverlap = null);
+    IReadOnlyDictionary<string, double>? RestOverlap = null,
+    double VcOffsetMs = 0,
+    IReadOnlyDictionary<string, double>? VcConsonant = null,
+    IReadOnlyDictionary<string, double>? VcBlank = null,
+    double VcOverlapAt = 0.5,
+    double LeadOffsetMs = 0,
+    double LeadConsonantMs = 200,
+    double LeadBlank = 0,
+    IReadOnlyDictionary<string, double>? LeadOverlap = null);

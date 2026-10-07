@@ -71,6 +71,7 @@ public sealed partial class MainPage : Page
         Editor.AnalyzeRequested += (_, _) => _ = StartAnalysisAsync();
         Editor.ViewportChanged += (_, _) => ScheduleViewport();
         BuildOverlapSliders();
+        BuildCvvcSliders();
         OffsetSlider.ValueChanged += (_, _) => OnConfigChanged();
         ConsonantSlider.ValueChanged += (_, _) => OnConfigChanged();
         BlankSlider.ValueChanged += (_, _) => OnConfigChanged();
@@ -78,7 +79,12 @@ public sealed partial class MainPage : Page
         RenzokuConsonantSlider.ValueChanged += (_, _) => OnConfigChanged();
         RenzokuBlankSlider.ValueChanged += (_, _) => OnConfigChanged();
         RenzokuOverlapSlider.ValueChanged += (_, _) => OnConfigChanged();
+        CvvcConsonantSlider.ValueChanged += (_, _) => OnCvvcSliderChanged();
+        CvvcBlankSlider.ValueChanged += (_, _) => OnCvvcSliderChanged();
+        VcOffsetSlider.ValueChanged += (_, _) => OnCvvcSliderChanged();
+        VcOverlapSlider.ValueChanged += (_, _) => OnCvvcSliderChanged();
         _restPreset = _builtIn;
+        _leadPreset = _builtIn;
         LoadPresets();
         _configReady = true;
         Editor.SetOtoSettings(CurrentExport());
@@ -1016,6 +1022,8 @@ public sealed partial class MainPage : Page
 
     OtoExport CurrentExport()
     {
+        if (OtoModeCvvc.IsChecked == true)
+            return CvvcExport();
         if (OtoModeRenzoku.IsChecked == true)
         {
             return new(
@@ -1064,10 +1072,12 @@ public sealed partial class MainPage : Page
         RenzokuConsonantValue.Text = FormatSeconds(RenzokuConsonantSlider.Value);
         RenzokuBlankValue.Text = FormatSignedSeconds(RenzokuBlankSlider.Value);
         RenzokuOverlapValue.Text = FormatPercent(RenzokuOverlapSlider.Value);
+        UpdateCvvcTexts();
         if (!_configReady)
             return;
         Editor.SetOtoSettings(CurrentExport());
         UpdatePresetDirty();
+        UpdateCvvcPresetDirty();
         if (!_wrote)
             return;
         _wrote = false;
@@ -1082,6 +1092,7 @@ public sealed partial class MainPage : Page
         _userPresets.AddRange(OtoPresetStore.Load());
         RebuildPresetMenu();
         SelectPreset(_builtIn);
+        LoadCvvcPresets();
     }
 
     void RebuildPresetMenu()
@@ -1091,6 +1102,7 @@ public sealed partial class MainPage : Page
         foreach (var preset in _userPresets)
             AddPresetItem(preset);
         RebuildRestPresetMenu();
+        RebuildCvvcLeadMenu();
     }
 
     void RebuildRestPresetMenu()

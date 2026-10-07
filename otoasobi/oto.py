@@ -1,4 +1,4 @@
-"""単独音と連続音の oto.ini。
+"""単独音、連続音、CVVC の oto.ini。
 
 1 行は次の形です。値はミリ秒、小数第 3 位です。
 
@@ -7,7 +7,7 @@
 オフセットはファイル先頭から。子音部・先行発声・オーバーラップはオフセットから。
 ブランクは負の値で書き、オフセットからの時間に -1 を掛けたものです。
 子音部とブランクは、単独音も連続音も同じ位置です。
-先行発声は母音の開始です。
+先行発声は、単独音と連続音と CVVC の通常音素では母音の開始です。
 
 単独音のオフセットは、子音の開始を基準に ±0.1 秒だけ前後へずらします。
 単独音のオーバーラップは、0 が子音の開始、1 が母音の開始です。
@@ -18,6 +18,15 @@
 音素の開始は、子音と直前の母音の境界です。子音がないときは、母音と母音の境界です。
 アンダーバーだけの無音の直後の音素は、単独音と同じ計算です。値は rest のプリセットです。
 エイリアスは連続音のままです。
+
+CVVC は、母音の音素ごとに通常音の行を書き、先頭以外で子音があるときはその前に子音音素の行を書きます。
+「さしす」は「- さ」「a sh」「し」「i s」「す」です。
+先頭音素は、ファイルの先頭と、アンダーバーだけの無音の直後です。計算は lead の単独音です。
+通常音素のオフセットは子音の開始です。オーバーラップは、その位置を 0%、先行発声を 100% とした割合で、0 未満は使いません。
+子音音素のエイリアスは、直前の母音と現在の子音です。オフセットとオーバーラップは連続音と同じです。
+子音音素の先行発声は、その子音の開始です。
+ブランクは子音の開始を 0%、終了を 100% とした割合です。
+子音部は、先行発声を 0%、そのブランクの位置を 100% とした割合です。
 """
 
 from __future__ import annotations
@@ -41,8 +50,10 @@ MIN_GAP_MS = 1.0
 MAX_PAD_MS = 2000.0
 # 子音の開始から前後にこの幅。画面のオフセットスライダーと同じ。正は手前。
 MAX_OFFSET_SHIFT_MS = 100.0
-# 連続音のオフセットの 0。音素の開始から手前へこの幅。
+# 連続音のオフセットの 0。音素の開始から手前へこの幅。CVVC の子音音素も同じ。
 RENZOKU_OFFSET_LEAD_MS = 150.0
+# CVVC の子音音素。子音部もブランクも、スライダーの初期値は 100%。
+VC_PART_AT = 1.0
 # 上辺の右端からずらす幅。画面のブランクスライダーと同じ。
 MAX_BLANK_SHIFT_S = 0.1
 OTO_INI_NAME = "oto.ini"
@@ -63,10 +74,19 @@ class OtoSettings:
     # 子音ラベル（k, sh など）ごと。0〜1 は子音開始から母音開始までの比率。
     # 負の数は、子音開始より前の秒。無いラベルは overlap_at。連続音では使わない。
     overlap_by: dict[str, float] = field(default_factory=dict)
-    # mono または renzoku。
+    # mono、renzoku、cvvc。
     mode: str = "mono"
     # 連続音で、アンダーバーの無音の直後にだけ使う単独音の値。
     rest: OtoSettings | None = None
+    # CVVC の通常音素。0〜1 だけ。無い子音は overlap_at。子音部・ブランクは上の欄。
+    cvvc_overlap_by: dict[str, float] = field(default_factory=dict)
+    # CVVC の子音音素。オフセットは連続音と同じずらし。子音部とブランクは 0〜1。
+    vc_offset_ms: float = 0.0
+    vc_consonant_by: dict[str, float] = field(default_factory=dict)
+    vc_blank_by: dict[str, float] = field(default_factory=dict)
+    vc_overlap_at: float = OVERLAP_AT
+    # CVVC の先頭音素に使う単独音。
+    lead: OtoSettings | None = None
 
 
 def _bounded(value: object, default: float, lo: float, hi: float) -> float:
@@ -101,20 +121,48 @@ def _overlap_by(raw: object) -> dict[str, float]:
     return table
 
 
+def _ratio_by(raw: object, default: float = OVERLAP_AT) -> dict[str, float]:
+    """子音ラベルごとの 0〜1。負の秒にはしない。"""
+    if not isinstance(raw, dict):
+        return {}
+    table: dict[str, float] = {}
+    for key, value in raw.items():
+        if isinstance(key, str) and key:
+            table[key] = _bounded(value, default, 0.0, 1.0)
+    return table
+
+
+def _mode_name(raw: object) -> str:
+    if raw == "renzoku":
+        return "renzoku"
+    if raw == "cvvc":
+        return "cvvc"
+    return "mono"
+
+
 def oto_settings_from(raw: object, *, with_rest: bool = True) -> OtoSettings:
     """画面からの config。無い欄と範囲外は初期値か、許す範囲の端に寄せる。"""
     if not isinstance(raw, dict):
         return OtoSettings()
+    mode = _mode_name(raw.get("mode"))
     overlap_raw = raw.get("overlap")
-    if isinstance(overlap_raw, dict):
+    cvvc_overlap_by: dict[str, float] = {}
+    if mode == "cvvc":
+        overlap_at = OVERLAP_AT
+        overlap_by = {}
+        cvvc_overlap_by = _ratio_by(overlap_raw)
+    elif isinstance(overlap_raw, dict):
         overlap_at = OVERLAP_AT
         overlap_by = _overlap_by(overlap_raw)
     else:
         overlap_at = _bounded(overlap_raw, OVERLAP_AT, 0.0, 1.0)
         overlap_by = {}
     rest = None
+    lead = None
     if with_rest and isinstance(raw.get("rest"), dict):
         rest = oto_settings_from(raw["rest"], with_rest=False)
+    if with_rest and isinstance(raw.get("lead"), dict):
+        lead = oto_settings_from(raw["lead"], with_rest=False)
     return OtoSettings(
         offset_ms=_bounded(
             raw.get("offset_ms"),
@@ -126,8 +174,19 @@ def oto_settings_from(raw: object, *, with_rest: bool = True) -> OtoSettings:
         blank_at=_bounded(raw.get("blank"), 0.0, -MAX_BLANK_SHIFT_S, MAX_BLANK_SHIFT_S),
         overlap_at=overlap_at,
         overlap_by=overlap_by,
-        mode="renzoku" if raw.get("mode") == "renzoku" else "mono",
+        mode=mode,
         rest=rest,
+        cvvc_overlap_by=cvvc_overlap_by,
+        vc_offset_ms=_bounded(
+            raw.get("vc_offset_ms"),
+            0.0,
+            -MAX_OFFSET_SHIFT_MS,
+            MAX_OFFSET_SHIFT_MS,
+        ),
+        vc_consonant_by=_ratio_by(raw.get("vc_consonant"), VC_PART_AT),
+        vc_blank_by=_ratio_by(raw.get("vc_blank"), VC_PART_AT),
+        vc_overlap_at=_bounded(raw.get("vc_overlap"), OVERLAP_AT, 0.0, 1.0),
+        lead=lead,
     )
 
 
@@ -142,8 +201,8 @@ def _fmt(value: float) -> str:
     return f"{rounded:.3f}"
 
 
-def _consonant_label(spans: list[Span], index: int, vowel: Span) -> str | None:
-    """同じモーラの直前区間が子音なら、そのラベル。母音だけと ん は None。"""
+def _consonant_span(spans: list[Span], index: int, vowel: Span) -> Span | None:
+    """同じモーラの直前区間が子音なら、その区間。母音だけと ん は None。"""
     if index <= 0:
         return None
     prev = spans[index - 1]
@@ -151,7 +210,14 @@ def _consonant_label(spans: list[Span], index: int, vowel: Span) -> str | None:
         return None
     if prev.label in VOWEL_ONSET_LABELS or prev.label in (SILENCE_LABEL, BREATH_LABEL):
         return None
-    return prev.label
+    return prev
+
+
+def _consonant_label(spans: list[Span], index: int, vowel: Span) -> str | None:
+    span = _consonant_span(spans, index, vowel)
+    if span is None:
+        return None
+    return span.label
 
 
 def _overlap_value(settings: OtoSettings, consonant: str | None) -> float:
@@ -360,6 +426,93 @@ def renzoku_oto_lines(
     lines: list[str] = []
     for index in range(len(spans)):
         line = renzoku_oto_line(filename, spans, index, duration, settings, loudness)
+        if line is not None:
+            lines.append(line)
+    return lines
+
+
+def _ratio(table: dict[str, float], key: str, default: float) -> float:
+    if key in table:
+        return table[key]
+    return default
+
+
+def _mora_alias(filename: str, vowel: Span) -> str:
+    return vowel.token or Path(filename).stem or vowel.label
+
+
+def _is_leading(spans: list[Span], index: int) -> bool:
+    """発音の先頭。ファイルの先頭と、アンダーバーだけの無音の直後。"""
+    return _previous_vowel_letter(spans, index) == "-"
+
+
+def _cvvc_normal_settings(settings: OtoSettings) -> OtoSettings:
+    """通常音素。オフセットは子音の開始に固定し、オーバーラップは 0〜1 だけ。"""
+    return OtoSettings(
+        offset_ms=0.0,
+        consonant_ms=settings.consonant_ms,
+        blank_at=settings.blank_at,
+        overlap_at=OVERLAP_AT,
+        overlap_by=settings.cvvc_overlap_by,
+    )
+
+
+def cvvc_vc_line(
+    filename: str,
+    spans: list[Span],
+    index: int,
+    duration: float,
+    settings: OtoSettings | None = None,
+) -> str | None:
+    """子音音素の 1 行。子音が無いモーラは None。"""
+    settings = settings or OtoSettings()
+    vowel = spans[index]
+    cons = _consonant_span(spans, index, vowel)
+    if cons is None:
+        return None
+    c0 = _ms(cons.start)
+    c1 = _ms(cons.end)
+    if c1 < c0:
+        c1 = c0
+    dur = max(_ms(duration), c1, c0)
+    offset = max(0.0, round(c0 - RENZOKU_OFFSET_LEAD_MS - settings.vc_offset_ms, 3))
+    preutter = max(0.0, round(c0 - offset, 3))
+    overlap = round((c0 - offset) * settings.vc_overlap_at, 3)
+    blank_at = round(c0 + (c1 - c0) * _ratio(settings.vc_blank_by, cons.label, VC_PART_AT), 3)
+    fixed_at = round(c0 + (blank_at - c0) * _ratio(settings.vc_consonant_by, cons.label, VC_PART_AT), 3)
+    consonant = max(0.0, round(fixed_at - offset, 3))
+    blank, consonant = _place_blank(blank_at, offset, consonant, dur)
+    alias = f"{_previous_vowel_letter(spans, index)} {cons.label}"
+    return (
+        f"{filename}={alias},{_fmt(offset)},{_fmt(consonant)},{_fmt(blank)},{_fmt(preutter)},{_fmt(overlap)}"
+    )
+
+
+def cvvc_oto_lines(
+    filename: str,
+    spans: list[Span],
+    duration: float,
+    settings: OtoSettings | None = None,
+    loudness: np.ndarray | None = None,
+) -> list[str]:
+    """CVVC の oto.ini。先頭、子音音素、通常音素の順に、発音の順で並べる。"""
+    settings = settings or OtoSettings()
+    normal = _cvvc_normal_settings(settings)
+    lead = settings.lead or OtoSettings()
+    lines: list[str] = []
+    for index, vowel in enumerate(spans):
+        if vowel.label not in VOWEL_ONSET_LABELS:
+            continue
+        alias = _mora_alias(filename, vowel)
+        if _is_leading(spans, index):
+            line = mono_oto_line(filename, spans, index, duration, lead, loudness, f"- {alias}")
+            if line is not None:
+                lines.append(line)
+            continue
+        vc = cvvc_vc_line(filename, spans, index, duration, settings)
+        if vc is not None:
+            lines.append(vc)
+        line = mono_oto_line(filename, spans, index, duration, normal, loudness, alias)
         if line is not None:
             lines.append(line)
     return lines
