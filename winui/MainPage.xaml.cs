@@ -44,8 +44,10 @@ public sealed partial class MainPage : Page
     const string OverlapScaleTip = "0% は子音の開始、100% は母音の開始です。0% で左へ引いて離すと、開始より前を秒で置けるスライダーになります。";
 
     readonly Dictionary<string, Slider> _overlapSliders = [];
+    readonly Dictionary<string, Border> _overlapFrames = [];
     readonly Dictionary<string, TextBlock> _overlapValues = [];
     readonly Dictionary<string, double> _overlapIntent = [];
+    Brush? _secondsFrameBrush;
     bool _overlapWrite;
     string? _overlapDragKey;
     bool _overlapArmLeft;
@@ -153,7 +155,14 @@ public sealed partial class MainPage : Page
             };
             AutomationProperties.SetName(slider, "オーバーラップ " + caption);
             ToolTipService.SetToolTip(slider, OverlapScaleTip);
+            var frame = new Border
+            {
+                Child = slider,
+                CornerRadius = new CornerRadius(4),
+                Padding = new Thickness(4, 0, 4, 0),
+            };
             _overlapSliders[key] = slider;
+            _overlapFrames[key] = frame;
             _overlapValues[key] = value;
             _overlapIntent[key] = DefaultOverlapPercent;
             slider.ValueChanged += (_, _) => OnOverlapChanged(key, slider);
@@ -165,7 +174,7 @@ public sealed partial class MainPage : Page
             slider.AddHandler(UIElement.PointerCanceledEvent, new PointerEventHandler(OnOverlapPointerEnded), true);
             var row = new StackPanel { Spacing = 4 };
             row.Children.Add(head);
-            row.Children.Add(slider);
+            row.Children.Add(frame);
             rows!.Children.Add(row);
         }
     }
@@ -290,104 +299,86 @@ public sealed partial class MainPage : Page
 
     void ShowOverlapSeconds(Slider slider, double seconds)
     {
-        _overlapWrite = true;
-        slider.Minimum = -ConsonantOverlap.MaxBeforeSeconds;
-        slider.Maximum = 0;
-        slider.StepFrequency = 0.001;
-        slider.SmallChange = 0.001;
-        slider.SnapsTo = SliderSnapsTo.StepValues;
-        slider.Value = Math.Clamp(seconds, -ConsonantOverlap.MaxBeforeSeconds, 0);
-        _overlapWrite = false;
-        PaintOverlapSlider(slider, seconds: true);
+        var value = Math.Clamp(seconds, -ConsonantOverlap.MaxBeforeSeconds, 0);
+        var switching = slider.Minimum >= 0;
+        if (switching)
+        {
+            _overlapWrite = true;
+            slider.Minimum = -ConsonantOverlap.MaxBeforeSeconds;
+            slider.Maximum = 0;
+            slider.StepFrequency = 0.001;
+            slider.SmallChange = 0.001;
+            slider.SnapsTo = SliderSnapsTo.StepValues;
+            slider.Value = value;
+            _overlapWrite = false;
+            TintOverlap(slider, seconds: true);
+            return;
+        }
+
+        if (Math.Abs(slider.Value - value) > 0.0001)
+        {
+            _overlapWrite = true;
+            slider.Value = value;
+            _overlapWrite = false;
+        }
     }
 
     void ShowOverlapPercent(Slider slider, double percent)
     {
-        _overlapWrite = true;
-        slider.Minimum = 0;
-        slider.Maximum = 100;
-        slider.StepFrequency = 1;
-        slider.SmallChange = 1;
-        slider.SnapsTo = SliderSnapsTo.StepValues;
-        slider.Value = Math.Clamp(Math.Round(percent, MidpointRounding.AwayFromZero), 0, 100);
-        _overlapWrite = false;
-        PaintOverlapSlider(slider, seconds: false);
+        var value = Math.Clamp(Math.Round(percent, MidpointRounding.AwayFromZero), 0, 100);
+        var switching = slider.Minimum < 0;
+        if (switching)
+        {
+            _overlapWrite = true;
+            slider.Minimum = 0;
+            slider.Maximum = 100;
+            slider.StepFrequency = 1;
+            slider.SmallChange = 1;
+            slider.SnapsTo = SliderSnapsTo.StepValues;
+            slider.Value = value;
+            _overlapWrite = false;
+            TintOverlap(slider, seconds: false);
+            return;
+        }
+
+        if (Math.Abs(slider.Value - value) > 0.001)
+        {
+            _overlapWrite = true;
+            slider.Value = value;
+            _overlapWrite = false;
+        }
     }
 
-    void PaintOverlapSlider(Slider slider, bool seconds)
+    void TintOverlap(Slider slider, bool seconds)
     {
-        if (slider.Tag is string key && _overlapValues.TryGetValue(key, out var value))
+        if (slider.Tag is not string key)
+            return;
+        if (_overlapValues.TryGetValue(key, out var caption))
         {
             if (seconds && ThemeBrush("AccentTextFillColorPrimaryBrush") is Brush accentText)
-                value.Foreground = accentText;
+                caption.Foreground = accentText;
             else
-                value.ClearValue(TextBlock.ForegroundProperty);
+                caption.ClearValue(TextBlock.ForegroundProperty);
         }
 
-        var accent = ThemeBrush("AccentFillColorDefaultBrush");
-        string[] resources =
-        [
-            "SliderTrackFill",
-            "SliderTrackFillPointerOver",
-            "SliderTrackFillPressed",
-            "SliderTrackValueFill",
-            "SliderTrackValueFillPointerOver",
-            "SliderTrackValueFillPressed",
-            "SliderThumbBackground",
-            "SliderThumbBackgroundPointerOver",
-            "SliderThumbBackgroundPressed",
-        ];
-        foreach (var resource in resources)
-        {
-            if (seconds && accent != null)
-                slider.Resources[resource] = accent;
-            else
-                slider.Resources.Remove(resource);
-        }
+        if (!_overlapFrames.TryGetValue(key, out var frame))
+            return;
+        frame.Background = seconds ? SecondsFrameBrush() : null;
+    }
 
-        slider.ApplyTemplate();
-        foreach (var element in Descendants(slider))
-        {
-            if (element is Microsoft.UI.Xaml.Shapes.Shape shape
-                && element.Name is "HorizontalDecreaseRect" or "HorizontalTrackRect")
-            {
-                if (seconds && accent != null)
-                    shape.Fill = accent;
-                else
-                    shape.ClearValue(Microsoft.UI.Xaml.Shapes.Shape.FillProperty);
-            }
-            else if (element is Control thumb && element.Name == "HorizontalThumb")
-            {
-                thumb.ApplyTemplate();
-                foreach (var inner in Descendants(thumb))
-                {
-                    if (inner is Border border && inner.Name == "ThumbBorder")
-                    {
-                        if (seconds && accent != null)
-                            border.Background = accent;
-                        else
-                            border.ClearValue(Border.BackgroundProperty);
-                    }
-                }
-            }
-        }
+    Brush? SecondsFrameBrush()
+    {
+        if (_secondsFrameBrush != null)
+            return _secondsFrameBrush;
+        if (ThemeBrush("AccentFillColorDefaultBrush") is not SolidColorBrush accent)
+            return _secondsFrameBrush = ThemeBrush("AccentFillColorTertiaryBrush");
+        _secondsFrameBrush = new SolidColorBrush(
+            Windows.UI.Color.FromArgb(0x33, accent.Color.R, accent.Color.G, accent.Color.B));
+        return _secondsFrameBrush;
     }
 
     static Brush? ThemeBrush(string key) =>
         Application.Current.Resources.TryGetValue(key, out var value) ? value as Brush : null;
-
-    static IEnumerable<FrameworkElement> Descendants(DependencyObject root)
-    {
-        var count = VisualTreeHelper.GetChildrenCount(root);
-        for (var i = 0; i < count; i++)
-        {
-            var child = VisualTreeHelper.GetChild(root, i);
-            if (child is FrameworkElement element)
-                yield return element;
-            foreach (var nested in Descendants(child))
-                yield return nested;
-        }
-    }
 
     static double StepOverlap(double intent, int direction, int steps)
     {
