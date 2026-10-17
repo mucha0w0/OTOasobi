@@ -191,25 +191,26 @@
                 Spacing="4"
                 HorizontalAlignment="Center"
                 VerticalAlignment="Center">
-                <TextBlock
-                    Text="オトアソビ"
-                    Style="{StaticResource TitleTextBlockStyle}"
-                    HorizontalAlignment="Center"
-                    TextAlignment="Center" />
-                <TextBlock
-                    Margin="0,0,0,16"
-                    Text="OTOasobi"
-                    Style="{StaticResource SubtitleTextBlockStyle}"
-                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                    HorizontalAlignment="Center"
-                    TextAlignment="Center" />
-                <TextBlock
-                    Margin="0,0,0,8"
+                <local:InfoNote
+                    Label="オトアソビ"
                     Text="フォルダを開くと編集画面に入ります。保存データがあるときは、その区間を読み込みます。無いときは、解析してから区間を直せます。フォルダをこのウィンドウへドロップしても開けます。"
-                    Style="{StaticResource BodyTextBlockStyle}"
-                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                    TextAlignment="Center"
-                    TextWrapping="Wrap" />
+                    TextAlignment="Center">
+                    <local:InfoNote.Header>
+                        <StackPanel Spacing="4">
+                            <TextBlock
+                                HorizontalAlignment="Center"
+                                Style="{StaticResource TitleTextBlockStyle}"
+                                Text="オトアソビ"
+                                TextAlignment="Center" />
+                            <TextBlock
+                                HorizontalAlignment="Center"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Style="{StaticResource SubtitleTextBlockStyle}"
+                                Text="OTOasobi"
+                                TextAlignment="Center" />
+                        </StackPanel>
+                    </local:InfoNote.Header>
+                </local:InfoNote>
                 <Button
                     MinWidth="200"
                     Margin="0,8,0,0"
@@ -364,11 +365,21 @@
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="*" />
                         </Grid.RowDefinitions>
-                        <TextBlock
-                            x:Name="FileTitle"
+                        <local:InfoNote
                             Margin="16,8,16,8"
-                            Style="{StaticResource BodyStrongTextBlockStyle}"
-                            TextTrimming="CharacterEllipsis" />
+                            Label="波形の操作"
+                            StretchHeader="True"
+                            Text="{StaticResource EditorHelp}">
+                            <local:InfoNote.Header>
+                                <TextBlock
+                                    x:Name="FileTitle"
+                                    HorizontalAlignment="Stretch"
+                                    VerticalAlignment="Center"
+                                    Style="{StaticResource BodyStrongTextBlockStyle}"
+                                    TextTrimming="CharacterEllipsis"
+                                    TextWrapping="NoWrap" />
+                            </local:InfoNote.Header>
+                        </local:InfoNote>
                         <local:SpanEditor
                             x:Name="Editor"
                             Grid.Row="1"
@@ -574,14 +585,9 @@
                                                 </Border>
                                                 <Border Style="{StaticResource PanelCardStyle}">
                                                     <StackPanel Spacing="10">
-                                                        <TextBlock
-                                                            Style="{StaticResource BodyStrongTextBlockStyle}"
-                                                            Text="オーバーラップ" />
-                                                        <TextBlock
-                                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                            Style="{StaticResource CaptionTextBlockStyle}"
-                                                            Text="0% は子音の開始、100% は母音の開始です。0% で左へ引いて離すと、その行は秒のスライダーになります。"
-                                                            TextWrapping="Wrap" />
+                                                        <local:InfoNote
+                                                            Title="オーバーラップ"
+                                                            Text="0% は子音の開始、100% は母音の開始です。0% で左へ引いて離すと、その行は秒のスライダーになります。" />
                                                         <StackPanel x:Name="OverlapList" Spacing="16" />
                                                     </StackPanel>
                                                 </Border>
@@ -592,14 +598,9 @@
                                                     Visibility="Collapsed">
                                                     <Border Style="{StaticResource PanelCardStyle}">
                                                         <StackPanel Spacing="8">
-                                                            <TextBlock
-                                                                Style="{StaticResource BodyStrongTextBlockStyle}"
-                                                                Text="無音の直後" />
-                                                            <TextBlock
-                                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                                Style="{StaticResource CaptionTextBlockStyle}"
-                                                                Text="アンダーバーの無音の直後の音素は、選んだ単独音のプリセットで計算します。"
-                                                                TextWrapping="Wrap" />
+                                                            <local:InfoNote
+                                                                Title="無音の直後"
+                                                                Text="アンダーバーの無音の直後の音素は、選んだ単独音のプリセットで計算します。" />
                                                             <DropDownButton
                                                                 x:Name="RestPresetMenu"
                                                                 MinHeight="32"
@@ -684,14 +685,9 @@
                                                     </Border>
                                                     <Border Style="{StaticResource PanelCardStyle}">
                                                         <StackPanel Spacing="8">
-                                                            <TextBlock
-                                                                Style="{StaticResource BodyStrongTextBlockStyle}"
-                                                                Text="オーバーラップ" />
-                                                            <TextBlock
-                                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                                Style="{StaticResource CaptionTextBlockStyle}"
-                                                                Text="0% はオフセットの位置、100% はその音素の開始です。音素の開始は、子音と直前の母音の境界です。"
-                                                                TextWrapping="Wrap" />
+                                                            <local:InfoNote
+                                                                Title="オーバーラップ"
+                                                                Text="0% はオフセットの位置、100% はその音素の開始です。音素の開始は、子音と直前の母音の境界です。" />
                                                             <Grid>
                                                                 <TextBlock VerticalAlignment="Center" Text="割合" />
                                                                 <TextBlock
@@ -720,14 +716,9 @@
                                                     Visibility="Collapsed">
                                                     <Border Style="{StaticResource PanelCardStyle}">
                                                         <StackPanel Spacing="8">
-                                                            <TextBlock
-                                                                Style="{StaticResource BodyStrongTextBlockStyle}"
-                                                                Text="先頭音素" />
-                                                            <TextBlock
-                                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                                Style="{StaticResource CaptionTextBlockStyle}"
-                                                                Text="ファイルの先頭と、アンダーバーの無音の直後は、選んだ単独音のプリセットで計算します。エイリアスは「- さ」の形です。"
-                                                                TextWrapping="Wrap" />
+                                                            <local:InfoNote
+                                                                Title="先頭音素"
+                                                                Text="ファイルの先頭と、アンダーバーの無音の直後は、選んだ単独音のプリセットで計算します。エイリアスは「- さ」の形です。" />
                                                             <DropDownButton
                                                                 x:Name="CvvcLeadPresetMenu"
                                                                 MinHeight="32"
@@ -748,14 +739,9 @@
                                                     </Border>
                                                     <Border Style="{StaticResource PanelCardStyle}">
                                                         <StackPanel Spacing="8">
-                                                            <TextBlock
-                                                                Style="{StaticResource BodyStrongTextBlockStyle}"
-                                                                Text="プリセット" />
-                                                            <TextBlock
-                                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                                Style="{StaticResource CaptionTextBlockStyle}"
-                                                                Text="通常音素と子音音素のスライダーです。単独音のプリセットとは別です。"
-                                                                TextWrapping="Wrap" />
+                                                            <local:InfoNote
+                                                                Title="プリセット"
+                                                                Text="通常音素と子音音素のスライダーです。単独音のプリセットとは別です。" />
                                                             <DropDownButton
                                                                 x:Name="CvvcPresetMenu"
                                                                 MinHeight="32"
@@ -796,14 +782,9 @@
                                                     </Border>
                                                     <Border Style="{StaticResource PanelCardStyle}">
                                                         <StackPanel Spacing="8">
-                                                            <TextBlock
-                                                                Style="{StaticResource BodyStrongTextBlockStyle}"
-                                                                Text="通常音素" />
-                                                            <TextBlock
-                                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                                Style="{StaticResource CaptionTextBlockStyle}"
-                                                                Text="先頭以外の音素です。オフセットは子音の開始、先行発声は母音の開始に揃えます。エイリアスは「し」のように、そのモーラのかなです。"
-                                                                TextWrapping="Wrap" />
+                                                            <local:InfoNote
+                                                                Title="通常音素"
+                                                                Text="先頭以外の音素です。オフセットは子音の開始、先行発声は母音の開始に揃えます。エイリアスは「し」のように、そのモーラのかなです。" />
                                                             <Grid>
                                                                 <TextBlock VerticalAlignment="Center" Text="子音部" />
                                                                 <TextBlock
@@ -846,27 +827,17 @@
                                                     </Border>
                                                     <Border Style="{StaticResource PanelCardStyle}">
                                                         <StackPanel Spacing="10">
-                                                            <TextBlock
-                                                                Style="{StaticResource BodyStrongTextBlockStyle}"
-                                                                Text="通常音素のオーバーラップ" />
-                                                            <TextBlock
-                                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                                Style="{StaticResource CaptionTextBlockStyle}"
-                                                                Text="0% はオフセット（子音の開始）、100% は先行発声（母音の開始）です。"
-                                                                TextWrapping="Wrap" />
+                                                            <local:InfoNote
+                                                                Title="通常音素のオーバーラップ"
+                                                                Text="0% はオフセット（子音の開始）、100% は先行発声（母音の開始）です。" />
                                                             <StackPanel x:Name="CvvcOverlapList" Spacing="16" />
                                                         </StackPanel>
                                                     </Border>
                                                     <Border Style="{StaticResource PanelCardStyle}">
                                                         <StackPanel Spacing="8">
-                                                            <TextBlock
-                                                                Style="{StaticResource BodyStrongTextBlockStyle}"
-                                                                Text="子音音素" />
-                                                            <TextBlock
-                                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                                Style="{StaticResource CaptionTextBlockStyle}"
-                                                                Text="直前の母音と、いまの子音です。エイリアスは「a sh」の形で、通常音素の前に並びます。先行発声はその子音の開始に揃えます。"
-                                                                TextWrapping="Wrap" />
+                                                            <local:InfoNote
+                                                                Title="子音音素"
+                                                                Text="直前の母音と、いまの子音です。エイリアスは「a sh」の形で、通常音素の前に並びます。先行発声はその子音の開始に揃えます。" />
                                                             <Grid>
                                                                 <TextBlock VerticalAlignment="Center" Text="オフセット" />
                                                                 <TextBlock
@@ -909,27 +880,17 @@
                                                     </Border>
                                                     <Border Style="{StaticResource PanelCardStyle}">
                                                         <StackPanel Spacing="10">
-                                                            <TextBlock
-                                                                Style="{StaticResource BodyStrongTextBlockStyle}"
-                                                                Text="子音音素の子音部" />
-                                                            <TextBlock
-                                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                                Style="{StaticResource CaptionTextBlockStyle}"
-                                                                Text="0% は先行発声（子音の開始）、100% はブランクの位置です。"
-                                                                TextWrapping="Wrap" />
+                                                            <local:InfoNote
+                                                                Title="子音音素の子音部"
+                                                                Text="0% は先行発声（子音の開始）、100% はブランクの位置です。" />
                                                             <StackPanel x:Name="VcConsonantList" Spacing="16" />
                                                         </StackPanel>
                                                     </Border>
                                                     <Border Style="{StaticResource PanelCardStyle}">
                                                         <StackPanel Spacing="10">
-                                                            <TextBlock
-                                                                Style="{StaticResource BodyStrongTextBlockStyle}"
-                                                                Text="子音音素のブランク" />
-                                                            <TextBlock
-                                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                                Style="{StaticResource CaptionTextBlockStyle}"
-                                                                Text="0% はその子音の開始、100% は終了です。"
-                                                                TextWrapping="Wrap" />
+                                                            <local:InfoNote
+                                                                Title="子音音素のブランク"
+                                                                Text="0% はその子音の開始、100% は終了です。" />
                                                             <StackPanel x:Name="VcBlankList" Spacing="16" />
                                                         </StackPanel>
                                                     </Border>
