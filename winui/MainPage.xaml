@@ -10,7 +10,7 @@
     mc:Ignorable="d">
 
     <Page.Resources>
-        <x:String x:Key="EditorHelp">上の波形では境界をドラッグして時刻を分けます。音量の下に出る oto.ini のラベルはドラッグできません。右ドラッグ、または選択中の左右キーでスクロールします。</x:String>
+        <x:String x:Key="EditorHelp">上の波形では境界をドラッグして時刻を分けます。音量の下の oto.ini をクリックすると、その音素の値を強調し、ほかの音素を半透明にします。重なっている場所ではクリックするたびに次の音素へ移ります。重なっていない音素はもう一度クリックすると解除します。音素のないところをクリックするか、Esc でも解除します。右ドラッグ、または選択中の左右キーでスクロールします。</x:String>
         <Style x:Key="ToolbarButtonStyle" TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
             <Setter Property="MinHeight" Value="32" />
             <Setter Property="Padding" Value="10,6" />

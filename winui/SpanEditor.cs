@@ -64,6 +64,7 @@ public sealed class SpanEditor : UserControl
     static readonly SolidColorBrush OtoRegionHotBrush = BrushOf(120, 45, 212, 191);
     static readonly SolidColorBrush OtoChipBrush = BrushOf(190, 14, 14, 14);
     const int OtoPointCount = 5;
+    const double OtoDimOpacity = 0.28;
     static readonly SolidColorBrush[] OtoPointBrushes =
     [
         BrushOf(255, 236, 236, 236),
@@ -122,6 +123,7 @@ public sealed class SpanEditor : UserControl
     List<List<(int Index, bool IsStart)>> _groups = [];
     OtoExport _oto = new(0, 200, 0, new Dictionary<string, double>());
     int _hotOto = -1;
+    int _focusOto = -1;
 
     DragKind _drag = DragKind.None;
     int _dragIndex = -1;
@@ -197,6 +199,13 @@ public sealed class SpanEditor : UserControl
         {
             if (_file == null)
                 return;
+            var y = e.GetPosition(_plot).Y;
+            if (InOtoBand(y))
+            {
+                e.Handled = true;
+                return;
+            }
+
             FinishDrag();
             SetFullView();
             ArrangeAll();
@@ -207,7 +216,10 @@ public sealed class SpanEditor : UserControl
             if (_drag != DragKind.None)
                 return;
             SetHotOto(-1);
-            SetReadout("");
+            if (_focusOto >= 0)
+                ShowFocusedOto(double.NaN);
+            else
+                SetReadout("");
             SetHotSplit(-1);
         };
         KeyDown += OnKeyDown;
@@ -217,6 +229,14 @@ public sealed class SpanEditor : UserControl
     {
         if (_file == null || _drag != DragKind.None)
             return;
+        if (e.Key == Windows.System.VirtualKey.Escape && _focusOto >= 0)
+        {
+            SetFocusOto(-1);
+            SetReadout("");
+            e.Handled = true;
+            return;
+        }
+
         if (e.Key == Windows.System.VirtualKey.Left)
         {
             Nudge(-0.2);
@@ -292,6 +312,7 @@ public sealed class SpanEditor : UserControl
         _otoLines.Clear();
         _otoPointChips.Clear();
         _hotOto = -1;
+        _focusOto = -1;
         _groups.Clear();
         _specImage = null;
         _wave = null;
@@ -349,6 +370,8 @@ public sealed class SpanEditor : UserControl
 
     internal void SetOtoSettings(OtoExport settings)
     {
+        if (!string.Equals(settings.Mode, _oto.Mode, StringComparison.Ordinal))
+            _focusOto = -1;
         _oto = settings;
         if (_file == null || _plot.Width < 2 || _plot.Height < 2)
             return;
@@ -413,6 +436,7 @@ public sealed class SpanEditor : UserControl
         _otoLines.Clear();
         _otoPointChips.Clear();
         _hotOto = -1;
+        _focusOto = -1;
         _otoWave = null;
         _otoWaveLine = null;
         _otoZero = null;
@@ -577,6 +601,7 @@ public sealed class SpanEditor : UserControl
 
         if (InOtoBand(point.Position.Y))
         {
+            FocusOtoAt(x);
             e.Handled = true;
             return;
         }
@@ -653,9 +678,12 @@ public sealed class SpanEditor : UserControl
         SetHotSplit(-1);
         if (InOtoBand(point.Position.Y))
         {
-            UseCursor(_cursorArrow);
+            UseCursor(_cursorHand);
             Highlight(-1);
-            ShowOtoHover(x);
+            if (_focusOto >= 0)
+                ShowFocusedOto(x);
+            else
+                ShowOtoHover(x);
             return;
         }
 
@@ -1884,6 +1912,8 @@ public sealed class SpanEditor : UserControl
         OtoMarks.Fill(_file, _oto, _otoMarks, _loudness);
         EnsureOtoVisuals(_otoMarks.Count);
         var count = Math.Min(_otoMarks.Count, _otoRects.Count);
+        if (_focusOto >= count)
+            _focusOto = -1;
         var lanes = LaneOf(_otoMarks, count);
         var laneCount = 1;
         for (var i = 0; i < count; i++)
@@ -1900,8 +1930,12 @@ public sealed class SpanEditor : UserControl
             var end = Math.Max(mark.Offset, mark.Blank);
             var left = X(start);
             var width = Math.Max(0, X(end) - left);
+            var focused = _focusOto >= 0;
+            var chosen = i == _focusOto;
+            var dim = focused && !chosen;
             var rect = _otoRects[i];
-            rect.Fill = i == _hotOto ? OtoRegionHotBrush : OtoRegionBrush;
+            rect.Fill = chosen || (!focused && i == _hotOto) ? OtoRegionHotBrush : OtoRegionBrush;
+            rect.Opacity = dim ? OtoDimOpacity : 1;
             rect.Visibility = width < 1 || height < 2 ? Visibility.Collapsed : Visibility.Visible;
             Canvas.SetLeft(rect, left);
             Canvas.SetTop(rect, top);
@@ -1912,7 +1946,12 @@ public sealed class SpanEditor : UserControl
             var text = _otoTexts[i];
             text.Text = mark.Alias;
             text.Width = width;
-            var showAlias = width >= 28 && height >= 20 && textTop + 14 <= top + height - 2;
+            text.Opacity = dim ? OtoDimOpacity : 1;
+            text.FontWeight = chosen
+                ? Microsoft.UI.Text.FontWeights.SemiBold
+                : Microsoft.UI.Text.FontWeights.Normal;
+            var aliasWide = chosen ? width >= 12 : width >= 28;
+            var showAlias = aliasWide && height >= 20 && textTop + 14 <= top + height - 2;
             text.Visibility = showAlias ? Visibility.Visible : Visibility.Collapsed;
             Canvas.SetLeft(text, left);
             Canvas.SetTop(text, textTop);
@@ -1921,6 +1960,8 @@ public sealed class SpanEditor : UserControl
             {
                 var line = _otoLines[i * OtoPointCount + point];
                 var x = X(mark.At(point));
+                line.Opacity = dim ? OtoDimOpacity : 1;
+                line.StrokeThickness = chosen ? 3 : 2;
                 line.Visibility = height > 1 ? Visibility.Visible : Visibility.Collapsed;
                 line.X1 = x;
                 line.X2 = x;
@@ -1956,6 +1997,48 @@ public sealed class SpanEditor : UserControl
             Canvas.SetLeft(_otoCaption, Pad + 2);
             Canvas.SetTop(_otoCaption, top + 3);
         }
+
+        if (_focusOto >= 0)
+            RaiseFocusedOto();
+    }
+
+    void RaiseFocusedOto()
+    {
+        if (_focusOto < 0 || _focusOto >= _otoRects.Count)
+            return;
+        Raise(_otoRects[_focusOto]);
+        for (var point = 0; point < OtoPointCount; point++)
+            Raise(_otoLines[_focusOto * OtoPointCount + point]);
+        if (_focusOto < _otoTexts.Count)
+            Raise(_otoTexts[_focusOto]);
+        foreach (var chip in _otoPointChips)
+            Raise(chip);
+        var start = _focusOto * OtoPointCount;
+        for (var point = 0; point < OtoPointCount; point++)
+        {
+            if (start + point < _otoPointChips.Count)
+                Raise(_otoPointChips[start + point]);
+        }
+
+        if (_otoCaption != null)
+            Raise(_otoCaption);
+        if (_loudnessLabel != null)
+            Raise(_loudnessLabel);
+        Raise(_waveSplit);
+        Raise(_loudSplit);
+        Raise(_otoSplit);
+    }
+
+    void Raise(UIElement element)
+    {
+        var children = _plot.Children;
+        var index = children.IndexOf(element);
+        if (index < 0)
+            return;
+        var last = children.Count - 1;
+        if (index >= last)
+            return;
+        children.Move((uint)index, (uint)last);
     }
 
     void PlaceOtoNames(int count, double nameY)
@@ -1977,8 +2060,20 @@ public sealed class SpanEditor : UserControl
             }
         }
 
-        pending.Sort((a, b) => a.X.CompareTo(b.X));
-        var nextLeft = double.NegativeInfinity;
+        var focused = _focusOto >= 0 && _focusOto < count;
+        pending.Sort((a, b) =>
+        {
+            if (focused)
+            {
+                var rank = (a.Index / OtoPointCount == _focusOto ? 0 : 1)
+                    .CompareTo(b.Index / OtoPointCount == _focusOto ? 0 : 1);
+                if (rank != 0)
+                    return rank;
+            }
+
+            return a.X.CompareTo(b.X);
+        });
+        var occupied = new List<(double Left, double Right)>();
         var shown = new bool[_otoPointChips.Count];
         foreach (var item in pending)
         {
@@ -1991,17 +2086,30 @@ public sealed class SpanEditor : UserControl
 
             var width = Math.Max(12, text.Text.Length * 10 + 8);
             var left = item.X - width / 2;
-            if (left < nextLeft)
+            var right = left + width;
+            var blocked = false;
+            foreach (var box in occupied)
+            {
+                if (left < box.Right && right > box.Left)
+                {
+                    blocked = true;
+                    break;
+                }
+            }
+
+            if (blocked)
             {
                 chip.Visibility = Visibility.Collapsed;
                 continue;
             }
 
+            var dim = focused && item.Index / OtoPointCount != _focusOto;
+            chip.Opacity = dim ? OtoDimOpacity : 1;
             chip.Visibility = Visibility.Visible;
             Canvas.SetLeft(chip, left);
             Canvas.SetTop(chip, nameY);
             shown[item.Index] = true;
-            nextLeft = left + width + 4;
+            occupied.Add((left, right + 4));
         }
 
         for (var i = 0; i < _otoPointChips.Count; i++)
@@ -2037,20 +2145,12 @@ public sealed class SpanEditor : UserControl
             }
         }
 
-        if (best >= 0)
+        if (best >= 0 && bestPoint >= 0)
         {
             var mark = _otoMarks[best];
             var at = mark.At(bestPoint);
-            var names = "";
-            for (var point = 0; point < OtoPointCount; point++)
-            {
-                if (Math.Abs(mark.At(point) - at) > 0.0005)
-                    continue;
-                names = names.Length == 0 ? OtoPointName(point) : names + "・" + OtoPointName(point);
-            }
-
             SetHotOto(best);
-            SetReadout($"{mark.Alias}   {names}   {at:0.000} 秒");
+            SetReadout($"{mark.Alias}   {JoinedPointNames(mark, at)}   {at:0.000} 秒   クリックで強調");
             return;
         }
 
@@ -2063,7 +2163,181 @@ public sealed class SpanEditor : UserControl
         }
 
         var hit = _otoMarks[region];
-        SetReadout($"{hit.Alias}   {hit.Offset:0.000}–{hit.Blank:0.000}");
+        SetReadout($"{hit.Alias}   {hit.Offset:0.000}–{hit.Blank:0.000}   クリックで強調");
+    }
+
+    void FocusOtoAt(double x)
+    {
+        var hits = OtoHitsAt(x);
+        int next;
+        if (hits.Count == 0 || (hits.Count == 1 && hits[0] == _focusOto))
+            next = -1;
+        else if (hits.Contains(_focusOto))
+            next = hits[(hits.IndexOf(_focusOto) + 1) % hits.Count];
+        else
+            next = BestOtoHit(hits, x);
+
+        SetFocusOto(next);
+        if (_focusOto >= 0)
+            ShowFocusedOto(x);
+        else
+            ShowOtoHover(x);
+    }
+
+    void SetFocusOto(int index)
+    {
+        if (index >= _otoMarks.Count)
+            index = -1;
+        if (_focusOto == index)
+            return;
+        _focusOto = index;
+        _hotOto = -1;
+        if (_file != null && _plot.Width >= 2 && _plot.Height >= 2)
+            ArrangeOtoLabels();
+    }
+
+    void ShowFocusedOto(double x)
+    {
+        if (_focusOto < 0 || _focusOto >= _otoMarks.Count)
+        {
+            SetReadout("");
+            return;
+        }
+
+        var mark = _otoMarks[_focusOto];
+        var text = OtoReadout(mark, x);
+        if (double.IsNaN(x))
+        {
+            SetReadout(text);
+            return;
+        }
+
+        var hits = OtoHitsAt(x);
+        if (hits.Count == 0 || (hits.Count == 1 && hits[0] == _focusOto))
+        {
+            SetReadout(text);
+            return;
+        }
+
+        var next = hits.Contains(_focusOto)
+            ? hits[(hits.IndexOf(_focusOto) + 1) % hits.Count]
+            : BestOtoHit(hits, x);
+        if (next < 0 || next == _focusOto)
+        {
+            SetReadout(text);
+            return;
+        }
+
+        SetReadout(text + "   クリックで " + _otoMarks[next].Alias);
+    }
+
+    string OtoReadout(OtoMark mark, double x)
+    {
+        if (!double.IsNaN(x))
+        {
+            var bestPoint = -1;
+            var bestDist = HitPx;
+            for (var point = 0; point < OtoPointCount; point++)
+            {
+                var dist = Math.Abs(X(mark.At(point)) - x);
+                if (dist > bestDist)
+                    continue;
+                bestDist = dist;
+                bestPoint = point;
+            }
+
+            if (bestPoint >= 0)
+            {
+                var at = mark.At(bestPoint);
+                return $"{mark.Alias}   {JoinedPointNames(mark, at)}   {at:0.000} 秒";
+            }
+        }
+
+        return $"{mark.Alias}   {mark.Offset:0.000}–{mark.Blank:0.000}";
+    }
+
+    static string JoinedPointNames(OtoMark mark, double at)
+    {
+        var names = "";
+        for (var point = 0; point < OtoPointCount; point++)
+        {
+            if (Math.Abs(mark.At(point) - at) > 0.0005)
+                continue;
+            names = names.Length == 0 ? OtoPointName(point) : names + "・" + OtoPointName(point);
+        }
+
+        return names;
+    }
+
+    List<int> OtoHitsAt(double x)
+    {
+        var time = XToTime(x);
+        var hits = new List<int>();
+        for (var i = 0; i < _otoMarks.Count; i++)
+        {
+            if (OtoContains(_otoMarks[i], time) || OtoPointNear(_otoMarks[i], x))
+                hits.Add(i);
+        }
+
+        hits.Sort((a, b) =>
+        {
+            var cmp = _otoMarks[a].Offset.CompareTo(_otoMarks[b].Offset);
+            return cmp != 0 ? cmp : a.CompareTo(b);
+        });
+        return hits;
+    }
+
+    int BestOtoHit(List<int> hits, double x)
+    {
+        var best = hits[0];
+        var bestDist = HitPx;
+        var foundLine = false;
+        foreach (var i in hits)
+        {
+            var mark = _otoMarks[i];
+            for (var point = 0; point < OtoPointCount; point++)
+            {
+                var dist = Math.Abs(X(mark.At(point)) - x);
+                if (dist > bestDist)
+                    continue;
+                bestDist = dist;
+                best = i;
+                foundLine = true;
+            }
+        }
+
+        if (foundLine)
+            return best;
+
+        var bestWidth = double.MaxValue;
+        foreach (var i in hits)
+        {
+            var width = Math.Abs(_otoMarks[i].Blank - _otoMarks[i].Offset);
+            if (width >= bestWidth)
+                continue;
+            bestWidth = width;
+            best = i;
+        }
+
+        return best;
+    }
+
+    static bool OtoContains(OtoMark mark, double time)
+    {
+        var start = Math.Min(mark.Offset, mark.Blank);
+        var end = Math.Max(mark.Offset, mark.Blank);
+        return time >= start - 1e-9 && time <= end + 1e-9;
+    }
+
+    bool OtoPointNear(OtoMark mark, double x)
+    {
+        for (var point = 0; point < OtoPointCount; point++)
+        {
+            if (Math.Abs(X(mark.At(point)) - x) <= HitPx)
+                return true;
+        }
+
+        return false;
     }
 
     int HitOtoRegion(double time)
@@ -2089,6 +2363,8 @@ public sealed class SpanEditor : UserControl
 
     void SetHotOto(int index)
     {
+        if (_focusOto >= 0)
+            return;
         if (index >= _otoMarks.Count)
             index = -1;
         if (_hotOto == index)
