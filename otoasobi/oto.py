@@ -27,6 +27,9 @@ CVVC は、母音の音素ごとに通常音の行を書き、先頭以外で子
 子音音素の先行発声は、その子音の開始です。
 ブランクは子音の開始を 0%、終了を 100% とした割合です。
 子音部は、先行発声を 0%、そのブランクの位置を 100% とした割合です。
+
+同じエイリアスが 2 回以上あるときは、2 回目以降の末尾に 2、3、… を付けます。
+1 回目はそのままです。その番号が別のエイリアスと重なるときは、空くまで進めます。
 """
 
 from __future__ import annotations
@@ -518,6 +521,51 @@ def cvvc_oto_lines(
     return lines
 
 
+def _split_oto_alias(line: str) -> tuple[str, str, str] | None:
+    """ファイル名、エイリアス、エイリアスより後ろ。形が違う行は None。"""
+    eq = line.find("=")
+    if eq < 0:
+        return None
+    body = line[eq + 1 :]
+    comma = body.find(",")
+    if comma < 0:
+        return None
+    return line[:eq], body[:comma], body[comma:]
+
+
+def number_duplicate_aliases(lines: list[str]) -> list[str]:
+    """同じエイリアスの 2 回目以降へ 2、3、… を付ける。
+
+    1 回目の名前は残す。付けた名前が、別のエイリアスの 1 回目や、
+    すでに付けた名前と重なるときは、空いている番号まで進める。
+    「あ」が 3 行なら「あ」「あ2」「あ3」です。
+    """
+    parsed = [_split_oto_alias(line) for line in lines]
+    reserved = {item[1] for item in parsed if item is not None}
+    used: set[str] = set()
+    seen: dict[str, int] = {}
+    out: list[str] = []
+    for line, item in zip(lines, parsed, strict=True):
+        if item is None:
+            out.append(line)
+            continue
+        filename, alias, tail = item
+        seen[alias] = seen.get(alias, 0) + 1
+        if seen[alias] == 1:
+            chosen = alias
+        else:
+            number = 2
+            while True:
+                candidate = f"{alias}{number}"
+                if candidate not in reserved and candidate not in used:
+                    chosen = candidate
+                    break
+                number += 1
+        used.add(chosen)
+        out.append(f"{filename}={chosen}{tail}")
+    return out
+
+
 def render_oto_ini(lines: list[str]) -> str:
     if not lines:
         return ""
@@ -543,5 +591,9 @@ def _rename_existing_as_log(path: Path) -> None:
 def write_oto_ini(path: str | Path, lines: list[str]) -> Path:
     path = Path(path)
     _rename_existing_as_log(path)
-    path.write_text(render_oto_ini(lines), encoding=ANSI, newline="\r\n")
+    path.write_text(
+        render_oto_ini(number_duplicate_aliases(lines)),
+        encoding=ANSI,
+        newline="\r\n",
+    )
     return path
