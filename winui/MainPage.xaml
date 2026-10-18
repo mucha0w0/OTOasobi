@@ -10,7 +10,7 @@
     mc:Ignorable="d">
 
     <Page.Resources>
-        <x:String x:Key="EditorHelp">上の波形では境界をドラッグして時刻を分けます。音量の下の oto.ini をクリックすると、その音素の値を強調し、ほかの音素を半透明にします。重なっている場所ではクリックするたびに次の音素へ移ります。重なっていない音素はもう一度クリックすると解除します。音素のないところをクリックするか、Esc でも解除します。右ドラッグ、または選択中の左右キーでスクロールします。</x:String>
+        <x:String x:Key="EditorHelp">上の波形では境界をドラッグして時刻を分けます。波形の左右の端をドラッグすると、波形の幅が変わります。ファイル一覧とスライダーは、その分だけ広がったり縮んだりします。音量の下の oto.ini をクリックすると、その音素の値を強調し、ほかの音素を半透明にします。重なっている場所ではクリックするたびに次の音素へ移ります。重なっていない音素はもう一度クリックすると解除します。音素のないところをクリックするか、Esc でも解除します。右ドラッグ、または選択中の左右キーでスクロールします。</x:String>
         <Style x:Key="ToolbarButtonStyle" TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
             <Setter Property="MinHeight" Value="32" />
             <Setter Property="Padding" Value="10,6" />
@@ -312,13 +312,16 @@
                     Style="{StaticResource CaptionTextBlockStyle}"
                     TextTrimming="CharacterEllipsis" />
 
-                <Grid Grid.Row="1" Margin="0,8,0,0">
+                <Grid x:Name="EditorColumns" Grid.Row="1" Margin="0,8,0,0">
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="280" />
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="320" />
+                        <ColumnDefinition x:Name="FileColumn" Width="280" />
+                        <ColumnDefinition x:Name="WaveColumn" Width="*" />
+                        <ColumnDefinition x:Name="SideColumn" Width="320" />
                     </Grid.ColumnDefinitions>
-                    <Border BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}" BorderThickness="0,0,1,0">
+                    <Border
+                        x:Name="FilePane"
+                        BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                        BorderThickness="0,0,1,0">
                         <Grid>
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto" />
@@ -360,7 +363,7 @@
                             </ListView>
                         </Grid>
                     </Border>
-                    <Grid Grid.Column="1" Margin="0,0,0,8">
+                    <Grid x:Name="WavePane" Grid.Column="1" Margin="0,0,0,8">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="*" />
@@ -386,8 +389,61 @@
                             Margin="12,0,12,4"
                             AutomationProperties.Name="波形と区間"
                             AutomationProperties.HelpText="{StaticResource EditorHelp}" />
+                        <local:EdgeGrip
+                            x:Name="WaveResizeLeft"
+                            Grid.Row="1"
+                            Width="20"
+                            Margin="0,0,0,4"
+                            HorizontalAlignment="Left"
+                            VerticalAlignment="Stretch"
+                            AutomationProperties.Name="波形の左端"
+                            Background="Transparent"
+                            PointerCanceled="WaveResize_Released"
+                            PointerCaptureLost="WaveResize_Released"
+                            PointerEntered="WaveResize_Entered"
+                            PointerExited="WaveResize_Exited"
+                            PointerMoved="WaveResize_Moved"
+                            PointerPressed="WaveResize_Pressed"
+                            PointerReleased="WaveResize_Released"
+                            ToolTipService.ToolTip="ドラッグして波形の幅を変えます">
+                            <Border
+                                x:Name="WaveResizeLeftMark"
+                                Width="2"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Stretch"
+                                Background="{ThemeResource AccentFillColorDefaultBrush}"
+                                IsHitTestVisible="False"
+                                Opacity="0" />
+                        </local:EdgeGrip>
+                        <local:EdgeGrip
+                            x:Name="WaveResizeRight"
+                            Grid.Row="1"
+                            Width="20"
+                            Margin="0,0,0,4"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Stretch"
+                            AutomationProperties.Name="波形の右端"
+                            Background="Transparent"
+                            PointerCanceled="WaveResize_Released"
+                            PointerCaptureLost="WaveResize_Released"
+                            PointerEntered="WaveResize_Entered"
+                            PointerExited="WaveResize_Exited"
+                            PointerMoved="WaveResize_Moved"
+                            PointerPressed="WaveResize_Pressed"
+                            PointerReleased="WaveResize_Released"
+                            ToolTipService.ToolTip="ドラッグして波形の幅を変えます">
+                            <Border
+                                x:Name="WaveResizeRightMark"
+                                Width="2"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Stretch"
+                                Background="{ThemeResource AccentFillColorDefaultBrush}"
+                                IsHitTestVisible="False"
+                                Opacity="0" />
+                        </local:EdgeGrip>
                     </Grid>
                     <Border
+                        x:Name="SidePane"
                         Grid.Column="2"
                         BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
                         BorderThickness="1,0,0,0">

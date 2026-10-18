@@ -1,5 +1,6 @@
 using System.Globalization;
 using Microsoft.UI.Dispatching;
+using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
@@ -63,6 +64,14 @@ public sealed partial class MainPage : Page
     OtoPreset? _selectedPreset;
     OtoPreset _restPreset = null!;
     bool _applyingPreset;
+    bool _waveResizing;
+    bool _waveResizeLeft;
+    double _waveGrabX;
+    double _waveGrabWidth;
+
+    const double MinFilePane = 160;
+    const double MinSidePane = 240;
+    const double MinWavePane = 280;
 
     public MainPage()
     {
@@ -91,6 +100,88 @@ public sealed partial class MainPage : Page
         AddHandler(PointerWheelChangedEvent, new PointerEventHandler(OnPageWheel), true);
         BindRecentFolders();
         Loaded += (_, _) => AttachMenuToTitleBar();
+        Unloaded += (_, _) => EndWaveResize();
+    }
+
+    void WaveResize_Entered(object sender, PointerRoutedEventArgs e) => ShowWaveGrip(sender, true);
+
+    void WaveResize_Exited(object sender, PointerRoutedEventArgs e)
+    {
+        if (_waveResizing)
+            return;
+        ShowWaveGrip(sender, false);
+    }
+
+    void WaveResize_Pressed(object sender, PointerRoutedEventArgs e)
+    {
+        if (!e.GetCurrentPoint((UIElement)sender).Properties.IsLeftButtonPressed)
+            return;
+        if (EditorColumns.ActualWidth < 1)
+            return;
+        _waveResizing = true;
+        _waveResizeLeft = ReferenceEquals(sender, WaveResizeLeft);
+        _waveGrabX = e.GetCurrentPoint(EditorColumns).Position.X;
+        _waveGrabWidth = ColumnWidth(_waveResizeLeft ? FileColumn : SideColumn);
+        ((UIElement)sender).CapturePointer(e.Pointer);
+        ShowWaveGrip(sender, true);
+        e.Handled = true;
+    }
+
+    void WaveResize_Moved(object sender, PointerRoutedEventArgs e)
+    {
+        if (!_waveResizing)
+            return;
+        ApplyWaveColumn(e);
+        e.Handled = true;
+    }
+
+    void WaveResize_Released(object sender, PointerRoutedEventArgs e) => EndWaveResize();
+
+    // ウィンドウの大きさは変えず、つかんだ端の移動分だけ隣の列を伸縮する。
+    void ApplyWaveColumn(PointerRoutedEventArgs e)
+    {
+        var total = EditorColumns.ActualWidth;
+        if (total < 1)
+            return;
+        var delta = e.GetCurrentPoint(EditorColumns).Position.X - _waveGrabX;
+        if (_waveResizeLeft)
+        {
+            var max = total - ColumnWidth(SideColumn) - MinWavePane;
+            FileColumn.Width = new GridLength(ClampPane(_waveGrabWidth + delta, MinFilePane, max));
+            return;
+        }
+
+        var sideMax = total - ColumnWidth(FileColumn) - MinWavePane;
+        SideColumn.Width = new GridLength(ClampPane(_waveGrabWidth - delta, MinSidePane, sideMax));
+    }
+
+    static double ColumnWidth(ColumnDefinition column) =>
+        column.Width.IsAbsolute ? column.Width.Value : column.ActualWidth;
+
+    static double ClampPane(double value, double min, double max)
+    {
+        if (double.IsNaN(value) || double.IsInfinity(value))
+            return min;
+        if (max < min)
+            return min;
+        return Math.Clamp(value, min, max);
+    }
+
+    void EndWaveResize()
+    {
+        if (!_waveResizing)
+            return;
+        _waveResizing = false;
+        WaveResizeLeft.ReleasePointerCaptures();
+        WaveResizeRight.ReleasePointerCaptures();
+        WaveResizeLeftMark.Opacity = 0;
+        WaveResizeRightMark.Opacity = 0;
+    }
+
+    void ShowWaveGrip(object sender, bool hot)
+    {
+        var mark = ReferenceEquals(sender, WaveResizeLeft) ? WaveResizeLeftMark : WaveResizeRightMark;
+        mark.Opacity = hot ? 1 : 0;
     }
 
     void AttachMenuToTitleBar()
@@ -1649,5 +1740,13 @@ public sealed partial class MainPage : Page
             return folder;
         var file = paths.FirstOrDefault(File.Exists);
         return file == null ? null : Path.GetDirectoryName(file);
+    }
+}
+
+public sealed class EdgeGrip : Grid
+{
+    public EdgeGrip()
+    {
+        ProtectedCursor = InputSystemCursor.Create(InputSystemCursorShape.SizeWestEast);
     }
 }
