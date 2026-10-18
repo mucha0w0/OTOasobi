@@ -66,8 +66,10 @@ public sealed partial class MainPage : Page
     bool _applyingPreset;
     bool _waveResizing;
     bool _waveResizeLeft;
+    bool _waveFrameHooked;
     double _waveGrabX;
     double _waveGrabWidth;
+    double _wavePointerX;
 
     const double MinFilePane = 160;
     const double MinSidePane = 240;
@@ -121,7 +123,10 @@ public sealed partial class MainPage : Page
         _waveResizing = true;
         _waveResizeLeft = ReferenceEquals(sender, WaveResizeLeft);
         _waveGrabX = e.GetCurrentPoint(EditorColumns).Position.X;
+        _wavePointerX = _waveGrabX;
         _waveGrabWidth = ColumnWidth(_waveResizeLeft ? FileColumn : SideColumn);
+        Editor.SetColumnDrag(true);
+        Effects.SetColumnDrag(true);
         ((UIElement)sender).CapturePointer(e.Pointer);
         ShowWaveGrip(sender, true);
         e.Handled = true;
@@ -131,28 +136,65 @@ public sealed partial class MainPage : Page
     {
         if (!_waveResizing)
             return;
-        ApplyWaveColumn(e);
+        _wavePointerX = e.GetCurrentPoint(EditorColumns).Position.X;
+        if (!_waveFrameHooked)
+        {
+            _waveFrameHooked = true;
+            CompositionTarget.Rendering += WaveResize_Frame;
+        }
+
         e.Handled = true;
     }
 
-    void WaveResize_Released(object sender, PointerRoutedEventArgs e) => EndWaveResize();
+    void WaveResize_Frame(object? sender, object e)
+    {
+        if (!_waveResizing)
+        {
+            UnhookWaveFrame();
+            return;
+        }
+
+        ApplyWaveColumn(_wavePointerX);
+    }
+
+    void WaveResize_Released(object sender, PointerRoutedEventArgs e)
+    {
+        if (_waveResizing)
+            ApplyWaveColumn(e.GetCurrentPoint(EditorColumns).Position.X);
+        EndWaveResize();
+    }
+
+    void UnhookWaveFrame()
+    {
+        if (!_waveFrameHooked)
+            return;
+        _waveFrameHooked = false;
+        CompositionTarget.Rendering -= WaveResize_Frame;
+    }
 
     // ウィンドウの大きさは変えず、つかんだ端の移動分だけ隣の列を伸縮する。
-    void ApplyWaveColumn(PointerRoutedEventArgs e)
+    void ApplyWaveColumn(double pointerX)
     {
         var total = EditorColumns.ActualWidth;
         if (total < 1)
             return;
-        var delta = e.GetCurrentPoint(EditorColumns).Position.X - _waveGrabX;
+        var delta = pointerX - _waveGrabX;
         if (_waveResizeLeft)
         {
             var max = total - ColumnWidth(SideColumn) - MinWavePane;
-            FileColumn.Width = new GridLength(ClampPane(_waveGrabWidth + delta, MinFilePane, max));
+            SetColumnWidth(FileColumn, ClampPane(_waveGrabWidth + delta, MinFilePane, max));
             return;
         }
 
         var sideMax = total - ColumnWidth(FileColumn) - MinWavePane;
-        SideColumn.Width = new GridLength(ClampPane(_waveGrabWidth - delta, MinSidePane, sideMax));
+        SetColumnWidth(SideColumn, ClampPane(_waveGrabWidth - delta, MinSidePane, sideMax));
+    }
+
+    static void SetColumnWidth(ColumnDefinition column, double width)
+    {
+        if (Math.Abs(ColumnWidth(column) - width) < 0.5)
+            return;
+        column.Width = new GridLength(width);
     }
 
     static double ColumnWidth(ColumnDefinition column) =>
@@ -172,6 +214,9 @@ public sealed partial class MainPage : Page
         if (!_waveResizing)
             return;
         _waveResizing = false;
+        UnhookWaveFrame();
+        Editor.SetColumnDrag(false);
+        Effects.SetColumnDrag(false);
         WaveResizeLeft.ReleasePointerCaptures();
         WaveResizeRight.ReleasePointerCaptures();
         WaveResizeLeftMark.Opacity = 0;

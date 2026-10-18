@@ -37,6 +37,7 @@ public sealed class SpanEditor : UserControl
         Drag,
     }
 
+    readonly Grid _root = new();
     readonly CursorCanvas _plot = new();
     readonly TextBlock _readout = new();
     readonly Border _badge;
@@ -141,9 +142,55 @@ public sealed class SpanEditor : UserControl
     object? _zoomToken;
     Pointer? _pointer;
     bool _labelsLocked;
+    bool _columnDrag;
+    double _columnDragWidth = 1;
+    ScaleTransform? _columnDragScale;
     readonly Border _labelGate;
 
     public event EventHandler? AnalyzeRequested;
+
+    // 列幅をドラッグしているあいだは、いまの絵を横に伸ばすだけにする。離したときに一度だけ描き直す。
+    public void SetColumnDrag(bool dragging)
+    {
+        if (dragging)
+        {
+            if (_columnDrag || ActualWidth < 2)
+                return;
+            _columnDragWidth = ActualWidth;
+            _columnDrag = true;
+            _columnDragScale ??= new ScaleTransform();
+            _columnDragScale.ScaleX = 1;
+            _root.HorizontalAlignment = HorizontalAlignment.Left;
+            _root.Width = _columnDragWidth;
+            _root.RenderTransformOrigin = new Point(0, 0);
+            _root.RenderTransform = _columnDragScale;
+            return;
+        }
+
+        if (!_columnDrag)
+            return;
+        _columnDrag = false;
+        _root.RenderTransform = null;
+        _root.ClearValue(WidthProperty);
+        _root.HorizontalAlignment = HorizontalAlignment.Stretch;
+        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+        {
+            if (_columnDrag || ActualWidth < 2 || ActualHeight < 2)
+                return;
+            SyncPlotSize(new Size(ActualWidth, ActualHeight));
+            ArrangeAll();
+            PlaceLabelGate();
+        });
+    }
+
+    void SyncPlotSize(Size size)
+    {
+        var width = Math.Max(0, size.Width);
+        var height = Math.Max(0, size.Height);
+        _plot.Width = width;
+        _plot.Height = height;
+        _clip.Rect = new Rect(0, 0, width, height);
+    }
 
     public void SetLabelsLocked(bool locked)
     {
@@ -153,7 +200,6 @@ public sealed class SpanEditor : UserControl
 
     public SpanEditor()
     {
-        var root = new Grid();
         _labelGate = MakeLabelGate();
         _plot.Background = BrushOf(255, 22, 22, 22);
         _plot.ManipulationMode = ManipulationModes.None;
@@ -172,19 +218,24 @@ public sealed class SpanEditor : UserControl
             Visibility = Visibility.Collapsed,
             Child = _readout,
         };
-        root.Children.Add(_plot);
-        root.Children.Add(_badge);
-        root.Children.Add(_labelGate);
-        Content = root;
+        _root.Children.Add(_plot);
+        _root.Children.Add(_badge);
+        _root.Children.Add(_labelGate);
+        Content = _root;
         Background = BrushOf(255, 22, 22, 22);
         ManipulationMode = ManipulationModes.None;
         IsTabStop = true;
 
         SizeChanged += (_, e) =>
         {
-            _plot.Width = e.NewSize.Width;
-            _plot.Height = e.NewSize.Height;
-            _clip.Rect = new Rect(0, 0, Math.Max(0, e.NewSize.Width), Math.Max(0, e.NewSize.Height));
+            if (_columnDrag)
+            {
+                if (_columnDragScale != null && _columnDragWidth > 1)
+                    _columnDragScale.ScaleX = e.NewSize.Width / _columnDragWidth;
+                return;
+            }
+
+            SyncPlotSize(e.NewSize);
             ArrangeAll();
             PlaceLabelGate();
         };

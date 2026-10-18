@@ -53,6 +53,10 @@ sealed class NoiseWaveform : UserControl
     bool _dragging;
     double _dragAnchor;
     bool _barSync;
+    bool _columnDrag;
+    double _columnDragWidth = 1;
+    ScaleTransform? _columnDragScale;
+    FrameworkElement? _columnDragRoot;
 
     public NoiseWaveform()
     {
@@ -73,7 +77,50 @@ sealed class NoiseWaveform : UserControl
         grid.Children.Add(_bar);
         _bar.ValueChanged += Bar_Changed;
         Content = grid;
-        SizeChanged += (_, _) => Draw();
+        _columnDragRoot = grid;
+        SizeChanged += (_, e) =>
+        {
+            if (_columnDrag)
+            {
+                if (_columnDragScale != null && _columnDragWidth > 1)
+                    _columnDragScale.ScaleX = e.NewSize.Width / _columnDragWidth;
+                return;
+            }
+
+            Draw();
+        };
+    }
+
+    public void SetColumnDrag(bool dragging)
+    {
+        if (_columnDragRoot == null)
+            return;
+        if (dragging)
+        {
+            if (_columnDrag || ActualWidth < 2)
+                return;
+            _columnDragWidth = ActualWidth;
+            _columnDrag = true;
+            _columnDragScale ??= new ScaleTransform();
+            _columnDragScale.ScaleX = 1;
+            _columnDragRoot.HorizontalAlignment = HorizontalAlignment.Left;
+            _columnDragRoot.Width = _columnDragWidth;
+            _columnDragRoot.RenderTransformOrigin = new Point(0, 0);
+            _columnDragRoot.RenderTransform = _columnDragScale;
+            return;
+        }
+
+        if (!_columnDrag)
+            return;
+        _columnDrag = false;
+        _columnDragRoot.RenderTransform = null;
+        _columnDragRoot.ClearValue(WidthProperty);
+        _columnDragRoot.HorizontalAlignment = HorizontalAlignment.Stretch;
+        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+        {
+            if (!_columnDrag)
+                Draw();
+        });
     }
 
     public event EventHandler<NoiseRangeEventArgs>? RangeChanging;

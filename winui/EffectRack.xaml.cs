@@ -149,6 +149,8 @@ public sealed partial class EffectRack : UserControl
         }
     }
 
+    internal void SetColumnDrag(bool dragging) => _wave.SetColumnDrag(dragging);
+
     public void SetFolder(string? folder)
     {
         var next = string.IsNullOrWhiteSpace(folder) ? null : Path.GetFullPath(folder);
