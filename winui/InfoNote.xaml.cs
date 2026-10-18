@@ -1,11 +1,15 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Shapes;
+using Windows.Foundation;
 
 namespace Otoasobi;
 
 public sealed partial class InfoNote : UserControl
 {
+    const double TailWidth = 10;
+
     public static readonly DependencyProperty TitleProperty = DependencyProperty.Register(
         nameof(Title),
         typeof(string),
@@ -90,26 +94,15 @@ public sealed partial class InfoNote : UserControl
             note.Apply();
     }
 
-    void Toggle_Checked(object sender, RoutedEventArgs e)
-    {
-        Apply();
-    }
-
-    void Toggle_Unchecked(object sender, RoutedEventArgs e)
-    {
-        Apply();
-    }
-
     void Apply()
     {
-        if (TitleBlock == null || Body == null || Toggle == null || Head == null || HeaderHost == null || TextColumn == null)
+        if (TitleBlock == null || Body == null || InfoButton == null || Head == null || HeaderHost == null || TextColumn == null)
             return;
 
         var text = Text ?? "";
         var title = Title ?? "";
         var hasHeader = Header != null;
         Body.Text = text;
-        Body.TextAlignment = TextAlignment;
         HeaderHost.Content = Header;
         HeaderHost.Visibility = hasHeader ? Visibility.Visible : Visibility.Collapsed;
         TitleBlock.Text = title;
@@ -120,8 +113,8 @@ public sealed partial class InfoNote : UserControl
             TextColumn.Width = new GridLength(1, GridUnitType.Star);
             Head.HorizontalAlignment = HorizontalAlignment.Stretch;
             HeaderHost.HorizontalAlignment = HorizontalAlignment.Stretch;
-            Toggle.VerticalAlignment = VerticalAlignment.Center;
-            Toggle.Margin = new Thickness(0);
+            InfoButton.VerticalAlignment = VerticalAlignment.Center;
+            InfoButton.Margin = new Thickness(0);
         }
         else
         {
@@ -130,19 +123,37 @@ public sealed partial class InfoNote : UserControl
                 ? HorizontalAlignment.Center
                 : HorizontalAlignment.Left;
             HeaderHost.HorizontalAlignment = HorizontalAlignment.Left;
-            Toggle.VerticalAlignment = hasHeader ? VerticalAlignment.Top : VerticalAlignment.Center;
-            Toggle.Margin = hasHeader ? new Thickness(0, 4, 0, 0) : new Thickness(0);
+            InfoButton.VerticalAlignment = hasHeader ? VerticalAlignment.Top : VerticalAlignment.Center;
+            InfoButton.Margin = hasHeader ? new Thickness(0, 8, 0, 0) : new Thickness(0);
         }
 
         var hasText = !string.IsNullOrWhiteSpace(text);
-        var open = Toggle.IsChecked == true && hasText;
-        Toggle.Visibility = hasText ? Visibility.Visible : Visibility.Collapsed;
-        Body.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
-        if (!hasText)
-            Toggle.IsChecked = false;
-
+        InfoButton.Visibility = hasText ? Visibility.Visible : Visibility.Collapsed;
         var label = string.IsNullOrEmpty(Label) ? title : Label;
-        AutomationProperties.SetName(Toggle, string.IsNullOrEmpty(label) ? "説明" : label + "の説明");
-        ToolTipService.SetToolTip(Toggle, open ? "説明を閉じる" : "説明");
+        AutomationProperties.SetName(InfoButton, string.IsNullOrEmpty(label) ? "説明" : label + "の説明");
+    }
+
+    void Bubble_Opened(object sender, object e)
+    {
+        Bubble.UpdateLayout();
+        if (XamlRoot?.Content is not UIElement root || InfoButton.ActualWidth <= 0 || Bubble.ActualWidth <= 0)
+            return;
+
+        var anchor = InfoButton.TransformToVisual(root).TransformPoint(
+            new Point(InfoButton.ActualWidth / 2, InfoButton.ActualHeight / 2));
+        var origin = Bubble.TransformToVisual(root).TransformPoint(new Point(0, 0));
+        var above = origin.Y + Bubble.ActualHeight / 2 < anchor.Y;
+        TailUp.Visibility = above ? Visibility.Collapsed : Visibility.Visible;
+        TailDown.Visibility = above ? Visibility.Visible : Visibility.Collapsed;
+
+        var left = Math.Clamp(anchor.X - origin.X - TailWidth / 2, 12, Math.Max(12, Bubble.ActualWidth - TailWidth - 12));
+        PlaceTail(above ? TailDown : TailUp, left, above);
+    }
+
+    static void PlaceTail(Polygon tail, double left, bool pointsDown)
+    {
+        tail.Margin = pointsDown
+            ? new Thickness(left, -1, 0, 0)
+            : new Thickness(left, 0, 0, -1);
     }
 }

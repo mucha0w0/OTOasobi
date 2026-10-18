@@ -5,66 +5,46 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     IsTabStop="False">
     <UserControl.Resources>
-        <Style x:Key="InfoToggleStyle" TargetType="ToggleButton">
-            <Setter Property="Width" Value="22" />
-            <Setter Property="Height" Value="22" />
-            <Setter Property="MinWidth" Value="22" />
-            <Setter Property="MinHeight" Value="22" />
+        <Style x:Key="InfoButtonStyle" TargetType="Button">
+            <Setter Property="Width" Value="16" />
+            <Setter Property="Height" Value="16" />
+            <Setter Property="MinWidth" Value="16" />
+            <Setter Property="MinHeight" Value="16" />
             <Setter Property="Padding" Value="0" />
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="Background" Value="Transparent" />
+            <Setter Property="IsTextScaleFactorEnabled" Value="False" />
             <Setter Property="UseSystemFocusVisuals" Value="True" />
             <Setter Property="Template">
                 <Setter.Value>
-                    <ControlTemplate TargetType="ToggleButton">
-                        <Grid Width="22" Height="22">
-                            <Ellipse
-                                x:Name="Plate"
-                                Fill="Transparent"
-                                Stroke="{ThemeResource TextFillColorSecondaryBrush}"
-                                StrokeThickness="1" />
-                            <TextBlock
+                    <ControlTemplate TargetType="Button">
+                        <Grid Width="16" Height="16" Background="Transparent">
+                            <FontIcon
                                 x:Name="Glyph"
                                 HorizontalAlignment="Center"
                                 VerticalAlignment="Center"
-                                Margin="0,-1,0,0"
-                                FontSize="12"
-                                FontWeight="SemiBold"
-                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                IsHitTestVisible="False"
-                                Text="i" />
+                                FontSize="11"
+                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                Glyph="&#xE946;"
+                                IsHitTestVisible="False" />
                             <VisualStateManager.VisualStateGroups>
                                 <VisualStateGroup x:Name="CommonStates">
                                     <VisualState x:Name="Normal" />
                                     <VisualState x:Name="PointerOver">
                                         <VisualState.Setters>
-                                            <Setter Target="Plate.Fill" Value="{ThemeResource SubtleFillColorSecondaryBrush}" />
-                                            <Setter Target="Plate.Stroke" Value="{ThemeResource TextFillColorPrimaryBrush}" />
-                                            <Setter Target="Glyph.Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
+                                            <Setter Target="Glyph.Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
                                         </VisualState.Setters>
                                     </VisualState>
                                     <VisualState x:Name="Pressed">
                                         <VisualState.Setters>
-                                            <Setter Target="Plate.Fill" Value="{ThemeResource SubtleFillColorTertiaryBrush}" />
+                                            <Setter Target="Glyph.Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
                                         </VisualState.Setters>
                                     </VisualState>
                                     <VisualState x:Name="Disabled">
                                         <VisualState.Setters>
-                                            <Setter Target="Plate.Stroke" Value="{ThemeResource TextFillColorDisabledBrush}" />
                                             <Setter Target="Glyph.Foreground" Value="{ThemeResource TextFillColorDisabledBrush}" />
                                         </VisualState.Setters>
                                     </VisualState>
-                                </VisualStateGroup>
-                                <VisualStateGroup x:Name="CheckStates">
-                                    <VisualState x:Name="Checked">
-                                        <VisualState.Setters>
-                                            <Setter Target="Plate.Fill" Value="{ThemeResource AccentFillColorDefaultBrush}" />
-                                            <Setter Target="Plate.Stroke" Value="{ThemeResource AccentFillColorDefaultBrush}" />
-                                            <Setter Target="Glyph.Foreground" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
-                                        </VisualState.Setters>
-                                    </VisualState>
-                                    <VisualState x:Name="Unchecked" />
-                                    <VisualState x:Name="Indeterminate" />
                                 </VisualStateGroup>
                             </VisualStateManager.VisualStateGroups>
                         </Grid>
@@ -72,36 +52,89 @@
                 </Setter.Value>
             </Setter>
         </Style>
+        <Style x:Key="BubblePresenterStyle" TargetType="FlyoutPresenter">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="CornerRadius" Value="0" />
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="MaxWidth" Value="320" />
+            <Setter Property="IsDefaultShadowEnabled" Value="True" />
+            <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
+            <Setter Property="ScrollViewer.HorizontalScrollMode" Value="Disabled" />
+        </Style>
     </UserControl.Resources>
-    <StackPanel Spacing="6">
-        <Grid x:Name="Head" ColumnSpacing="6" HorizontalAlignment="Left">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition x:Name="TextColumn" Width="Auto" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
-            <TextBlock
-                x:Name="TitleBlock"
-                VerticalAlignment="Center"
-                Style="{StaticResource BodyStrongTextBlockStyle}"
-                TextTrimming="CharacterEllipsis" />
-            <ContentPresenter
-                x:Name="HeaderHost"
-                VerticalAlignment="Center"
-                Visibility="Collapsed" />
-            <ToggleButton
-                x:Name="Toggle"
-                Grid.Column="1"
-                VerticalAlignment="Center"
-                Checked="Toggle_Checked"
-                Style="{StaticResource InfoToggleStyle}"
-                Unchecked="Toggle_Unchecked" />
-        </Grid>
+    <Grid x:Name="Head" ColumnSpacing="4" HorizontalAlignment="Left">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition x:Name="TextColumn" Width="Auto" />
+            <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
         <TextBlock
-            x:Name="Body"
-            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-            IsTextSelectionEnabled="True"
-            Style="{StaticResource CaptionTextBlockStyle}"
-            TextWrapping="Wrap"
+            x:Name="TitleBlock"
+            VerticalAlignment="Center"
+            Style="{StaticResource BodyStrongTextBlockStyle}"
+            TextTrimming="CharacterEllipsis" />
+        <ContentPresenter
+            x:Name="HeaderHost"
+            VerticalAlignment="Center"
             Visibility="Collapsed" />
-    </StackPanel>
+        <Button
+            x:Name="InfoButton"
+            Grid.Column="1"
+            VerticalAlignment="Center"
+            Style="{StaticResource InfoButtonStyle}">
+            <Button.Flyout>
+                <Flyout
+                    x:Name="BubbleFlyout"
+                    Placement="Top"
+                    ShowMode="Transient"
+                    Opened="Bubble_Opened">
+                    <Flyout.FlyoutPresenterStyle>
+                        <StaticResource ResourceKey="BubblePresenterStyle" />
+                    </Flyout.FlyoutPresenterStyle>
+                    <Grid x:Name="Bubble">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="5" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="5" />
+                        </Grid.RowDefinitions>
+                        <Polygon
+                            x:Name="TailUp"
+                            Grid.Row="0"
+                            HorizontalAlignment="Left"
+                            VerticalAlignment="Bottom"
+                            Margin="0,0,0,-1"
+                            Fill="{ThemeResource SolidBackgroundFillColorBaseBrush}"
+                            IsHitTestVisible="False"
+                            Points="0,5 5,0 10,5" />
+                        <Border
+                            Grid.Row="1"
+                            Padding="12,8"
+                            Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
+                            BorderBrush="{ThemeResource SurfaceStrokeColorDefaultBrush}"
+                            BorderThickness="1"
+                            CornerRadius="8">
+                            <TextBlock
+                                x:Name="Body"
+                                MaxWidth="248"
+                                Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                                IsTextSelectionEnabled="True"
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                TextWrapping="Wrap" />
+                        </Border>
+                        <Polygon
+                            x:Name="TailDown"
+                            Grid.Row="2"
+                            HorizontalAlignment="Left"
+                            VerticalAlignment="Top"
+                            Margin="0,-1,0,0"
+                            Fill="{ThemeResource SolidBackgroundFillColorBaseBrush}"
+                            IsHitTestVisible="False"
+                            Points="0,0 5,5 10,0"
+                            Visibility="Collapsed" />
+                    </Grid>
+                </Flyout>
+            </Button.Flyout>
+        </Button>
+    </Grid>
 </UserControl>
