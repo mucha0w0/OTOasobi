@@ -218,30 +218,57 @@ static class EffectRackPresetStore
             if (!File.Exists(FilePath))
                 return [];
             var list = JsonSerializer.Deserialize<List<EffectRackPreset>>(File.ReadAllText(FilePath), JsonOptions);
-            if (list == null)
-                return [];
-            var seen = new HashSet<string>();
-            var result = new List<EffectRackPreset>();
-            foreach (var preset in list)
-            {
-                var name = preset.Name.Trim();
-                if (name.Length == 0 || name.Length > 40 || EffectRackPreset.IsReservedName(name) || !seen.Add(name))
-                    continue;
-                preset.Name = name;
-                preset.BuiltIn = false;
-                preset.Effects = CleanEffects(preset.Effects);
-                if (preset.Effects.Count == 0)
-                    continue;
-                result.Add(preset);
-            }
-
-            return result;
+            return Normalize(list);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
         {
             return [];
         }
     }
+
+    public static List<EffectRackPreset> Normalize(IEnumerable<EffectRackPreset>? list)
+    {
+        var seen = new HashSet<string>();
+        var result = new List<EffectRackPreset>();
+        if (list == null)
+            return result;
+        foreach (var preset in list)
+        {
+            var name = preset.Name.Trim();
+            if (name.Length == 0 || name.Length > 40 || EffectRackPreset.IsReservedName(name) || !seen.Add(name))
+                continue;
+            preset.Name = name;
+            preset.BuiltIn = false;
+            preset.Effects = CleanEffects(preset.Effects);
+            if (preset.Effects.Count == 0)
+                continue;
+            result.Add(preset);
+        }
+
+        return result;
+    }
+
+    public static List<StoredEffect> NormalizeEffects(IEnumerable<StoredEffect>? effects)
+    {
+        var cleaned = CleanEffects(effects == null ? [] : effects.ToList());
+        var seen = new HashSet<string>();
+        var result = new List<StoredEffect>();
+        foreach (var effect in cleaned)
+        {
+            if (!IsKnownKind(effect.Kind) || !seen.Add(effect.Kind))
+                continue;
+            result.Add(effect);
+        }
+
+        return result;
+    }
+
+    static bool IsKnownKind(string kind) => kind is
+        EqualizerEffect.KindId
+        or NormalizeEffect.KindId
+        or HighPassEffect.KindId
+        or NoiseSuppressorEffect.KindId
+        or CompressorEffect.KindId;
 
     public static void Save(IEnumerable<EffectRackPreset> presets)
     {

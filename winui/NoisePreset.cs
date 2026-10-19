@@ -60,27 +60,32 @@ static class NoisePresetStore
             if (!File.Exists(FilePath))
                 return [];
             var list = JsonSerializer.Deserialize<List<NoisePreset>>(File.ReadAllText(FilePath), JsonOptions);
-            if (list == null)
-                return [];
-            var seen = new HashSet<string>();
-            var result = new List<NoisePreset>();
-            foreach (var preset in list)
-            {
-                var name = preset.Name.Trim();
-                if (name.Length == 0 || name.Length > 40 || NoisePreset.IsReservedName(name) || !seen.Add(name))
-                    continue;
-                preset.Name = name;
-                preset.BuiltIn = false;
-                preset.Reduction = NoiseSuppressorEffect.ClampReduction(preset.Reduction);
-                result.Add(preset);
-            }
-
-            return result;
+            return Normalize(list);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
         {
             return [];
         }
+    }
+
+    public static List<NoisePreset> Normalize(IEnumerable<NoisePreset>? list)
+    {
+        var seen = new HashSet<string>();
+        var result = new List<NoisePreset>();
+        if (list == null)
+            return result;
+        foreach (var preset in list)
+        {
+            var name = preset.Name.Trim();
+            if (name.Length == 0 || name.Length > 40 || NoisePreset.IsReservedName(name) || !seen.Add(name))
+                continue;
+            preset.Name = name;
+            preset.BuiltIn = false;
+            preset.Reduction = NoiseSuppressorEffect.ClampReduction(preset.Reduction);
+            result.Add(preset);
+        }
+
+        return result;
     }
 
     public static void Save(IEnumerable<NoisePreset> presets)

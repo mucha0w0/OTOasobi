@@ -1962,4 +1962,56 @@ public sealed partial class EffectRack : UserControl
 
     static string FormatHz(double hz) =>
         Math.Round(hz).ToString("0", CultureInfo.InvariantCulture) + " Hz";
+
+    internal EffectLibrary CaptureLibrary() =>
+        new()
+        {
+            Chain = BuildStoredEffectList().Select(effect => effect.Clone()).ToList(),
+            EqPresets = _userPresets.ToList(),
+            NormalizePresets = _normPresets.ToList(),
+            HighPassPresets = _hpPresets.ToList(),
+            NoisePresets = _noisePresets.ToList(),
+            CompressorPresets = _compPresets.ToList(),
+            RackPresets = _rackPresets.ToList(),
+        };
+
+    internal void ReplaceLibrary(EffectLibrary library)
+    {
+        var eq = EqPresetStore.Normalize(library.EqPresets);
+        var norm = NormalizePresetStore.Normalize(library.NormalizePresets);
+        var hp = HighPassPresetStore.Normalize(library.HighPassPresets);
+        var noise = NoisePresetStore.Normalize(library.NoisePresets);
+        var comp = CompressorPresetStore.Normalize(library.CompressorPresets);
+        var rack = EffectRackPresetStore.Normalize(library.RackPresets);
+        var chain = EffectRackPresetStore.NormalizeEffects(library.Chain);
+        EqPresetStore.Save(eq);
+        NormalizePresetStore.Save(norm);
+        HighPassPresetStore.Save(hp);
+        NoisePresetStore.Save(noise);
+        CompressorPresetStore.Save(comp);
+        EffectRackPresetStore.Save(rack);
+
+        _userPresets.Clear();
+        _userPresets.AddRange(eq);
+        _normPresets.Clear();
+        _normPresets.AddRange(norm);
+        _hpPresets.Clear();
+        _hpPresets.AddRange(hp);
+        _noisePresets.Clear();
+        _noisePresets.AddRange(noise);
+        _compPresets.Clear();
+        _compPresets.AddRange(comp);
+        _rackPresets.Clear();
+        _rackPresets.AddRange(rack);
+        RebuildPresetMenu();
+        RebuildNormPresetMenu();
+        RebuildHpPresetMenu();
+        RebuildNoisePresetMenu();
+        RebuildCompPresetMenu();
+        RebuildRackPresetMenu();
+        ApplyEffectSnapshot(chain);
+        SyncRackPresetSelection();
+        SaveChain();
+        InvalidateProcessedPreview();
+    }
 }

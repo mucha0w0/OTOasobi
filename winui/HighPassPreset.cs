@@ -64,28 +64,33 @@ static class HighPassPresetStore
             if (!File.Exists(FilePath))
                 return [];
             var list = JsonSerializer.Deserialize<List<HighPassPreset>>(File.ReadAllText(FilePath), JsonOptions);
-            if (list == null)
-                return [];
-            var seen = new HashSet<string>();
-            var result = new List<HighPassPreset>();
-            foreach (var preset in list)
-            {
-                var name = preset.Name.Trim();
-                if (name.Length == 0 || name.Length > 40 || HighPassPreset.IsReservedName(name) || !seen.Add(name))
-                    continue;
-                preset.Name = name;
-                preset.BuiltIn = false;
-                preset.Frequency = HighPassEffect.ClampHz(preset.Frequency);
-                preset.Slope = HighPassEffect.ClampSlope(preset.Slope);
-                result.Add(preset);
-            }
-
-            return result;
+            return Normalize(list);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
         {
             return [];
         }
+    }
+
+    public static List<HighPassPreset> Normalize(IEnumerable<HighPassPreset>? list)
+    {
+        var seen = new HashSet<string>();
+        var result = new List<HighPassPreset>();
+        if (list == null)
+            return result;
+        foreach (var preset in list)
+        {
+            var name = preset.Name.Trim();
+            if (name.Length == 0 || name.Length > 40 || HighPassPreset.IsReservedName(name) || !seen.Add(name))
+                continue;
+            preset.Name = name;
+            preset.BuiltIn = false;
+            preset.Frequency = HighPassEffect.ClampHz(preset.Frequency);
+            preset.Slope = HighPassEffect.ClampSlope(preset.Slope);
+            result.Add(preset);
+        }
+
+        return result;
     }
 
     public static void Save(IEnumerable<HighPassPreset> presets)

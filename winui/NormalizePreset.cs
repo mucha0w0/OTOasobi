@@ -60,27 +60,32 @@ static class NormalizePresetStore
             if (!File.Exists(FilePath))
                 return [];
             var list = JsonSerializer.Deserialize<List<NormalizePreset>>(File.ReadAllText(FilePath), JsonOptions);
-            if (list == null)
-                return [];
-            var seen = new HashSet<string>();
-            var result = new List<NormalizePreset>();
-            foreach (var preset in list)
-            {
-                var name = preset.Name.Trim();
-                if (name.Length == 0 || name.Length > 40 || NormalizePreset.IsReservedName(name) || !seen.Add(name))
-                    continue;
-                preset.Name = name;
-                preset.BuiltIn = false;
-                preset.Target = NormalizeEffect.Clamp(preset.Target);
-                result.Add(preset);
-            }
-
-            return result;
+            return Normalize(list);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
         {
             return [];
         }
+    }
+
+    public static List<NormalizePreset> Normalize(IEnumerable<NormalizePreset>? list)
+    {
+        var seen = new HashSet<string>();
+        var result = new List<NormalizePreset>();
+        if (list == null)
+            return result;
+        foreach (var preset in list)
+        {
+            var name = preset.Name.Trim();
+            if (name.Length == 0 || name.Length > 40 || NormalizePreset.IsReservedName(name) || !seen.Add(name))
+                continue;
+            preset.Name = name;
+            preset.BuiltIn = false;
+            preset.Target = NormalizeEffect.Clamp(preset.Target);
+            result.Add(preset);
+        }
+
+        return result;
     }
 
     public static void Save(IEnumerable<NormalizePreset> presets)

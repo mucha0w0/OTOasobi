@@ -63,28 +63,33 @@ static class CompressorPresetStore
             if (!File.Exists(FilePath))
                 return [];
             var list = JsonSerializer.Deserialize<List<CompressorPreset>>(File.ReadAllText(FilePath), JsonOptions);
-            if (list == null)
-                return [];
-            var seen = new HashSet<string>();
-            var result = new List<CompressorPreset>();
-            foreach (var preset in list)
-            {
-                var name = preset.Name.Trim();
-                if (name.Length == 0 || name.Length > 40 || CompressorPreset.IsReservedName(name) || !seen.Add(name))
-                    continue;
-                preset.Name = name;
-                preset.BuiltIn = false;
-                preset.Ratio = CompressorEffect.ClampRatio(preset.Ratio);
-                preset.Reduction = CompressorEffect.ClampReduction(preset.Reduction);
-                result.Add(preset);
-            }
-
-            return result;
+            return Normalize(list);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
         {
             return [];
         }
+    }
+
+    public static List<CompressorPreset> Normalize(IEnumerable<CompressorPreset>? list)
+    {
+        var seen = new HashSet<string>();
+        var result = new List<CompressorPreset>();
+        if (list == null)
+            return result;
+        foreach (var preset in list)
+        {
+            var name = preset.Name.Trim();
+            if (name.Length == 0 || name.Length > 40 || CompressorPreset.IsReservedName(name) || !seen.Add(name))
+                continue;
+            preset.Name = name;
+            preset.BuiltIn = false;
+            preset.Ratio = CompressorEffect.ClampRatio(preset.Ratio);
+            preset.Reduction = CompressorEffect.ClampReduction(preset.Reduction);
+            result.Add(preset);
+        }
+
+        return result;
     }
 
     public static void Save(IEnumerable<CompressorPreset> presets)

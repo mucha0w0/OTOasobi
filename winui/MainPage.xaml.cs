@@ -64,6 +64,8 @@ public sealed partial class MainPage : Page
     OtoPreset? _selectedPreset;
     OtoPreset _restPreset = null!;
     bool _applyingPreset;
+    bool _applyingSave;
+    DispatcherQueueTimer? _sessionTimer;
     bool _waveResizing;
     bool _waveResizeLeft;
     bool _waveFrameHooked;
@@ -96,13 +98,54 @@ public sealed partial class MainPage : Page
         VcOverlapSlider.ValueChanged += (_, _) => OnCvvcSliderChanged();
         _restPreset = _builtIn;
         _leadPreset = _builtIn;
+        var queue = DispatcherQueue.GetForCurrentThread();
+        if (queue != null)
+        {
+            _sessionTimer = queue.CreateTimer();
+            _sessionTimer.IsRepeating = false;
+            _sessionTimer.Interval = TimeSpan.FromMilliseconds(500);
+            _sessionTimer.Tick += (_, _) => FlushSession();
+        }
+
         LoadPresets();
+        var session = OtoSaveStore.TryLoadSession(out var keepSession);
         _configReady = true;
-        Editor.SetOtoSettings(CurrentExport());
+        if (session != null)
+            ApplyLoaded(session);
+        else if (!keepSession)
+        {
+            OnConfigChanged();
+            FlushSession();
+        }
+        else
+            OnConfigChanged();
         AddHandler(PointerWheelChangedEvent, new PointerEventHandler(OnPageWheel), true);
         BindRecentFolders();
         Loaded += (_, _) => AttachMenuToTitleBar();
-        Unloaded += (_, _) => EndWaveResize();
+        Unloaded += (_, _) =>
+        {
+            EndWaveResize();
+            try
+            {
+                FlushSession();
+            }
+            catch (Exception)
+            {
+            }
+        };
+        if (App.MainWindow != null)
+        {
+            App.MainWindow.Closed += (_, _) =>
+            {
+                try
+                {
+                    FlushSession();
+                }
+                catch (Exception)
+                {
+                }
+            };
+        }
     }
 
     void WaveResize_Entered(object sender, PointerRoutedEventArgs e) => ShowWaveGrip(sender, true);
@@ -259,7 +302,7 @@ public sealed partial class MainPage : Page
         CvvcOtoContent.Visibility = OtoModeCvvc.IsChecked == true
             ? Visibility.Visible
             : Visibility.Collapsed;
-        if (_configReady)
+        if (_configReady && !_applyingSave)
             OnConfigChanged();
     }
 
@@ -1214,6 +1257,7 @@ public sealed partial class MainPage : Page
         Editor.SetOtoSettings(CurrentExport());
         UpdatePresetDirty();
         UpdateCvvcPresetDirty();
+        ScheduleSession();
         if (!_wrote)
             return;
         _wrote = false;
@@ -1669,6 +1713,8 @@ public sealed partial class MainPage : Page
         var editing = idle && EditorView.Visibility == Visibility.Visible && _files.Count > 0;
         var ready = editing && _analyzed;
         OpenMenuItem.IsEnabled = idle;
+        SaveSettingsMenuItem.IsEnabled = idle;
+        LoadSettingsMenuItem.IsEnabled = idle;
         WriteMenuItem.IsEnabled = ready;
         WriteButton.IsEnabled = ready;
         ReanalyzeMenuItem.Text = _analyzed ? "再解析" : "解析";

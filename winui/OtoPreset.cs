@@ -41,32 +41,37 @@ static class OtoPresetStore
             if (!File.Exists(FilePath))
                 return [];
             var list = JsonSerializer.Deserialize<List<OtoPreset>>(File.ReadAllText(FilePath), JsonOptions);
-            if (list == null)
-                return [];
-            var seen = new HashSet<string>();
-            var result = new List<OtoPreset>();
-            foreach (var preset in list)
-            {
-                var name = preset.Name.Trim();
-                if (name.Length == 0 || name.Length > 40 || name == OtoPreset.BuiltInName || !seen.Add(name))
-                    continue;
-                preset.Name = name;
-                preset.BuiltIn = false;
-                preset.Offset = Clamp(preset.Offset, -0.1, 0.1, 0, 3);
-                preset.Consonant = Clamp(preset.Consonant, 0, 0.2, 0.2, 3);
-                preset.Blank = Clamp(preset.Blank, -0.1, 0.1, 0, 3);
-                preset.Overlap ??= [];
-                foreach (var key in preset.Overlap.Keys.ToList())
-                    preset.Overlap[key] = ConsonantOverlap.Stored(preset.Overlap[key]);
-                result.Add(preset);
-            }
-
-            return result;
+            return Normalize(list);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
         {
             return [];
         }
+    }
+
+    public static List<OtoPreset> Normalize(IEnumerable<OtoPreset>? list)
+    {
+        var seen = new HashSet<string>();
+        var result = new List<OtoPreset>();
+        if (list == null)
+            return result;
+        foreach (var preset in list)
+        {
+            var name = preset.Name.Trim();
+            if (name.Length == 0 || name.Length > 40 || name == OtoPreset.BuiltInName || !seen.Add(name))
+                continue;
+            preset.Name = name;
+            preset.BuiltIn = false;
+            preset.Offset = Clamp(preset.Offset, -0.1, 0.1, 0, 3);
+            preset.Consonant = Clamp(preset.Consonant, 0, 0.2, 0.2, 3);
+            preset.Blank = Clamp(preset.Blank, -0.1, 0.1, 0, 3);
+            preset.Overlap ??= [];
+            foreach (var key in preset.Overlap.Keys.ToList())
+                preset.Overlap[key] = ConsonantOverlap.Stored(preset.Overlap[key]);
+            result.Add(preset);
+        }
+
+        return result;
     }
 
     public static void Save(IEnumerable<OtoPreset> presets)

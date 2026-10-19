@@ -157,6 +157,17 @@
                             <KeyboardAccelerator Modifiers="Control" Key="O" />
                         </MenuFlyoutItem.KeyboardAccelerators>
                     </MenuFlyoutItem>
+                    <MenuFlyoutSeparator />
+                    <MenuFlyoutItem
+                        x:Name="SaveSettingsMenuItem"
+                        AutomationProperties.HelpText="計算方法、スライダー、プリセットをファイルに保存します"
+                        Click="SaveSettings_Click"
+                        Text="設定を保存" />
+                    <MenuFlyoutItem
+                        x:Name="LoadSettingsMenuItem"
+                        AutomationProperties.HelpText="保存した計算方法、スライダー、プリセットを読み込みます"
+                        Click="LoadSettings_Click"
+                        Text="設定を読み込む" />
                     <MenuFlyoutItem
                         x:Name="WriteMenuItem"
                         Text="oto.iniを作成"
