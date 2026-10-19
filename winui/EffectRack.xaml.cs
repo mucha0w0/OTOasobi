@@ -296,29 +296,15 @@ public sealed partial class EffectRack : UserControl
         RebuildRackPresetMenu();
     }
 
-    void RebuildRackPresetMenu()
-    {
-        RackPresetFlyout.Items.Clear();
-        foreach (var preset in EffectRackPreset.BuiltIns)
-            AddRackPresetItem(preset);
-        if (_rackPresets.Count > 0)
-            RackPresetFlyout.Items.Add(new MenuFlyoutSeparator());
-        foreach (var preset in _rackPresets)
-            AddRackPresetItem(preset);
-    }
-
-    void AddRackPresetItem(EffectRackPreset preset)
-    {
-        var item = new RadioMenuFlyoutItem
-        {
-            Text = preset.Name,
-            GroupName = "rack-preset",
-            Tag = preset,
-            IsChecked = ReferenceEquals(preset, _rackSelected),
-        };
-        item.Click += (_, _) => SelectRackPreset(preset);
-        RackPresetFlyout.Items.Add(item);
-    }
+    void RebuildRackPresetMenu() =>
+        PresetUi.Fill(
+            RackPresetFlyout,
+            "rack-preset",
+            EffectRackPreset.BuiltIns,
+            _rackPresets,
+            _rackSelected,
+            SelectRackPreset,
+            separator: true);
 
     void SelectRackPreset(EffectRackPreset preset)
     {
@@ -348,17 +334,13 @@ public sealed partial class EffectRack : UserControl
             return;
         var snapshot = CaptureCurrentSnapshot();
         var dirty = _rackSelected != null && !_rackSelected.Matches(snapshot);
-        RackPresetNameText.Text = _rackSelected?.Name ?? EffectRackPreset.CustomName;
-        RackPresetDirtyMark.Visibility = dirty ? Visibility.Visible : Visibility.Collapsed;
-        foreach (var entry in RackPresetFlyout.Items)
-        {
-            if (entry is not RadioMenuFlyoutItem radio || radio.Tag is not EffectRackPreset preset)
-                continue;
-            radio.IsChecked = ReferenceEquals(preset, _rackSelected);
-            var text = dirty && ReferenceEquals(preset, _rackSelected) ? preset.Name + " *" : preset.Name;
-            if (radio.Text != text)
-                radio.Text = text;
-        }
+        PresetUi.MarkDirty(
+            RackPresetFlyout,
+            RackPresetNameText,
+            RackPresetDirtyMark,
+            _rackSelected,
+            dirty,
+            EffectRackPreset.CustomName);
     }
 
     void SaveRackPreset_Click(object sender, RoutedEventArgs e)
@@ -368,66 +350,22 @@ public sealed partial class EffectRack : UserControl
 
     async Task SaveRackPresetAsync()
     {
-        var box = new TextBox { PlaceholderText = "プリセット名" };
-        if (_rackSelected is { BuiltIn: false })
-        {
-            box.Text = _rackSelected.Name;
-            box.SelectAll();
-        }
-
-        var error = new TextBlock
-        {
-            TextWrapping = TextWrapping.Wrap,
-            Visibility = Visibility.Collapsed,
-        };
-        if (Application.Current.Resources.TryGetValue("SystemFillColorCriticalBrush", out var brush) && brush is Brush paint)
-            error.Foreground = paint;
-        var panel = new StackPanel { Spacing = 8, MinWidth = 280 };
-        panel.Children.Add(new TextBlock
-        {
-            Text = "エフェクト全体の設定につける名前を入力してください。",
-            TextWrapping = TextWrapping.Wrap,
-        });
-        panel.Children.Add(box);
-        panel.Children.Add(error);
-        var dialog = new ContentDialog
-        {
-            Title = "現在のエフェクト設定を保存",
-            Content = panel,
-            PrimaryButtonText = "保存",
-            CloseButtonText = "キャンセル",
-            DefaultButton = ContentDialogButton.Primary,
-            XamlRoot = XamlRoot,
-        };
-        dialog.Opened += (_, _) => box.Focus(FocusState.Programmatic);
-        dialog.PrimaryButtonClick += (_, args) =>
-        {
-            var message = NameError(box.Text, EffectRackPreset.IsReservedName);
-            if (message == null)
-                return;
-            args.Cancel = true;
-            error.Text = message;
-            error.Visibility = Visibility.Visible;
-        };
-        if (XamlRoot == null || await dialog.ShowAsync() != ContentDialogResult.Primary)
+        var name = await PresetUi.AskNameAsync(
+            XamlRoot,
+            "現在のエフェクト設定を保存",
+            "エフェクト全体の設定につける名前を入力してください。",
+            _rackSelected is { BuiltIn: false } ? _rackSelected.Name : null,
+            raw => PresetUi.ReservedNameError(raw, EffectRackPreset.IsReservedName));
+        if (name == null)
             return;
 
-        var name = box.Text.Trim();
         var existing = _rackPresets.FirstOrDefault(preset => preset.Name == name);
-        if (existing != null && !ReferenceEquals(existing, _rackSelected))
-        {
-            var confirm = new ContentDialog
-            {
-                Title = "プリセットを上書きしますか？",
-                Content = $"「{name}」は既にあります。いまの設定で置き換えます。",
-                PrimaryButtonText = "上書きする",
-                CloseButtonText = "キャンセル",
-                DefaultButton = ContentDialogButton.Primary,
-                XamlRoot = XamlRoot,
-            };
-            if (await confirm.ShowAsync() != ContentDialogResult.Primary)
-                return;
-        }
+        if (existing != null && !ReferenceEquals(existing, _rackSelected)
+            && !await PresetUi.ConfirmOverwriteAsync(
+                XamlRoot,
+                "プリセットを上書きしますか？",
+                $"「{name}」は既にあります。いまの設定で置き換えます。"))
+            return;
 
         var snapshot = CaptureCurrentSnapshot();
         var target = existing ?? new EffectRackPreset { Name = name };
@@ -538,29 +476,15 @@ public sealed partial class EffectRack : UserControl
         UpdateNoiseDirty();
     }
 
-    void RebuildNoisePresetMenu()
-    {
-        NoisePresetFlyout.Items.Clear();
-        foreach (var preset in NoisePreset.BuiltIns)
-            AddNoisePresetItem(preset);
-        if (_noisePresets.Count > 0)
-            NoisePresetFlyout.Items.Add(new MenuFlyoutSeparator());
-        foreach (var preset in _noisePresets)
-            AddNoisePresetItem(preset);
-    }
-
-    void AddNoisePresetItem(NoisePreset preset)
-    {
-        var item = new RadioMenuFlyoutItem
-        {
-            Text = preset.Name,
-            GroupName = "noise-preset",
-            Tag = preset,
-            IsChecked = ReferenceEquals(preset, _noiseSelected),
-        };
-        item.Click += (_, _) => SelectNoisePreset(preset);
-        NoisePresetFlyout.Items.Add(item);
-    }
+    void RebuildNoisePresetMenu() =>
+        PresetUi.Fill(
+            NoisePresetFlyout,
+            "noise-preset",
+            NoisePreset.BuiltIns,
+            _noisePresets,
+            _noiseSelected,
+            SelectNoisePreset,
+            separator: true);
 
     void SelectNoisePreset(NoisePreset preset)
     {
@@ -575,17 +499,13 @@ public sealed partial class EffectRack : UserControl
     void UpdateNoiseDirty()
     {
         var dirty = _noiseSelected != null && !_noiseSelected.Matches(_noise.ReductionDb);
-        NoisePresetNameText.Text = _noiseSelected?.Name ?? NoisePreset.CustomName;
-        NoisePresetDirtyMark.Visibility = dirty ? Visibility.Visible : Visibility.Collapsed;
-        foreach (var entry in NoisePresetFlyout.Items)
-        {
-            if (entry is not RadioMenuFlyoutItem radio || radio.Tag is not NoisePreset preset)
-                continue;
-            radio.IsChecked = ReferenceEquals(preset, _noiseSelected);
-            var text = dirty && ReferenceEquals(preset, _noiseSelected) ? preset.Name + " *" : preset.Name;
-            if (radio.Text != text)
-                radio.Text = text;
-        }
+        PresetUi.MarkDirty(
+            NoisePresetFlyout,
+            NoisePresetNameText,
+            NoisePresetDirtyMark,
+            _noiseSelected,
+            dirty,
+            NoisePreset.CustomName);
     }
 
     NoisePreset? FindNoisePreset(string name)
@@ -607,66 +527,22 @@ public sealed partial class EffectRack : UserControl
 
     async Task SaveNoisePresetAsync()
     {
-        var box = new TextBox { PlaceholderText = "プリセット名" };
-        if (_noiseSelected is { BuiltIn: false })
-        {
-            box.Text = _noiseSelected.Name;
-            box.SelectAll();
-        }
-
-        var error = new TextBlock
-        {
-            TextWrapping = TextWrapping.Wrap,
-            Visibility = Visibility.Collapsed,
-        };
-        if (Application.Current.Resources.TryGetValue("SystemFillColorCriticalBrush", out var brush) && brush is Brush paint)
-            error.Foreground = paint;
-        var panel = new StackPanel { Spacing = 8, MinWidth = 280 };
-        panel.Children.Add(new TextBlock
-        {
-            Text = "この抑える量につける名前を入力してください。",
-            TextWrapping = TextWrapping.Wrap,
-        });
-        panel.Children.Add(box);
-        panel.Children.Add(error);
-        var dialog = new ContentDialog
-        {
-            Title = "現在の抑える量を保存",
-            Content = panel,
-            PrimaryButtonText = "保存",
-            CloseButtonText = "キャンセル",
-            DefaultButton = ContentDialogButton.Primary,
-            XamlRoot = XamlRoot,
-        };
-        dialog.Opened += (_, _) => box.Focus(FocusState.Programmatic);
-        dialog.PrimaryButtonClick += (_, args) =>
-        {
-            var message = NameError(box.Text, NoisePreset.IsReservedName);
-            if (message == null)
-                return;
-            args.Cancel = true;
-            error.Text = message;
-            error.Visibility = Visibility.Visible;
-        };
-        if (XamlRoot == null || await dialog.ShowAsync() != ContentDialogResult.Primary)
+        var name = await PresetUi.AskNameAsync(
+            XamlRoot,
+            "現在の抑える量を保存",
+            "この抑える量につける名前を入力してください。",
+            _noiseSelected is { BuiltIn: false } ? _noiseSelected.Name : null,
+            raw => PresetUi.ReservedNameError(raw, NoisePreset.IsReservedName));
+        if (name == null)
             return;
 
-        var name = box.Text.Trim();
         var existing = _noisePresets.FirstOrDefault(preset => preset.Name == name);
-        if (existing != null && !ReferenceEquals(existing, _noiseSelected))
-        {
-            var confirm = new ContentDialog
-            {
-                Title = "プリセットを上書きしますか？",
-                Content = $"「{name}」は既にあります。いまの抑える量で置き換えます。",
-                PrimaryButtonText = "上書きする",
-                CloseButtonText = "キャンセル",
-                DefaultButton = ContentDialogButton.Primary,
-                XamlRoot = XamlRoot,
-            };
-            if (await confirm.ShowAsync() != ContentDialogResult.Primary)
-                return;
-        }
+        if (existing != null && !ReferenceEquals(existing, _noiseSelected)
+            && !await PresetUi.ConfirmOverwriteAsync(
+                XamlRoot,
+                "プリセットを上書きしますか？",
+                $"「{name}」は既にあります。いまの抑える量で置き換えます。"))
+            return;
 
         var target = existing ?? new NoisePreset { Name = name };
         target.Reduction = _noise.ReductionDb;
@@ -1213,29 +1089,15 @@ public sealed partial class EffectRack : UserControl
         EqBody.Opacity = EqToggle.IsOn ? 1 : 0.5;
     }
 
-    void RebuildPresetMenu()
-    {
-        PresetFlyout.Items.Clear();
-        foreach (var preset in EqPreset.BuiltIns)
-            AddPresetItem(preset);
-        if (_userPresets.Count > 0)
-            PresetFlyout.Items.Add(new MenuFlyoutSeparator());
-        foreach (var preset in _userPresets)
-            AddPresetItem(preset);
-    }
-
-    void AddPresetItem(EqPreset preset)
-    {
-        var item = new RadioMenuFlyoutItem
-        {
-            Text = preset.Name,
-            GroupName = "eq-preset",
-            Tag = preset,
-            IsChecked = ReferenceEquals(preset, _selected),
-        };
-        item.Click += (_, _) => SelectPreset(preset);
-        PresetFlyout.Items.Add(item);
-    }
+    void RebuildPresetMenu() =>
+        PresetUi.Fill(
+            PresetFlyout,
+            "eq-preset",
+            EqPreset.BuiltIns,
+            _userPresets,
+            _selected,
+            SelectPreset,
+            separator: true);
 
     void SelectPreset(EqPreset preset)
     {
@@ -1251,17 +1113,7 @@ public sealed partial class EffectRack : UserControl
     void UpdateDirty()
     {
         _dirty = _selected != null && !_eq.Matches(_selected.Gains);
-        PresetNameText.Text = _selected?.Name ?? EqPreset.CustomName;
-        PresetDirtyMark.Visibility = _dirty ? Visibility.Visible : Visibility.Collapsed;
-        foreach (var entry in PresetFlyout.Items)
-        {
-            if (entry is not RadioMenuFlyoutItem radio || radio.Tag is not EqPreset preset)
-                continue;
-            radio.IsChecked = ReferenceEquals(preset, _selected);
-            var text = _dirty && ReferenceEquals(preset, _selected) ? preset.Name + " *" : preset.Name;
-            if (radio.Text != text)
-                radio.Text = text;
-        }
+        PresetUi.MarkDirty(PresetFlyout, PresetNameText, PresetDirtyMark, _selected, _dirty, EqPreset.CustomName);
     }
 
     EqPreset? FindPreset(string name)
@@ -1392,66 +1244,22 @@ public sealed partial class EffectRack : UserControl
 
     async Task SavePresetAsync()
     {
-        var box = new TextBox { PlaceholderText = "プリセット名" };
-        if (_selected is { BuiltIn: false })
-        {
-            box.Text = _selected.Name;
-            box.SelectAll();
-        }
-
-        var error = new TextBlock
-        {
-            TextWrapping = TextWrapping.Wrap,
-            Visibility = Visibility.Collapsed,
-        };
-        if (Application.Current.Resources.TryGetValue("SystemFillColorCriticalBrush", out var brush) && brush is Brush paint)
-            error.Foreground = paint;
-        var panel = new StackPanel { Spacing = 8, MinWidth = 280 };
-        panel.Children.Add(new TextBlock
-        {
-            Text = "この設定につける名前を入力してください。",
-            TextWrapping = TextWrapping.Wrap,
-        });
-        panel.Children.Add(box);
-        panel.Children.Add(error);
-        var dialog = new ContentDialog
-        {
-            Title = "現在の設定を保存",
-            Content = panel,
-            PrimaryButtonText = "保存",
-            CloseButtonText = "キャンセル",
-            DefaultButton = ContentDialogButton.Primary,
-            XamlRoot = XamlRoot,
-        };
-        dialog.Opened += (_, _) => box.Focus(FocusState.Programmatic);
-        dialog.PrimaryButtonClick += (_, args) =>
-        {
-            var message = NameError(box.Text, EqPreset.IsReservedName);
-            if (message == null)
-                return;
-            args.Cancel = true;
-            error.Text = message;
-            error.Visibility = Visibility.Visible;
-        };
-        if (XamlRoot == null || await dialog.ShowAsync() != ContentDialogResult.Primary)
+        var name = await PresetUi.AskNameAsync(
+            XamlRoot,
+            "現在の設定を保存",
+            "この設定につける名前を入力してください。",
+            _selected is { BuiltIn: false } ? _selected.Name : null,
+            raw => PresetUi.ReservedNameError(raw, EqPreset.IsReservedName));
+        if (name == null)
             return;
 
-        var name = box.Text.Trim();
         var existing = _userPresets.FirstOrDefault(preset => preset.Name == name);
-        if (existing != null && !ReferenceEquals(existing, _selected))
-        {
-            var confirm = new ContentDialog
-            {
-                Title = "プリセットを上書きしますか？",
-                Content = $"「{name}」は既にあります。いまの設定で置き換えます。",
-                PrimaryButtonText = "上書きする",
-                CloseButtonText = "キャンセル",
-                DefaultButton = ContentDialogButton.Primary,
-                XamlRoot = XamlRoot,
-            };
-            if (await confirm.ShowAsync() != ContentDialogResult.Primary)
-                return;
-        }
+        if (existing != null && !ReferenceEquals(existing, _selected)
+            && !await PresetUi.ConfirmOverwriteAsync(
+                XamlRoot,
+                "プリセットを上書きしますか？",
+                $"「{name}」は既にあります。いまの設定で置き換えます。"))
+            return;
 
         var target = existing ?? new EqPreset { Name = name };
         target.Gains = _eq.CopyGains();
@@ -1471,29 +1279,15 @@ public sealed partial class EffectRack : UserControl
         SelectPreset(target);
     }
 
-    void RebuildHpPresetMenu()
-    {
-        HpPresetFlyout.Items.Clear();
-        foreach (var preset in HighPassPreset.BuiltIns)
-            AddHpPresetItem(preset);
-        if (_hpPresets.Count > 0)
-            HpPresetFlyout.Items.Add(new MenuFlyoutSeparator());
-        foreach (var preset in _hpPresets)
-            AddHpPresetItem(preset);
-    }
-
-    void AddHpPresetItem(HighPassPreset preset)
-    {
-        var item = new RadioMenuFlyoutItem
-        {
-            Text = preset.Name,
-            GroupName = "hp-preset",
-            Tag = preset,
-            IsChecked = ReferenceEquals(preset, _hpSelected),
-        };
-        item.Click += (_, _) => SelectHpPreset(preset);
-        HpPresetFlyout.Items.Add(item);
-    }
+    void RebuildHpPresetMenu() =>
+        PresetUi.Fill(
+            HpPresetFlyout,
+            "hp-preset",
+            HighPassPreset.BuiltIns,
+            _hpPresets,
+            _hpSelected,
+            SelectHpPreset,
+            separator: true);
 
     void SelectHpPreset(HighPassPreset preset)
     {
@@ -1509,17 +1303,7 @@ public sealed partial class EffectRack : UserControl
     void UpdateHpDirty()
     {
         var dirty = _hpSelected != null && !_hpSelected.Matches(_hp.Frequency, _hp.Slope);
-        HpPresetNameText.Text = _hpSelected?.Name ?? HighPassPreset.CustomName;
-        HpPresetDirtyMark.Visibility = dirty ? Visibility.Visible : Visibility.Collapsed;
-        foreach (var entry in HpPresetFlyout.Items)
-        {
-            if (entry is not RadioMenuFlyoutItem radio || radio.Tag is not HighPassPreset preset)
-                continue;
-            radio.IsChecked = ReferenceEquals(preset, _hpSelected);
-            var text = dirty && ReferenceEquals(preset, _hpSelected) ? preset.Name + " *" : preset.Name;
-            if (radio.Text != text)
-                radio.Text = text;
-        }
+        PresetUi.MarkDirty(HpPresetFlyout, HpPresetNameText, HpPresetDirtyMark, _hpSelected, dirty, HighPassPreset.CustomName);
     }
 
     HighPassPreset? FindHpPreset(string name)
@@ -1541,66 +1325,22 @@ public sealed partial class EffectRack : UserControl
 
     async Task SaveHpPresetAsync()
     {
-        var box = new TextBox { PlaceholderText = "プリセット名" };
-        if (_hpSelected is { BuiltIn: false })
-        {
-            box.Text = _hpSelected.Name;
-            box.SelectAll();
-        }
-
-        var error = new TextBlock
-        {
-            TextWrapping = TextWrapping.Wrap,
-            Visibility = Visibility.Collapsed,
-        };
-        if (Application.Current.Resources.TryGetValue("SystemFillColorCriticalBrush", out var brush) && brush is Brush paint)
-            error.Foreground = paint;
-        var panel = new StackPanel { Spacing = 8, MinWidth = 280 };
-        panel.Children.Add(new TextBlock
-        {
-            Text = "この設定につける名前を入力してください。",
-            TextWrapping = TextWrapping.Wrap,
-        });
-        panel.Children.Add(box);
-        panel.Children.Add(error);
-        var dialog = new ContentDialog
-        {
-            Title = "現在の設定を保存",
-            Content = panel,
-            PrimaryButtonText = "保存",
-            CloseButtonText = "キャンセル",
-            DefaultButton = ContentDialogButton.Primary,
-            XamlRoot = XamlRoot,
-        };
-        dialog.Opened += (_, _) => box.Focus(FocusState.Programmatic);
-        dialog.PrimaryButtonClick += (_, args) =>
-        {
-            var message = NameError(box.Text, HighPassPreset.IsReservedName);
-            if (message == null)
-                return;
-            args.Cancel = true;
-            error.Text = message;
-            error.Visibility = Visibility.Visible;
-        };
-        if (XamlRoot == null || await dialog.ShowAsync() != ContentDialogResult.Primary)
+        var name = await PresetUi.AskNameAsync(
+            XamlRoot,
+            "現在の設定を保存",
+            "この設定につける名前を入力してください。",
+            _hpSelected is { BuiltIn: false } ? _hpSelected.Name : null,
+            raw => PresetUi.ReservedNameError(raw, HighPassPreset.IsReservedName));
+        if (name == null)
             return;
 
-        var name = box.Text.Trim();
         var existing = _hpPresets.FirstOrDefault(preset => preset.Name == name);
-        if (existing != null && !ReferenceEquals(existing, _hpSelected))
-        {
-            var confirm = new ContentDialog
-            {
-                Title = "プリセットを上書きしますか？",
-                Content = $"「{name}」は既にあります。いまの設定で置き換えます。",
-                PrimaryButtonText = "上書きする",
-                CloseButtonText = "キャンセル",
-                DefaultButton = ContentDialogButton.Primary,
-                XamlRoot = XamlRoot,
-            };
-            if (await confirm.ShowAsync() != ContentDialogResult.Primary)
-                return;
-        }
+        if (existing != null && !ReferenceEquals(existing, _hpSelected)
+            && !await PresetUi.ConfirmOverwriteAsync(
+                XamlRoot,
+                "プリセットを上書きしますか？",
+                $"「{name}」は既にあります。いまの設定で置き換えます。"))
+            return;
 
         var target = existing ?? new HighPassPreset { Name = name };
         target.Frequency = _hp.Frequency;
@@ -1621,29 +1361,15 @@ public sealed partial class EffectRack : UserControl
         SelectHpPreset(target);
     }
 
-    void RebuildCompPresetMenu()
-    {
-        CompPresetFlyout.Items.Clear();
-        foreach (var preset in CompressorPreset.BuiltIns)
-            AddCompPresetItem(preset);
-        if (_compPresets.Count > 0)
-            CompPresetFlyout.Items.Add(new MenuFlyoutSeparator());
-        foreach (var preset in _compPresets)
-            AddCompPresetItem(preset);
-    }
-
-    void AddCompPresetItem(CompressorPreset preset)
-    {
-        var item = new RadioMenuFlyoutItem
-        {
-            Text = preset.Name,
-            GroupName = "comp-preset",
-            Tag = preset,
-            IsChecked = ReferenceEquals(preset, _compSelected),
-        };
-        item.Click += (_, _) => SelectCompPreset(preset);
-        CompPresetFlyout.Items.Add(item);
-    }
+    void RebuildCompPresetMenu() =>
+        PresetUi.Fill(
+            CompPresetFlyout,
+            "comp-preset",
+            CompressorPreset.BuiltIns,
+            _compPresets,
+            _compSelected,
+            SelectCompPreset,
+            separator: true);
 
     void SelectCompPreset(CompressorPreset preset)
     {
@@ -1659,17 +1385,13 @@ public sealed partial class EffectRack : UserControl
     void UpdateCompDirty()
     {
         var dirty = _compSelected != null && !_compSelected.Matches(_comp.Ratio, _comp.ReductionDb);
-        CompPresetNameText.Text = _compSelected?.Name ?? CompressorPreset.CustomName;
-        CompPresetDirtyMark.Visibility = dirty ? Visibility.Visible : Visibility.Collapsed;
-        foreach (var entry in CompPresetFlyout.Items)
-        {
-            if (entry is not RadioMenuFlyoutItem radio || radio.Tag is not CompressorPreset preset)
-                continue;
-            radio.IsChecked = ReferenceEquals(preset, _compSelected);
-            var text = dirty && ReferenceEquals(preset, _compSelected) ? preset.Name + " *" : preset.Name;
-            if (radio.Text != text)
-                radio.Text = text;
-        }
+        PresetUi.MarkDirty(
+            CompPresetFlyout,
+            CompPresetNameText,
+            CompPresetDirtyMark,
+            _compSelected,
+            dirty,
+            CompressorPreset.CustomName);
     }
 
     CompressorPreset? FindCompPreset(string name)
@@ -1691,66 +1413,22 @@ public sealed partial class EffectRack : UserControl
 
     async Task SaveCompPresetAsync()
     {
-        var box = new TextBox { PlaceholderText = "プリセット名" };
-        if (_compSelected is { BuiltIn: false })
-        {
-            box.Text = _compSelected.Name;
-            box.SelectAll();
-        }
-
-        var error = new TextBlock
-        {
-            TextWrapping = TextWrapping.Wrap,
-            Visibility = Visibility.Collapsed,
-        };
-        if (Application.Current.Resources.TryGetValue("SystemFillColorCriticalBrush", out var brush) && brush is Brush paint)
-            error.Foreground = paint;
-        var panel = new StackPanel { Spacing = 8, MinWidth = 280 };
-        panel.Children.Add(new TextBlock
-        {
-            Text = "この設定につける名前を入力してください。",
-            TextWrapping = TextWrapping.Wrap,
-        });
-        panel.Children.Add(box);
-        panel.Children.Add(error);
-        var dialog = new ContentDialog
-        {
-            Title = "現在の設定を保存",
-            Content = panel,
-            PrimaryButtonText = "保存",
-            CloseButtonText = "キャンセル",
-            DefaultButton = ContentDialogButton.Primary,
-            XamlRoot = XamlRoot,
-        };
-        dialog.Opened += (_, _) => box.Focus(FocusState.Programmatic);
-        dialog.PrimaryButtonClick += (_, args) =>
-        {
-            var message = NameError(box.Text, CompressorPreset.IsReservedName);
-            if (message == null)
-                return;
-            args.Cancel = true;
-            error.Text = message;
-            error.Visibility = Visibility.Visible;
-        };
-        if (XamlRoot == null || await dialog.ShowAsync() != ContentDialogResult.Primary)
+        var name = await PresetUi.AskNameAsync(
+            XamlRoot,
+            "現在の設定を保存",
+            "この設定につける名前を入力してください。",
+            _compSelected is { BuiltIn: false } ? _compSelected.Name : null,
+            raw => PresetUi.ReservedNameError(raw, CompressorPreset.IsReservedName));
+        if (name == null)
             return;
 
-        var name = box.Text.Trim();
         var existing = _compPresets.FirstOrDefault(preset => preset.Name == name);
-        if (existing != null && !ReferenceEquals(existing, _compSelected))
-        {
-            var confirm = new ContentDialog
-            {
-                Title = "プリセットを上書きしますか？",
-                Content = $"「{name}」は既にあります。いまの設定で置き換えます。",
-                PrimaryButtonText = "上書きする",
-                CloseButtonText = "キャンセル",
-                DefaultButton = ContentDialogButton.Primary,
-                XamlRoot = XamlRoot,
-            };
-            if (await confirm.ShowAsync() != ContentDialogResult.Primary)
-                return;
-        }
+        if (existing != null && !ReferenceEquals(existing, _compSelected)
+            && !await PresetUi.ConfirmOverwriteAsync(
+                XamlRoot,
+                "プリセットを上書きしますか？",
+                $"「{name}」は既にあります。いまの設定で置き換えます。"))
+            return;
 
         var target = existing ?? new CompressorPreset { Name = name };
         target.Ratio = _comp.Ratio;
@@ -1771,29 +1449,15 @@ public sealed partial class EffectRack : UserControl
         SelectCompPreset(target);
     }
 
-    void RebuildNormPresetMenu()
-    {
-        NormPresetFlyout.Items.Clear();
-        foreach (var preset in NormalizePreset.BuiltIns)
-            AddNormPresetItem(preset);
-        if (_normPresets.Count > 0)
-            NormPresetFlyout.Items.Add(new MenuFlyoutSeparator());
-        foreach (var preset in _normPresets)
-            AddNormPresetItem(preset);
-    }
-
-    void AddNormPresetItem(NormalizePreset preset)
-    {
-        var item = new RadioMenuFlyoutItem
-        {
-            Text = preset.Name,
-            GroupName = "norm-preset",
-            Tag = preset,
-            IsChecked = ReferenceEquals(preset, _normSelected),
-        };
-        item.Click += (_, _) => SelectNormPreset(preset);
-        NormPresetFlyout.Items.Add(item);
-    }
+    void RebuildNormPresetMenu() =>
+        PresetUi.Fill(
+            NormPresetFlyout,
+            "norm-preset",
+            NormalizePreset.BuiltIns,
+            _normPresets,
+            _normSelected,
+            SelectNormPreset,
+            separator: true);
 
     void SelectNormPreset(NormalizePreset preset)
     {
@@ -1810,17 +1474,13 @@ public sealed partial class EffectRack : UserControl
     void UpdateNormDirty()
     {
         var dirty = _normSelected != null && !_normSelected.Matches(_norm.TargetDb);
-        NormPresetNameText.Text = _normSelected?.Name ?? NormalizePreset.CustomName;
-        NormPresetDirtyMark.Visibility = dirty ? Visibility.Visible : Visibility.Collapsed;
-        foreach (var entry in NormPresetFlyout.Items)
-        {
-            if (entry is not RadioMenuFlyoutItem radio || radio.Tag is not NormalizePreset preset)
-                continue;
-            radio.IsChecked = ReferenceEquals(preset, _normSelected);
-            var text = dirty && ReferenceEquals(preset, _normSelected) ? preset.Name + " *" : preset.Name;
-            if (radio.Text != text)
-                radio.Text = text;
-        }
+        PresetUi.MarkDirty(
+            NormPresetFlyout,
+            NormPresetNameText,
+            NormPresetDirtyMark,
+            _normSelected,
+            dirty,
+            NormalizePreset.CustomName);
     }
 
     NormalizePreset? FindNormPreset(string name)
@@ -1842,66 +1502,22 @@ public sealed partial class EffectRack : UserControl
 
     async Task SaveNormPresetAsync()
     {
-        var box = new TextBox { PlaceholderText = "プリセット名" };
-        if (_normSelected is { BuiltIn: false })
-        {
-            box.Text = _normSelected.Name;
-            box.SelectAll();
-        }
-
-        var error = new TextBlock
-        {
-            TextWrapping = TextWrapping.Wrap,
-            Visibility = Visibility.Collapsed,
-        };
-        if (Application.Current.Resources.TryGetValue("SystemFillColorCriticalBrush", out var brush) && brush is Brush paint)
-            error.Foreground = paint;
-        var panel = new StackPanel { Spacing = 8, MinWidth = 280 };
-        panel.Children.Add(new TextBlock
-        {
-            Text = "このピークにつける名前を入力してください。",
-            TextWrapping = TextWrapping.Wrap,
-        });
-        panel.Children.Add(box);
-        panel.Children.Add(error);
-        var dialog = new ContentDialog
-        {
-            Title = "現在のピークを保存",
-            Content = panel,
-            PrimaryButtonText = "保存",
-            CloseButtonText = "キャンセル",
-            DefaultButton = ContentDialogButton.Primary,
-            XamlRoot = XamlRoot,
-        };
-        dialog.Opened += (_, _) => box.Focus(FocusState.Programmatic);
-        dialog.PrimaryButtonClick += (_, args) =>
-        {
-            var message = NameError(box.Text, NormalizePreset.IsReservedName);
-            if (message == null)
-                return;
-            args.Cancel = true;
-            error.Text = message;
-            error.Visibility = Visibility.Visible;
-        };
-        if (XamlRoot == null || await dialog.ShowAsync() != ContentDialogResult.Primary)
+        var name = await PresetUi.AskNameAsync(
+            XamlRoot,
+            "現在のピークを保存",
+            "このピークにつける名前を入力してください。",
+            _normSelected is { BuiltIn: false } ? _normSelected.Name : null,
+            raw => PresetUi.ReservedNameError(raw, NormalizePreset.IsReservedName));
+        if (name == null)
             return;
 
-        var name = box.Text.Trim();
         var existing = _normPresets.FirstOrDefault(preset => preset.Name == name);
-        if (existing != null && !ReferenceEquals(existing, _normSelected))
-        {
-            var confirm = new ContentDialog
-            {
-                Title = "プリセットを上書きしますか？",
-                Content = $"「{name}」は既にあります。いまのピークで置き換えます。",
-                PrimaryButtonText = "上書きする",
-                CloseButtonText = "キャンセル",
-                DefaultButton = ContentDialogButton.Primary,
-                XamlRoot = XamlRoot,
-            };
-            if (await confirm.ShowAsync() != ContentDialogResult.Primary)
-                return;
-        }
+        if (existing != null && !ReferenceEquals(existing, _normSelected)
+            && !await PresetUi.ConfirmOverwriteAsync(
+                XamlRoot,
+                "プリセットを上書きしますか？",
+                $"「{name}」は既にあります。いまのピークで置き換えます。"))
+            return;
 
         var target = existing ?? new NormalizePreset { Name = name };
         target.Target = _norm.TargetDb;
@@ -1919,20 +1535,6 @@ public sealed partial class EffectRack : UserControl
 
         RebuildNormPresetMenu();
         SelectNormPreset(target);
-    }
-
-    static string? NameError(string raw, Func<string, bool> reserved)
-    {
-        var name = raw.Trim();
-        if (name.Length == 0)
-            return "名前を入力してください。";
-        if (name.Length > 40)
-            return "名前は40文字までです。";
-        if (name.Any(char.IsControl))
-            return "名前に使えない文字があります。";
-        if (reserved(name))
-            return "その名前は使えません。";
-        return null;
     }
 
     async Task TellAsync(string title, string message)

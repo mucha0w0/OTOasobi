@@ -1,10 +1,8 @@
-using System.Text.Encodings.Web;
-using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace Otoasobi;
 
-sealed class NormalizePreset
+sealed class NormalizePreset : INamedPreset
 {
     public const string CustomName = "カスタム";
 
@@ -40,33 +38,13 @@ sealed class NormalizePreset
 
 static class NormalizePresetStore
 {
-    static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        WriteIndented = true,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        PropertyNameCaseInsensitive = true,
-        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-    };
-
     public static string FilePath { get; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "Otoasobi",
         "normalize-presets.json");
 
-    public static IReadOnlyList<NormalizePreset> Load()
-    {
-        try
-        {
-            if (!File.Exists(FilePath))
-                return [];
-            var list = JsonSerializer.Deserialize<List<NormalizePreset>>(File.ReadAllText(FilePath), JsonOptions);
-            return Normalize(list);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
-        {
-            return [];
-        }
-    }
+    public static IReadOnlyList<NormalizePreset> Load() =>
+        JsonFiles.ReadList<NormalizePreset>(FilePath, Normalize);
 
     public static List<NormalizePreset> Normalize(IEnumerable<NormalizePreset>? list)
     {
@@ -88,13 +66,6 @@ static class NormalizePresetStore
         return result;
     }
 
-    public static void Save(IEnumerable<NormalizePreset> presets)
-    {
-        var path = FilePath;
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        var json = JsonSerializer.Serialize(presets.Where(preset => !preset.BuiltIn), JsonOptions);
-        var temp = path + ".tmp";
-        File.WriteAllText(temp, json);
-        File.Move(temp, path, overwrite: true);
-    }
+    public static void Save(IEnumerable<NormalizePreset> presets) =>
+        JsonFiles.Write(FilePath, presets.Where(preset => !preset.BuiltIn));
 }

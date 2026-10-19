@@ -521,16 +521,6 @@ def _follows_rest(spans: list[Span], index: int, vowel: Span) -> bool:
     return prev.label == SILENCE_LABEL and _is_rest_token(prev.token)
 
 
-def _phoneme_start(spans: list[Span], index: int, vowel: Span) -> float:
-    """その音素の開始。連続音のオーバーラップの 100%。
-
-    子音があるときは、その子音と直前の母音の境界。
-    子音がないときは、母音と母音の境界。直前の母音が無いときは、その開始そのもの。
-    オフセットの 0 は、この点から RENZOKU_OFFSET_LEAD_MS だけ手前です。
-    """
-    return _consonant_start(spans, index, vowel)
-
-
 def _renzoku_timed_line(
     filename: str,
     spans: list[Span],
@@ -542,7 +532,8 @@ def _renzoku_timed_line(
 ) -> str:
     """連続音の位置。オフセットは音素の開始から 0.15 秒手前、オーバーラップはそのあいだの割合。"""
     vowel = spans[index]
-    start = _ms(_phoneme_start(spans, index, vowel))
+    # 音素の開始。子音があるときはその開始、無いときは母音の開始。
+    start = _ms(_consonant_start(spans, index, vowel))
     v0 = _ms(vowel.start)
     v1 = _ms(vowel.end)
     dur = max(_ms(duration), v1, start)

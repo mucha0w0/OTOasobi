@@ -1,10 +1,8 @@
-using System.Text.Encodings.Web;
-using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace Otoasobi;
 
-sealed class EqPreset
+sealed class EqPreset : INamedPreset
 {
     public const string CustomName = "カスタム";
 
@@ -38,33 +36,13 @@ sealed class EqPreset
 
 static class EqPresetStore
 {
-    static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        WriteIndented = true,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        PropertyNameCaseInsensitive = true,
-        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-    };
-
     public static string FilePath { get; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "Otoasobi",
         "eq-presets.json");
 
-    public static IReadOnlyList<EqPreset> Load()
-    {
-        try
-        {
-            if (!File.Exists(FilePath))
-                return [];
-            var list = JsonSerializer.Deserialize<List<EqPreset>>(File.ReadAllText(FilePath), JsonOptions);
-            return Normalize(list);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
-        {
-            return [];
-        }
-    }
+    public static IReadOnlyList<EqPreset> Load() =>
+        JsonFiles.ReadList<EqPreset>(FilePath, Normalize);
 
     public static List<EqPreset> Normalize(IEnumerable<EqPreset>? list)
     {
@@ -86,15 +64,8 @@ static class EqPresetStore
         return result;
     }
 
-    public static void Save(IEnumerable<EqPreset> presets)
-    {
-        var path = FilePath;
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        var json = JsonSerializer.Serialize(presets.Where(preset => !preset.BuiltIn), JsonOptions);
-        var temp = path + ".tmp";
-        File.WriteAllText(temp, json);
-        File.Move(temp, path, overwrite: true);
-    }
+    public static void Save(IEnumerable<EqPreset> presets) =>
+        JsonFiles.Write(FilePath, presets.Where(preset => !preset.BuiltIn));
 
     static double[] Clean(double[]? gains)
     {

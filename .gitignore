@@ -7,3 +7,5 @@ build/
 dist/
 .idea/
 .vscode/
+[Bb]in/
+[Oo]bj/

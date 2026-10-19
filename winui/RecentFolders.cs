@@ -1,5 +1,3 @@
-using System.Text.Json;
-
 namespace Otoasobi;
 
 public sealed class RecentFolder
@@ -19,13 +17,6 @@ static class RecentFolders
 {
     const int MaxCount = 10;
 
-    static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        WriteIndented = true,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        PropertyNameCaseInsensitive = true,
-    };
-
     public static string FilePath { get; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "Otoasobi",
@@ -33,30 +24,21 @@ static class RecentFolders
 
     public static IReadOnlyList<string> Load()
     {
-        try
-        {
-            if (!File.Exists(FilePath))
-                return [];
-            var list = JsonSerializer.Deserialize<List<string>>(File.ReadAllText(FilePath), JsonOptions);
-            if (list == null)
-                return [];
-            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var result = new List<string>();
-            foreach (var raw in list)
-            {
-                if (!TryNormalize(raw, out var path) || !seen.Add(path))
-                    continue;
-                result.Add(path);
-                if (result.Count == MaxCount)
-                    break;
-            }
-
-            return result;
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
-        {
+        var list = JsonFiles.Read<List<string>>(FilePath);
+        if (list == null)
             return [];
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var result = new List<string>();
+        foreach (var raw in list)
+        {
+            if (!TryNormalize(raw, out var path) || !seen.Add(path))
+                continue;
+            result.Add(path);
+            if (result.Count == MaxCount)
+                break;
         }
+
+        return result;
     }
 
     public static void Remember(string folder)
@@ -90,12 +72,7 @@ static class RecentFolders
     {
         try
         {
-            var path = FilePath;
-            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            var json = JsonSerializer.Serialize(folders, JsonOptions);
-            var temp = path + ".tmp";
-            File.WriteAllText(temp, json);
-            File.Move(temp, path, overwrite: true);
+            JsonFiles.Write(FilePath, folders);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {

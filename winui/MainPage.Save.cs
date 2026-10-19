@@ -1,7 +1,6 @@
 using System.Text.Json;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Media;
 
 namespace Otoasobi;
 
@@ -28,7 +27,7 @@ public sealed partial class MainPage
             return;
 
         var box = new TextBox { PlaceholderText = "設定名" };
-        var error = DialogErrorLine();
+        var error = PresetUi.ErrorLine();
         var panel = new StackPanel { Spacing = 8, MinWidth = 360 };
         panel.Children.Add(new TextBlock
         {
@@ -62,20 +61,12 @@ public sealed partial class MainPage
             return;
 
         var name = box.Text.Trim();
-        if (File.Exists(OtoSaveStore.FilePathFor(folder, name)))
-        {
-            var confirm = new ContentDialog
-            {
-                Title = "設定を上書きしますか？",
-                Content = $"「{name}」は既にあります。いまの設定で置き換えます。",
-                PrimaryButtonText = "上書きする",
-                CloseButtonText = "キャンセル",
-                DefaultButton = ContentDialogButton.Primary,
-                XamlRoot = XamlRoot,
-            };
-            if (await confirm.ShowAsync() != ContentDialogResult.Primary)
-                return;
-        }
+        if (File.Exists(OtoSaveStore.FilePathFor(folder, name))
+            && !await PresetUi.ConfirmOverwriteAsync(
+                XamlRoot,
+                "設定を上書きしますか？",
+                $"「{name}」は既にあります。いまの設定で置き換えます。"))
+            return;
 
         try
         {
@@ -604,18 +595,6 @@ public sealed partial class MainPage
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
         }
-    }
-
-    TextBlock DialogErrorLine()
-    {
-        var error = new TextBlock
-        {
-            TextWrapping = TextWrapping.Wrap,
-            Visibility = Visibility.Collapsed,
-        };
-        if (Application.Current.Resources.TryGetValue("SystemFillColorCriticalBrush", out var brush) && brush is Brush paint)
-            error.Foreground = paint;
-        return error;
     }
 
     static TextBlock HintText(string text) =>

@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Globalization;
-using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -244,15 +243,6 @@ static class OtoSaveStore
         "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
     ];
 
-    static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        WriteIndented = true,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        PropertyNameCaseInsensitive = true,
-        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-    };
-
     public static string ModeLabel(string? mode) => mode switch
     {
         "renzoku" => "連続音",
@@ -267,12 +257,11 @@ static class OtoSaveStore
 
     public static string? NameError(string raw)
     {
+        var basic = PresetUi.BasicNameError(raw);
+        if (basic != null)
+            return basic;
         var name = raw.Trim();
-        if (name.Length == 0)
-            return "名前を入力してください。";
-        if (name.Length > 40)
-            return "名前は40文字までです。";
-        if (name.Any(char.IsControl) || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+        if (name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
             return "名前に使えない文字があります。";
         if (name.EndsWith('.') || name.EndsWith(' '))
             return "名前に使えない文字があります。";
@@ -358,7 +347,7 @@ static class OtoSaveStore
 
     public static OtoSaveFile Read(string path)
     {
-        var file = JsonSerializer.Deserialize<OtoSaveFile>(File.ReadAllText(path), JsonOptions)
+        var file = JsonSerializer.Deserialize<OtoSaveFile>(File.ReadAllText(path), JsonFiles.OptionsIgnoringNull)
             ?? throw new JsonException("空のファイルです。");
         if (file.Version > OtoSaveFile.CurrentVersion)
             throw new InvalidDataException("この保存データは、いまの OTOasobi では読めません。");
@@ -420,13 +409,8 @@ static class OtoSaveStore
         });
     }
 
-    static void WriteTo(string path, OtoSaveFile file)
-    {
-        var json = JsonSerializer.Serialize(file, JsonOptions);
-        var temp = path + ".tmp";
-        File.WriteAllText(temp, json);
-        File.Move(temp, path, overwrite: true);
-    }
+    static void WriteTo(string path, OtoSaveFile file) =>
+        JsonFiles.Write(path, file, JsonFiles.OptionsIgnoringNull);
 
     static bool IsSession(string path) =>
         Path.GetFileName(path).Equals(SessionFileName, StringComparison.OrdinalIgnoreCase);

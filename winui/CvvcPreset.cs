@@ -1,11 +1,9 @@
-using System.Text.Encodings.Web;
-using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace Otoasobi;
 
 // CVVC の通常音素と子音音素。単独音のプリセットとは別のファイルに残す。
-sealed class CvvcPreset
+sealed class CvvcPreset : INamedPreset
 {
     public const string BuiltInName = "初期値";
 
@@ -24,33 +22,13 @@ sealed class CvvcPreset
 
 static class CvvcPresetStore
 {
-    static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        WriteIndented = true,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        PropertyNameCaseInsensitive = true,
-        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-    };
-
     public static string FilePath { get; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "Otoasobi",
         "cvvc-presets.json");
 
-    public static IReadOnlyList<CvvcPreset> Load()
-    {
-        try
-        {
-            if (!File.Exists(FilePath))
-                return [];
-            var list = JsonSerializer.Deserialize<List<CvvcPreset>>(File.ReadAllText(FilePath), JsonOptions);
-            return Normalize(list);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
-        {
-            return [];
-        }
-    }
+    public static IReadOnlyList<CvvcPreset> Load() =>
+        JsonFiles.ReadList<CvvcPreset>(FilePath, Normalize);
 
     public static List<CvvcPreset> Normalize(IEnumerable<CvvcPreset>? list)
     {
@@ -78,15 +56,8 @@ static class CvvcPresetStore
         return result;
     }
 
-    public static void Save(IEnumerable<CvvcPreset> presets)
-    {
-        var path = FilePath;
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        var json = JsonSerializer.Serialize(presets.Where(preset => !preset.BuiltIn), JsonOptions);
-        var temp = path + ".tmp";
-        File.WriteAllText(temp, json);
-        File.Move(temp, path, overwrite: true);
-    }
+    public static void Save(IEnumerable<CvvcPreset> presets) =>
+        JsonFiles.Write(FilePath, presets.Where(preset => !preset.BuiltIn));
 
     public static double Percent(double value, double fallback)
     {

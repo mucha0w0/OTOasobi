@@ -1,6 +1,3 @@
-using System.Text.Encodings.Web;
-using System.Text.Json;
-
 namespace Otoasobi;
 
 // 音声へ順にかける処理。リストの並びがかかる順で、Move で入れ替える。
@@ -122,14 +119,6 @@ sealed class StoredChain
 
 static class EffectChainStore
 {
-    static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        WriteIndented = true,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        PropertyNameCaseInsensitive = true,
-        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-    };
-
     public static string FilePath { get; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "Otoasobi",
@@ -137,36 +126,19 @@ static class EffectChainStore
 
     public static StoredChain? Load()
     {
-        try
-        {
-            if (!File.Exists(FilePath))
-                return null;
-            var stored = JsonSerializer.Deserialize<StoredChain>(File.ReadAllText(FilePath), JsonOptions);
-            if (stored == null)
-                return null;
-            stored.Effects ??= [];
-            foreach (var effect in stored.Effects)
-            {
-                effect.Kind ??= "";
-                effect.Preset ??= "";
-                effect.Gains ??= [];
-            }
-
-            return stored;
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
-        {
+        var stored = JsonFiles.Read<StoredChain>(FilePath);
+        if (stored == null)
             return null;
+        stored.Effects ??= [];
+        foreach (var effect in stored.Effects)
+        {
+            effect.Kind ??= "";
+            effect.Preset ??= "";
+            effect.Gains ??= [];
         }
+
+        return stored;
     }
 
-    public static void Save(StoredChain chain)
-    {
-        var path = FilePath;
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        var json = JsonSerializer.Serialize(chain, JsonOptions);
-        var temp = path + ".tmp";
-        File.WriteAllText(temp, json);
-        File.Move(temp, path, overwrite: true);
-    }
+    public static void Save(StoredChain chain) => JsonFiles.Write(FilePath, chain);
 }

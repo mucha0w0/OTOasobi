@@ -327,9 +327,6 @@ def speech_threshold(track: FrameTrack) -> float:
     return max(float(np.max(track.rms)) * 0.08, 1e-4)
 
 
-_speech_thr = speech_threshold
-
-
 def _spaced_peaks(times: np.ndarray, score: np.ndarray, count: int, min_dt: float) -> list[float] | None:
     if count <= 0 or len(times) == 0:
         return [] if count == 0 else None
@@ -595,19 +592,26 @@ def stop_vowel_start(track: FrameTrack, start: float, end: float) -> float:
     return min(max(cut, start + 0.02), end - 0.015)
 
 
-def flap_onset(track: FrameTrack, peak: float, t_lo: float, t_hi: float) -> float:
-    """Start of a flap: the drop into the tap, or the rise out of silence when initial."""
+def _constriction_onset(
+    track: FrameTrack,
+    peak: float,
+    t_lo: float,
+    t_hi: float,
+    lookback: float,
+    fallback: float,
+) -> float:
+    """Silence rise, or the drop into a short constriction. lookback and fallback are seconds."""
     t_lo = max(0.0, t_lo)
     peak = min(max(peak, t_lo), max(t_lo, t_hi))
-    lo = max(t_lo, peak - 0.06)
+    lo = max(t_lo, peak - lookback)
     hi = min(t_hi, max(peak + 0.02, lo + 0.03))
     sel = (track.times >= lo) & (track.times <= hi)
     if int(np.count_nonzero(sel)) < 3:
-        return max(t_lo, peak - 0.02)
+        return max(t_lo, peak - fallback)
     times = track.times[sel]
     rms = track.rms[sel]
     if len(times) < 3:
-        return max(t_lo, peak - 0.02)
+        return max(t_lo, peak - fallback)
     speech_thr = speech_threshold(track)
     if float(rms[0]) < speech_thr * 1.5:
         i = 0
@@ -616,29 +620,16 @@ def flap_onset(track: FrameTrack, peak: float, t_lo: float, t_hi: float) -> floa
         return max(t_lo, float(times[i]))
     i = int(np.argmin(np.diff(rms)))
     return max(t_lo, float(times[i]))
+
+
+def flap_onset(track: FrameTrack, peak: float, t_lo: float, t_hi: float) -> float:
+    """Start of a flap: the drop into the tap, or the rise out of silence when initial."""
+    return _constriction_onset(track, peak, t_lo, t_hi, lookback=0.06, fallback=0.02)
 
 
 def labial_onset(track: FrameTrack, peak: float, t_lo: float, t_hi: float) -> float:
     """Start of ヴ: the rise out of silence, or the drop into the constriction."""
-    t_lo = max(0.0, t_lo)
-    peak = min(max(peak, t_lo), max(t_lo, t_hi))
-    lo = max(t_lo, peak - 0.10)
-    hi = min(t_hi, max(peak + 0.02, lo + 0.03))
-    sel = (track.times >= lo) & (track.times <= hi)
-    if int(np.count_nonzero(sel)) < 3:
-        return max(t_lo, peak - 0.04)
-    times = track.times[sel]
-    rms = track.rms[sel]
-    if len(times) < 3:
-        return max(t_lo, peak - 0.04)
-    speech_thr = speech_threshold(track)
-    if float(rms[0]) < speech_thr * 1.5:
-        i = 0
-        while i < len(rms) - 1 and float(rms[i]) < speech_thr * 0.45:
-            i += 1
-        return max(t_lo, float(times[i]))
-    i = int(np.argmin(np.diff(rms)))
-    return max(t_lo, float(times[i]))
+    return _constriction_onset(track, peak, t_lo, t_hi, lookback=0.10, fallback=0.04)
 
 
 def labial_vowel_start(track: FrameTrack, start: float, end: float) -> float:
@@ -820,21 +811,30 @@ def flap_vowel_start(track: FrameTrack, start: float, end: float) -> float:
     return min(cut, end - 0.015)
 
 
+def _dip_score(rms: np.ndarray) -> np.ndarray:
+    score = np.zeros(len(rms))
+    if len(rms) >= 3:
+        score[1:-1] = 0.5 * (rms[:-2] + rms[2:]) - rms[1:-1]
+    return score
+
+
+def _snap_onsets(peaks: list[float], start: float, place) -> list[float]:
+    """Place each peak, then pin the first onset to the region start."""
+    onsets = [place(peak, start if i == 0 else peaks[i - 1]) for i, peak in enumerate(peaks)]
+    if onsets:
+        onsets[0] = start
+    return onsets
+
+
 def _flap_onsets(track: FrameTrack, start: float, end: float, count: int) -> list[float] | None:
     sel = (track.times >= start) & (track.times <= end)
     if not np.any(sel):
         return None
     times = track.times[sel]
-    rms = track.rms[sel]
-    score = np.zeros(len(rms))
-    if len(rms) >= 3:
-        score[1:-1] = 0.5 * (rms[:-2] + rms[2:]) - rms[1:-1]
-    peaks = _spaced_peaks(times, score, count, min_dt=0.10)
+    peaks = _spaced_peaks(times, _dip_score(track.rms[sel]), count, min_dt=0.10)
     if peaks is None:
         return None
-    onsets = [flap_onset(track, peak, start if i == 0 else peaks[i - 1], end) for i, peak in enumerate(peaks)]
-    onsets[0] = start
-    return onsets
+    return _snap_onsets(peaks, start, lambda peak, prior: flap_onset(track, peak, prior, end))
 
 
 def _weak_fricative_onsets(track: FrameTrack, start: float, end: float, count: int) -> list[float] | None:
@@ -871,16 +871,10 @@ def _labial_onsets(track: FrameTrack, start: float, end: float, count: int) -> l
     if not np.any(sel):
         return None
     times = track.times[sel]
-    rms = track.rms[sel]
-    score = np.zeros(len(rms))
-    if len(rms) >= 3:
-        score[1:-1] = 0.5 * (rms[:-2] + rms[2:]) - rms[1:-1]
-    peaks = _spaced_peaks(times, score, count, min_dt=0.12)
+    peaks = _spaced_peaks(times, _dip_score(track.rms[sel]), count, min_dt=0.12)
     if peaks is None:
         return None
-    onsets = [labial_onset(track, peak, start if i == 0 else peaks[i - 1], end) for i, peak in enumerate(peaks)]
-    onsets[0] = start
-    return onsets
+    return _snap_onsets(peaks, start, lambda peak, prior: labial_onset(track, peak, prior, end))
 
 
 def nasal_vowel_start(track: FrameTrack, start: float, end: float) -> float:
@@ -910,9 +904,11 @@ def _stop_onsets(track: FrameTrack, start: float, end: float, count: int) -> lis
     peaks = _spaced_peaks(track.times[sel], track.flux[sel], count, min_dt=0.11)
     if peaks is None:
         return None
-    onsets = [stop_closure_start(track, peak, start if i == 0 else peaks[i - 1], 0.12) for i, peak in enumerate(peaks)]
-    onsets[0] = start
-    return onsets
+    return _snap_onsets(
+        peaks,
+        start,
+        lambda peak, prior: stop_closure_start(track, peak, prior, 0.12),
+    )
 
 
 def _nasal_onsets(track: FrameTrack, start: float, end: float, count: int) -> list[float] | None:
@@ -924,9 +920,7 @@ def _nasal_onsets(track: FrameTrack, start: float, end: float, count: int) -> li
     peaks = _spaced_peaks(times, inv, count, min_dt=0.10)
     if peaks is None:
         return None
-    onsets = [nasal_onset(track, peak, start if i == 0 else peaks[i - 1], end) for i, peak in enumerate(peaks)]
-    onsets[0] = start
-    return onsets
+    return _snap_onsets(peaks, start, lambda peak, prior: nasal_onset(track, peak, prior, end))
 
 
 def _median_smooth(values: np.ndarray, width: int = 3) -> np.ndarray:
@@ -1300,9 +1294,6 @@ def sonorant_join(prev: Token, mora: Token) -> bool:
     return mora.kind == "N" and prev.vowel is not None
 
 
-_sonorant_join = sonorant_join
-
-
 def _refine_vowel_sequences(
     track: FrameTrack,
     moras: list[Token],
@@ -1378,9 +1369,6 @@ def cv_cut(track: FrameTrack, mora: Token, start: float, end: float) -> float:
     if max_c <= min_c:
         return (start + end) / 2
     return min(max(cut, min_c), max_c)
-
-
-_cv_cut = cv_cut
 
 
 def split_vowel_time(parts: tuple[Token, ...], start: float, end: float) -> list[Span]:

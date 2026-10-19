@@ -1,11 +1,9 @@
-using System.Text.Encodings.Web;
-using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace Otoasobi;
 
 // 設定スライダーの値。初期値は常にあり、それ以外は LocalAppData に残す。
-sealed class OtoPreset
+sealed class OtoPreset : INamedPreset
 {
     public const string BuiltInName = "初期値";
 
@@ -21,33 +19,13 @@ sealed class OtoPreset
 
 static class OtoPresetStore
 {
-    static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        WriteIndented = true,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        PropertyNameCaseInsensitive = true,
-        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-    };
-
     public static string FilePath { get; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "Otoasobi",
         "presets.json");
 
-    public static IReadOnlyList<OtoPreset> Load()
-    {
-        try
-        {
-            if (!File.Exists(FilePath))
-                return [];
-            var list = JsonSerializer.Deserialize<List<OtoPreset>>(File.ReadAllText(FilePath), JsonOptions);
-            return Normalize(list);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
-        {
-            return [];
-        }
-    }
+    public static IReadOnlyList<OtoPreset> Load() =>
+        JsonFiles.ReadList<OtoPreset>(FilePath, Normalize);
 
     public static List<OtoPreset> Normalize(IEnumerable<OtoPreset>? list)
     {
@@ -74,15 +52,8 @@ static class OtoPresetStore
         return result;
     }
 
-    public static void Save(IEnumerable<OtoPreset> presets)
-    {
-        var path = FilePath;
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        var json = JsonSerializer.Serialize(presets.Where(preset => !preset.BuiltIn), JsonOptions);
-        var temp = path + ".tmp";
-        File.WriteAllText(temp, json);
-        File.Move(temp, path, overwrite: true);
-    }
+    public static void Save(IEnumerable<OtoPreset> presets) =>
+        JsonFiles.Write(FilePath, presets.Where(preset => !preset.BuiltIn));
 
     static double Clamp(double value, double lo, double hi, double fallback, int digits)
     {

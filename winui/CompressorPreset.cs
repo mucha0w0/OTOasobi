@@ -1,10 +1,8 @@
-using System.Text.Encodings.Web;
-using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace Otoasobi;
 
-sealed class CompressorPreset
+sealed class CompressorPreset : INamedPreset
 {
     public const string CustomName = "カスタム";
 
@@ -43,33 +41,13 @@ sealed class CompressorPreset
 
 static class CompressorPresetStore
 {
-    static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        WriteIndented = true,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        PropertyNameCaseInsensitive = true,
-        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-    };
-
     public static string FilePath { get; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "Otoasobi",
         "compressor-presets.json");
 
-    public static IReadOnlyList<CompressorPreset> Load()
-    {
-        try
-        {
-            if (!File.Exists(FilePath))
-                return [];
-            var list = JsonSerializer.Deserialize<List<CompressorPreset>>(File.ReadAllText(FilePath), JsonOptions);
-            return Normalize(list);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
-        {
-            return [];
-        }
-    }
+    public static IReadOnlyList<CompressorPreset> Load() =>
+        JsonFiles.ReadList<CompressorPreset>(FilePath, Normalize);
 
     public static List<CompressorPreset> Normalize(IEnumerable<CompressorPreset>? list)
     {
@@ -92,13 +70,6 @@ static class CompressorPresetStore
         return result;
     }
 
-    public static void Save(IEnumerable<CompressorPreset> presets)
-    {
-        var path = FilePath;
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        var json = JsonSerializer.Serialize(presets.Where(preset => !preset.BuiltIn), JsonOptions);
-        var temp = path + ".tmp";
-        File.WriteAllText(temp, json);
-        File.Move(temp, path, overwrite: true);
-    }
+    public static void Save(IEnumerable<CompressorPreset> presets) =>
+        JsonFiles.Write(FilePath, presets.Where(preset => !preset.BuiltIn));
 }

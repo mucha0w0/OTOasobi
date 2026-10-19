@@ -78,6 +78,30 @@ def _wav_in_folder(folder: str, name: object) -> Path:
     return wav
 
 
+def _note_file(request_id: object, shown: dict, name: str, fraction: float, label: str) -> None:
+    """同じファイルと同じ段階で、進み 0.02 未満なら進捗を出さない。"""
+    done = round(max(0.0, min(1.0, float(fraction))), 3)
+    if (
+        shown.get("name", "") == name
+        and shown["label"] == label
+        and done < 1.0
+        and done - float(shown["done"]) < 0.02
+    ):
+        return
+    shown["name"] = name
+    shown["done"] = done
+    shown["label"] = label
+    _respond(
+        {
+            "id": request_id,
+            "event": "file",
+            "name": name,
+            "done": done,
+            "label": label,
+        }
+    )
+
+
 def _analyze_one(request_id: object, folder: str, name: object) -> dict:
     """表示中の 1 ファイルだけ解析する。保存データは画面側がまとめて書く。"""
     wav = _wav_in_folder(folder, name)
@@ -85,23 +109,10 @@ def _analyze_one(request_id: object, folder: str, name: object) -> dict:
     def on_progress(done: int, total: int) -> None:
         _respond({"id": request_id, "event": "progress", "done": done, "total": total})
 
-    shown = {"done": -1.0, "label": ""}
+    shown = {"name": "", "done": -1.0, "label": ""}
 
     def on_step(fraction: float, label: str) -> None:
-        done = round(max(0.0, min(1.0, float(fraction))), 3)
-        if shown["label"] == label and done < 1.0 and done - float(shown["done"]) < 0.02:
-            return
-        shown["done"] = done
-        shown["label"] = label
-        _respond(
-            {
-                "id": request_id,
-                "event": "file",
-                "name": wav.name,
-                "done": done,
-                "label": label,
-            }
-        )
+        _note_file(request_id, shown, wav.name, fraction, label)
 
     on_progress(0, 1)
     analysis = analyze_wav(wav, on_step)
@@ -139,26 +150,7 @@ def _analyze(request_id: object, path: str, force: bool) -> dict:
     shown = {"name": "", "done": -1.0, "label": ""}
 
     def on_file(name: str, fraction: float, label: str) -> None:
-        done = round(max(0.0, min(1.0, float(fraction))), 3)
-        if (
-            shown["name"] == name
-            and shown["label"] == label
-            and done < 1.0
-            and done - float(shown["done"]) < 0.02
-        ):
-            return
-        shown["name"] = name
-        shown["done"] = done
-        shown["label"] = label
-        _respond(
-            {
-                "id": request_id,
-                "event": "file",
-                "name": name,
-                "done": done,
-                "label": label,
-            }
-        )
+        _note_file(request_id, shown, name, fraction, label)
 
     files, skipped = analyze_folder_files(path, on_progress=on_progress, on_file=on_file)
     if not files:

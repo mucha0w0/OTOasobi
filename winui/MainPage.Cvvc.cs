@@ -163,24 +163,15 @@ public sealed partial class MainPage
     {
         if (_leadPreset != _builtIn && !_userPresets.Contains(_leadPreset))
             _leadPreset = _builtIn;
-        CvvcLeadPresetFlyout.Items.Clear();
-        AddCvvcLeadItem(_builtIn);
-        foreach (var preset in _userPresets)
-            AddCvvcLeadItem(preset);
+        PresetUi.Fill(
+            CvvcLeadPresetFlyout,
+            "cvvc-lead-preset",
+            [_builtIn],
+            _userPresets,
+            _leadPreset,
+            SelectCvvcLead,
+            separator: false);
         CvvcLeadPresetNameText.Text = _leadPreset.Name;
-    }
-
-    void AddCvvcLeadItem(OtoPreset preset)
-    {
-        var item = new RadioMenuFlyoutItem
-        {
-            Text = preset.Name,
-            GroupName = "cvvc-lead-preset",
-            Tag = preset,
-            IsChecked = ReferenceEquals(preset, _leadPreset),
-        };
-        item.Click += (_, _) => SelectCvvcLead(preset);
-        CvvcLeadPresetFlyout.Items.Add(item);
     }
 
     void SelectCvvcLead(OtoPreset preset)
@@ -197,26 +188,15 @@ public sealed partial class MainPage
             OnConfigChanged();
     }
 
-    void RebuildCvvcPresetMenu()
-    {
-        CvvcPresetFlyout.Items.Clear();
-        AddCvvcPresetItem(_cvvcBuiltIn);
-        foreach (var preset in _cvvcPresets)
-            AddCvvcPresetItem(preset);
-    }
-
-    void AddCvvcPresetItem(CvvcPreset preset)
-    {
-        var item = new RadioMenuFlyoutItem
-        {
-            Text = preset.Name,
-            GroupName = "cvvc-preset",
-            Tag = preset,
-            IsChecked = ReferenceEquals(preset, _selectedCvvc),
-        };
-        item.Click += (_, _) => SelectCvvcPreset(preset);
-        CvvcPresetFlyout.Items.Add(item);
-    }
+    void RebuildCvvcPresetMenu() =>
+        PresetUi.Fill(
+            CvvcPresetFlyout,
+            "cvvc-preset",
+            [_cvvcBuiltIn],
+            _cvvcPresets,
+            _selectedCvvc,
+            SelectCvvcPreset,
+            separator: false);
 
     void SelectCvvcPreset(CvvcPreset preset)
     {
@@ -259,15 +239,7 @@ public sealed partial class MainPage
     void UpdateCvvcPresetDirty()
     {
         var dirty = !_applyingPreset && _selectedCvvc != null && !CvvcPresetMatches(_selectedCvvc);
-        CvvcPresetDirtyMark.Visibility = dirty ? Visibility.Visible : Visibility.Collapsed;
-        foreach (var entry in CvvcPresetFlyout.Items)
-        {
-            if (entry is not RadioMenuFlyoutItem radio || radio.Tag is not CvvcPreset preset)
-                continue;
-            var text = dirty && ReferenceEquals(preset, _selectedCvvc) ? preset.Name + " *" : preset.Name;
-            if (radio.Text != text)
-                radio.Text = text;
-        }
+        PresetUi.MarkDirty(CvvcPresetFlyout, null, CvvcPresetDirtyMark, _selectedCvvc, dirty, CvvcPreset.BuiltInName);
     }
 
     bool CvvcPresetMatches(CvvcPreset preset)
@@ -321,66 +293,22 @@ public sealed partial class MainPage
 
     async Task SaveCvvcPresetAsync()
     {
-        var box = new TextBox { PlaceholderText = "プリセット名" };
-        if (_selectedCvvc is { BuiltIn: false })
-        {
-            box.Text = _selectedCvvc.Name;
-            box.SelectAll();
-        }
-
-        var error = new TextBlock
-        {
-            TextWrapping = TextWrapping.Wrap,
-            Visibility = Visibility.Collapsed,
-        };
-        if (Application.Current.Resources.TryGetValue("SystemFillColorCriticalBrush", out var brush) && brush is Brush paint)
-            error.Foreground = paint;
-        var panel = new StackPanel { Spacing = 8, MinWidth = 280 };
-        panel.Children.Add(new TextBlock
-        {
-            Text = "この設定につける名前を入力してください。",
-            TextWrapping = TextWrapping.Wrap,
-        });
-        panel.Children.Add(box);
-        panel.Children.Add(error);
-        var dialog = new ContentDialog
-        {
-            Title = "現在の設定を保存",
-            Content = panel,
-            PrimaryButtonText = "保存",
-            CloseButtonText = "キャンセル",
-            DefaultButton = ContentDialogButton.Primary,
-            XamlRoot = XamlRoot,
-        };
-        dialog.Opened += (_, _) => box.Focus(FocusState.Programmatic);
-        dialog.PrimaryButtonClick += (_, args) =>
-        {
-            var message = PresetNameError(box.Text);
-            if (message == null)
-                return;
-            args.Cancel = true;
-            error.Text = message;
-            error.Visibility = Visibility.Visible;
-        };
-        if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+        var name = await PresetUi.AskNameAsync(
+            XamlRoot,
+            "現在の設定を保存",
+            "この設定につける名前を入力してください。",
+            _selectedCvvc is { BuiltIn: false } ? _selectedCvvc.Name : null,
+            PresetNameError);
+        if (name == null)
             return;
 
-        var name = box.Text.Trim();
         var existing = _cvvcPresets.FirstOrDefault(preset => preset.Name == name);
-        if (existing != null && !ReferenceEquals(existing, _selectedCvvc))
-        {
-            var confirm = new ContentDialog
-            {
-                Title = "プリセットを上書きしますか？",
-                Content = $"「{name}」は既にあります。いまの設定で置き換えます。",
-                PrimaryButtonText = "上書きする",
-                CloseButtonText = "キャンセル",
-                DefaultButton = ContentDialogButton.Primary,
-                XamlRoot = XamlRoot,
-            };
-            if (await confirm.ShowAsync() != ContentDialogResult.Primary)
-                return;
-        }
+        if (existing != null && !ReferenceEquals(existing, _selectedCvvc)
+            && !await PresetUi.ConfirmOverwriteAsync(
+                XamlRoot,
+                "プリセットを上書きしますか？",
+                $"「{name}」は既にあります。いまの設定で置き換えます。"))
+            return;
 
         var target = existing ?? new CvvcPreset { Name = name };
         CopyCvvcInto(target);

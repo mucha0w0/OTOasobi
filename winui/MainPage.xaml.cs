@@ -1278,10 +1278,14 @@ public sealed partial class MainPage : Page
 
     void RebuildPresetMenu()
     {
-        PresetFlyout.Items.Clear();
-        AddPresetItem(_builtIn);
-        foreach (var preset in _userPresets)
-            AddPresetItem(preset);
+        PresetUi.Fill(
+            PresetFlyout,
+            "oto-preset",
+            [_builtIn],
+            _userPresets,
+            _selectedPreset,
+            SelectPreset,
+            separator: false);
         RebuildRestPresetMenu();
         RebuildCvvcLeadMenu();
     }
@@ -1290,24 +1294,15 @@ public sealed partial class MainPage : Page
     {
         if (_restPreset != _builtIn && !_userPresets.Contains(_restPreset))
             _restPreset = _builtIn;
-        RestPresetFlyout.Items.Clear();
-        AddRestPresetItem(_builtIn);
-        foreach (var preset in _userPresets)
-            AddRestPresetItem(preset);
+        PresetUi.Fill(
+            RestPresetFlyout,
+            "renzoku-rest-preset",
+            [_builtIn],
+            _userPresets,
+            _restPreset,
+            SelectRestPreset,
+            separator: false);
         RestPresetNameText.Text = _restPreset.Name;
-    }
-
-    void AddRestPresetItem(OtoPreset preset)
-    {
-        var item = new RadioMenuFlyoutItem
-        {
-            Text = preset.Name,
-            GroupName = "renzoku-rest-preset",
-            Tag = preset,
-            IsChecked = ReferenceEquals(preset, _restPreset),
-        };
-        item.Click += (_, _) => SelectRestPreset(preset);
-        RestPresetFlyout.Items.Add(item);
     }
 
     void SelectRestPreset(OtoPreset preset)
@@ -1334,19 +1329,6 @@ public sealed partial class MainPage : Page
         }
 
         return overlap;
-    }
-
-    void AddPresetItem(OtoPreset preset)
-    {
-        var item = new RadioMenuFlyoutItem
-        {
-            Text = preset.Name,
-            GroupName = "oto-preset",
-            Tag = preset,
-            IsChecked = ReferenceEquals(preset, _selectedPreset),
-        };
-        item.Click += (_, _) => SelectPreset(preset);
-        PresetFlyout.Items.Add(item);
     }
 
     void SelectPreset(OtoPreset preset)
@@ -1383,15 +1365,7 @@ public sealed partial class MainPage : Page
     void UpdatePresetDirty()
     {
         var dirty = !_applyingPreset && _selectedPreset != null && !PresetMatches(_selectedPreset);
-        PresetDirtyMark.Visibility = dirty ? Visibility.Visible : Visibility.Collapsed;
-        foreach (var entry in PresetFlyout.Items)
-        {
-            if (entry is not RadioMenuFlyoutItem radio || radio.Tag is not OtoPreset preset)
-                continue;
-            var text = dirty && ReferenceEquals(preset, _selectedPreset) ? preset.Name + " *" : preset.Name;
-            if (radio.Text != text)
-                radio.Text = text;
-        }
+        PresetUi.MarkDirty(PresetFlyout, null, PresetDirtyMark, _selectedPreset, dirty, OtoPreset.BuiltInName);
     }
 
     bool PresetMatches(OtoPreset preset)
@@ -1435,66 +1409,22 @@ public sealed partial class MainPage : Page
 
     async Task SavePresetAsync()
     {
-        var box = new TextBox { PlaceholderText = "プリセット名" };
-        if (_selectedPreset is { BuiltIn: false })
-        {
-            box.Text = _selectedPreset.Name;
-            box.SelectAll();
-        }
-
-        var error = new TextBlock
-        {
-            TextWrapping = TextWrapping.Wrap,
-            Visibility = Visibility.Collapsed,
-        };
-        if (Application.Current.Resources.TryGetValue("SystemFillColorCriticalBrush", out var brush) && brush is Brush paint)
-            error.Foreground = paint;
-        var panel = new StackPanel { Spacing = 8, MinWidth = 280 };
-        panel.Children.Add(new TextBlock
-        {
-            Text = "この設定につける名前を入力してください。",
-            TextWrapping = TextWrapping.Wrap,
-        });
-        panel.Children.Add(box);
-        panel.Children.Add(error);
-        var dialog = new ContentDialog
-        {
-            Title = "現在の設定を保存",
-            Content = panel,
-            PrimaryButtonText = "保存",
-            CloseButtonText = "キャンセル",
-            DefaultButton = ContentDialogButton.Primary,
-            XamlRoot = XamlRoot,
-        };
-        dialog.Opened += (_, _) => box.Focus(FocusState.Programmatic);
-        dialog.PrimaryButtonClick += (_, args) =>
-        {
-            var message = PresetNameError(box.Text);
-            if (message == null)
-                return;
-            args.Cancel = true;
-            error.Text = message;
-            error.Visibility = Visibility.Visible;
-        };
-        if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+        var name = await PresetUi.AskNameAsync(
+            XamlRoot,
+            "現在の設定を保存",
+            "この設定につける名前を入力してください。",
+            _selectedPreset is { BuiltIn: false } ? _selectedPreset.Name : null,
+            PresetNameError);
+        if (name == null)
             return;
 
-        var name = box.Text.Trim();
         var existing = _userPresets.FirstOrDefault(preset => preset.Name == name);
-        if (existing != null && !ReferenceEquals(existing, _selectedPreset))
-        {
-            var confirm = new ContentDialog
-            {
-                Title = "プリセットを上書きしますか？",
-                Content = $"「{name}」は既にあります。いまの設定で置き換えます。",
-                PrimaryButtonText = "上書きする",
-                CloseButtonText = "キャンセル",
-                DefaultButton = ContentDialogButton.Primary,
-                XamlRoot = XamlRoot,
-            };
-            if (await confirm.ShowAsync() != ContentDialogResult.Primary)
-                return;
-        }
+        if (existing != null && !ReferenceEquals(existing, _selectedPreset)
+            && !await PresetUi.ConfirmOverwriteAsync(
+                XamlRoot,
+                "プリセットを上書きしますか？",
+                $"「{name}」は既にあります。いまの設定で置き換えます。"))
+            return;
 
         var target = existing ?? new OtoPreset { Name = name };
         CopyCurrentInto(target);
@@ -1512,19 +1442,11 @@ public sealed partial class MainPage : Page
         }
     }
 
-    static string? PresetNameError(string raw)
-    {
-        var name = raw.Trim();
-        if (name.Length == 0)
-            return "名前を入力してください。";
-        if (name.Length > 40)
-            return "名前は40文字までです。";
-        if (name.Any(char.IsControl))
-            return "名前に使えない文字があります。";
-        if (name == OtoPreset.BuiltInName)
-            return "初期値という名前は使えません。";
-        return null;
-    }
+    static string? PresetNameError(string raw) =>
+        PresetUi.ReservedNameError(
+            raw,
+            name => name == OtoPreset.BuiltInName,
+            "初期値という名前は使えません。");
 
     static string FormatSeconds(double value) =>
         Math.Round(value, 3).ToString("0.000", CultureInfo.InvariantCulture) + " s";

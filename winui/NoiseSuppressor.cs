@@ -1,6 +1,3 @@
-using System.Text.Encodings.Web;
-using System.Text.Json;
-
 namespace Otoasobi;
 
 // 選んだ無音のスペクトルを、定常ノイズとして抑える。
@@ -450,14 +447,6 @@ static class NoiseCaptureStore
 {
     const int MaxCaptures = 30;
 
-    static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        WriteIndented = true,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        PropertyNameCaseInsensitive = true,
-        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-    };
-
     public static string FilePath { get; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "Otoasobi",
@@ -489,30 +478,12 @@ static class NoiseCaptureStore
 
     static NoiseCaptureFile Load()
     {
-        try
-        {
-            if (!File.Exists(FilePath))
-                return new NoiseCaptureFile();
-            var stored = JsonSerializer.Deserialize<NoiseCaptureFile>(File.ReadAllText(FilePath), JsonOptions);
-            stored ??= new NoiseCaptureFile();
-            stored.Captures ??= [];
-            return stored;
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
-        {
-            return new NoiseCaptureFile();
-        }
+        var stored = JsonFiles.Read<NoiseCaptureFile>(FilePath) ?? new NoiseCaptureFile();
+        stored.Captures ??= [];
+        return stored;
     }
 
-    static void Write(NoiseCaptureFile stored)
-    {
-        var path = FilePath;
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        var json = JsonSerializer.Serialize(stored, JsonOptions);
-        var temp = path + ".tmp";
-        File.WriteAllText(temp, json);
-        File.Move(temp, path, overwrite: true);
-    }
+    static void Write(NoiseCaptureFile stored) => JsonFiles.Write(FilePath, stored);
 
     static bool SameFolder(string left, string right) =>
         string.Equals(Path.GetFullPath(left), Path.GetFullPath(right), StringComparison.OrdinalIgnoreCase);
