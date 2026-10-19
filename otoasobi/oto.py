@@ -274,6 +274,130 @@ def _place_blank(blank_at: float, offset: float, consonant: float, duration_ms: 
     return blank, consonant
 
 
+def adjustments_from(raw: object) -> list[dict]:
+    """画面でドラッグした位置。file, index, alias と、直した点だけの秒。"""
+    if not isinstance(raw, list):
+        return []
+    found: list[dict] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        filename = item.get("file")
+        alias = item.get("alias")
+        index = item.get("index")
+        if not isinstance(filename, str) or not filename or len(filename) > 255:
+            continue
+        if not isinstance(alias, str) or not alias.strip() or len(alias) > 80:
+            continue
+        if isinstance(index, bool) or not isinstance(index, (int, float)):
+            continue
+        if isinstance(index, float) and not index.is_integer():
+            continue
+        index = int(index)
+        if index < 0 or index > 10000:
+            continue
+        points: dict[str, float] = {}
+        for key in ("offset", "overlap", "preutter", "consonant", "blank"):
+            value = item.get(key)
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                continue
+            number = float(value)
+            if number != number or number in (float("inf"), float("-inf")):
+                continue
+            points[key] = max(-0.1, min(36000.0, number))
+        if not points:
+            continue
+        found.append(
+            {
+                "file": filename,
+                "index": index,
+                "alias": alias.strip(),
+                "points": points,
+            }
+        )
+    return found
+
+
+def _split_oto_values(line: str) -> tuple[str, str, float, float, float, float, float] | None:
+    """ファイル名、エイリアス、オフセット、子音部、ブランク、先行発声、オーバーラップ。ミリ秒。"""
+    parsed = _split_oto_alias(line)
+    if parsed is None:
+        return None
+    filename, alias, tail = parsed
+    parts = tail.split(",")
+    if len(parts) != 6:
+        return None
+    try:
+        offset, consonant, blank, preutter, overlap = (float(part) for part in parts[1:])
+    except ValueError:
+        return None
+    return filename, alias, offset, consonant, blank, preutter, overlap
+
+
+def _apply_line(line: str, expected_alias: str, points: dict[str, float], duration: float) -> str:
+    """直した絶対時刻だけを載せ、残りは計算した位置のままにする。"""
+    parsed = _split_oto_values(line)
+    if parsed is None:
+        return line
+    filename, alias, offset, consonant, blank, preutter, overlap = parsed
+    if alias != expected_alias:
+        return line
+    off = offset
+    pre_at = offset + preutter
+    con_at = offset + consonant
+    end = offset - blank
+    ov_at = offset + overlap
+    if "offset" in points:
+        off = _ms(points["offset"])
+    if "preutter" in points:
+        pre_at = _ms(points["preutter"])
+    if "consonant" in points:
+        con_at = _ms(points["consonant"])
+    if "blank" in points:
+        end = _ms(points["blank"])
+    if "overlap" in points:
+        ov_at = _ms(points["overlap"])
+    off = max(0.0, round(off, 3))
+    dur = max(_ms(max(duration, 0.0)), off, end, con_at, pre_at, ov_at)
+    pre_at = max(off, round(pre_at, 3))
+    con_rel = max(0.0, round(con_at - off, 3))
+    blank_rel, con_rel = _place_blank(round(end, 3), off, con_rel, dur)
+    pre_rel = max(0.0, round(pre_at - off, 3))
+    ov_at = min(max(round(ov_at, 3), -100.0), dur)
+    ov_rel = round(ov_at - off, 3)
+    return (
+        f"{filename}={alias},{_fmt(off)},{_fmt(con_rel)},{_fmt(blank_rel)},{_fmt(pre_rel)},{_fmt(ov_rel)}"
+    )
+
+
+def apply_file_adjustments(
+    lines: list[str],
+    filename: str,
+    adjustments: list[dict] | None,
+    duration: float,
+) -> list[str]:
+    """1 ファイル分の行へ、同じ並びのドラッグ位置を載せる。エイリアスが違う行は触らない。"""
+    if not adjustments:
+        return lines
+    by_index: dict[int, dict] = {}
+    for item in adjustments:
+        if item.get("file") != filename:
+            continue
+        index = item.get("index")
+        if isinstance(index, int):
+            by_index[index] = item
+    if not by_index:
+        return lines
+    out: list[str] = []
+    for index, line in enumerate(lines):
+        item = by_index.get(index)
+        if item is None:
+            out.append(line)
+            continue
+        out.append(_apply_line(line, str(item.get("alias") or ""), item["points"], duration))
+    return out
+
+
 def mono_oto_line(
     filename: str,
     spans: list[Span],

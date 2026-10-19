@@ -31,6 +31,7 @@ CVVC の vc_offset_ms と vc_overlap は子音音素で、連続音のオフセ�
 blank の 0 は音量の上辺の右端。正は減衰側、負は手前へ、その秒数だけずらす。子音部とブランクは単独音と連続音と CVVC の通常音素で同じ。
 応答の txt はそのモードの oto.ini。全区間は OTOasibi_log.txt、母音始まりは OTOasibi_out.txt。
 画面で区間を直したあとは save が保存データを更新し、write が oto.ini を計算して書く。
+write の adjustments は、ドラッグで直した位置。file、index、alias と、直した点だけの秒。無い点は自動推定のまま。
 """
 
 from __future__ import annotations
@@ -51,7 +52,7 @@ from otoasobi.analyze import (
     skipped_notice,
 )
 from otoasobi.cache import file_from_mapping, file_to_mapping, read_cache, save_cache
-from otoasobi.oto import oto_settings_from
+from otoasobi.oto import adjustments_from, oto_settings_from
 from otoasobi.parser import FilenameError
 from otoasobi.preview import render_preview
 
@@ -247,9 +248,9 @@ def _save(folder: str, files: object) -> dict:
     return {"ok": True}
 
 
-def _write(folder: str, files: object, config: object) -> dict:
+def _write(folder: str, files: object, config: object, adjustments: object = None) -> dict:
     parsed = _parsed_files(files)
-    out = export_folder(folder, parsed, oto_settings_from(config))
+    out = export_folder(folder, parsed, oto_settings_from(config), adjustments_from(adjustments))
     try:
         save_cache(folder, parsed)
     except Exception as exc:
@@ -299,7 +300,12 @@ def main() -> None:
                 folder = request.get("folder")
                 if not isinstance(folder, str) or not folder:
                     raise RuntimeError("folder がありません")
-                payload = _write(folder, request.get("files"), request.get("config"))
+                payload = _write(
+                    folder,
+                    request.get("files"),
+                    request.get("config"),
+                    request.get("adjustments"),
+                )
             else:
                 raise RuntimeError("未対応のコマンドです")
         except FilenameError as exc:

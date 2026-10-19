@@ -67,6 +67,7 @@ public sealed partial class MainPage : Page
     bool _applyingSave;
     bool _sessionDirty;
     bool _sessionLocked;
+    OtoAdjustBook _adjust = new();
     DispatcherQueueTimer? _sessionTimer;
     bool _waveResizing;
     bool _waveResizeLeft;
@@ -83,6 +84,7 @@ public sealed partial class MainPage : Page
     {
         InitializeComponent();
         Editor.Edited += (_, _) => OnEdited();
+        Editor.OtoTuned += OnOtoTuned;
         Editor.AnalyzeRequested += (_, _) => _ = StartAnalysisAsync();
         Editor.ViewportChanged += (_, _) => ScheduleViewport();
         BuildOverlapSliders();
@@ -1079,6 +1081,7 @@ public sealed partial class MainPage : Page
                 preview.WaveT1,
                 preview.Samples,
                 preview.SampleRate);
+            Editor.SetTunes(TunesFor(file));
             var current = Editor.ViewportQuery();
             if (current.Columns == columns && current.Rows == rows
                 && Math.Abs(current.T0) < 1e-6
@@ -1159,7 +1162,11 @@ public sealed partial class MainPage : Page
         try
         {
             _analysis ??= new AnalysisClient();
-            var result = await _analysis.WriteAsync(_folder, _files, CurrentExport());
+            var result = await _analysis.WriteAsync(
+                _folder,
+                _files,
+                CurrentExport(),
+                _adjust.For(CurrentMode()));
             if (!result.Ok || string.IsNullOrEmpty(result.Txt))
             {
                 ShowNotice(
@@ -1248,6 +1255,7 @@ public sealed partial class MainPage : Page
         if (!_configReady)
             return;
         Editor.SetOtoSettings(CurrentExport());
+        PushTunes();
         UpdatePresetDirty();
         UpdateCvvcPresetDirty();
         ScheduleSession();
@@ -1533,6 +1541,39 @@ public sealed partial class MainPage : Page
         if (rounded < 0)
             return "-" + text + " s";
         return "0.000 s";
+    }
+
+    void OnOtoTuned(object? sender, OtoAdjustedEntry entry)
+    {
+        if (_applyingSave)
+            return;
+        _adjust.Remember(CurrentMode(), entry);
+        ScheduleSession();
+        if (!_wrote)
+            return;
+        _wrote = false;
+        ShowNotice(
+            "修正はまだファイルに入っていません",
+            WithSkip("もう一度「oto.iniを作成」を押すと、oto.ini に反映されます。"));
+    }
+
+    void PushTunes()
+    {
+        if (FileList.SelectedItem is not WavFile file)
+        {
+            Editor.SetTunes(null);
+            return;
+        }
+
+        Editor.SetTunes(TunesFor(file));
+    }
+
+    List<OtoAdjustedEntry> TunesFor(WavFile file)
+    {
+        return _adjust.For(CurrentMode())
+            .Where(entry => entry.File.Equals(file.Name, StringComparison.OrdinalIgnoreCase))
+            .Select(entry => entry.Copy())
+            .ToList();
     }
 
     void OnEdited()

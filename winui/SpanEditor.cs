@@ -28,6 +28,7 @@ public sealed class SpanEditor : UserControl
         Boundary,
         Pan,
         Split,
+        Oto,
     }
 
     enum SplitLook
@@ -117,6 +118,10 @@ public sealed class SpanEditor : UserControl
     readonly List<Line> _lines = [];
     readonly List<TextBlock> _ticks = [];
     readonly List<OtoMark> _otoMarks = [];
+    readonly List<OtoMark> _otoAuto = [];
+    readonly Dictionary<int, double?[]> _tune = [];
+    List<OtoAdjustedEntry>? _pendingTunes;
+    List<int>? _tuneDefer;
     readonly List<Rectangle> _otoRects = [];
     readonly List<TextBlock> _otoTexts = [];
     readonly List<Line> _otoLines = [];
@@ -125,6 +130,11 @@ public sealed class SpanEditor : UserControl
     OtoExport _oto = new(0, 200, 0, new Dictionary<string, double>());
     int _hotOto = -1;
     int _focusOto = -1;
+    int _otoDragIndex = -1;
+    double _otoPressX;
+    bool _otoDragLive;
+    readonly bool[] _otoStack = new bool[OtoTune.PointCount];
+    readonly double?[] _otoDragOrigin = new double?[OtoTune.PointCount];
 
     DragKind _drag = DragKind.None;
     int _dragIndex = -1;
@@ -333,6 +343,8 @@ public sealed class SpanEditor : UserControl
 
     public event EventHandler? Edited;
 
+    internal event EventHandler<OtoAdjustedEntry>? OtoTuned;
+
     public event EventHandler? ViewportChanged;
 
     public bool HasContent => _file != null;
@@ -358,6 +370,9 @@ public sealed class SpanEditor : UserControl
         _lines.Clear();
         _ticks.Clear();
         _otoMarks.Clear();
+        _otoAuto.Clear();
+        _tune.Clear();
+        _pendingTunes = null;
         _otoRects.Clear();
         _otoTexts.Clear();
         _otoLines.Clear();
@@ -422,8 +437,25 @@ public sealed class SpanEditor : UserControl
     internal void SetOtoSettings(OtoExport settings)
     {
         if (!string.Equals(settings.Mode, _oto.Mode, StringComparison.Ordinal))
+        {
+            // モードが変わると行の意味が変わる。前のモードの直した値は画面から外す。
             _focusOto = -1;
+            _tune.Clear();
+            _pendingTunes = null;
+        }
+
         _oto = settings;
+        if (_file == null || _plot.Width < 2 || _plot.Height < 2)
+            return;
+        ArrangeOtoLabels();
+    }
+
+    internal void SetTunes(IReadOnlyList<OtoAdjustedEntry>? entries)
+    {
+        if (_drag == DragKind.Oto)
+            return;
+        _tune.Clear();
+        _pendingTunes = entries == null ? [] : entries.ToList();
         if (_file == null || _plot.Width < 2 || _plot.Height < 2)
             return;
         ArrangeOtoLabels();
@@ -482,6 +514,9 @@ public sealed class SpanEditor : UserControl
         _lines.Clear();
         _ticks.Clear();
         _otoMarks.Clear();
+        _otoAuto.Clear();
+        _tune.Clear();
+        _pendingTunes = null;
         _otoRects.Clear();
         _otoTexts.Clear();
         _otoLines.Clear();
@@ -650,6 +685,23 @@ public sealed class SpanEditor : UserControl
             return;
         }
 
+        var oto = HitOtoPoint(x, point.Position.Y);
+        if (oto is { } hit)
+        {
+            if (_focusOto != hit.Index)
+                SetFocusOto(hit.Index);
+            _drag = DragKind.Oto;
+            _otoDragIndex = hit.Index;
+            _otoPressX = x;
+            _otoDragLive = false;
+            ArmOtoStack(hit.Index, hit.Point);
+            _changed = false;
+            ArmCapture(e.Pointer);
+            UseCursor(_cursorEw);
+            e.Handled = true;
+            return;
+        }
+
         if (InOtoBand(point.Position.Y))
         {
             FocusOtoAt(x);
@@ -715,6 +767,26 @@ public sealed class SpanEditor : UserControl
             return;
         }
 
+        if (_drag == DragKind.Oto)
+        {
+            if (!_otoDragLive)
+            {
+                if (Math.Abs(x - _otoPressX) < 3)
+                {
+                    UseCursor(_cursorEw);
+                    e.Handled = true;
+                    return;
+                }
+
+                _otoDragLive = true;
+            }
+
+            ApplyOtoDrag(XToTime(x));
+            UseCursor(_cursorEw);
+            e.Handled = true;
+            return;
+        }
+
         var split = HitSplit(point.Position.Y);
         if (split >= 0)
         {
@@ -727,6 +799,15 @@ public sealed class SpanEditor : UserControl
         }
 
         SetHotSplit(-1);
+        var otoHit = HitOtoPoint(x, point.Position.Y);
+        if (otoHit is { } hover)
+        {
+            UseCursor(_cursorEw);
+            Highlight(-1);
+            ShowOtoPoint(hover.Index, hover.Point);
+            return;
+        }
+
         if (InOtoBand(point.Position.Y))
         {
             UseCursor(_cursorHand);
@@ -784,7 +865,10 @@ public sealed class SpanEditor : UserControl
             return;
         var changed = _changed;
         var split = _drag == DragKind.Split;
+        var otoIndex = _drag == DragKind.Oto && _otoDragLive ? _otoDragIndex : -1;
         _drag = DragKind.None;
+        _otoDragIndex = -1;
+        _otoDragLive = false;
         _splitIndex = -1;
         _origin = [];
         if (split)
@@ -805,6 +889,16 @@ public sealed class SpanEditor : UserControl
                 }
             }
         }
+
+        if (otoIndex >= 0)
+        {
+            if (changed)
+                EmitTune(otoIndex);
+            FlushDeferredTunes();
+            return;
+        }
+
+        FlushDeferredTunes();
 
         if (changed)
             Edited?.Invoke(this, EventArgs.Empty);
@@ -1960,7 +2054,7 @@ public sealed class SpanEditor : UserControl
     {
         if (_file == null)
             return;
-        OtoMarks.Fill(_file, _oto, _otoMarks, _loudness);
+        RefreshOtoMarks();
         EnsureOtoVisuals(_otoMarks.Count);
         var count = Math.Min(_otoMarks.Count, _otoRects.Count);
         if (_focusOto >= count)
@@ -1995,7 +2089,7 @@ public sealed class SpanEditor : UserControl
 
             var textTop = top + 4 + lanes[i] * pitch;
             var text = _otoTexts[i];
-            text.Text = mark.Alias;
+            text.Text = AliasLabel(mark, i);
             text.Width = width;
             text.Opacity = dim ? OtoDimOpacity : 1;
             text.FontWeight = chosen
@@ -2011,12 +2105,13 @@ public sealed class SpanEditor : UserControl
             {
                 var line = _otoLines[i * OtoPointCount + point];
                 var x = X(mark.At(point));
+                var dragging = chosen && _drag == DragKind.Oto && _otoDragIndex == i && _otoStack[point];
                 line.Opacity = dim ? OtoDimOpacity : 1;
-                line.StrokeThickness = chosen ? 3 : 2;
+                line.StrokeThickness = dragging ? 4 : chosen ? 3 : 2;
                 line.Visibility = height > 1 ? Visibility.Visible : Visibility.Collapsed;
                 line.X1 = x;
                 line.X2 = x;
-                line.Y1 = top;
+                line.Y1 = chosen ? 0 : top;
                 line.Y2 = top + height;
             }
         }
@@ -2122,6 +2217,10 @@ public sealed class SpanEditor : UserControl
                     return rank;
             }
 
+            var star = (Tuned(b.Index / OtoPointCount, b.Index % OtoPointCount) ? 1 : 0)
+                .CompareTo(Tuned(a.Index / OtoPointCount, a.Index % OtoPointCount) ? 1 : 0);
+            if (star != 0)
+                return star;
             return a.X.CompareTo(b.X);
         });
         var occupied = new List<(double Left, double Right)>();
@@ -2135,6 +2234,9 @@ public sealed class SpanEditor : UserControl
                 continue;
             }
 
+            var markIndex = item.Index / OtoPointCount;
+            var point = item.Index % OtoPointCount;
+            text.Text = PointLabel(markIndex, point);
             var width = Math.Max(12, text.Text.Length * 10 + 8);
             var left = item.X - width / 2;
             var right = left + width;
@@ -2284,7 +2386,7 @@ public sealed class SpanEditor : UserControl
 
     string OtoReadout(OtoMark mark, double x)
     {
-        if (!double.IsNaN(x))
+        if (!double.IsNaN(x) && _focusOto >= 0 && _focusOto < _otoMarks.Count)
         {
             var bestPoint = -1;
             var bestDist = HitPx;
@@ -2298,13 +2400,11 @@ public sealed class SpanEditor : UserControl
             }
 
             if (bestPoint >= 0)
-            {
-                var at = mark.At(bestPoint);
-                return $"{mark.Alias}   {JoinedPointNames(mark, at)}   {at:0.000} 秒";
-            }
+                return PointReadout(_focusOto, bestPoint);
         }
 
-        return $"{mark.Alias}   {mark.Offset:0.000}–{mark.Blank:0.000}";
+        var alias = _focusOto >= 0 ? AliasLabel(mark, _focusOto) : mark.Alias;
+        return $"{alias}   {mark.Offset:0.000}–{mark.Blank:0.000}";
     }
 
     static string JoinedPointNames(OtoMark mark, double at)
@@ -2458,6 +2558,322 @@ public sealed class SpanEditor : UserControl
 
         return lanes;
     }
+
+    void RefreshOtoMarks()
+    {
+        if (_file == null)
+            return;
+        OtoMarks.Fill(_file, _oto, _otoAuto, _loudness);
+        TakePending(_otoAuto.Count);
+        var changed = Reconcile(_otoAuto);
+        _otoMarks.Clear();
+        var duration = Duration;
+        for (var i = 0; i < _otoAuto.Count; i++)
+        {
+            _tune.TryGetValue(i, out var points);
+            _otoMarks.Add(OtoTune.Apply(_otoAuto[i], points, duration));
+        }
+
+        if (changed == null)
+            return;
+        if (_drag == DragKind.Oto)
+        {
+            (_tuneDefer ??= []).AddRange(changed);
+            return;
+        }
+
+        foreach (var index in changed)
+            EmitTune(index);
+    }
+
+    void TakePending(int count)
+    {
+        if (_pendingTunes == null || _file == null)
+            return;
+        foreach (var entry in _pendingTunes)
+        {
+            if (entry.Index < 0 || entry.Index >= count)
+                continue;
+            if (!entry.File.Equals(_file.Name, StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (!string.Equals(entry.Alias, _otoAuto[entry.Index].Alias, StringComparison.Ordinal))
+                continue;
+            var points = entry.Points();
+            if (!OtoTune.Has(points))
+                continue;
+            _tune[entry.Index] = points;
+        }
+
+        _pendingTunes = null;
+    }
+
+    List<int>? Reconcile(List<OtoMark> auto)
+    {
+        List<int>? changed = null;
+        var drop = new List<int>();
+        foreach (var (index, points) in _tune)
+        {
+            if (index < 0 || index >= auto.Count)
+            {
+                drop.Add(index);
+                continue;
+            }
+
+            var any = false;
+            var edited = false;
+            for (var point = 0; point < OtoTune.PointCount; point++)
+            {
+                if (points[point] is not double time)
+                    continue;
+                if (Math.Abs(time - auto[index].At(point)) <= OtoTune.MagnetSeconds)
+                {
+                    points[point] = null;
+                    edited = true;
+                    continue;
+                }
+
+                any = true;
+            }
+
+            if (!any)
+                drop.Add(index);
+            if (edited)
+                (changed ??= []).Add(index);
+        }
+
+        foreach (var index in drop)
+            _tune.Remove(index);
+        return changed;
+    }
+
+    void ArmOtoStack(int index, int point)
+    {
+        Array.Clear(_otoStack);
+        Array.Clear(_otoDragOrigin);
+        if (index < 0 || index >= _otoMarks.Count)
+            return;
+        var mark = _otoMarks[index];
+        var at = mark.At(point);
+        for (var i = 0; i < OtoTune.PointCount; i++)
+        {
+            _otoStack[i] = Math.Abs(mark.At(i) - at) <= OtoTune.MagnetSeconds;
+            _otoDragOrigin[i] = TunedAt(index, i);
+        }
+
+        _otoStack[point] = true;
+    }
+
+    void ApplyOtoDrag(double time)
+    {
+        var index = _otoDragIndex;
+        if (_file == null || index < 0 || index >= _otoMarks.Count || index >= _otoAuto.Count)
+            return;
+        var shown = _otoMarks[index];
+        var auto = _otoAuto[index];
+        var next = OtoTune.ClampGroup(shown, _otoStack, time, Duration);
+        var moved = false;
+        for (var point = 0; point < OtoTune.PointCount; point++)
+        {
+            if (!_otoStack[point])
+                continue;
+            double? stored = Math.Abs(next - auto.At(point)) <= OtoTune.MagnetSeconds ? null : next;
+            if (Nullable.Equals(stored, TunedAt(index, point)))
+                continue;
+            SetTuned(index, point, stored);
+            moved = true;
+        }
+
+        if (!moved)
+            return;
+        ArrangeOtoLabels();
+        StickTunedToShown(index);
+        _changed = !SameTune(index, _otoDragOrigin);
+        if (index < _otoMarks.Count)
+        {
+            var point = 0;
+            for (var i = 0; i < OtoTune.PointCount; i++)
+            {
+                if (_otoStack[i])
+                    point = i;
+            }
+
+            ShowOtoPoint(index, point);
+        }
+    }
+
+    void StickTunedToShown(int index)
+    {
+        if (index < 0 || index >= _otoMarks.Count || index >= _otoAuto.Count)
+            return;
+        var changed = false;
+        for (var point = 0; point < OtoTune.PointCount; point++)
+        {
+            if (!_otoStack[point] || TunedAt(index, point) == null)
+                continue;
+            var shown = _otoMarks[index].At(point);
+            if (Math.Abs(shown - _otoAuto[index].At(point)) <= OtoTune.MagnetSeconds)
+            {
+                SetTuned(index, point, null);
+                changed = true;
+                continue;
+            }
+
+            if (Math.Abs(shown - TunedAt(index, point)!.Value) <= 1e-9)
+                continue;
+            SetTuned(index, point, OtoTune.RoundSeconds(shown));
+            changed = true;
+        }
+
+        if (changed)
+            ArrangeOtoLabels();
+    }
+
+    void SetTuned(int index, int point, double? time)
+    {
+        if (!_tune.TryGetValue(index, out var points))
+        {
+            if (time == null)
+                return;
+            points = new double?[OtoTune.PointCount];
+            _tune[index] = points;
+        }
+
+        points[point] = time;
+        if (!OtoTune.Has(points))
+            _tune.Remove(index);
+    }
+
+    double? TunedAt(int index, int point)
+    {
+        if (!_tune.TryGetValue(index, out var points) || point < 0 || point >= points.Length)
+            return null;
+        return points[point];
+    }
+
+    bool Tuned(int index, int point) => TunedAt(index, point) != null;
+
+    bool TunedAny(int index)
+    {
+        for (var point = 0; point < OtoTune.PointCount; point++)
+        {
+            if (Tuned(index, point))
+                return true;
+        }
+
+        return false;
+    }
+
+    bool SameTune(int index, double?[] origin)
+    {
+        for (var point = 0; point < OtoTune.PointCount; point++)
+        {
+            if (!Nullable.Equals(TunedAt(index, point), origin[point]))
+                return false;
+        }
+
+        return true;
+    }
+
+    void FlushDeferredTunes()
+    {
+        if (_tuneDefer == null)
+            return;
+        var pending = _tuneDefer;
+        _tuneDefer = null;
+        foreach (var index in pending.Distinct())
+            EmitTune(index);
+    }
+
+    void EmitTune(int index)
+    {
+        if (_file == null || index < 0 || index >= _otoAuto.Count)
+            return;
+        var entry = new OtoAdjustedEntry
+        {
+            File = _file.Name,
+            Index = index,
+            Alias = _otoAuto[index].Alias,
+        };
+        for (var point = 0; point < OtoTune.PointCount; point++)
+            entry.SetPoint(point, TunedAt(index, point));
+        OtoTuned?.Invoke(this, entry);
+    }
+
+    (int Index, int Point)? HitOtoPoint(double x, double y)
+    {
+        if (_file == null || _labelsLocked || _otoMarks.Count == 0)
+            return null;
+        var inBand = InOtoBand(y);
+        var onWave = y >= 0 && y < OtoTop;
+        if (!inBand && !onWave)
+            return null;
+        if (!inBand && _focusOto < 0)
+            return null;
+        var slop = inBand ? HitPx : 8;
+        var best = -1;
+        var bestPoint = -1;
+        var bestDist = slop;
+        var focused = false;
+        for (var i = 0; i < _otoMarks.Count; i++)
+        {
+            if (!inBand && i != _focusOto)
+                continue;
+            var mark = _otoMarks[i];
+            for (var point = 0; point < OtoPointCount; point++)
+            {
+                var dist = Math.Abs(X(mark.At(point)) - x);
+                if (dist > slop)
+                    continue;
+                AcceptOtoHit(ref best, ref bestPoint, ref bestDist, ref focused, i, point, dist, i == _focusOto);
+            }
+        }
+
+        if (best < 0)
+            return null;
+        return (best, bestPoint);
+    }
+
+    void AcceptOtoHit(ref int best, ref int bestPoint, ref double bestDist, ref bool focused, int index, int point, double dist, bool isFocus)
+    {
+        var closer = best < 0 || dist < bestDist - 0.1;
+        var preferFocus = !closer && isFocus && !focused && dist <= bestDist + 0.1;
+        if (!closer && !preferFocus)
+            return;
+        bestDist = dist;
+        best = index;
+        bestPoint = point;
+        focused = isFocus;
+    }
+
+    void ShowOtoPoint(int index, int point)
+    {
+        if (index < 0 || index >= _otoMarks.Count)
+        {
+            SetReadout("");
+            return;
+        }
+
+        if (_focusOto < 0)
+            SetHotOto(index);
+        SetReadout(PointReadout(index, point));
+    }
+
+    string PointReadout(int index, int point)
+    {
+        var mark = _otoMarks[index];
+        var at = mark.At(point);
+        var state = Tuned(index, point) ? "調整済み" : "自動推定";
+        return $"{mark.Alias}   {PointLabel(index, point)}   {at:0.000} 秒   {state}";
+    }
+
+    string PointLabel(int index, int point)
+    {
+        var name = OtoPointName(point);
+        return Tuned(index, point) ? name + " *" : name;
+    }
+
+    string AliasLabel(OtoMark mark, int index) =>
+        TunedAny(index) ? mark.Alias + " *" : mark.Alias;
 
     static string OtoPointName(int point) => point switch
     {

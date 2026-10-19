@@ -460,7 +460,7 @@ static class OtoMarks
         return prev.Start;
     }
 
-    static (double Blank, double Consonant) PlaceBlank(
+    internal static (double Blank, double Consonant) PlaceBlank(
         double blankAt,
         double offset,
         double consonant,
@@ -499,7 +499,7 @@ static class OtoMarks
 
     static double Ms(double seconds) => Round3(seconds * 1000.0);
 
-    static double Round3(double value) => Math.Round(value, 3, MidpointRounding.ToEven);
+    internal static double Round3(double value) => Math.Round(value, 3, MidpointRounding.ToEven);
 
     static double Bounded(double value, double fallback, double lo, double hi)
     {

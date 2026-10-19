@@ -98,7 +98,11 @@ sealed class AnalysisClient : IDisposable
         throw new IOException(string.IsNullOrEmpty(error) ? "保存データを書けませんでした。" : error);
     }
 
-    public async Task<AnalyzeResult> WriteAsync(string folder, IReadOnlyList<WavFile> files, OtoExport config)
+    public async Task<AnalyzeResult> WriteAsync(
+        string folder,
+        IReadOnlyList<WavFile> files,
+        OtoExport config,
+        IReadOnlyList<OtoAdjustedEntry>? adjustments = null)
     {
         using var doc = await SendAsync(id => JsonSerializer.Serialize(new
         {
@@ -106,6 +110,7 @@ sealed class AnalysisClient : IDisposable
             cmd = "write",
             folder,
             files = FilePayload(files),
+            adjustments = AdjustPayload(adjustments),
             config = new
             {
                 offset_ms = config.OffsetMs,
@@ -216,6 +221,23 @@ sealed class AnalysisClient : IDisposable
 
         var cached = root.TryGetProperty("cached", out var cachedValue) && cachedValue.ValueKind == JsonValueKind.True;
         return new FolderData(ok, error, notice, files, cached);
+    }
+
+    static object[] AdjustPayload(IReadOnlyList<OtoAdjustedEntry>? entries)
+    {
+        if (entries == null || entries.Count == 0)
+            return [];
+        return entries.Where(entry => entry.Any).Select(entry => new
+        {
+            file = entry.File,
+            index = entry.Index,
+            alias = entry.Alias,
+            offset = entry.Offset,
+            overlap = entry.Overlap,
+            preutter = entry.Preutter,
+            consonant = entry.Consonant,
+            blank = entry.Blank,
+        }).ToArray();
     }
 
     static object[] FilePayload(IReadOnlyList<WavFile> files)

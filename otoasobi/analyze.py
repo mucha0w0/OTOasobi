@@ -12,6 +12,7 @@ from otoasobi.features import compute_features, loudness_db
 from otoasobi.oto import (
     OTO_INI_NAME,
     OtoSettings,
+    apply_file_adjustments,
     cvvc_oto_lines,
     mono_oto_lines,
     renzoku_oto_lines,
@@ -258,6 +259,7 @@ def export_folder(
     folder: str | Path,
     files: list[AnalyzedFile],
     settings: OtoSettings | None = None,
+    adjustments: list[dict] | None = None,
 ) -> Path:
     """直した区間から oto.ini とラベルを書く。settings が無いときはいまの初期値。"""
     folder = Path(folder)
@@ -275,12 +277,17 @@ def export_folder(
         write_lines = mono_oto_lines
     for item in files:
         oto_lines.extend(
-            write_lines(
+            apply_file_adjustments(
+                write_lines(
+                    item.name,
+                    item.spans,
+                    item.duration,
+                    settings,
+                    _file_loudness(folder, item.name),
+                ),
                 item.name,
-                item.spans,
+                adjustments,
                 item.duration,
-                settings,
-                _file_loudness(folder, item.name),
             )
         )
     out = folder / OTO_INI_NAME

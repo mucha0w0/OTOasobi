@@ -43,6 +43,9 @@ sealed class OtoSaveFile
     public List<CvvcPreset>? CvvcPresets { get; set; }
 
     public EffectLibrary? Effects { get; set; }
+
+    // 線で直した位置。モードごと。無いときは自動推定だけ。
+    public OtoAdjustBook? Adjustments { get; set; }
 }
 
 sealed class OtoSliderState
@@ -99,6 +102,109 @@ sealed class EffectLibrary
     public List<CompressorPreset> CompressorPresets { get; set; } = [];
 
     public List<EffectRackPreset> RackPresets { get; set; } = [];
+}
+
+// 音素ごとの線の位置。null の欄は自動推定のまま。時刻はファイル先頭からの秒。
+sealed class OtoAdjustedEntry
+{
+    public string File { get; set; } = "";
+
+    public int Index { get; set; }
+
+    public string Alias { get; set; } = "";
+
+    public double? Offset { get; set; }
+
+    public double? Overlap { get; set; }
+
+    public double? Preutter { get; set; }
+
+    public double? Consonant { get; set; }
+
+    public double? Blank { get; set; }
+
+    public bool Any =>
+        Offset != null || Overlap != null || Preutter != null || Consonant != null || Blank != null;
+
+    public double? Point(int point) => point switch
+    {
+        0 => Offset,
+        1 => Overlap,
+        2 => Preutter,
+        3 => Consonant,
+        _ => Blank,
+    };
+
+    public void SetPoint(int point, double? value)
+    {
+        switch (point)
+        {
+            case 0:
+                Offset = value;
+                break;
+            case 1:
+                Overlap = value;
+                break;
+            case 2:
+                Preutter = value;
+                break;
+            case 3:
+                Consonant = value;
+                break;
+            default:
+                Blank = value;
+                break;
+        }
+    }
+
+    public double?[] Points() => [Offset, Overlap, Preutter, Consonant, Blank];
+
+    public OtoAdjustedEntry Copy() => new()
+    {
+        File = File,
+        Index = Index,
+        Alias = Alias,
+        Offset = Offset,
+        Overlap = Overlap,
+        Preutter = Preutter,
+        Consonant = Consonant,
+        Blank = Blank,
+    };
+}
+
+sealed class OtoAdjustBook
+{
+    public List<OtoAdjustedEntry> Mono { get; set; } = [];
+
+    public List<OtoAdjustedEntry> Renzoku { get; set; } = [];
+
+    public List<OtoAdjustedEntry> Cvvc { get; set; } = [];
+
+    public bool IsEmpty => Mono.Count == 0 && Renzoku.Count == 0 && Cvvc.Count == 0;
+
+    public List<OtoAdjustedEntry> For(string? mode) => mode switch
+    {
+        "renzoku" => Renzoku,
+        "cvvc" => Cvvc,
+        _ => Mono,
+    };
+
+    public OtoAdjustBook Copy() => new()
+    {
+        Mono = Mono.Select(entry => entry.Copy()).ToList(),
+        Renzoku = Renzoku.Select(entry => entry.Copy()).ToList(),
+        Cvvc = Cvvc.Select(entry => entry.Copy()).ToList(),
+    };
+
+    public void Remember(string? mode, OtoAdjustedEntry entry)
+    {
+        var list = For(mode);
+        list.RemoveAll(item =>
+            item.Index == entry.Index
+            && item.File.Equals(entry.File, StringComparison.OrdinalIgnoreCase));
+        if (entry.Any)
+            list.Add(entry.Copy());
+    }
 }
 
 sealed class OtoSaveSummary
@@ -364,7 +470,64 @@ static class OtoSaveStore
             file.CvvcPresets = CvvcPresetStore.Normalize(file.CvvcPresets);
         if (file.Effects != null)
             CleanEffects(file.Effects);
+        file.Adjustments = CleanAdjust(file.Adjustments);
         return file;
+    }
+
+    static OtoAdjustBook? CleanAdjust(OtoAdjustBook? book)
+    {
+        if (book == null)
+            return null;
+        var cleaned = new OtoAdjustBook
+        {
+            Mono = CleanEntries(book.Mono),
+            Renzoku = CleanEntries(book.Renzoku),
+            Cvvc = CleanEntries(book.Cvvc),
+        };
+        return cleaned.IsEmpty ? null : cleaned;
+    }
+
+    static List<OtoAdjustedEntry> CleanEntries(List<OtoAdjustedEntry>? list)
+    {
+        var result = new List<OtoAdjustedEntry>();
+        if (list == null)
+            return result;
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        for (var i = list.Count - 1; i >= 0; i--)
+        {
+            var entry = list[i];
+            if (entry == null)
+                continue;
+            var file = (entry.File ?? "").Trim();
+            var alias = (entry.Alias ?? "").Trim();
+            if (file.Length == 0 || file.Length > 255 || alias.Length == 0 || alias.Length > 80)
+                continue;
+            if (entry.Index < 0 || entry.Index > 10000)
+                continue;
+            var key = file + "\n" + entry.Index.ToString(CultureInfo.InvariantCulture);
+            if (!seen.Add(key))
+                continue;
+            entry.File = file;
+            entry.Alias = alias;
+            entry.Offset = CleanTime(entry.Offset);
+            entry.Overlap = CleanTime(entry.Overlap);
+            entry.Preutter = CleanTime(entry.Preutter);
+            entry.Consonant = CleanTime(entry.Consonant);
+            entry.Blank = CleanTime(entry.Blank);
+            if (!entry.Any)
+                continue;
+            result.Add(entry);
+        }
+
+        result.Reverse();
+        return result;
+    }
+
+    static double? CleanTime(double? value)
+    {
+        if (value is not double time || double.IsNaN(time) || double.IsInfinity(time))
+            return null;
+        return Math.Clamp(Math.Round(time, 6), -0.1, 36000);
     }
 
     static void CleanEffects(EffectLibrary library)

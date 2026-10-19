@@ -32,7 +32,7 @@ public sealed partial class MainPage
         var panel = new StackPanel { Spacing = 8, MinWidth = 360 };
         panel.Children.Add(new TextBlock
         {
-            Text = "いまの計算方法、スライダー、プリセットを、このフォルダに保存します。原音修正の設定も含みます。",
+            Text = "いまの計算方法、スライダー、プリセットを、このフォルダに保存します。原音修正の設定と、線で直した oto.ini の値も含みます。",
             TextWrapping = TextWrapping.Wrap,
         });
         panel.Children.Add(box);
@@ -299,6 +299,8 @@ public sealed partial class MainPage
         _applyingSave = true;
         try
         {
+            _adjust = file.Adjustments?.Copy() ?? new OtoAdjustBook();
+            Editor.SetTunes(null);
             ReplaceLibraries(file);
             ApplySliders(file);
         }
@@ -329,6 +331,7 @@ public sealed partial class MainPage
         if (_folder == null)
             return;
         _sessionLocked = false;
+        _adjust = new OtoAdjustBook();
         var session = OtoSaveStore.TryLoadSession(_folder, out var keep);
         if (session != null)
         {
@@ -339,6 +342,8 @@ public sealed partial class MainPage
         _sessionLocked = keep;
         if (!keep)
             ApplyDefaults();
+        else
+            Editor.SetTunes(null);
     }
 
     void ApplyDefaults()
@@ -346,6 +351,8 @@ public sealed partial class MainPage
         _applyingSave = true;
         try
         {
+            _adjust = new OtoAdjustBook();
+            Editor.SetTunes(null);
             ApplySliders(new OtoSaveFile());
         }
         finally
@@ -484,6 +491,7 @@ public sealed partial class MainPage
                 VcConsonant = CapturePercents(_vcConsonantSliders, DefaultVcConsonantPercent),
                 VcBlank = CapturePercents(_vcBlankSliders, DefaultVcBlankPercent),
             },
+            Adjustments = _adjust.IsEmpty ? null : _adjust.Copy(),
         };
         if (!includeLibraries)
             return file;
