@@ -972,6 +972,7 @@ public sealed partial class SpanEditor : UserControl
 
         if (otoIndex >= 0)
         {
+            ArrangeOtoLabels();
             if (changed)
                 EmitTune(otoIndex);
             FlushDeferredTunes();

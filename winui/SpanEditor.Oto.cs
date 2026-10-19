@@ -259,7 +259,7 @@ public sealed partial class SpanEditor
             Canvas.SetTop(_otoCaption, top + 3);
         }
 
-        if (_focusOto >= 0)
+        if (_focusOto >= 0 && _drag != DragKind.Oto)
             RaiseFocusedOto();
     }
 
@@ -846,8 +846,10 @@ public sealed partial class SpanEditor
 
         if (!moved)
             return;
-        ArrangeOtoLabels();
-        StickTunedToShown(index);
+        ReapplyTunedMark(index);
+        if (StickTunedToShown(index))
+            ReapplyTunedMark(index);
+        PaintDraggedOto(index);
         _changed = !SameTune(index, _otoDragOrigin);
         if (index < _otoMarks.Count)
         {
@@ -862,10 +864,10 @@ public sealed partial class SpanEditor
         }
     }
 
-    void StickTunedToShown(int index)
+    bool StickTunedToShown(int index)
     {
         if (index < 0 || index >= _otoMarks.Count || index >= _otoAuto.Count)
-            return;
+            return false;
         var changed = false;
         for (var point = 0; point < OtoTune.PointCount; point++)
         {
@@ -885,8 +887,65 @@ public sealed partial class SpanEditor
             changed = true;
         }
 
-        if (changed)
-            ArrangeOtoLabels();
+        return changed;
+    }
+
+    void ReapplyTunedMark(int index)
+    {
+        if (index < 0 || index >= _otoAuto.Count || index >= _otoMarks.Count)
+            return;
+        _tune.TryGetValue(index, out var points);
+        _otoMarks[index] = OtoTune.Apply(_otoAuto[index], points, Duration);
+    }
+
+    // ドラッグ中は、動かしている音素の線だけを動かす。全音素の再計算と重ね順の入れ替えはしない。
+    void PaintDraggedOto(int index)
+    {
+        if (index < 0 || index >= _otoMarks.Count || index >= _otoRects.Count)
+            return;
+        var mark = _otoMarks[index];
+        var start = Math.Min(mark.Offset, mark.Blank);
+        var end = Math.Max(mark.Offset, mark.Blank);
+        var left = X(start);
+        var width = Math.Max(0, X(end) - left);
+        var rect = _otoRects[index];
+        rect.Width = width;
+        Canvas.SetLeft(rect, left);
+        if (index < _otoTexts.Count)
+        {
+            var text = _otoTexts[index];
+            var alias = AliasLabel(mark, index);
+            if (!string.Equals(text.Text, alias, StringComparison.Ordinal))
+                text.Text = alias;
+            text.Width = width;
+            Canvas.SetLeft(text, left);
+        }
+
+        var chosen = index == _focusOto;
+        for (var point = 0; point < OtoTune.PointCount; point++)
+        {
+            var lineIndex = index * OtoTune.PointCount + point;
+            if (lineIndex >= _otoLines.Count)
+                break;
+            var line = _otoLines[lineIndex];
+            var x = X(mark.At(point));
+            line.X1 = x;
+            line.X2 = x;
+            if (_otoStack[point])
+                line.StrokeThickness = 4;
+            else if (chosen)
+                line.StrokeThickness = 3;
+            if (lineIndex >= _otoPointChips.Count)
+                continue;
+            var chip = _otoPointChips[lineIndex];
+            if (chip.Visibility != Visibility.Visible || chip.Child is not TextBlock name)
+                continue;
+            var label = PointLabel(index, point);
+            if (!string.Equals(name.Text, label, StringComparison.Ordinal))
+                name.Text = label;
+            var chipWidth = Math.Max(12, name.Text.Length * 10 + 8);
+            Canvas.SetLeft(chip, x - chipWidth / 2);
+        }
     }
 
     void SetTuned(int index, int point, double? time)
