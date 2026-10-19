@@ -591,7 +591,7 @@ public sealed partial class MainPage : Page
         var delta = point.Properties.MouseWheelDelta;
         if (delta == 0)
             delta = e.GetCurrentPoint(this).Properties.MouseWheelDelta;
-        if (Editor.ZoomAt(point.Position.X, delta, e))
+        if (Editor.ZoomAt(point.Position.X, delta, e, SpanEditor.ShiftHeld(e)))
             e.Handled = true;
     }
 

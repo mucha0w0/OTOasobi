@@ -330,15 +330,36 @@ public sealed partial class SpanEditor : UserControl
         ArrangeAll();
     }
 
-    public bool ZoomAt(double x, int delta, object? token = null)
+    public bool ZoomAt(double x, int delta, object? token = null, bool horizontal = false)
     {
         if (token != null && ReferenceEquals(token, _zoomToken))
             return true;
         if (_file == null || delta == 0 || _drag != DragKind.None || _plot.Width < 2)
             return false;
         _zoomToken = token;
-        ZoomBy(delta > 0 ? 0.8 : 1.25, x);
+        if (horizontal)
+            ScrollByWheel(delta);
+        else
+            ZoomBy(delta > 0 ? 0.8 : 1.25, x);
         return true;
+    }
+
+    // 標準ノッチ（120）で表示幅の 15%。ホイールを上へ回すと先頭側へ動く。
+    void ScrollByWheel(int delta) => Nudge(-delta / 120.0 * 0.15);
+
+    internal static bool ShiftHeld(PointerRoutedEventArgs e)
+    {
+        if (e.KeyModifiers.HasFlag(Windows.System.VirtualKeyModifiers.Shift))
+            return true;
+        return IsKeyDown(Windows.System.VirtualKey.Shift)
+            || IsKeyDown(Windows.System.VirtualKey.LeftShift)
+            || IsKeyDown(Windows.System.VirtualKey.RightShift);
+    }
+
+    static bool IsKeyDown(Windows.System.VirtualKey key)
+    {
+        var state = InputKeyboardSource.GetKeyStateForCurrentThread(key);
+        return (state & Windows.UI.Core.CoreVirtualKeyStates.Down) != 0;
     }
 
     public event EventHandler? Edited;
@@ -925,7 +946,7 @@ public sealed partial class SpanEditor : UserControl
     void OnWheel(object sender, PointerRoutedEventArgs e)
     {
         var point = e.GetCurrentPoint(_plot);
-        if (ZoomAt(point.Position.X, point.Properties.MouseWheelDelta, e))
+        if (ZoomAt(point.Position.X, point.Properties.MouseWheelDelta, e, ShiftHeld(e)))
             e.Handled = true;
     }
 
