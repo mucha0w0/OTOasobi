@@ -774,7 +774,7 @@
                                                         <StackPanel Spacing="8">
                                                             <local:InfoNote
                                                                 Title="先頭音素"
-                                                                Text="ファイルの先頭と、アンダーバーの無音の直後は、選んだ単独音のプリセットで計算します。エイリアスは「- さ」の形です。" />
+                                                                Text="ファイルの先頭と、アンダーバーの無音の直後は、選んだ単独音のプリセットで計算します。あいうえおんは、ファイルの先頭では連続音と同じ計算です。エイリアスは「- さ」の形です。" />
                                                             <DropDownButton
                                                                 x:Name="CvvcLeadPresetMenu"
                                                                 MinHeight="32"
@@ -840,7 +840,7 @@
                                                         <StackPanel Spacing="8">
                                                             <local:InfoNote
                                                                 Title="通常音素"
-                                                                Text="先頭以外の音素です。オフセットは子音の開始、先行発声は母音の開始に揃えます。エイリアスは「し」のように、そのモーラのかなです。" />
+                                                                Text="先頭以外で、子音がある音素です。オフセットは子音の開始、先行発声は母音の開始に揃えます。あいうえおんは連続音と同じ計算で、オフセットとオーバーラップは子音音素のスライダーです。エイリアスは、そのモーラのかなです。" />
                                                             <Grid>
                                                                 <TextBlock VerticalAlignment="Center" Text="子音部" />
                                                                 <TextBlock
@@ -893,7 +893,7 @@
                                                         <StackPanel Spacing="8">
                                                             <local:InfoNote
                                                                 Title="子音音素"
-                                                                Text="直前の母音と、いまの子音です。エイリアスは「a sh」の形で、通常音素の前に並びます。先行発声はその子音の開始に揃えます。" />
+                                                                Text="直前の母音と、いまの子音です。エイリアスは「a sh」の形で、通常音素の前に並びます。先行発声はその子音の開始に揃えます。オフセットとオーバーラップは、あいうえおんにも使います。" />
                                                             <Grid>
                                                                 <TextBlock VerticalAlignment="Center" Text="オフセット" />
                                                                 <TextBlock

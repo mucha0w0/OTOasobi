@@ -24,8 +24,10 @@ mode が renzoku のときは連続音、cvvc のときは CVVC。それ以外�
 連続音の offset_ms の 0 は、その音素の子音と直前の母音の境界から 150ms 手前。子音が無いときは母音と母音の境界から 150ms 手前。overlap は 1 個の数値で、0 がオフセットの位置、1 がその音素の開始。
 連続音の rest は単独音と同じ形の config。アンダーバーだけの無音の直後の音素だけ、この値で単独音の計算をする。エイリアスは連続音のまま。
 CVVC の lead は単独音と同じ形の config。発音の先頭の音素だけ、この値で単独音の計算をする。エイリアスは「- さ」の形。
+あいうえおんは、アンダーバーの直後を除き、連続音と同じ計算です。エイリアスは CVVC のままです。
+そのオフセットとオーバーラップは vc_offset_ms と vc_overlap、子音部とブランクは consonant_ms と blank です。
 CVVC の consonant_ms と blank は通常音素。overlap は子音ラベルから 0〜1 で、0 が子音の開始、1 が先行発声。負の秒は使わない。
-CVVC の vc_offset_ms と vc_overlap は子音音素で、連続音のオフセットとオーバーラップと同じ。vc_consonant と vc_blank は子音ラベルから 0〜1。
+CVVC の vc_offset_ms と vc_overlap は子音音素で、連続音のオフセットとオーバーラップと同じ。母音音素もこの 2 つを使う。vc_consonant と vc_blank は子音ラベルから 0〜1。
 blank の 0 は音量の上辺の右端。正は減衰側、負は手前へ、その秒数だけずらす。子音部とブランクは単独音と連続音と CVVC の通常音素で同じ。
 応答の txt はそのモードの oto.ini。全区間は OTOasibi_log.txt、母音始まりは OTOasibi_out.txt。
 画面で区間を直したあとは save が保存データを更新し、write が oto.ini を計算して書く。

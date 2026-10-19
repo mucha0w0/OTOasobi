@@ -22,6 +22,8 @@
 CVVC は、母音の音素ごとに通常音の行を書き、先頭以外で子音があるときはその前に子音音素の行を書きます。
 「さしす」は「- さ」「a sh」「し」「i s」「す」です。
 先頭音素は、ファイルの先頭と、アンダーバーだけの無音の直後です。計算は lead の単独音です。
+あいうえおんは、アンダーバーの直後を除き、連続音と同じ計算です。エイリアスは CVVC のままです。
+ファイルの先頭は「- あ」、それ以外は「あ」です。オフセットとオーバーラップは子音音素の値、子音部とブランクは通常音素の値です。
 通常音素のオフセットは子音の開始です。オーバーラップは、その位置を 0%、先行発声を 100% とした割合で、0 未満は使いません。
 子音音素のエイリアスは、直前の母音と現在の子音です。オフセットとオーバーラップは連続音と同じです。
 子音音素の先行発声は、その子音の開始です。
@@ -57,6 +59,8 @@ MAX_OFFSET_SHIFT_MS = 100.0
 RENZOKU_OFFSET_LEAD_MS = 150.0
 # CVVC の子音音素。子音部もブランクも、スライダーの初期値は 100%。
 VC_PART_AT = 1.0
+# CVVC で連続音の計算にする、子音のない母音。を と小書き母音も同じ。
+_CVVC_VOWEL_PHONEMES = frozenset("あいうえおんをぁぃぅぇぉアイウエオンヲァィゥェォ")
 # 上辺の右端からずらす幅。画面のブランクスライダーと同じ。
 MAX_BLANK_SHIFT_S = 0.1
 OTO_INI_NAME = "oto.ini"
@@ -376,29 +380,17 @@ def _phoneme_start(spans: list[Span], index: int, vowel: Span) -> float:
     return _consonant_start(spans, index, vowel)
 
 
-def renzoku_oto_line(
+def _renzoku_timed_line(
     filename: str,
     spans: list[Span],
     index: int,
     duration: float,
-    settings: OtoSettings | None = None,
-    loudness: np.ndarray | None = None,
-) -> str | None:
-    """1 エイリアス分の連続音 oto.ini 行。母音でも ん でもなければ None。"""
-    settings = settings or OtoSettings()
+    settings: OtoSettings,
+    loudness: np.ndarray | None,
+    alias: str,
+) -> str:
+    """連続音の位置。オフセットは音素の開始から 0.15 秒手前、オーバーラップはそのあいだの割合。"""
     vowel = spans[index]
-    if vowel.label not in VOWEL_ONSET_LABELS:
-        return None
-    if _follows_rest(spans, index, vowel):
-        return mono_oto_line(
-            filename,
-            spans,
-            index,
-            duration,
-            settings.rest or OtoSettings(),
-            loudness,
-            _renzoku_alias(filename, spans, index, vowel),
-        )
     start = _ms(_phoneme_start(spans, index, vowel))
     v0 = _ms(vowel.start)
     v1 = _ms(vowel.end)
@@ -413,10 +405,36 @@ def renzoku_oto_line(
         release_blank_seconds(loudness, duration, spans, index, settings.blank_at)
     )
     blank, consonant = _place_blank(blank_at, offset, consonant, dur)
-    alias = _renzoku_alias(filename, spans, index, vowel)
     return (
         f"{filename}={alias},{_fmt(offset)},{_fmt(consonant)},{_fmt(blank)},{_fmt(preutter)},{_fmt(overlap)}"
     )
+
+
+def renzoku_oto_line(
+    filename: str,
+    spans: list[Span],
+    index: int,
+    duration: float,
+    settings: OtoSettings | None = None,
+    loudness: np.ndarray | None = None,
+) -> str | None:
+    """1 エイリアス分の連続音 oto.ini 行。母音でも ん でもなければ None。"""
+    settings = settings or OtoSettings()
+    vowel = spans[index]
+    if vowel.label not in VOWEL_ONSET_LABELS:
+        return None
+    alias = _renzoku_alias(filename, spans, index, vowel)
+    if _follows_rest(spans, index, vowel):
+        return mono_oto_line(
+            filename,
+            spans,
+            index,
+            duration,
+            settings.rest or OtoSettings(),
+            loudness,
+            alias,
+        )
+    return _renzoku_timed_line(filename, spans, index, duration, settings, loudness, alias)
 
 
 def renzoku_oto_lines(
@@ -447,6 +465,21 @@ def _mora_alias(filename: str, vowel: Span) -> str:
 def _is_leading(spans: list[Span], index: int) -> bool:
     """発音の先頭。ファイルの先頭と、アンダーバーだけの無音の直後。"""
     return _previous_vowel_letter(spans, index) == "-"
+
+
+def _is_vowel_phoneme(token: str) -> bool:
+    """子音のない母音。あいうえおん、を、小書き母音。平仮名でも片仮名でも。"""
+    return token in _CVVC_VOWEL_PHONEMES
+
+
+def _cvvc_vowel_settings(settings: OtoSettings) -> OtoSettings:
+    """母音音素の連続音計算。ずらしと割合は子音音素、子音部とブランクは通常音素。"""
+    return OtoSettings(
+        offset_ms=settings.vc_offset_ms,
+        consonant_ms=settings.consonant_ms,
+        blank_at=settings.blank_at,
+        overlap_at=settings.vc_overlap_at,
+    )
 
 
 def _cvvc_normal_settings(settings: OtoSettings) -> OtoSettings:
@@ -507,6 +540,24 @@ def cvvc_oto_lines(
         if vowel.label not in VOWEL_ONSET_LABELS:
             continue
         alias = _mora_alias(filename, vowel)
+        if _is_vowel_phoneme(vowel.token):
+            # アンダーバーの直後だけ、連続音と同じく単独音。使う値は先頭音素のプリセット。
+            shown = f"- {alias}" if _is_leading(spans, index) else alias
+            if _follows_rest(spans, index, vowel):
+                line = mono_oto_line(filename, spans, index, duration, lead, loudness, shown)
+            else:
+                line = _renzoku_timed_line(
+                    filename,
+                    spans,
+                    index,
+                    duration,
+                    _cvvc_vowel_settings(settings),
+                    loudness,
+                    shown,
+                )
+            if line is not None:
+                lines.append(line)
+            continue
         if _is_leading(spans, index):
             line = mono_oto_line(filename, spans, index, duration, lead, loudness, f"- {alias}")
             if line is not None:

@@ -126,6 +126,39 @@ static class OtoMarks
     {
         var vowel = spans[index];
         var alias = MoraAlias(filename, vowel);
+        if (IsVowelPhoneme(vowel.Token))
+        {
+            // あいうえおんは連続音と同じ位置。アンダーバーの直後だけ、先頭音素の単独音。
+            var shown = PreviousVowelLetter(spans, index) == "-" ? "- " + alias : alias;
+            if (FollowsRest(spans, index, vowel))
+            {
+                dest.Add(Build(
+                    filename,
+                    spans,
+                    index,
+                    duration,
+                    leadOffsetMs,
+                    leadConsonantMs,
+                    leadBlank,
+                    leadOverlap ?? new Dictionary<string, double>(),
+                    loudness,
+                    shown));
+                return;
+            }
+
+            dest.Add(BuildRenzokuAt(
+                spans,
+                index,
+                duration,
+                vcOffsetMs,
+                consonantMs,
+                blankAt,
+                vcOverlapAt,
+                loudness,
+                shown));
+            return;
+        }
+
         if (PreviousVowelLetter(spans, index) == "-")
         {
             dest.Add(Build(
@@ -226,9 +259,8 @@ static class OtoMarks
         IReadOnlyDictionary<string, double>? restOverlap,
         double[]? loudness)
     {
-        var vowel = spans[index];
-        var alias = RenzokuAlias(filename, spans, index, vowel);
-        if (FollowsRest(spans, index, vowel))
+        var alias = RenzokuAlias(filename, spans, index, spans[index]);
+        if (FollowsRest(spans, index, spans[index]))
         {
             var mono = Build(
                 filename,
@@ -243,6 +275,30 @@ static class OtoMarks
             return mono with { Alias = alias };
         }
 
+        return BuildRenzokuAt(
+            spans,
+            index,
+            duration,
+            offsetMs,
+            consonantMs,
+            blankAt,
+            overlapAt,
+            loudness,
+            alias);
+    }
+
+    static OtoMark BuildRenzokuAt(
+        List<PhoneSpan> spans,
+        int index,
+        double duration,
+        double offsetMs,
+        double consonantMs,
+        double blankAt,
+        double overlapAt,
+        double[]? loudness,
+        string alias)
+    {
+        var vowel = spans[index];
         var start = Ms(ConsonantStart(spans, index, vowel));
         var v0 = Ms(vowel.Start);
         var v1 = Ms(vowel.End);
@@ -433,6 +489,13 @@ static class OtoMarks
 
     static bool IsVowelOnset(string label) =>
         label is "a" or "i" or "u" or "e" or "o" or "N" or "M";
+
+    // 子音のない母音。CVVC では連続音の計算にする。を と小書き母音も同じ。
+    static bool IsVowelPhoneme(string token) =>
+        token is "あ" or "い" or "う" or "え" or "お" or "ん" or "を"
+            or "ぁ" or "ぃ" or "ぅ" or "ぇ" or "ぉ"
+            or "ア" or "イ" or "ウ" or "エ" or "オ" or "ン" or "ヲ"
+            or "ァ" or "ィ" or "ゥ" or "ェ" or "ォ";
 
     static double Ms(double seconds) => Round3(seconds * 1000.0);
 
