@@ -2565,7 +2565,7 @@ public sealed class SpanEditor : UserControl
             return;
         OtoMarks.Fill(_file, _oto, _otoAuto, _loudness);
         TakePending(_otoAuto.Count);
-        var changed = Reconcile(_otoAuto);
+        DropStaleTunes(_otoAuto.Count);
         _otoMarks.Clear();
         var duration = Duration;
         for (var i = 0; i < _otoAuto.Count; i++)
@@ -2573,17 +2573,6 @@ public sealed class SpanEditor : UserControl
             _tune.TryGetValue(i, out var points);
             _otoMarks.Add(OtoTune.Apply(_otoAuto[i], points, duration));
         }
-
-        if (changed == null)
-            return;
-        if (_drag == DragKind.Oto)
-        {
-            (_tuneDefer ??= []).AddRange(changed);
-            return;
-        }
-
-        foreach (var index in changed)
-            EmitTune(index);
     }
 
     void TakePending(int count)
@@ -2607,43 +2596,17 @@ public sealed class SpanEditor : UserControl
         _pendingTunes = null;
     }
 
-    List<int>? Reconcile(List<OtoMark> auto)
+    void DropStaleTunes(int count)
     {
-        List<int>? changed = null;
         var drop = new List<int>();
-        foreach (var (index, points) in _tune)
+        foreach (var index in _tune.Keys)
         {
-            if (index < 0 || index >= auto.Count)
-            {
+            if (index < 0 || index >= count)
                 drop.Add(index);
-                continue;
-            }
-
-            var any = false;
-            var edited = false;
-            for (var point = 0; point < OtoTune.PointCount; point++)
-            {
-                if (points[point] is not double time)
-                    continue;
-                if (Math.Abs(time - auto[index].At(point)) <= OtoTune.MagnetSeconds)
-                {
-                    points[point] = null;
-                    edited = true;
-                    continue;
-                }
-
-                any = true;
-            }
-
-            if (!any)
-                drop.Add(index);
-            if (edited)
-                (changed ??= []).Add(index);
         }
 
         foreach (var index in drop)
             _tune.Remove(index);
-        return changed;
     }
 
     void ArmOtoStack(int index, int point)

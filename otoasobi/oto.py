@@ -335,13 +335,17 @@ def _split_oto_values(line: str) -> tuple[str, str, float, float, float, float, 
 
 
 def _apply_line(line: str, expected_alias: str, points: dict[str, float], duration: float) -> str:
-    """直した絶対時刻だけを載せ、残りは計算した位置のままにする。"""
+    """直した絶対時刻は動かさない。隙間が足りないときは、直していない点だけを動かす。
+
+    画面の OtoTune.Place と同じ手順。
+    """
     parsed = _split_oto_values(line)
     if parsed is None:
         return line
     filename, alias, offset, consonant, blank, preutter, overlap = parsed
     if alias != expected_alias:
         return line
+    locked = {key for key in ("offset", "overlap", "preutter", "consonant", "blank") if key in points}
     off = offset
     pre_at = offset + preutter
     con_at = offset + consonant
@@ -357,16 +361,39 @@ def _apply_line(line: str, expected_alias: str, points: dict[str, float], durati
         end = _ms(points["blank"])
     if "overlap" in points:
         ov_at = _ms(points["overlap"])
-    off = max(0.0, round(off, 3))
+    off = round(off, 3)
+    pre_at = round(pre_at, 3)
+    con_at = round(con_at, 3)
+    end = round(end, 3)
+    ov_at = round(ov_at, 3)
     dur = max(_ms(max(duration, 0.0)), off, end, con_at, pre_at, ov_at)
-    pre_at = max(off, round(pre_at, 3))
-    con_rel = max(0.0, round(con_at - off, 3))
-    blank_rel, con_rel = _place_blank(round(end, 3), off, con_rel, dur)
-    pre_rel = max(0.0, round(pre_at - off, 3))
-    ov_at = min(max(round(ov_at, 3), -100.0), dur)
-    ov_rel = round(ov_at - off, 3)
+    if "offset" not in locked and off < 0.0:
+        off = 0.0
+    if "preutter" not in locked and pre_at < off:
+        pre_at = off
+    if "consonant" not in locked and con_at < off:
+        con_at = off
+    if "blank" not in locked and end > dur:
+        end = dur
+    min_end = round(con_at + MIN_GAP_MS, 3)
+    if end < min_end:
+        if "blank" not in locked and "consonant" not in locked:
+            con_rel = max(0.0, round(con_at - off, 3))
+            blank_rel, con_rel = _place_blank(end, off, con_rel, dur)
+            con_at = round(off + con_rel, 3)
+            end = round(off - blank_rel, 3)
+        elif "blank" not in locked:
+            end = min_end
+        elif "consonant" not in locked:
+            con_at = round(end - MIN_GAP_MS, 3)
+    if "consonant" not in locked and con_at < off:
+        floor = off
+        if "blank" in locked:
+            floor = min(floor, round(end - MIN_GAP_MS, 3))
+        con_at = floor
     return (
-        f"{filename}={alias},{_fmt(off)},{_fmt(con_rel)},{_fmt(blank_rel)},{_fmt(pre_rel)},{_fmt(ov_rel)}"
+        f"{filename}={alias},{_fmt(off)},{_fmt(round(con_at - off, 3))},"
+        f"{_fmt(round(off - end, 3))},{_fmt(round(pre_at - off, 3))},{_fmt(round(ov_at - off, 3))}"
     )
 
 

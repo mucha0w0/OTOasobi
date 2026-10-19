@@ -26,16 +26,31 @@ static class OtoTune
     {
         if (!Has(points))
             return auto;
+        var locked = new bool[PointCount];
+        double Pick(int point, double autoAt)
+        {
+            if (points![point] is double time)
+            {
+                locked[point] = true;
+                return time;
+            }
+
+            return autoAt;
+        }
+
         return Place(
             auto,
-            points![0] ?? auto.Offset,
-            points[1] ?? auto.Overlap,
-            points[2] ?? auto.Preutter,
-            points[3] ?? auto.Consonant,
-            points[4] ?? auto.Blank,
+            Pick(0, auto.Offset),
+            Pick(1, auto.Overlap),
+            Pick(2, auto.Preutter),
+            Pick(3, auto.Consonant),
+            Pick(4, auto.Blank),
+            locked,
             durationSeconds);
     }
 
+    // 直した点（locked）は、スライダーで隣が動いても絶対時刻を変えない。
+    // 空ける必要があるときは、直していない点だけを動かす。oto.py の _apply_line と同じ。
     public static OtoMark Place(
         OtoMark basis,
         double offsetS,
@@ -43,30 +58,63 @@ static class OtoTune
         double preutterS,
         double consonantS,
         double blankS,
+        bool[] locked,
         double durationS)
     {
-        var off = Math.Max(0, OtoMarks.Round3(offsetS * 1000.0));
-        var preAt = OtoMarks.Round3(preutterS * 1000.0);
-        var conAt = OtoMarks.Round3(consonantS * 1000.0);
-        var end = OtoMarks.Round3(blankS * 1000.0);
-        var ovAt = OtoMarks.Round3(overlapS * 1000.0);
-        var dur = OtoMarks.Round3(Math.Max(durationS, 0) * 1000.0);
-        dur = Math.Max(dur, Math.Max(off, Math.Max(end, Math.Max(conAt, Math.Max(preAt, ovAt)))));
-        preAt = Math.Max(off, preAt);
-        var conRel = Math.Max(0, OtoMarks.Round3(conAt - off));
-        var placed = OtoMarks.PlaceBlank(end, off, conRel, dur);
-        var preRel = Math.Max(0, OtoMarks.Round3(preAt - off));
-        ovAt = Math.Clamp(ovAt, -100, dur);
-        var ovRel = OtoMarks.Round3(ovAt - off);
+        var off = Ms(offsetS);
+        var pre = Ms(preutterS);
+        var con = Ms(consonantS);
+        var end = Ms(blankS);
+        var ov = Ms(overlapS);
+        var dur = Ms(Math.Max(durationS, 0));
+        dur = Math.Max(dur, Math.Max(off, Math.Max(end, Math.Max(con, Math.Max(pre, ov)))));
+        if (!locked[0] && off < 0)
+            off = 0;
+        if (!locked[2] && pre < off)
+            pre = off;
+        if (!locked[3] && con < off)
+            con = off;
+        if (!locked[4] && end > dur)
+            end = dur;
+        var minEnd = OtoMarks.Round3(con + MinGapSeconds * 1000.0);
+        if (end < minEnd)
+        {
+            if (!locked[4] && !locked[3])
+            {
+                var rel = Math.Max(0, OtoMarks.Round3(con - off));
+                var placed = OtoMarks.PlaceBlank(end, off, rel, dur);
+                con = OtoMarks.Round3(off + placed.Consonant);
+                end = OtoMarks.Round3(off - placed.Blank);
+            }
+            else if (!locked[4])
+            {
+                end = minEnd;
+            }
+            else if (!locked[3])
+            {
+                con = OtoMarks.Round3(end - MinGapSeconds * 1000.0);
+            }
+        }
+
+        if (!locked[3] && con < off)
+        {
+            var floor = off;
+            if (locked[4])
+                floor = Math.Min(floor, OtoMarks.Round3(end - MinGapSeconds * 1000.0));
+            con = floor;
+        }
+
         return basis with
         {
             Offset = off / 1000.0,
-            Overlap = (off + ovRel) / 1000.0,
-            Preutter = (off + preRel) / 1000.0,
-            Consonant = (off + placed.Consonant) / 1000.0,
-            Blank = (off - placed.Blank) / 1000.0,
+            Overlap = ov / 1000.0,
+            Preutter = pre / 1000.0,
+            Consonant = con / 1000.0,
+            Blank = end / 1000.0,
         };
     }
+
+    static double Ms(double seconds) => OtoMarks.Round3(seconds * 1000.0);
 
     // 重なっている線は、同じ位置の値をまとめて動かす。止まっている線は壁になる。
     public static double ClampGroup(OtoMark mark, bool[] stack, double time, double duration)
