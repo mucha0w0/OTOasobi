@@ -544,6 +544,7 @@ public sealed partial class SpanEditor
         _hotOto = -1;
         if (_file != null && _plot.Width >= 2 && _plot.Height >= 2)
             ArrangeOtoLabels();
+        PaintWaveBoundaryOpacity();
     }
 
     void ShowFocusedOto(double x)

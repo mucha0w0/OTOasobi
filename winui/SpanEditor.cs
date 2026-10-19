@@ -116,6 +116,7 @@ public sealed partial class SpanEditor : UserControl
     readonly List<TextBlock> _waveTexts = [];
     readonly List<TextBlock> _specTexts = [];
     readonly List<Line> _lines = [];
+    readonly List<Line> _waveLines = [];
     readonly List<TextBlock> _ticks = [];
     readonly List<OtoMark> _otoMarks = [];
     readonly List<OtoMark> _otoAuto = [];
@@ -389,6 +390,7 @@ public sealed partial class SpanEditor : UserControl
         _waveTexts.Clear();
         _specTexts.Clear();
         _lines.Clear();
+        _waveLines.Clear();
         _ticks.Clear();
         _otoMarks.Clear();
         _otoAuto.Clear();
@@ -533,6 +535,7 @@ public sealed partial class SpanEditor : UserControl
         _waveTexts.Clear();
         _specTexts.Clear();
         _lines.Clear();
+        _waveLines.Clear();
         _ticks.Clear();
         _otoMarks.Clear();
         _otoAuto.Clear();
@@ -646,13 +649,21 @@ public sealed partial class SpanEditor : UserControl
         _groups = BuildGroups(_file.Spans);
         foreach (var _ in _groups)
         {
+            var waveLine = new Line
+            {
+                Stroke = LineBrush,
+                StrokeThickness = 2,
+                IsHitTestVisible = false,
+            };
             var line = new Line
             {
                 Stroke = LineBrush,
                 StrokeThickness = 2,
                 IsHitTestVisible = false,
             };
+            _waveLines.Add(waveLine);
             _lines.Add(line);
+            _plot.Children.Add(waveLine);
             _plot.Children.Add(line);
         }
 
@@ -1201,18 +1212,29 @@ public sealed partial class SpanEditor : UserControl
 
         for (var i = 0; i < _lines.Count && i < _groups.Count; i++)
         {
+            var wave = i < _waveLines.Count ? _waveLines[i] : null;
             if (IsQuietBoundary(i))
             {
                 _lines[i].Visibility = Visibility.Collapsed;
+                if (wave != null)
+                    wave.Visibility = Visibility.Collapsed;
                 continue;
             }
 
-            _lines[i].Visibility = Visibility.Visible;
             var x = X(GroupTime(i));
+            _lines[i].Visibility = Visibility.Visible;
             _lines[i].X1 = x;
             _lines[i].X2 = x;
-            _lines[i].Y1 = 0;
-            _lines[i].Y2 = Math.Max(0, OtoTop - SplitThickness);
+            _lines[i].Y1 = SpecTop;
+            _lines[i].Y2 = Math.Max(SpecTop, OtoTop - SplitThickness);
+            if (wave == null)
+                continue;
+            wave.Visibility = Visibility.Visible;
+            wave.X1 = x;
+            wave.X2 = x;
+            wave.Y1 = 0;
+            wave.Y2 = WaveHeight;
+            wave.Opacity = _focusOto >= 0 ? OtoDimOpacity : 1;
         }
     }
 
@@ -1386,7 +1408,19 @@ public sealed partial class SpanEditor : UserControl
     void Highlight(int group)
     {
         for (var i = 0; i < _lines.Count; i++)
-            _lines[i].Stroke = i == group ? HotBrush : LineBrush;
+        {
+            var stroke = i == group ? HotBrush : LineBrush;
+            _lines[i].Stroke = stroke;
+            if (i < _waveLines.Count)
+                _waveLines[i].Stroke = stroke;
+        }
+    }
+
+    void PaintWaveBoundaryOpacity()
+    {
+        var opacity = _focusOto >= 0 ? OtoDimOpacity : 1;
+        foreach (var line in _waveLines)
+            line.Opacity = opacity;
     }
 
     void ApplySplit(double y)
