@@ -121,7 +121,7 @@ public sealed partial class SpanEditor
         _otoRects.Add(rect);
         _otoTexts.Add(text);
         _plot.Children.Add(rect);
-        for (var point = 0; point < OtoPointCount; point++)
+        for (var point = 0; point < OtoTune.PointCount; point++)
         {
             var line = new Line
             {
@@ -216,9 +216,9 @@ public sealed partial class SpanEditor
             Canvas.SetLeft(text, left);
             Canvas.SetTop(text, textTop);
 
-            for (var point = 0; point < OtoPointCount; point++)
+            for (var point = 0; point < OtoTune.PointCount; point++)
             {
-                var line = _otoLines[i * OtoPointCount + point];
+                var line = _otoLines[i * OtoTune.PointCount + point];
                 var x = X(mark.At(point));
                 var dragging = chosen && _drag == DragKind.Oto && _otoDragIndex == i && _otoStack[point];
                 line.Opacity = dim ? OtoDimOpacity : 1;
@@ -235,7 +235,7 @@ public sealed partial class SpanEditor
             _otoRects[i].Visibility = Visibility.Collapsed;
         for (var i = count; i < _otoTexts.Count; i++)
             _otoTexts[i].Visibility = Visibility.Collapsed;
-        for (var i = count * OtoPointCount; i < _otoLines.Count; i++)
+        for (var i = count * OtoTune.PointCount; i < _otoLines.Count; i++)
             _otoLines[i].Visibility = Visibility.Collapsed;
 
         var textBottom = top + 4 + laneCount * Math.Max(pitch, 14);
@@ -268,14 +268,14 @@ public sealed partial class SpanEditor
         if (_focusOto < 0 || _focusOto >= _otoRects.Count)
             return;
         Raise(_otoRects[_focusOto]);
-        for (var point = 0; point < OtoPointCount; point++)
-            Raise(_otoLines[_focusOto * OtoPointCount + point]);
+        for (var point = 0; point < OtoTune.PointCount; point++)
+            Raise(_otoLines[_focusOto * OtoTune.PointCount + point]);
         if (_focusOto < _otoTexts.Count)
             Raise(_otoTexts[_focusOto]);
         foreach (var chip in _otoPointChips)
             Raise(chip);
-        var start = _focusOto * OtoPointCount;
-        for (var point = 0; point < OtoPointCount; point++)
+        var start = _focusOto * OtoTune.PointCount;
+        for (var point = 0; point < OtoTune.PointCount; point++)
         {
             if (start + point < _otoPointChips.Count)
                 Raise(_otoPointChips[start + point]);
@@ -307,9 +307,9 @@ public sealed partial class SpanEditor
         var pending = new List<(double X, int Index)>();
         for (var i = 0; i < count; i++)
         {
-            for (var point = 0; point < OtoPointCount; point++)
+            for (var point = 0; point < OtoTune.PointCount; point++)
             {
-                var index = i * OtoPointCount + point;
+                var index = i * OtoTune.PointCount + point;
                 var x = X(_otoMarks[i].At(point));
                 if (x < -30 || x > _plot.Width + 30)
                 {
@@ -326,14 +326,14 @@ public sealed partial class SpanEditor
         {
             if (focused)
             {
-                var rank = (a.Index / OtoPointCount == _focusOto ? 0 : 1)
-                    .CompareTo(b.Index / OtoPointCount == _focusOto ? 0 : 1);
+                var rank = (a.Index / OtoTune.PointCount == _focusOto ? 0 : 1)
+                    .CompareTo(b.Index / OtoTune.PointCount == _focusOto ? 0 : 1);
                 if (rank != 0)
                     return rank;
             }
 
-            var star = (Tuned(b.Index / OtoPointCount, b.Index % OtoPointCount) ? 1 : 0)
-                .CompareTo(Tuned(a.Index / OtoPointCount, a.Index % OtoPointCount) ? 1 : 0);
+            var star = (Tuned(b.Index / OtoTune.PointCount, b.Index % OtoTune.PointCount) ? 1 : 0)
+                .CompareTo(Tuned(a.Index / OtoTune.PointCount, a.Index % OtoTune.PointCount) ? 1 : 0);
             if (star != 0)
                 return star;
             return a.X.CompareTo(b.X);
@@ -349,8 +349,8 @@ public sealed partial class SpanEditor
                 continue;
             }
 
-            var markIndex = item.Index / OtoPointCount;
-            var point = item.Index % OtoPointCount;
+            var markIndex = item.Index / OtoTune.PointCount;
+            var point = item.Index % OtoTune.PointCount;
             text.Text = PointLabel(markIndex, point);
             var width = Math.Max(12, text.Text.Length * 10 + 8);
             var left = item.X - width / 2;
@@ -371,7 +371,7 @@ public sealed partial class SpanEditor
                 continue;
             }
 
-            var dim = focused && item.Index / OtoPointCount != _focusOto;
+            var dim = focused && item.Index / OtoTune.PointCount != _focusOto;
             chip.Opacity = dim ? OtoDimOpacity : 1;
             chip.Visibility = Visibility.Visible;
             Canvas.SetLeft(chip, left);
@@ -402,7 +402,7 @@ public sealed partial class SpanEditor
         for (var i = 0; i < _otoMarks.Count; i++)
         {
             var mark = _otoMarks[i];
-            for (var point = 0; point < OtoPointCount; point++)
+            for (var point = 0; point < OtoTune.PointCount; point++)
             {
                 var dist = Math.Abs(X(mark.At(point)) - x);
                 if (dist > bestDist)
@@ -588,7 +588,7 @@ public sealed partial class SpanEditor
         {
             var bestPoint = -1;
             var bestDist = HitPx;
-            for (var point = 0; point < OtoPointCount; point++)
+            for (var point = 0; point < OtoTune.PointCount; point++)
             {
                 var dist = Math.Abs(X(mark.At(point)) - x);
                 if (dist > bestDist)
@@ -608,7 +608,7 @@ public sealed partial class SpanEditor
     static string JoinedPointNames(OtoMark mark, double at)
     {
         var names = "";
-        for (var point = 0; point < OtoPointCount; point++)
+        for (var point = 0; point < OtoTune.PointCount; point++)
         {
             if (Math.Abs(mark.At(point) - at) > 0.0005)
                 continue;
@@ -644,7 +644,7 @@ public sealed partial class SpanEditor
         foreach (var i in hits)
         {
             var mark = _otoMarks[i];
-            for (var point = 0; point < OtoPointCount; point++)
+            for (var point = 0; point < OtoTune.PointCount; point++)
             {
                 var dist = Math.Abs(X(mark.At(point)) - x);
                 if (dist > bestDist)
@@ -680,7 +680,7 @@ public sealed partial class SpanEditor
 
     bool OtoPointNear(OtoMark mark, double x)
     {
-        for (var point = 0; point < OtoPointCount; point++)
+        for (var point = 0; point < OtoTune.PointCount; point++)
         {
             if (Math.Abs(X(mark.At(point)) - x) <= HitPx)
                 return true;
@@ -980,7 +980,7 @@ public sealed partial class SpanEditor
             if (!inBand && i != _focusOto)
                 continue;
             var mark = _otoMarks[i];
-            for (var point = 0; point < OtoPointCount; point++)
+            for (var point = 0; point < OtoTune.PointCount; point++)
             {
                 var dist = Math.Abs(X(mark.At(point)) - x);
                 if (dist > slop)

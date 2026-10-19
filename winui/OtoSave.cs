@@ -233,7 +233,7 @@ static class OtoSaveStore
 {
     public const string FilePrefix = "OTOasibi_";
     const string SessionStem = "作業中";
-    const string CacheFileName = "OTOasibi_cache.json";
+    public const string CacheFileName = "OTOasibi_cache.json";
     const string SessionFileName = FilePrefix + SessionStem + ".json";
 
     static readonly string[] ReservedDevices =

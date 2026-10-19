@@ -1567,6 +1567,3 @@ def clean_spans(spans: list[Span], duration: float) -> list[Span]:
             continue
         merged.append(span)
     return merged
-
-
-_clean = clean_spans

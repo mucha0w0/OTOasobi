@@ -103,18 +103,12 @@ def analyze_wav(
     )
 
 
-# a i u e o, plus ん (N / M). っ (cl), 無音, and 息 are not onsets.
-_VOWEL_ONSET = VOWEL_ONSET_LABELS
-
-
-def spans_to_txt(spans: list[Span], *, include_token: bool = True) -> str:
+def spans_to_txt(spans: list[Span]) -> str:
     """Full span log: start, end, phoneme, kana."""
-    lines = []
-    for span in spans:
-        row = f"{span.start:.6f}\t{span.end:.6f}\t{span.label}"
-        if include_token:
-            row += f"\t{span.token}"
-        lines.append(row)
+    lines = [
+        f"{span.start:.6f}\t{span.end:.6f}\t{span.label}\t{span.token}"
+        for span in spans
+    ]
     return "\n".join(lines) + ("\n" if lines else "")
 
 
@@ -122,7 +116,7 @@ def vowel_onset_rows(spans: list[Span]) -> list[tuple[str, float]]:
     """Kana label and the start time of each vowel, N, or M."""
     rows: list[tuple[str, float]] = []
     for span in spans:
-        if span.label not in _VOWEL_ONSET:
+        if span.label not in VOWEL_ONSET_LABELS:
             continue
         rows.append((span.token or span.label, span.start))
     return rows
@@ -188,12 +182,6 @@ class AnalyzedFile:
     duration: float
     spans: list[Span]
     engine: str = "acoustic"
-
-
-@dataclass
-class FolderResult:
-    txt: Path | None
-    skipped: list[str]
 
 
 def skipped_notice(skipped: list[str]) -> str:
@@ -297,14 +285,3 @@ def export_folder(
     onset.write_text(format_batch_txt(span_entries), encoding="utf-8")
     write_oto_ini(out, oto_lines)
     return out
-
-
-def analyze_folder(
-    folder: str | Path,
-    on_progress: Callable[[int, int], None] | None = None,
-    on_file: Callable[[str, float, str], None] | None = None,
-) -> FolderResult:
-    files, skipped = analyze_folder_files(folder, on_progress=on_progress, on_file=on_file)
-    if not files:
-        return FolderResult(txt=None, skipped=skipped)
-    return FolderResult(txt=export_folder(folder, files), skipped=skipped)

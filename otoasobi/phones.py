@@ -50,7 +50,7 @@ VOWEL_ONSET_LABELS = frozenset(_VOWELS | {"N", "M"})
 SILENCE_LABEL = "無音"
 BREATH_LABEL = "息"
 
-# One palette for the GUI (tuples) and the matplotlib figure (hex).
+# Segment colors for the development GUI.
 KIND_RGB: dict[str, tuple[int, int, int]] = {
     SILENCE_LABEL: (154, 160, 166),
     BREATH_LABEL: (96, 165, 250),
@@ -90,13 +90,6 @@ def token_mms_units(token: Token, token_index: int) -> list[MmsUnit]:
     if token.vowel in _VOWELS:
         units.append(MmsUnit(token.vowel, token_index, "V"))
     return units
-
-
-def mms_plan(tokens: list[Token]) -> list[MmsUnit]:
-    plan: list[MmsUnit] = []
-    for i, token in enumerate(tokens):
-        plan.extend(token_mms_units(token, i))
-    return plan
 
 
 def phone_name(token: Token, part: str) -> str:

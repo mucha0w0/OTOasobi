@@ -65,7 +65,6 @@ public sealed partial class SpanEditor : UserControl
     static readonly SolidColorBrush OtoRegionBrush = BrushOf(64, 15, 157, 142);
     static readonly SolidColorBrush OtoRegionHotBrush = BrushOf(120, 45, 212, 191);
     static readonly SolidColorBrush OtoChipBrush = BrushOf(190, 14, 14, 14);
-    const int OtoPointCount = 5;
     const double OtoDimOpacity = 0.28;
     static readonly SolidColorBrush[] OtoPointBrushes =
     [

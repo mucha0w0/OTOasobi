@@ -213,7 +213,6 @@ AFFRICATE = {"ts", "ch", "j"}
 # missing, and the consonant is often quieter than the vowel, so the sibilant
 # ratio test marks one frame or finds no island and skips the row.
 WEAK_FRICATIVE = {"h", "hy", "f", "fy"}
-FRICATIVE = SIBILANT | WEAK_FRICATIVE
 # Japanese ヴ is a voiced labial [β]. Its boundary is the rise into the vowel.
 LABIAL_FRICATIVE = {"v", "vy"}
 STOP = {"k", "t", "p", "b", "d", "g", "ky", "gy", "py", "by", "ty", "dy", "kw", "gw"}

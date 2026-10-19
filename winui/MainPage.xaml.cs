@@ -32,8 +32,6 @@ public sealed partial class MainPage : Page
     bool _configReady;
     bool _analyzed;
 
-    const string CacheFileName = "OTOasibi_cache.json";
-
     // oto.py の子音部、OVERLAP_AT、ブランク 0 秒（上辺の右端からのずれ）。
     // オフセットの 0 は子音開始。スライダーは ±0.1 秒で、マイナスは手前。
     // オーバーラップは子音ごと。0% が子音開始、100% が母音開始。中央が 50%。
@@ -867,7 +865,7 @@ public sealed partial class MainPage : Page
             return;
         }
 
-        var cache = Path.Combine(folder, CacheFileName);
+        var cache = Path.Combine(folder, OtoSaveStore.CacheFileName);
         if (File.Exists(cache))
         {
             try
@@ -1754,7 +1752,7 @@ public sealed partial class MainPage : Page
             App.MainWindow.AppWindow.Resize(new SizeInt32(width, height));
     }
 
-    static bool HasCache(string folder) => File.Exists(Path.Combine(folder, CacheFileName));
+    static bool HasCache(string folder) => File.Exists(Path.Combine(folder, OtoSaveStore.CacheFileName));
 
     static List<string> ListWavNames(string folder)
     {
