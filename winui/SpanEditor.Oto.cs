@@ -969,7 +969,7 @@ public sealed partial class SpanEditor
             return null;
         if (!inBand && _focusOto < 0)
             return null;
-        var slop = inBand ? HitPx : 8;
+        var slop = inBand || InWaveBand(y) ? HitPx : 8;
         var best = -1;
         var bestPoint = -1;
         var bestDist = slop;

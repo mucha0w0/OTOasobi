@@ -731,6 +731,7 @@ public sealed partial class SpanEditor : UserControl
         }
 
         // 同じ音素をもう一度クリックしても外さない。別の音素の波形・スペクトラム・音量で外す。
+        var lockWaveBoundary = WaveBoundaryLocked(point.Position.Y);
         if (ReleaseFocusAt(point.Position.Y, x))
         {
             SetFocusOto(-1);
@@ -742,6 +743,21 @@ public sealed partial class SpanEditor : UserControl
                 else
                     SetReadout("");
             }
+        }
+
+        if (lockWaveBoundary)
+        {
+            if (_focusOto < 0)
+            {
+                var span = HitSpan(XToTime(x));
+                if (span >= 0)
+                    ShowSpan(span);
+                else
+                    SetReadout("");
+            }
+
+            e.Handled = true;
+            return;
         }
 
         var group = HitGroup(x);
@@ -855,6 +871,21 @@ public sealed partial class SpanEditor : UserControl
         }
 
         SetHotOto(-1);
+        if (WaveBoundaryLocked(point.Position.Y))
+        {
+            Highlight(-1);
+            var lockedTime = XToTime(x);
+            var lockedSpan = HitSpan(lockedTime);
+            UseCursor(_cursorArrow);
+            if (lockedSpan >= 0)
+                ShowSpan(lockedSpan, _focusOto >= 0 && !FocusedOwnsTime(lockedTime));
+            else if (_focusOto >= 0 && !FocusedOwnsTime(lockedTime))
+                SetReadout("クリックで解除");
+            else
+                SetReadout("");
+            return;
+        }
+
         var group = HitGroup(x);
         if (group >= 0)
         {
@@ -1677,6 +1708,11 @@ public sealed partial class SpanEditor : UserControl
     }
 
     double WaveHeight => Math.Max(1, BandArea * ShownWaveShare);
+
+    bool InWaveBand(double y) => _file != null && y >= 0 && y < WaveHeight;
+
+    // 強調中は、上の波形の子音・母音境界を掴むと oto.ini の線と取り違える。
+    bool WaveBoundaryLocked(double y) => _focusOto >= 0 && InWaveBand(y);
 
     double OtoHeight => Math.Max(1, BandArea * ShownOtoShare);
 
