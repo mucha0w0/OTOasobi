@@ -23,28 +23,22 @@ public sealed partial class MainPage
 
     async Task SaveSettingsAsync()
     {
-        if (XamlRoot == null)
+        var folder = _folder;
+        if (XamlRoot == null || folder == null)
             return;
-        try
-        {
-            Directory.CreateDirectory(OtoSaveStore.Folder);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-        }
 
         var box = new TextBox { PlaceholderText = "設定名" };
         var error = DialogErrorLine();
         var panel = new StackPanel { Spacing = 8, MinWidth = 360 };
         panel.Children.Add(new TextBlock
         {
-            Text = "いまの計算方法、スライダー、プリセットを、この名前で保存します。原音修正の設定も含みます。",
+            Text = "いまの計算方法、スライダー、プリセットを、このフォルダに保存します。原音修正の設定も含みます。",
             TextWrapping = TextWrapping.Wrap,
         });
         panel.Children.Add(box);
         panel.Children.Add(error);
         panel.Children.Add(HintText("保存先"));
-        panel.Children.Add(PathText(OtoSaveStore.Folder));
+        panel.Children.Add(PathText(folder));
         var dialog = new ContentDialog
         {
             Title = "設定を保存",
@@ -68,7 +62,7 @@ public sealed partial class MainPage
             return;
 
         var name = box.Text.Trim();
-        if (File.Exists(OtoSaveStore.FilePathFor(name)))
+        if (File.Exists(OtoSaveStore.FilePathFor(folder, name)))
         {
             var confirm = new ContentDialog
             {
@@ -87,9 +81,9 @@ public sealed partial class MainPage
         {
             var file = CaptureSettings(includeLibraries: true);
             file.Name = name;
-            OtoSaveStore.WriteNamed(file);
-            FlushSession();
-            ShowNotice("設定を保存しました", OtoSaveStore.FilePathFor(name));
+            OtoSaveStore.WriteNamed(folder, file);
+            FlushSession(force: true);
+            ShowNotice("設定を保存しました", OtoSaveStore.FilePathFor(folder, name));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
         {
@@ -99,11 +93,12 @@ public sealed partial class MainPage
 
     async Task LoadSettingsAsync()
     {
-        if (XamlRoot == null)
+        var folder = _folder;
+        if (XamlRoot == null || folder == null)
             return;
         while (true)
         {
-            var pick = await PickSaveAsync();
+            var pick = await PickSaveAsync(folder);
             if (pick == null)
                 return;
             if (pick.Value.Delete)
@@ -112,7 +107,7 @@ public sealed partial class MainPage
                     continue;
                 try
                 {
-                    OtoSaveStore.Delete(pick.Value.Name);
+                    OtoSaveStore.Delete(folder, pick.Value.Name);
                 }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
                 {
@@ -146,21 +141,13 @@ public sealed partial class MainPage
         }
     }
 
-    async Task<(bool Delete, string Name, string Path)?> PickSaveAsync()
+    async Task<(bool Delete, string Name, string Path)?> PickSaveAsync(string folder)
     {
-        try
-        {
-            Directory.CreateDirectory(OtoSaveStore.Folder);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-        }
-
-        var entries = OtoSaveStore.List();
+        var entries = OtoSaveStore.List(folder);
         var options = new StackPanel { Spacing = 2 };
         var empty = new TextBlock
         {
-            Text = "設定ファイルはまだありません。「設定を保存」で、このフォルダにファイルを作れます。",
+            Text = "このフォルダには、まだ設定ファイルがありません。「設定を保存」で作れます。",
             TextWrapping = TextWrapping.Wrap,
             Visibility = entries.Count == 0 ? Visibility.Visible : Visibility.Collapsed,
         };
@@ -207,7 +194,7 @@ public sealed partial class MainPage
         {
             try
             {
-                OtoSaveStore.OpenFolder();
+                OtoSaveStore.OpenFolder(folder);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
@@ -285,7 +272,7 @@ public sealed partial class MainPage
         panel.Children.Add(empty);
         panel.Children.Add(scroller);
         panel.Children.Add(HintText("保存先"));
-        panel.Children.Add(PathText(OtoSaveStore.Folder));
+        panel.Children.Add(PathText(folder));
         panel.Children.Add(actions);
         dialog.Content = panel;
         await dialog.ShowAsync();
@@ -321,7 +308,54 @@ public sealed partial class MainPage
         }
 
         OnConfigChanged();
+        FlushSession(force: true);
+    }
+
+    void AdoptFolder(string folder)
+    {
+        if (string.Equals(_folder, folder, StringComparison.OrdinalIgnoreCase))
+        {
+            _folder = folder;
+            return;
+        }
+
         FlushSession();
+        _folder = folder;
+        LoadFolderSettings();
+    }
+
+    void LoadFolderSettings()
+    {
+        if (_folder == null)
+            return;
+        _sessionLocked = false;
+        var session = OtoSaveStore.TryLoadSession(_folder, out var keep);
+        if (session != null)
+        {
+            ApplyLoaded(session);
+            return;
+        }
+
+        _sessionLocked = keep;
+        if (!keep)
+            ApplyDefaults();
+    }
+
+    void ApplyDefaults()
+    {
+        _applyingSave = true;
+        try
+        {
+            ApplySliders(new OtoSaveFile());
+        }
+        finally
+        {
+            _applyingSave = false;
+        }
+
+        OnConfigChanged();
+        _sessionDirty = false;
+        _sessionTimer?.Stop();
     }
 
     void ReplaceLibraries(OtoSaveFile file)
@@ -540,20 +574,24 @@ public sealed partial class MainPage
 
     void ScheduleSession()
     {
-        if (!_configReady || _applyingSave || _sessionTimer == null)
+        if (!_configReady || _applyingSave || _sessionLocked || _sessionTimer == null || _folder == null)
             return;
+        _sessionDirty = true;
         _sessionTimer.Stop();
         _sessionTimer.Start();
     }
 
-    void FlushSession()
+    void FlushSession(bool force = false)
     {
         _sessionTimer?.Stop();
-        if (!_configReady || _applyingSave)
+        if (!_configReady || _applyingSave || _sessionLocked || _folder == null)
+            return;
+        if (!force && !_sessionDirty)
             return;
         try
         {
-            OtoSaveStore.WriteSession(CaptureSettings(includeLibraries: false));
+            OtoSaveStore.WriteSession(_folder, CaptureSettings(includeLibraries: false));
+            _sessionDirty = false;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {

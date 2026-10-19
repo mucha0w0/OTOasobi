@@ -65,6 +65,8 @@ public sealed partial class MainPage : Page
     OtoPreset _restPreset = null!;
     bool _applyingPreset;
     bool _applyingSave;
+    bool _sessionDirty;
+    bool _sessionLocked;
     DispatcherQueueTimer? _sessionTimer;
     bool _waveResizing;
     bool _waveResizeLeft;
@@ -108,17 +110,8 @@ public sealed partial class MainPage : Page
         }
 
         LoadPresets();
-        var session = OtoSaveStore.TryLoadSession(out var keepSession);
         _configReady = true;
-        if (session != null)
-            ApplyLoaded(session);
-        else if (!keepSession)
-        {
-            OnConfigChanged();
-            FlushSession();
-        }
-        else
-            OnConfigChanged();
+        OnConfigChanged();
         AddHandler(PointerWheelChangedEvent, new PointerEventHandler(OnPageWheel), true);
         BindRecentFolders();
         Loaded += (_, _) => AttachMenuToTitleBar();
@@ -901,11 +894,11 @@ public sealed partial class MainPage : Page
     async Task RunAsync(string folderPath, bool force)
     {
         _busy = true;
-        _folder = folderPath;
+        _wrote = false;
+        AdoptFolder(folderPath);
         Effects.SetFolder(folderPath);
         _files.Clear();
         _notice = null;
-        _wrote = false;
         var total = CountTargets(folderPath);
         ShowBusy(0, total);
         var queue = DispatcherQueue;
@@ -1621,11 +1614,11 @@ public sealed partial class MainPage : Page
     void ShowUnanalyzed(string folder, IReadOnlyList<string> names)
     {
         _analyzed = false;
-        _folder = folder;
+        _wrote = false;
+        AdoptFolder(folder);
         Effects.SetFolder(folder);
         _files.Clear();
         _notice = null;
-        _wrote = false;
         foreach (var name in names)
             _files.Add(new WavFile { Name = name });
         ShowOnly("editor");
@@ -1712,9 +1705,10 @@ public sealed partial class MainPage : Page
         var idle = !_busy;
         var editing = idle && EditorView.Visibility == Visibility.Visible && _files.Count > 0;
         var ready = editing && _analyzed;
+        var hasFolder = _folder != null;
         OpenMenuItem.IsEnabled = idle;
-        SaveSettingsMenuItem.IsEnabled = idle;
-        LoadSettingsMenuItem.IsEnabled = idle;
+        SaveSettingsMenuItem.IsEnabled = idle && hasFolder;
+        LoadSettingsMenuItem.IsEnabled = idle && hasFolder;
         WriteMenuItem.IsEnabled = ready;
         WriteButton.IsEnabled = ready;
         ReanalyzeMenuItem.Text = _analyzed ? "再解析" : "解析";

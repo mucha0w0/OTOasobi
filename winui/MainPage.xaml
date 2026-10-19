@@ -160,13 +160,15 @@
                     <MenuFlyoutSeparator />
                     <MenuFlyoutItem
                         x:Name="SaveSettingsMenuItem"
-                        AutomationProperties.HelpText="計算方法、スライダー、プリセットをファイルに保存します"
+                        AutomationProperties.HelpText="計算方法、スライダー、プリセットを、開いているフォルダに保存します"
                         Click="SaveSettings_Click"
+                        IsEnabled="False"
                         Text="設定を保存" />
                     <MenuFlyoutItem
                         x:Name="LoadSettingsMenuItem"
-                        AutomationProperties.HelpText="保存した計算方法、スライダー、プリセットを読み込みます"
+                        AutomationProperties.HelpText="開いているフォルダの設定ファイルを読み込みます"
                         Click="LoadSettings_Click"
+                        IsEnabled="False"
                         Text="設定を読み込む" />
                     <MenuFlyoutItem
                         x:Name="WriteMenuItem"

@@ -6,7 +6,7 @@ using System.Text.Json.Serialization;
 
 namespace Otoasobi;
 
-// 計算方法、スライダー、プリセット。saves フォルダの JSON。
+// 計算方法、スライダー、プリセット。開いているフォルダの直下に置く。
 sealed class OtoSaveFile
 {
     public const int CurrentVersion = 1;
@@ -126,7 +126,10 @@ sealed class OtoSaveSummary
 
 static class OtoSaveStore
 {
-    const string SessionFileName = "作業中.json";
+    public const string FilePrefix = "OTOasibi_";
+    const string SessionStem = "作業中";
+    const string CacheFileName = "OTOasibi_cache.json";
+    const string SessionFileName = FilePrefix + SessionStem + ".json";
 
     static readonly string[] ReservedDevices =
     [
@@ -144,13 +147,6 @@ static class OtoSaveStore
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     };
 
-    public static string Folder { get; } = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "Otoasobi",
-        "saves");
-
-    public static string SessionPath { get; } = Path.Combine(Folder, SessionFileName);
-
     public static string ModeLabel(string? mode) => mode switch
     {
         "renzoku" => "連続音",
@@ -158,7 +154,10 @@ static class OtoSaveStore
         _ => "単独音",
     };
 
-    public static string FilePathFor(string name) => Path.Combine(Folder, name.Trim() + ".json");
+    public static string FilePathFor(string folder, string name) =>
+        Path.Combine(folder, FilePrefix + name.Trim() + ".json");
+
+    public static string SessionPath(string folder) => Path.Combine(folder, SessionFileName);
 
     public static string? NameError(string raw)
     {
@@ -171,7 +170,8 @@ static class OtoSaveStore
             return "名前に使えない文字があります。";
         if (name.EndsWith('.') || name.EndsWith(' '))
             return "名前に使えない文字があります。";
-        if (name.Equals(Path.GetFileNameWithoutExtension(SessionFileName), StringComparison.OrdinalIgnoreCase))
+        if (name.Equals(SessionStem, StringComparison.OrdinalIgnoreCase)
+            || name.Equals("cache", StringComparison.OrdinalIgnoreCase))
             return "その名前は使えません。";
         var stem = name;
         var dot = name.IndexOf('.');
@@ -182,16 +182,16 @@ static class OtoSaveStore
         return null;
     }
 
-    public static IReadOnlyList<OtoSaveSummary> List()
+    public static IReadOnlyList<OtoSaveSummary> List(string folder)
     {
         try
         {
-            if (!Directory.Exists(Folder))
+            if (!Directory.Exists(folder))
                 return [];
             var result = new List<OtoSaveSummary>();
-            foreach (var path in Directory.EnumerateFiles(Folder, "*.json"))
+            foreach (var path in Directory.EnumerateFiles(folder, FilePrefix + "*.json"))
             {
-                if (IsSession(path))
+                if (IsSession(path) || IsCache(path))
                     continue;
                 OtoSaveFile file;
                 try
@@ -229,14 +229,15 @@ static class OtoSaveStore
         }
     }
 
-    public static OtoSaveFile? TryLoadSession(out bool keepExisting)
+    public static OtoSaveFile? TryLoadSession(string folder, out bool keepExisting)
     {
         keepExisting = false;
         try
         {
-            if (!File.Exists(SessionPath))
+            var path = SessionPath(folder);
+            if (!File.Exists(path))
                 return null;
-            return Read(SessionPath);
+            return Read(path);
         }
         catch (InvalidDataException)
         {
@@ -258,11 +259,17 @@ static class OtoSaveStore
         if (file.Kind != OtoSaveFile.KindId)
             throw new InvalidDataException("このファイルは設定の保存データではありません。");
         if (!IsSession(path))
-            file.Name = Path.GetFileNameWithoutExtension(path);
+        {
+            var name = DisplayName(path);
+            if (string.IsNullOrEmpty(name))
+                throw new InvalidDataException("このファイルは設定の保存データではありません。");
+            file.Name = name;
+        }
+
         return Clean(file);
     }
 
-    public static void WriteNamed(OtoSaveFile file)
+    public static void WriteNamed(string folder, OtoSaveFile file)
     {
         var name = file.Name.Trim();
         var error = NameError(name);
@@ -272,10 +279,10 @@ static class OtoSaveStore
         file.Kind = OtoSaveFile.KindId;
         file.Version = OtoSaveFile.CurrentVersion;
         file.SavedAt = DateTimeOffset.Now;
-        WriteTo(FilePathFor(name), file);
+        WriteTo(FilePathFor(folder, name), file);
     }
 
-    public static void WriteSession(OtoSaveFile file)
+    public static void WriteSession(string folder, OtoSaveFile file)
     {
         file.Name = "";
         file.Kind = OtoSaveFile.KindId;
@@ -284,33 +291,31 @@ static class OtoSaveStore
         file.Presets = null;
         file.CvvcPresets = null;
         file.Effects = null;
-        WriteTo(SessionPath, file);
+        WriteTo(SessionPath(folder), file);
     }
 
-    public static void Delete(string name)
+    public static void Delete(string folder, string name)
     {
         var error = NameError(name);
         if (error != null)
             throw new ArgumentException(error);
-        var path = FilePathFor(name);
+        var path = FilePathFor(folder, name);
         if (File.Exists(path))
             File.Delete(path);
     }
 
-    public static void OpenFolder()
+    public static void OpenFolder(string folder)
     {
-        Directory.CreateDirectory(Folder);
         Process.Start(new ProcessStartInfo
         {
             FileName = "explorer.exe",
-            Arguments = "\"" + Folder + "\"",
+            Arguments = "\"" + folder + "\"",
             UseShellExecute = true,
         });
     }
 
     static void WriteTo(string path, OtoSaveFile file)
     {
-        Directory.CreateDirectory(Folder);
         var json = JsonSerializer.Serialize(file, JsonOptions);
         var temp = path + ".tmp";
         File.WriteAllText(temp, json);
@@ -319,6 +324,21 @@ static class OtoSaveStore
 
     static bool IsSession(string path) =>
         Path.GetFileName(path).Equals(SessionFileName, StringComparison.OrdinalIgnoreCase);
+
+    static bool IsCache(string path) =>
+        Path.GetFileName(path).Equals(CacheFileName, StringComparison.OrdinalIgnoreCase);
+
+    static string? DisplayName(string path)
+    {
+        var file = Path.GetFileName(path);
+        if (!file.StartsWith(FilePrefix, StringComparison.OrdinalIgnoreCase)
+            || !file.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+            return null;
+        var stem = file[..^".json".Length];
+        if (stem.Length <= FilePrefix.Length)
+            return null;
+        return stem[FilePrefix.Length..];
+    }
 
     static OtoSaveFile Clean(OtoSaveFile file)
     {
