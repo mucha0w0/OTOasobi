@@ -709,6 +709,20 @@ public sealed class SpanEditor : UserControl
             return;
         }
 
+        // 同じ音素をもう一度クリックしても外さない。別の音素の波形・スペクトラム・音量で外す。
+        if (ReleaseFocusAt(point.Position.Y, x))
+        {
+            SetFocusOto(-1);
+            if (HitGroup(x) < 0)
+            {
+                var span = HitSpan(XToTime(x));
+                if (span >= 0)
+                    ShowSpan(span);
+                else
+                    SetReadout("");
+            }
+        }
+
         var group = HitGroup(x);
         if (group >= 0)
         {
@@ -830,10 +844,14 @@ public sealed class SpanEditor : UserControl
         }
 
         Highlight(-1);
-        var span = HitSpan(XToTime(x));
+        var time = XToTime(x);
+        var span = HitSpan(time);
+        var canRelease = _focusOto >= 0 && point.Position.Y < OtoTop && !FocusedOwnsTime(time);
         UseCursor(_cursorArrow);
         if (span >= 0)
-            ShowSpan(span);
+            ShowSpan(span, canRelease);
+        else if (canRelease)
+            SetReadout("クリックで解除");
         else
             SetReadout("");
     }
@@ -1339,12 +1357,15 @@ public sealed class SpanEditor : UserControl
         SetReadout($"{GroupTime(group):0.000} 秒");
     }
 
-    void ShowSpan(int index)
+    void ShowSpan(int index, bool canRelease = false)
     {
         if (_file == null || index < 0 || index >= _file.Spans.Count)
             return;
         var span = _file.Spans[index];
-        SetReadout($"{Caption(span)}   {span.Start:0.000}–{span.End:0.000}");
+        var text = $"{Caption(span)}   {span.Start:0.000}–{span.End:0.000}";
+        if (canRelease)
+            text += "   クリックで解除";
+        SetReadout(text);
     }
 
     void Highlight(int group)
@@ -1916,6 +1937,9 @@ public sealed class SpanEditor : UserControl
 
     static bool IsQuietSpan(string label) => label is "無音" or "息";
 
+    static bool IsVowelLabel(string label) =>
+        label is "a" or "i" or "u" or "e" or "o" or "N" or "M";
+
     static Color KindColor(string label)
     {
         if (label == "無音")
@@ -2319,14 +2343,96 @@ public sealed class SpanEditor : UserControl
         SetReadout($"{hit.Alias}   {hit.Offset:0.000}–{hit.Blank:0.000}   クリックで強調");
     }
 
+    bool ReleaseFocusAt(double y, double x)
+    {
+        if (_focusOto < 0 || y < 0 || y >= OtoTop)
+            return false;
+        return !FocusedOwnsTime(XToTime(x));
+    }
+
+    // 強調中の oto が占める音。母音の行は、別の行になっていない直前の子音も含む。
+    bool FocusedOwnsTime(double time)
+    {
+        if (_file == null || _focusOto < 0)
+            return false;
+        var spans = _file.Spans;
+        for (var i = 0; i < spans.Count; i++)
+        {
+            if (time < spans[i].Start - 1e-4 || time > spans[i].End + 1e-4)
+                continue;
+            if (FocusedOwnsSpan(i))
+                return true;
+        }
+
+        return false;
+    }
+
+    bool FocusedOwnsSpan(int index)
+    {
+        var anchor = AnchorSpan(_focusOto);
+        if (anchor < 0 || _file == null || index < 0)
+            return false;
+        if (index == anchor)
+            return true;
+        var spans = _file.Spans;
+        if (index != anchor - 1 || anchor >= spans.Count || SpanAnchorsOtherOto(index))
+            return false;
+        if (!IsVowelLabel(spans[anchor].Label))
+            return false;
+        var consonant = spans[index];
+        var vowel = spans[anchor];
+        return consonant.Token == vowel.Token
+            && !string.IsNullOrEmpty(consonant.Token)
+            && !IsVowelLabel(consonant.Label)
+            && !IsQuietSpan(consonant.Label);
+    }
+
+    bool SpanAnchorsOtherOto(int span)
+    {
+        for (var i = 0; i < _otoMarks.Count; i++)
+        {
+            if (i != _focusOto && AnchorSpan(i) == span)
+                return true;
+        }
+
+        return false;
+    }
+
+    int AnchorSpan(int otoIndex)
+    {
+        if (_file == null || otoIndex < 0)
+            return -1;
+        var source = otoIndex < _otoAuto.Count ? _otoAuto : _otoMarks;
+        if (otoIndex >= source.Count)
+            return -1;
+        var time = source[otoIndex].Preutter;
+        var spans = _file.Spans;
+        var best = -1;
+        var bestDelta = double.MaxValue;
+        for (var i = 0; i < spans.Count; i++)
+        {
+            if (time < spans[i].Start - 0.002 || time > spans[i].End + 0.002)
+                continue;
+            var delta = Math.Abs(spans[i].Start - time);
+            if (delta >= bestDelta)
+                continue;
+            bestDelta = delta;
+            best = i;
+        }
+
+        return best;
+    }
+
     void FocusOtoAt(double x)
     {
         var hits = OtoHitsAt(x);
         int next;
-        if (hits.Count == 0 || (hits.Count == 1 && hits[0] == _focusOto))
+        if (hits.Count == 0)
             next = -1;
-        else if (hits.Contains(_focusOto))
-            next = hits[(hits.IndexOf(_focusOto) + 1) % hits.Count];
+        else if (_focusOto >= 0 && hits.Contains(_focusOto))
+            next = hits.Count == 1
+                ? _focusOto
+                : hits[(hits.IndexOf(_focusOto) + 1) % hits.Count];
         else
             next = BestOtoHit(hits, x);
 
