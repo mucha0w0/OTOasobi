@@ -181,7 +181,6 @@ public sealed partial class SpanEditor : UserControl
         if (e.Key == Windows.System.VirtualKey.Escape && _focusOto >= 0)
         {
             SetFocusOto(-1);
-            SetReadout("");
             e.Handled = true;
             return;
         }
@@ -258,7 +257,7 @@ public sealed partial class SpanEditor : UserControl
 
     public bool HasContent => _file != null;
 
-    public void Clear(string message)
+    public void Clear()
     {
         FinishDrag();
         _file = null;
@@ -302,12 +301,6 @@ public sealed partial class SpanEditor : UserControl
         _otoWaveLine = null;
         _otoZero = null;
         _otoCaption = null;
-        foreach (var band in AllBands)
-        {
-            band.Readout.Text = message;
-            band.Badge.Visibility = string.IsNullOrEmpty(message) ? Visibility.Collapsed : Visibility.Visible;
-        }
-
         UseCursor(_cursorArrow);
     }
 
@@ -347,7 +340,6 @@ public sealed partial class SpanEditor : UserControl
         _viewportArmed = false;
         SetFullView();
         Rebuild();
-        SetReadout("");
     }
 
     internal void SetOtoSettings(OtoExport settings)
@@ -634,29 +626,10 @@ public sealed partial class SpanEditor : UserControl
         // 同じ音素をもう一度クリックしても外さない。別の音素の波形・スペクトラム・音量で外す。
         var lockWaveBoundary = WaveBoundaryLocked(point.Position.Y);
         if (ReleaseFocusAt(point.Position.Y, x))
-        {
             SetFocusOto(-1);
-            if (HitGroup(x) < 0)
-            {
-                var span = HitSpan(XToTime(x));
-                if (span >= 0)
-                    ShowSpan(span);
-                else
-                    SetReadout("");
-            }
-        }
 
         if (lockWaveBoundary)
         {
-            if (_focusOto < 0)
-            {
-                var span = HitSpan(XToTime(x));
-                if (span >= 0)
-                    ShowSpan(span);
-                else
-                    SetReadout("");
-            }
-
             e.Handled = true;
             return;
         }
@@ -671,7 +644,6 @@ public sealed partial class SpanEditor : UserControl
             ArmCapture(e.Pointer);
             UseCursor(_cursorEw);
             Highlight(group);
-            ShowBoundary(group);
             e.Handled = true;
         }
     }
@@ -735,7 +707,8 @@ public sealed partial class SpanEditor : UserControl
         {
             UseCursor(_cursorEw);
             Highlight(-1);
-            ShowOtoPoint(hover.Index, hover.Point);
+            if (_focusOto < 0)
+                SetHotOto(hover.Index);
             return;
         }
 
@@ -743,9 +716,7 @@ public sealed partial class SpanEditor : UserControl
         {
             UseCursor(_cursorHand);
             Highlight(-1);
-            if (_focusOto >= 0)
-                ShowFocusedOto(x);
-            else
+            if (_focusOto < 0)
                 ShowOtoHover(x);
             return;
         }
@@ -754,15 +725,7 @@ public sealed partial class SpanEditor : UserControl
         if (WaveBoundaryLocked(point.Position.Y))
         {
             Highlight(-1);
-            var lockedTime = XToTime(x);
-            var lockedSpan = HitSpan(lockedTime);
             UseCursor(_cursorArrow);
-            if (lockedSpan >= 0)
-                ShowSpan(lockedSpan, _focusOto >= 0 && !FocusedOwnsTime(lockedTime));
-            else if (_focusOto >= 0 && !FocusedOwnsTime(lockedTime))
-                SetReadout("クリックで解除");
-            else
-                SetReadout("");
             return;
         }
 
@@ -771,32 +734,11 @@ public sealed partial class SpanEditor : UserControl
         {
             UseCursor(_cursorEw);
             Highlight(group);
-            ShowBoundary(group);
             return;
         }
 
         Highlight(-1);
-        var time = XToTime(x);
-        var span = HitSpan(time);
-        var canRelease = _focusOto >= 0 && _hitKind != BandKind.Oto && !FocusedOwnsTime(time);
         UseCursor(_cursorArrow);
-        if (span >= 0)
-            ShowSpan(span, canRelease);
-        else if (canRelease)
-            SetReadout("クリックで解除");
-        else
-            SetReadout("");
-    }
-
-    void SetReadout(string text)
-    {
-        var message = string.IsNullOrEmpty(text) ? null : text;
-        foreach (var band in AllBands)
-        {
-            var show = message != null && ReferenceEquals(band, _xBand);
-            band.Readout.Text = show ? message : "";
-            band.Badge.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
-        }
     }
 
     void OnPointerReleased(object sender, PointerRoutedEventArgs e)
@@ -895,7 +837,6 @@ public sealed partial class SpanEditor : UserControl
         _changed = Changed();
         ArrangeSpans();
         Highlight(_dragIndex);
-        ShowBoundary(_dragIndex);
     }
 
     void Pan(double x)
@@ -1279,24 +1220,6 @@ public sealed partial class SpanEditor : UserControl
         if (span <= 0)
             return _waveT0;
         return _waveT0 + (index + 0.5) / count * span;
-    }
-
-    void ShowBoundary(int group)
-    {
-        if (group < 0 || group >= _groups.Count)
-            return;
-        SetReadout($"{GroupTime(group):0.000} 秒");
-    }
-
-    void ShowSpan(int index, bool canRelease = false)
-    {
-        if (_file == null || index < 0 || index >= _file.Spans.Count)
-            return;
-        var span = _file.Spans[index];
-        var text = $"{Caption(span)}   {span.Start:0.000}–{span.End:0.000}";
-        if (canRelease)
-            text += "   クリックで解除";
-        SetReadout(text);
     }
 
     void Highlight(int group)

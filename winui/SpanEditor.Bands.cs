@@ -127,10 +127,6 @@ public sealed partial class SpanEditor
         if (!ReferenceEquals(_xBand, band))
             return;
         SetHotOto(-1);
-        if (_focusOto >= 0)
-            ShowFocusedOto(double.NaN);
-        else
-            SetReadout("");
     }
 
     void OnBandDoubleTapped(BandView band, DoubleTappedRoutedEventArgs e)
@@ -171,24 +167,6 @@ public sealed partial class SpanEditor
                 ManipulationMode = ManipulationModes.None,
                 Clip = _clip,
             };
-            Readout = new TextBlock
-            {
-                IsHitTestVisible = false,
-                FontSize = 13,
-                Foreground = TextBrush,
-                TextWrapping = TextWrapping.Wrap,
-            };
-            Badge = new Border
-            {
-                HorizontalAlignment = HorizontalAlignment.Right,
-                VerticalAlignment = VerticalAlignment.Top,
-                Margin = new Thickness(12),
-                Padding = new Thickness(8, 4, 8, 4),
-                Background = BrushOf(190, 22, 22, 22),
-                IsHitTestVisible = false,
-                Visibility = Visibility.Collapsed,
-                Child = Readout,
-            };
             Notice = new TextBlock
             {
                 Text = "音量データがありません",
@@ -203,7 +181,6 @@ public sealed partial class SpanEditor
             _root.Children.Add(Plot);
             _root.Children.Add(Notice);
             _root.Children.Add(ChildrenOverlay);
-            _root.Children.Add(Badge);
             Content = _root;
             Background = BrushOf(255, 22, 22, 22);
             IsTabStop = true;
@@ -230,10 +207,6 @@ public sealed partial class SpanEditor
         public BandKind Kind { get; }
 
         public CursorCanvas Plot { get; }
-
-        public TextBlock Readout { get; }
-
-        public Border Badge { get; }
 
         public TextBlock Notice { get; }
 

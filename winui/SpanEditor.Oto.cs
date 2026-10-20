@@ -428,12 +428,10 @@ public sealed partial class SpanEditor
         if (_otoMarks.Count == 0)
         {
             SetHotOto(-1);
-            SetReadout("");
             return;
         }
 
         var best = -1;
-        var bestPoint = -1;
         var bestDist = HitPx;
         for (var i = 0; i < _otoMarks.Count; i++)
         {
@@ -445,29 +443,16 @@ public sealed partial class SpanEditor
                     continue;
                 bestDist = dist;
                 best = i;
-                bestPoint = point;
             }
         }
 
-        if (best >= 0 && bestPoint >= 0)
+        if (best >= 0)
         {
-            var mark = _otoMarks[best];
-            var at = mark.At(bestPoint);
             SetHotOto(best);
-            SetReadout($"{mark.Alias}   {JoinedPointNames(mark, at)}   {at:0.000} 秒   クリックで強調");
             return;
         }
 
-        var region = HitOtoRegion(XToTime(x));
-        SetHotOto(region);
-        if (region < 0)
-        {
-            SetReadout("");
-            return;
-        }
-
-        var hit = _otoMarks[region];
-        SetReadout($"{hit.Alias}   {hit.Offset:0.000}–{hit.Blank:0.000}   クリックで強調");
+        SetHotOto(HitOtoRegion(XToTime(x)));
     }
 
     bool ReleaseFocusAt(double y, double x)
@@ -564,9 +549,7 @@ public sealed partial class SpanEditor
             next = BestOtoHit(hits, x);
 
         SetFocusOto(next);
-        if (_focusOto >= 0)
-            ShowFocusedOto(x);
-        else
+        if (_focusOto < 0)
             ShowOtoHover(x);
     }
 
@@ -581,77 +564,6 @@ public sealed partial class SpanEditor
         if (_file != null && HasDrawnPlot)
             ArrangeOtoLabels();
         PaintWaveBoundaryOpacity();
-    }
-
-    void ShowFocusedOto(double x)
-    {
-        if (_focusOto < 0 || _focusOto >= _otoMarks.Count)
-        {
-            SetReadout("");
-            return;
-        }
-
-        var mark = _otoMarks[_focusOto];
-        var text = OtoReadout(mark, x);
-        if (double.IsNaN(x))
-        {
-            SetReadout(text);
-            return;
-        }
-
-        var hits = OtoHitsAt(x);
-        if (hits.Count == 0 || (hits.Count == 1 && hits[0] == _focusOto))
-        {
-            SetReadout(text);
-            return;
-        }
-
-        var next = hits.Contains(_focusOto)
-            ? hits[(hits.IndexOf(_focusOto) + 1) % hits.Count]
-            : BestOtoHit(hits, x);
-        if (next < 0 || next == _focusOto)
-        {
-            SetReadout(text);
-            return;
-        }
-
-        SetReadout(text + "   クリックで " + _otoMarks[next].Alias);
-    }
-
-    string OtoReadout(OtoMark mark, double x)
-    {
-        if (!double.IsNaN(x) && _focusOto >= 0 && _focusOto < _otoMarks.Count)
-        {
-            var bestPoint = -1;
-            var bestDist = HitPx;
-            for (var point = 0; point < OtoTune.PointCount; point++)
-            {
-                var dist = Math.Abs(X(mark.At(point)) - x);
-                if (dist > bestDist)
-                    continue;
-                bestDist = dist;
-                bestPoint = point;
-            }
-
-            if (bestPoint >= 0)
-                return PointReadout(_focusOto, bestPoint);
-        }
-
-        var alias = _focusOto >= 0 ? AliasLabel(mark, _focusOto) : mark.Alias;
-        return $"{alias}   {mark.Offset:0.000}–{mark.Blank:0.000}";
-    }
-
-    static string JoinedPointNames(OtoMark mark, double at)
-    {
-        var names = "";
-        for (var point = 0; point < OtoTune.PointCount; point++)
-        {
-            if (Math.Abs(mark.At(point) - at) > 0.0005)
-                continue;
-            names = names.Length == 0 ? OtoPointName(point) : names + "・" + OtoPointName(point);
-        }
-
-        return names;
     }
 
     List<int> OtoHitsAt(double x)
@@ -887,17 +799,6 @@ public sealed partial class SpanEditor
             ReapplyTunedMark(index);
         PaintDraggedOto(index);
         _changed = !SameTune(index, _otoDragOrigin);
-        if (index < _otoMarks.Count)
-        {
-            var point = 0;
-            for (var i = 0; i < OtoTune.PointCount; i++)
-            {
-                if (_otoStack[i])
-                    point = i;
-            }
-
-            ShowOtoPoint(index, point);
-        }
     }
 
     bool StickTunedToShown(int index)
@@ -1101,27 +1002,6 @@ public sealed partial class SpanEditor
         best = index;
         bestPoint = point;
         focused = isFocus;
-    }
-
-    void ShowOtoPoint(int index, int point)
-    {
-        if (index < 0 || index >= _otoMarks.Count)
-        {
-            SetReadout("");
-            return;
-        }
-
-        if (_focusOto < 0)
-            SetHotOto(index);
-        SetReadout(PointReadout(index, point));
-    }
-
-    string PointReadout(int index, int point)
-    {
-        var mark = _otoMarks[index];
-        var at = mark.At(point);
-        var state = Tuned(index, point) ? "調整済み" : "自動推定";
-        return $"{mark.Alias}   {PointLabel(index, point)}   {at:0.000} 秒   {state}";
     }
 
     string PointLabel(int index, int point)

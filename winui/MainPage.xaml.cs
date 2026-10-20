@@ -903,7 +903,7 @@ public sealed partial class MainPage : Page
             }
 
             var updated = result.Files[0];
-            Editor.Clear("波形を読み込んでいます…");
+            Editor.Clear();
             file.Duration = updated.Duration;
             file.Engine = updated.Engine;
             file.Spans.Clear();
@@ -964,7 +964,7 @@ public sealed partial class MainPage : Page
         var gen = ++_previewGen;
         _appliedKey = "";
         _shownFile = file;
-        Editor.Clear("波形を読み込んでいます…");
+        Editor.Clear();
         try
         {
             _analysis ??= new AnalysisClient();
@@ -975,7 +975,7 @@ public sealed partial class MainPage : Page
                 return;
             if (!preview.Ok)
             {
-                Editor.Clear(string.IsNullOrEmpty(preview.Error) ? "波形を表示できません。" : preview.Error);
+                Editor.Clear();
                 return;
             }
 
@@ -1005,10 +1005,10 @@ public sealed partial class MainPage : Page
                 _appliedKey = ViewportKey(file.Name, current.T0, current.T1, current.Columns, current.Rows);
             }
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             if (gen == _previewGen)
-                Editor.Clear(ex.Message);
+                Editor.Clear();
         }
     }
 
