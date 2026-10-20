@@ -139,6 +139,9 @@ public sealed partial class MainPage : Page
         SpecHost.Children.Add(Editor.SpecSurface);
         LoudHost.Children.Add(Editor.LoudSurface);
         OtoBandHost.Children.Add(Editor.OtoSurface);
+        // ページが読み込まれる前は Parent が空のままなので、ここから外してからドックへ入れる。
+        foreach (var pane in new UIElement[] { FilePane, WavePane, SpecHost, LoudHost, OtoBandHost, SourcePane, OtoPane })
+            PaneHolder.Children.Remove(pane);
         Dock.Mount(
         [
             ("file", "ファイル", FilePane),
