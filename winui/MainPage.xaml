@@ -373,18 +373,7 @@
                         <local:InfoNote
                             Margin="16,8,16,8"
                             Label="波形の操作"
-                            StretchHeader="True"
-                            Text="{StaticResource EditorHelp}">
-                            <local:InfoNote.Header>
-                                <TextBlock
-                                    x:Name="FileTitle"
-                                    HorizontalAlignment="Stretch"
-                                    VerticalAlignment="Center"
-                                    Style="{StaticResource BodyStrongTextBlockStyle}"
-                                    TextTrimming="CharacterEllipsis"
-                                    TextWrapping="NoWrap" />
-                            </local:InfoNote.Header>
-                        </local:InfoNote>
+                            Text="{StaticResource EditorHelp}" />
                         <Grid x:Name="WaveHost" Grid.Row="1" />
                     </Grid>
                     <Grid x:Name="SpecHost" />

@@ -959,7 +959,6 @@ public sealed partial class MainPage : Page
         _viewportTimer?.Stop();
         var gen = ++_previewGen;
         _appliedKey = "";
-        ShowFile(file);
         Editor.Clear("波形を読み込んでいます…");
         try
         {
@@ -1499,8 +1498,6 @@ public sealed partial class MainPage : Page
         HideStatus();
         ClearNotice();
         FileCount.Text = $"{_files.Count} 件";
-        FileTitle.Text = "";
-        ToolTipService.SetToolTip(FileTitle, null);
         Editor.IsEnabled = true;
         ConfigBody.IsEnabled = true;
         Editor.SetLabelsLocked(true);
@@ -1642,12 +1639,6 @@ public sealed partial class MainPage : Page
         if (string.IsNullOrWhiteSpace(body))
             return _notice;
         return body + "\n" + _notice;
-    }
-
-    void ShowFile(WavFile file)
-    {
-        FileTitle.Text = file.Name;
-        ToolTipService.SetToolTip(FileTitle, file.Name);
     }
 
     void Widen()
