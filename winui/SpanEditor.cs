@@ -18,38 +18,27 @@ public sealed partial class SpanEditor : UserControl
     const double LinkGap = 0.0005;
     const double HitPx = 18;
     const double LoudnessRangeDb = 40;
-    const double SplitThickness = 8;
-    const double SplitSlop = 10;
-    const double MinBand = 48;
 
     enum DragKind
     {
         None,
         Boundary,
         Pan,
-        Split,
         Oto,
     }
 
-    enum SplitLook
-    {
-        Rest,
-        Hover,
-        Drag,
-    }
-
-    readonly Grid _root = new();
-    readonly CursorCanvas _plot = new();
-    readonly TextBlock _readout = new();
-    readonly Border _badge;
-    readonly RectangleGeometry _clip = new();
+    readonly BandView _waveView = new(BandKind.Wave);
+    readonly BandView _specView = new(BandKind.Spec);
+    readonly BandView _loudView = new(BandKind.Loud);
+    readonly BandView _otoView = new(BandKind.Oto);
+    readonly Line[] _waveOtoLines = new Line[OtoTune.PointCount];
+    readonly List<Line> _loudLines = [];
+    BandView _xBand = null!;
+    BandKind _hitKind;
+    CursorCanvas _plot => _xBand.Plot;
     readonly InputCursor _cursorArrow = InputSystemCursor.Create(InputSystemCursorShape.Arrow);
     readonly InputCursor _cursorEw = InputSystemCursor.Create(InputSystemCursorShape.SizeWestEast);
-    readonly InputCursor _cursorNs = InputSystemCursor.Create(InputSystemCursorShape.SizeNorthSouth);
     readonly InputCursor _cursorHand = InputSystemCursor.Create(InputSystemCursorShape.Hand);
-    readonly Grid _waveSplit = MakeSplitBar();
-    readonly Grid _loudSplit = MakeSplitBar();
-    readonly Grid _otoSplit = MakeSplitBar();
 
     static readonly SolidColorBrush WaveBrush = BrushOf(170, 230, 230, 230);
     static readonly SolidColorBrush WaveLineBrush = BrushOf(255, 236, 236, 236);
@@ -59,7 +48,6 @@ public sealed partial class SpanEditor : UserControl
     static readonly SolidColorBrush HotBrush = BrushOf(255, 251, 191, 36);
     static readonly SolidColorBrush TickBrush = BrushOf(255, 209, 213, 219);
     static readonly SolidColorBrush TextBrush = BrushOf(255, 249, 250, 251);
-    static readonly SolidColorBrush SplitLineBrush = BrushOf(0x24, 0xFF, 0xFF, 0xFF);
     static readonly SolidColorBrush LoudBrush = BrushOf(255, 153, 246, 228);
     static readonly SolidColorBrush LoudBackBrush = BrushOf(255, 14, 14, 14);
     static readonly SolidColorBrush OtoRegionBrush = BrushOf(64, 15, 157, 142);
@@ -92,9 +80,6 @@ public sealed partial class SpanEditor : UserControl
     int _sampleRate;
     double _view0;
     double _view1 = 1;
-    double _waveShare = 0.30;
-    double _loudShare = 0.14;
-    double _otoShare = 0.24;
     bool _viewportArmed;
     (double T0, double T1, int Columns, int Rows) _notified;
 
@@ -138,12 +123,6 @@ public sealed partial class SpanEditor : UserControl
 
     DragKind _drag = DragKind.None;
     int _dragIndex = -1;
-    int _splitIndex = -1;
-    int _hotSplit = -1;
-    double _splitY;
-    double _splitWave;
-    double _splitLoud;
-    double _splitOto;
     double _panX;
     double _panView0;
     double _panView1;
@@ -152,54 +131,20 @@ public sealed partial class SpanEditor : UserControl
     object? _zoomToken;
     Pointer? _pointer;
     bool _labelsLocked;
-    bool _columnDrag;
-    double _columnDragWidth = 1;
-    ScaleTransform? _columnDragScale;
     readonly Border _labelGate;
 
     public event EventHandler? AnalyzeRequested;
 
-    // 列幅をドラッグしているあいだは、いまの絵を横に伸ばすだけにする。離したときに一度だけ描き直す。
+    // 境目をドラッグしているあいだは、いまの絵を伸ばすだけにする。離したときに一度だけ描き直す。
     public void SetColumnDrag(bool dragging)
     {
-        if (dragging)
+        foreach (var band in AllBands)
+            band.SetColumnDrag(dragging);
+        if (!dragging)
         {
-            if (_columnDrag || ActualWidth < 2)
-                return;
-            _columnDragWidth = ActualWidth;
-            _columnDrag = true;
-            _columnDragScale ??= new ScaleTransform();
-            _columnDragScale.ScaleX = 1;
-            _root.HorizontalAlignment = HorizontalAlignment.Left;
-            _root.Width = _columnDragWidth;
-            _root.RenderTransformOrigin = new Point(0, 0);
-            _root.RenderTransform = _columnDragScale;
-            return;
-        }
-
-        if (!_columnDrag)
-            return;
-        _columnDrag = false;
-        _root.RenderTransform = null;
-        _root.ClearValue(WidthProperty);
-        _root.HorizontalAlignment = HorizontalAlignment.Stretch;
-        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
-        {
-            if (_columnDrag || ActualWidth < 2 || ActualHeight < 2)
-                return;
-            SyncPlotSize(new Size(ActualWidth, ActualHeight));
             ArrangeAll();
             PlaceLabelGate();
-        });
-    }
-
-    void SyncPlotSize(Size size)
-    {
-        var width = Math.Max(0, size.Width);
-        var height = Math.Max(0, size.Height);
-        _plot.Width = width;
-        _plot.Height = height;
-        _clip.Rect = new Rect(0, 0, width, height);
+        }
     }
 
     public void SetLabelsLocked(bool locked)
@@ -210,84 +155,29 @@ public sealed partial class SpanEditor : UserControl
 
     public SpanEditor()
     {
+        _xBand = _waveView;
         _labelGate = MakeLabelGate();
-        _plot.Background = BrushOf(255, 22, 22, 22);
-        _plot.ManipulationMode = ManipulationModes.None;
-        _plot.Clip = _clip;
-        _readout.IsHitTestVisible = false;
-        _readout.FontSize = 13;
-        _readout.Foreground = TextBrush;
-        _badge = new Border
+        for (var point = 0; point < OtoTune.PointCount; point++)
         {
-            HorizontalAlignment = HorizontalAlignment.Right,
-            VerticalAlignment = VerticalAlignment.Top,
-            Margin = new Thickness(12),
-            Padding = new Thickness(8, 4, 8, 4),
-            Background = BrushOf(190, 22, 22, 22),
-            IsHitTestVisible = false,
-            Visibility = Visibility.Collapsed,
-            Child = _readout,
-        };
-        _root.Children.Add(_plot);
-        _root.Children.Add(_badge);
-        _root.Children.Add(_labelGate);
-        Content = _root;
+            _waveOtoLines[point] = new Line
+            {
+                Stroke = OtoBrush(point),
+                StrokeThickness = 3,
+                IsHitTestVisible = false,
+                Visibility = Visibility.Collapsed,
+            };
+        }
+
         Background = BrushOf(255, 22, 22, 22);
         ManipulationMode = ManipulationModes.None;
-        IsTabStop = true;
-
-        SizeChanged += (_, e) =>
-        {
-            if (_columnDrag)
-            {
-                if (_columnDragScale != null && _columnDragWidth > 1)
-                    _columnDragScale.ScaleX = e.NewSize.Width / _columnDragWidth;
-                return;
-            }
-
-            SyncPlotSize(e.NewSize);
-            ArrangeAll();
-            PlaceLabelGate();
-        };
-        _plot.PointerPressed += OnPointerPressed;
-        _plot.PointerMoved += OnPointerMoved;
-        _plot.PointerReleased += OnPointerReleased;
-        _plot.PointerCanceled += OnPointerReleased;
-        _plot.PointerCaptureLost += OnPointerCaptureLost;
-        AddHandler(PointerWheelChangedEvent, new PointerEventHandler(OnWheel), true);
-        PointerEntered += (_, _) => Focus(FocusState.Pointer);
-        DoubleTapped += (_, e) =>
-        {
-            if (_file == null)
-                return;
-            var y = e.GetPosition(_plot).Y;
-            if (InOtoBand(y))
-            {
-                e.Handled = true;
-                return;
-            }
-
-            FinishDrag();
-            SetFullView();
-            ArrangeAll();
-            e.Handled = true;
-        };
-        PointerExited += (_, _) =>
-        {
-            if (_drag != DragKind.None)
-                return;
-            SetHotOto(-1);
-            if (_focusOto >= 0)
-                ShowFocusedOto(double.NaN);
-            else
-                SetReadout("");
-            SetHotSplit(-1);
-        };
-        KeyDown += OnKeyDown;
+        IsTabStop = false;
+        BindBands();
     }
 
     void OnKeyDown(object sender, KeyRoutedEventArgs e)
     {
+        if (sender is BandView band)
+            UseBand(band);
         if (_file == null || _drag != DragKind.None)
             return;
         if (e.Key == Windows.System.VirtualKey.Escape && _focusOto >= 0)
@@ -383,7 +273,8 @@ public sealed partial class SpanEditor : UserControl
         _wavePeak = 0.2;
         _viewportArmed = false;
         _dots.Clear();
-        _plot.Children.Clear();
+        foreach (var band in AllBands)
+            band.Plot.Children.Clear();
         _waveRects.Clear();
         _specRects.Clear();
         _waveTexts.Clear();
@@ -413,7 +304,12 @@ public sealed partial class SpanEditor : UserControl
         _otoWaveLine = null;
         _otoZero = null;
         _otoCaption = null;
-        SetReadout(message);
+        foreach (var band in AllBands)
+        {
+            band.Readout.Text = message;
+            band.Badge.Visibility = string.IsNullOrEmpty(message) ? Visibility.Collapsed : Visibility.Visible;
+        }
+
         UseCursor(_cursorArrow);
     }
 
@@ -467,7 +363,7 @@ public sealed partial class SpanEditor : UserControl
         }
 
         _oto = settings;
-        if (_file == null || _plot.Width < 2 || _plot.Height < 2)
+        if (_file == null || !HasDrawnPlot)
             return;
         ArrangeOtoLabels();
     }
@@ -478,7 +374,7 @@ public sealed partial class SpanEditor : UserControl
             return;
         _tune.Clear();
         _pendingTunes = entries == null ? [] : entries.ToList();
-        if (_file == null || _plot.Width < 2 || _plot.Height < 2)
+        if (_file == null || !HasDrawnPlot)
             return;
         ArrangeOtoLabels();
     }
@@ -527,7 +423,8 @@ public sealed partial class SpanEditor : UserControl
 
     void Rebuild()
     {
-        _plot.Children.Clear();
+        foreach (var band in AllBands)
+            band.Plot.Children.Clear();
         _dots.Clear();
         _waveRects.Clear();
         _specRects.Clear();
@@ -535,6 +432,7 @@ public sealed partial class SpanEditor : UserControl
         _specTexts.Clear();
         _lines.Clear();
         _waveLines.Clear();
+        _loudLines.Clear();
         _ticks.Clear();
         _otoMarks.Clear();
         _otoAuto.Clear();
@@ -560,14 +458,14 @@ public sealed partial class SpanEditor : UserControl
             UseLayoutRounding = true,
             IsHitTestVisible = false,
         };
-        _plot.Children.Add(_specImage);
+        _specView.Plot.Children.Add(_specImage);
 
         _wave = new Polygon
         {
             Fill = WaveBrush,
             IsHitTestVisible = false,
         };
-        _plot.Children.Add(_wave);
+        _waveView.Plot.Children.Add(_wave);
         _waveLine = new Polyline
         {
             Stroke = WaveLineBrush,
@@ -575,7 +473,7 @@ public sealed partial class SpanEditor : UserControl
             StrokeLineJoin = PenLineJoin.Round,
             IsHitTestVisible = false,
         };
-        _plot.Children.Add(_waveLine);
+        _waveView.Plot.Children.Add(_waveLine);
 
         _zero = new Line
         {
@@ -583,14 +481,14 @@ public sealed partial class SpanEditor : UserControl
             StrokeThickness = 1,
             IsHitTestVisible = false,
         };
-        _plot.Children.Add(_zero);
+        _waveView.Plot.Children.Add(_zero);
 
         _loudnessBack = new Rectangle
         {
             Fill = LoudBackBrush,
             IsHitTestVisible = false,
         };
-        _plot.Children.Add(_loudnessBack);
+        _loudView.Plot.Children.Add(_loudnessBack);
 
         _loudnessLine = new Polyline
         {
@@ -599,7 +497,7 @@ public sealed partial class SpanEditor : UserControl
             StrokeLineJoin = PenLineJoin.Round,
             IsHitTestVisible = false,
         };
-        _plot.Children.Add(_loudnessLine);
+        _loudView.Plot.Children.Add(_loudnessLine);
 
         _loudnessLabel = new Border
         {
@@ -641,8 +539,8 @@ public sealed partial class SpanEditor : UserControl
             _specRects.Add(specRect);
             _waveTexts.Add(waveText);
             _specTexts.Add(specText);
-            _plot.Children.Add(waveRect);
-            _plot.Children.Add(specRect);
+            _waveView.Plot.Children.Add(waveRect);
+            _specView.Plot.Children.Add(specRect);
         }
 
         _groups = BuildGroups(_file.Spans);
@@ -660,28 +558,36 @@ public sealed partial class SpanEditor : UserControl
                 StrokeThickness = 2,
                 IsHitTestVisible = false,
             };
+            var loudLine = new Line
+            {
+                Stroke = LineBrush,
+                StrokeThickness = 2,
+                IsHitTestVisible = false,
+            };
             _waveLines.Add(waveLine);
             _lines.Add(line);
-            _plot.Children.Add(waveLine);
-            _plot.Children.Add(line);
+            _loudLines.Add(loudLine);
+            _waveView.Plot.Children.Add(waveLine);
+            _specView.Plot.Children.Add(line);
+            _loudView.Plot.Children.Add(loudLine);
         }
 
         foreach (var text in _waveTexts)
-            _plot.Children.Add(text);
+            _waveView.Plot.Children.Add(text);
         foreach (var text in _specTexts)
-            _plot.Children.Add(text);
+            _specView.Plot.Children.Add(text);
+        foreach (var line in _waveOtoLines)
+            _waveView.Plot.Children.Add(line);
+        UseBand(_otoView);
         AddOtoVisuals();
-        _plot.Children.Add(_loudnessLabel);
-        _plot.Children.Add(_waveSplit);
-        _plot.Children.Add(_loudSplit);
-        _plot.Children.Add(_otoSplit);
+        _loudView.Plot.Children.Add(_loudnessLabel);
 
         ArrangeAll();
     }
 
     void OnPointerPressed(object sender, PointerRoutedEventArgs e)
     {
-        if (_file == null || _plot.Width < 2)
+        if (!UseBand(sender) || _file == null || _plot.Width < 2)
             return;
         var point = e.GetCurrentPoint(_plot);
         var x = point.Position.X;
@@ -695,23 +601,6 @@ public sealed partial class SpanEditor : UserControl
             _changed = false;
             ArmCapture(e.Pointer);
             UseCursor(_cursorHand);
-            e.Handled = true;
-            return;
-        }
-
-        var split = HitSplit(point.Position.Y);
-        if (split >= 0)
-        {
-            _drag = DragKind.Split;
-            _splitIndex = split;
-            _splitY = point.Position.Y;
-            _splitWave = ShownWaveShare;
-            _splitLoud = ShownLoudShare;
-            _splitOto = ShownOtoShare;
-            _changed = false;
-            SetHotSplit(split);
-            ArmCapture(e.Pointer);
-            UseCursor(_cursorNs);
             e.Handled = true;
             return;
         }
@@ -794,13 +683,12 @@ public sealed partial class SpanEditor : UserControl
     {
         if (!ReferenceEquals(_plot.Cursor, cursor))
             _plot.Cursor = cursor;
-        if (!ReferenceEquals(ProtectedCursor, cursor))
-            ProtectedCursor = cursor;
+        _xBand.SetCursor(cursor);
     }
 
     void OnPointerMoved(object sender, PointerRoutedEventArgs e)
     {
-        if (_file == null)
+        if (!UseBand(sender) || _file == null)
             return;
         var point = e.GetCurrentPoint(_plot);
         var x = point.Position.X;
@@ -816,14 +704,6 @@ public sealed partial class SpanEditor : UserControl
         {
             ApplyBoundary(XToTime(x));
             UseCursor(_cursorEw);
-            e.Handled = true;
-            return;
-        }
-
-        if (_drag == DragKind.Split)
-        {
-            ApplySplit(point.Position.Y);
-            UseCursor(_cursorNs);
             e.Handled = true;
             return;
         }
@@ -848,18 +728,6 @@ public sealed partial class SpanEditor : UserControl
             return;
         }
 
-        var split = HitSplit(point.Position.Y);
-        if (split >= 0)
-        {
-            UseCursor(_cursorNs);
-            Highlight(-1);
-            SetHotOto(-1);
-            SetHotSplit(split);
-            SetReadout("");
-            return;
-        }
-
-        SetHotSplit(-1);
         var otoHit = HitOtoPoint(x, point.Position.Y);
         if (otoHit is { } hover)
         {
@@ -908,7 +776,7 @@ public sealed partial class SpanEditor : UserControl
         Highlight(-1);
         var time = XToTime(x);
         var span = HitSpan(time);
-        var canRelease = _focusOto >= 0 && point.Position.Y < OtoTop && !FocusedOwnsTime(time);
+        var canRelease = _focusOto >= 0 && _hitKind != BandKind.Oto && !FocusedOwnsTime(time);
         UseCursor(_cursorArrow);
         if (span >= 0)
             ShowSpan(span, canRelease);
@@ -920,8 +788,13 @@ public sealed partial class SpanEditor : UserControl
 
     void SetReadout(string text)
     {
-        _readout.Text = text;
-        _badge.Visibility = string.IsNullOrEmpty(text) ? Visibility.Collapsed : Visibility.Visible;
+        var message = string.IsNullOrEmpty(text) ? null : text;
+        foreach (var band in AllBands)
+        {
+            var show = message != null && ReferenceEquals(band, _xBand);
+            band.Readout.Text = show ? message : "";
+            band.Badge.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        }
     }
 
     void OnPointerReleased(object sender, PointerRoutedEventArgs e)
@@ -944,15 +817,11 @@ public sealed partial class SpanEditor : UserControl
         if (_drag == DragKind.None)
             return;
         var changed = _changed;
-        var split = _drag == DragKind.Split;
         var otoIndex = _drag == DragKind.Oto && _otoDragLive ? _otoDragIndex : -1;
         _drag = DragKind.None;
         _otoDragIndex = -1;
         _otoDragLive = false;
-        _splitIndex = -1;
         _origin = [];
-        if (split)
-            SetHotSplit(-1);
         if (_pointer != null)
         {
             var pointer = _pointer;
@@ -983,13 +852,6 @@ public sealed partial class SpanEditor : UserControl
 
         if (changed)
             Edited?.Invoke(this, EventArgs.Empty);
-    }
-
-    void OnWheel(object sender, PointerRoutedEventArgs e)
-    {
-        var point = e.GetCurrentPoint(_plot);
-        if (ZoomAt(point.Position.X, point.Properties.MouseWheelDelta, e, ShiftHeld(e)))
-            e.Handled = true;
     }
 
     void ZoomBy(double factor, double? anchorX = null)
@@ -1044,11 +906,13 @@ public sealed partial class SpanEditor : UserControl
 
     void ArrangeAll()
     {
-        if (_file == null || _plot.Width < 2 || _plot.Height < 2)
+        if (_file == null)
             return;
+        _loudView.Notice.Visibility = HasLoudness ? Visibility.Collapsed : Visibility.Visible;
         ArrangeWave();
         ArrangeSpans();
-        ArrangeTicks();
+        foreach (var band in AllBands)
+            ArrangeTicks(band);
         PlaceLabelGate();
         NotifyViewport();
     }
@@ -1097,9 +961,10 @@ public sealed partial class SpanEditor : UserControl
 
     void PlaceLabelGate()
     {
-        if (!_labelsLocked || _plot.Height < 2)
+        if (!_labelsLocked || _otoView.Plot.Height < 8)
         {
             _labelGate.Visibility = Visibility.Collapsed;
+            _otoView.ChildrenOverlay.IsHitTestVisible = false;
             return;
         }
 
@@ -1107,24 +972,29 @@ public sealed partial class SpanEditor : UserControl
         if (height < 8)
         {
             _labelGate.Visibility = Visibility.Collapsed;
+            _otoView.ChildrenOverlay.IsHitTestVisible = false;
             return;
         }
 
-        _labelGate.Margin = new Thickness(0, OtoTop, 0, 0);
-        _labelGate.Height = height;
+        _labelGate.Margin = new Thickness(0);
+        _labelGate.Height = double.NaN;
+        _labelGate.VerticalAlignment = VerticalAlignment.Stretch;
         _labelGate.Visibility = Visibility.Visible;
+        _otoView.ChildrenOverlay.IsHitTestVisible = true;
     }
 
     void ArrangeWave()
     {
+        UseBand(_specView);
         if (_specImage != null)
         {
             Canvas.SetLeft(_specImage, X(_specT0));
-            Canvas.SetTop(_specImage, SpecTop);
+            Canvas.SetTop(_specImage, 0);
             _specImage.Width = Math.Max(1, X(_specT1) - X(_specT0));
             _specImage.Height = Math.Max(1, SpecHeight);
         }
 
+        UseBand(_waveView);
         ArrangeWaveform();
 
         if (_zero != null)
@@ -1137,15 +1007,16 @@ public sealed partial class SpanEditor : UserControl
         }
 
         ArrangeLoudness();
+        UseBand(_otoView);
         ArrangeOtoWave();
-        ArrangeSplits();
     }
 
     void ArrangeLoudness()
     {
+        UseBand(_loudView);
         var height = LoudnessHeight;
         var top = LoudnessTop;
-        var visible = height > 1;
+        var visible = HasLoudness && height > 1;
         if (_loudnessBack != null)
         {
             Canvas.SetLeft(_loudnessBack, 0);
@@ -1185,10 +1056,9 @@ public sealed partial class SpanEditor : UserControl
     {
         if (_file == null)
             return;
-        var waveTop = 0.0;
         var waveHeight = WaveHeight;
-        var specTop = SpecTop;
         var specHeight = SpecHeight;
+        var loudHeight = LoudnessHeight;
         var spans = _file.Spans;
         for (var i = 0; i < spans.Count; i++)
         {
@@ -1199,13 +1069,14 @@ public sealed partial class SpanEditor : UserControl
                 continue;
             }
 
-            var left = X(spans[i].Start);
-            var right = X(spans[i].End);
-            var width = Math.Max(0, right - left);
-            PlaceRect(_waveRects, i, left, waveTop, width, waveHeight);
-            PlaceRect(_specRects, i, left, specTop, width, specHeight);
-            PlaceText(_waveTexts, i, left, waveTop + 8, width);
-            PlaceText(_specTexts, i, left, specTop + 8, width);
+            var waveLeft = XOn(_waveView, spans[i].Start);
+            var waveWidth = Math.Max(0, XOn(_waveView, spans[i].End) - waveLeft);
+            var specLeft = XOn(_specView, spans[i].Start);
+            var specWidth = Math.Max(0, XOn(_specView, spans[i].End) - specLeft);
+            PlaceRect(_waveRects, i, waveLeft, 0, waveWidth, waveHeight);
+            PlaceRect(_specRects, i, specLeft, 0, specWidth, specHeight);
+            PlaceText(_waveTexts, i, waveLeft, 8, waveWidth);
+            PlaceText(_specTexts, i, specLeft, 8, specWidth);
         }
 
         ArrangeOtoLabels();
@@ -1213,40 +1084,56 @@ public sealed partial class SpanEditor : UserControl
         for (var i = 0; i < _lines.Count && i < _groups.Count; i++)
         {
             var wave = i < _waveLines.Count ? _waveLines[i] : null;
+            var loud = i < _loudLines.Count ? _loudLines[i] : null;
             if (IsQuietBoundary(i))
             {
                 _lines[i].Visibility = Visibility.Collapsed;
                 if (wave != null)
                     wave.Visibility = Visibility.Collapsed;
+                if (loud != null)
+                    loud.Visibility = Visibility.Collapsed;
                 continue;
             }
 
-            var x = X(GroupTime(i));
-            _lines[i].Visibility = Visibility.Visible;
-            _lines[i].X1 = x;
-            _lines[i].X2 = x;
-            _lines[i].Y1 = SpecTop;
-            _lines[i].Y2 = Math.Max(SpecTop, OtoTop - SplitThickness);
-            if (wave == null)
-                continue;
-            wave.Visibility = Visibility.Visible;
-            wave.X1 = x;
-            wave.X2 = x;
-            wave.Y1 = 0;
-            wave.Y2 = WaveHeight;
-            wave.Opacity = _focusOto >= 0 ? OtoDimOpacity : 1;
+            var time = GroupTime(i);
+            PlaceBoundary(_lines[i], XOn(_specView, time), specHeight);
+            if (wave != null)
+            {
+                PlaceBoundary(wave, XOn(_waveView, time), waveHeight);
+                wave.Opacity = _focusOto >= 0 ? OtoDimOpacity : 1;
+            }
+
+            if (loud != null)
+                PlaceBoundary(loud, XOn(_loudView, time), loudHeight);
         }
     }
 
-    void ArrangeTicks()
+    static void PlaceBoundary(Line line, double x, double height)
     {
-        foreach (var tick in _ticks)
-            _plot.Children.Remove(tick);
-        _ticks.Clear();
+        line.Visibility = Visibility.Visible;
+        line.X1 = x;
+        line.X2 = x;
+        line.Y1 = 0;
+        line.Y2 = Math.Max(1, height);
+    }
+
+    void ArrangeTicks(BandView band)
+    {
+        for (var i = _ticks.Count - 1; i >= 0; i--)
+        {
+            if (!ReferenceEquals(VisualTreeHelper.GetParent(_ticks[i]), band.Plot))
+                continue;
+            band.Plot.Children.Remove(_ticks[i]);
+            _ticks.RemoveAt(i);
+        }
+
+        if (band.Plot.Width < 2 || band.Plot.Height < 2)
+            return;
+        UseBand(band);
         var span = Math.Max(1e-6, _view1 - _view0);
         var step = NiceStep(span / Math.Max(1, PlotWidth / 90));
         var first = Math.Ceiling(_view0 / step) * step;
-        var y = _plot.Height - Ruler + 1;
+        var y = band.Plot.Height - Ruler + 1;
         for (var t = first; t <= _view1 + step * 0.001; t += step)
         {
             var tick = new TextBlock
@@ -1257,7 +1144,7 @@ public sealed partial class SpanEditor : UserControl
                 IsHitTestVisible = false,
             };
             _ticks.Add(tick);
-            _plot.Children.Add(tick);
+            band.Plot.Children.Add(tick);
             Canvas.SetLeft(tick, X(t) + 4);
             Canvas.SetTop(tick, y);
         }
@@ -1321,12 +1208,12 @@ public sealed partial class SpanEditor : UserControl
         {
             var extra = _dots[^1];
             _dots.RemoveAt(_dots.Count - 1);
-            _plot.Children.Remove(extra);
+            _waveView.Plot.Children.Remove(extra);
         }
 
-        var insertAt = _plot.Children.IndexOf(_waveLine) + 1;
+        var insertAt = _waveView.Plot.Children.IndexOf(_waveLine) + 1;
         if (insertAt <= 0)
-            insertAt = _plot.Children.Count;
+            insertAt = _waveView.Plot.Children.Count;
         while (_dots.Count < points.Count)
         {
             var dot = new Ellipse
@@ -1335,7 +1222,7 @@ public sealed partial class SpanEditor : UserControl
                 IsHitTestVisible = false,
             };
             _dots.Add(dot);
-            _plot.Children.Insert(insertAt + _dots.Count - 1, dot);
+            _waveView.Plot.Children.Insert(insertAt + _dots.Count - 1, dot);
         }
 
         for (var i = 0; i < points.Count; i++)
@@ -1351,7 +1238,7 @@ public sealed partial class SpanEditor : UserControl
     void ClearDots()
     {
         foreach (var dot in _dots)
-            _plot.Children.Remove(dot);
+            _waveView.Plot.Children.Remove(dot);
         _dots.Clear();
     }
 
@@ -1413,6 +1300,8 @@ public sealed partial class SpanEditor : UserControl
             _lines[i].Stroke = stroke;
             if (i < _waveLines.Count)
                 _waveLines[i].Stroke = stroke;
+            if (i < _loudLines.Count)
+                _loudLines[i].Stroke = stroke;
         }
     }
 
@@ -1421,157 +1310,6 @@ public sealed partial class SpanEditor : UserControl
         var opacity = _focusOto >= 0 ? OtoDimOpacity : 1;
         foreach (var line in _waveLines)
             line.Opacity = opacity;
-    }
-
-    void ApplySplit(double y)
-    {
-        var area = BandArea;
-        if (area < 1)
-            return;
-        var dy = y - _splitY;
-        var bands = HasLoudness ? 4.0 : 3.0;
-        var minPx = Math.Min(MinBand, area / bands);
-        var wavePx = area * _splitWave;
-        var loudPx = HasLoudness ? area * _splitLoud : 0;
-        var otoPx = area * _splitOto;
-        if (_splitIndex == 0)
-        {
-            wavePx = ClampRange(wavePx + dy, minPx, area - loudPx - otoPx - minPx);
-            _waveShare = wavePx / area;
-        }
-        else if (_splitIndex == 1)
-        {
-            loudPx = ClampRange(loudPx - dy, minPx, area - wavePx - otoPx - minPx);
-            _loudShare = loudPx / area;
-        }
-        else if (HasLoudness)
-        {
-            var pair = loudPx + otoPx;
-            var floor = Math.Min(minPx, pair / 2);
-            otoPx = ClampRange(otoPx - dy, floor, pair - floor);
-            loudPx = pair - otoPx;
-            _loudShare = loudPx / area;
-            _otoShare = otoPx / area;
-        }
-        else
-        {
-            otoPx = ClampRange(otoPx - dy, minPx, area - wavePx - minPx);
-            _otoShare = otoPx / area;
-        }
-
-        ArrangeAll();
-    }
-
-    int HitSplit(double y)
-    {
-        if (InSplit(y, WaveHeight))
-            return 0;
-        if (HasLoudness && InSplit(y, LoudnessTop - SplitThickness))
-            return 1;
-        if (InSplit(y, OtoTop - SplitThickness))
-            return 2;
-        return -1;
-    }
-
-    static bool InSplit(double y, double top)
-    {
-        return y >= top - SplitSlop && y < top + SplitThickness + SplitSlop;
-    }
-
-    void SetHotSplit(int index)
-    {
-        if (_drag == DragKind.Split)
-            index = _splitIndex;
-        if (_hotSplit == index)
-            return;
-        _hotSplit = index;
-        PaintSplit(_waveSplit, LookFor(0));
-        PaintSplit(_loudSplit, LookFor(1));
-        PaintSplit(_otoSplit, LookFor(2));
-    }
-
-    void ArrangeSplits()
-    {
-        PlaceSplit(_waveSplit, WaveHeight, LookFor(0));
-        if (HasLoudness)
-        {
-            _loudSplit.Visibility = Visibility.Visible;
-            PlaceSplit(_loudSplit, LoudnessTop - SplitThickness, LookFor(1));
-        }
-        else
-        {
-            _loudSplit.Visibility = Visibility.Collapsed;
-        }
-
-        _otoSplit.Visibility = Visibility.Visible;
-        PlaceSplit(_otoSplit, OtoTop - SplitThickness, LookFor(2));
-    }
-
-    SplitLook LookFor(int index)
-    {
-        if (_drag == DragKind.Split && _splitIndex == index)
-            return SplitLook.Drag;
-        if (_hotSplit == index)
-            return SplitLook.Hover;
-        return SplitLook.Rest;
-    }
-
-    void PlaceSplit(Grid bar, double top, SplitLook look)
-    {
-        bar.Width = Math.Max(0, _plot.Width);
-        Canvas.SetLeft(bar, 0);
-        Canvas.SetTop(bar, top);
-        PaintSplit(bar, look);
-    }
-
-    static void PaintSplit(Grid bar, SplitLook look)
-    {
-        if (bar.Children.Count == 0 || bar.Children[0] is not Border mark)
-            return;
-        mark.Height = look == SplitLook.Rest ? 1 : 2;
-        mark.Background = look switch
-        {
-            SplitLook.Drag => ThemeBrush("AccentFillColorDefaultBrush", SplitLineBrush),
-            SplitLook.Hover => ThemeBrush("AccentFillColorSecondaryBrush", SplitLineBrush),
-            _ => SplitLineBrush,
-        };
-    }
-
-    static Brush ThemeBrush(string key, Brush fallback)
-    {
-        if (Application.Current?.Resources.TryGetValue(key, out var value) == true && value is Brush brush)
-            return brush;
-        return fallback;
-    }
-
-    static Grid MakeSplitBar()
-    {
-        var mark = new Border
-        {
-            Height = 1,
-            HorizontalAlignment = HorizontalAlignment.Stretch,
-            VerticalAlignment = VerticalAlignment.Center,
-            Background = SplitLineBrush,
-            IsHitTestVisible = false,
-            UseLayoutRounding = true,
-        };
-        var bar = new Grid
-        {
-            Height = SplitThickness,
-            Background = BrushOf(0, 0, 0, 0),
-            IsHitTestVisible = false,
-            UseLayoutRounding = true,
-            Children = { mark },
-        };
-        Canvas.SetZIndex(bar, 40);
-        return bar;
-    }
-
-    static double ClampRange(double value, double lo, double hi)
-    {
-        if (hi < lo)
-            return lo;
-        return Math.Clamp(value, lo, hi);
     }
 
     int HitGroup(double x)
@@ -1682,89 +1420,38 @@ public sealed partial class SpanEditor : UserControl
 
     double PlotWidth => Math.Max(1, _plot.Width - Pad * 2);
 
-    double ContentBottom => Math.Max(0, _plot.Height - Ruler);
+    bool HasDrawnPlot => AllBands.Any(band => band.Plot.Width >= 2 && band.Plot.Height >= 2);
 
     bool HasLoudness => _loudness.Length >= 2;
 
-    int BandCount => HasLoudness ? 4 : 3;
+    double ContentHeight(BandView band) => Math.Max(0, band.Plot.Height - Ruler);
 
-    double BandArea
+    double WaveHeight => Math.Max(1, ContentHeight(_waveView));
+
+    bool InWaveBand(double y) => _hitKind == BandKind.Wave && _file != null && y >= 0 && y < _waveView.Plot.Height;
+
+    // 強調中は、波形の子音・母音境界を掴むと oto.ini の線と取り違える。
+    bool WaveBoundaryLocked(double y) => _focusOto >= 0 && _hitKind == BandKind.Wave;
+
+    double OtoHeight => Math.Max(1, ContentHeight(_otoView));
+
+    double LoudnessHeight => HasLoudness ? Math.Max(1, ContentHeight(_loudView)) : 0;
+
+    double SpecHeight => Math.Max(1, ContentHeight(_specView));
+
+    double SpecTop => 0;
+
+    double LoudnessTop => 0;
+
+    double OtoTop => 0;
+
+    double XOn(BandView band, double time)
     {
-        get
-        {
-            var handles = HasLoudness ? 3 : 2;
-            return Math.Max(0, ContentBottom - handles * SplitThickness);
-        }
+        var width = Math.Max(1, band.Plot.Width - Pad * 2);
+        return Pad + (time - _view0) / Math.Max(1e-9, _view1 - _view0) * width;
     }
 
-    double ShareFloor
-    {
-        get
-        {
-            var area = BandArea;
-            if (area < 1)
-                return 0.08;
-            var byPx = MinBand / area;
-            var byCount = 0.92 / BandCount;
-            return Math.Min(Math.Min(0.2, byPx), byCount);
-        }
-    }
-
-    double ShownOtoShare
-    {
-        get
-        {
-            var min = ShareFloor;
-            return Math.Clamp(_otoShare, min, 1 - (BandCount - 1) * min);
-        }
-    }
-
-    double ShownLoudShare
-    {
-        get
-        {
-            if (!HasLoudness)
-                return 0;
-            var min = ShareFloor;
-            var max = 1 - ShownOtoShare - 2 * min;
-            return Math.Clamp(_loudShare, min, Math.Max(min, max));
-        }
-    }
-
-    double ShownWaveShare
-    {
-        get
-        {
-            var min = ShareFloor;
-            var max = 1 - ShownOtoShare - ShownLoudShare - min;
-            return Math.Clamp(_waveShare, min, Math.Max(min, max));
-        }
-    }
-
-    double WaveHeight => Math.Max(1, BandArea * ShownWaveShare);
-
-    bool InWaveBand(double y) => _file != null && y >= 0 && y < WaveHeight;
-
-    // 強調中は、上の波形の子音・母音境界を掴むと oto.ini の線と取り違える。
-    bool WaveBoundaryLocked(double y) => _focusOto >= 0 && InWaveBand(y);
-
-    double OtoHeight => Math.Max(1, BandArea * ShownOtoShare);
-
-    double LoudnessHeight => HasLoudness ? Math.Max(1, BandArea * ShownLoudShare) : 0;
-
-    double SpecHeight => Math.Max(1, BandArea - WaveHeight - LoudnessHeight - OtoHeight);
-
-    double SpecTop => WaveHeight + SplitThickness;
-
-    double LoudnessTop => SpecTop + SpecHeight + (HasLoudness ? SplitThickness : 0);
-
-    double OtoTop =>
-        (HasLoudness ? LoudnessTop + LoudnessHeight : SpecTop + SpecHeight) + SplitThickness;
-
-    double X(double time)
-    {
-        return Pad + (time - _view0) / Math.Max(1e-9, _view1 - _view0) * PlotWidth;
-    }
+    double X(double time) => XOn(_xBand, time);
 
     double XToTime(double x)
     {
@@ -1828,10 +1515,23 @@ public sealed partial class SpanEditor : UserControl
     public (int Columns, int Rows) RasterSize()
     {
         var scale = 1.0;
-        if (XamlRoot != null && XamlRoot.RasterizationScale > 0)
-            scale = XamlRoot.RasterizationScale;
-        var plot = _plot.Width >= 2 ? PlotWidth : 1400;
-        var spec = _plot.Height >= 2 ? SpecHeight : 360;
+        var root = _specView.XamlRoot ?? _waveView.XamlRoot ?? XamlRoot;
+        if (root != null && root.RasterizationScale > 0)
+            scale = root.RasterizationScale;
+        var plot = _specView.Plot.Width >= 2 ? _specView.Plot.Width - Pad * 2 : 0;
+        if (plot < 1)
+        {
+            foreach (var band in AllBands)
+            {
+                if (band.Plot.Width >= 2)
+                    plot = Math.Max(plot, band.Plot.Width - Pad * 2);
+            }
+        }
+
+        if (plot < 1)
+            plot = 1400;
+
+        var spec = _specView.Plot.Height >= 2 ? SpecHeight : 360;
         var columns = (int)Math.Clamp(Math.Ceiling(Math.Max(1, plot) * scale), 64, 4096);
         var rows = (int)Math.Clamp(Math.Ceiling(Math.Max(1, spec) * scale), 64, 1200);
         return (columns, rows);

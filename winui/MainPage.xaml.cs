@@ -67,16 +67,8 @@ public sealed partial class MainPage : Page
     bool _sessionLocked;
     OtoAdjustBook _adjust = new();
     DispatcherQueueTimer? _sessionTimer;
-    bool _waveResizing;
-    bool _waveResizeLeft;
-    bool _waveFrameHooked;
-    double _waveGrabX;
-    double _waveGrabWidth;
-    double _wavePointerX;
-
-    const double MinFilePane = 160;
-    const double MinSidePane = 240;
-    const double MinWavePane = 280;
+    bool _layoutReady;
+    bool _paneMenuWrite;
 
     public MainPage()
     {
@@ -112,12 +104,12 @@ public sealed partial class MainPage : Page
         LoadPresets();
         _configReady = true;
         OnConfigChanged();
+        MountDock();
         AddHandler(PointerWheelChangedEvent, new PointerEventHandler(OnPageWheel), true);
         BindRecentFolders();
         Loaded += (_, _) => AttachMenuToTitleBar();
         Unloaded += (_, _) =>
         {
-            EndWaveResize();
             try
             {
                 FlushSession();
@@ -141,129 +133,64 @@ public sealed partial class MainPage : Page
         }
     }
 
-    void WaveResize_Entered(object sender, PointerRoutedEventArgs e) => ShowWaveGrip(sender, true);
-
-    void WaveResize_Exited(object sender, PointerRoutedEventArgs e)
+    void MountDock()
     {
-        if (_waveResizing)
-            return;
-        ShowWaveGrip(sender, false);
-    }
-
-    void WaveResize_Pressed(object sender, PointerRoutedEventArgs e)
-    {
-        if (!e.GetCurrentPoint((UIElement)sender).Properties.IsLeftButtonPressed)
-            return;
-        if (EditorColumns.ActualWidth < 1)
-            return;
-        _waveResizing = true;
-        _waveResizeLeft = ReferenceEquals(sender, WaveResizeLeft);
-        _waveGrabX = e.GetCurrentPoint(EditorColumns).Position.X;
-        _wavePointerX = _waveGrabX;
-        _waveGrabWidth = ColumnWidth(_waveResizeLeft ? FileColumn : SideColumn);
-        Editor.SetColumnDrag(true);
-        Effects.SetColumnDrag(true);
-        ((UIElement)sender).CapturePointer(e.Pointer);
-        ShowWaveGrip(sender, true);
-        e.Handled = true;
-    }
-
-    void WaveResize_Moved(object sender, PointerRoutedEventArgs e)
-    {
-        if (!_waveResizing)
-            return;
-        _wavePointerX = e.GetCurrentPoint(EditorColumns).Position.X;
-        if (!_waveFrameHooked)
+        WaveHost.Children.Add(Editor.WaveSurface);
+        SpecHost.Children.Add(Editor.SpecSurface);
+        LoudHost.Children.Add(Editor.LoudSurface);
+        OtoBandHost.Children.Add(Editor.OtoSurface);
+        Dock.Mount(
+        [
+            ("file", "ファイル", FilePane),
+            ("wave", "波形", WavePane),
+            ("spec", "スペクトログラム", SpecHost),
+            ("loud", "音量", LoudHost),
+            ("otoBand", "oto区間", OtoBandHost),
+            ("source", "原音修正", SourcePane),
+            ("oto", "oto調整", OtoPane),
+        ]);
+        Dock.PaneResizing += (_, dragging) =>
         {
-            _waveFrameHooked = true;
-            CompositionTarget.Rendering += WaveResize_Frame;
-        }
-
-        e.Handled = true;
-    }
-
-    void WaveResize_Frame(object? sender, object e)
-    {
-        if (!_waveResizing)
+            Editor.SetColumnDrag(dragging);
+            Effects.SetColumnDrag(dragging);
+        };
+        Dock.LayoutChanged += (_, _) =>
         {
-            UnhookWaveFrame();
+            SyncPaneMenu();
+            if (_layoutReady)
+                EditorLayoutStore.Save(Dock.Root);
+        };
+        if (!EditorLayoutStore.TryLoad(out var layout))
+            layout = EditorLayout.CreateDefault();
+        Dock.Load(layout);
+        SyncPaneMenu();
+        _layoutReady = true;
+    }
+
+    void SyncPaneMenu()
+    {
+        _paneMenuWrite = true;
+        ShowFileItem.IsChecked = Dock.Contains("file");
+        ShowWaveItem.IsChecked = Dock.Contains("wave");
+        ShowSpecItem.IsChecked = Dock.Contains("spec");
+        ShowLoudItem.IsChecked = Dock.Contains("loud");
+        ShowOtoBandItem.IsChecked = Dock.Contains("otoBand");
+        ShowSourceItem.IsChecked = Dock.Contains("source");
+        ShowOtoItem.IsChecked = Dock.Contains("oto");
+        _paneMenuWrite = false;
+    }
+
+    void PaneMenu_Click(object sender, RoutedEventArgs e)
+    {
+        if (_paneMenuWrite || sender is not ToggleMenuFlyoutItem item || item.Tag is not string id)
             return;
-        }
-
-        ApplyWaveColumn(_wavePointerX);
+        if (item.IsChecked)
+            Dock.Show(id);
+        else
+            Dock.Hide(id);
     }
 
-    void WaveResize_Released(object sender, PointerRoutedEventArgs e)
-    {
-        if (_waveResizing)
-            ApplyWaveColumn(e.GetCurrentPoint(EditorColumns).Position.X);
-        EndWaveResize();
-    }
-
-    void UnhookWaveFrame()
-    {
-        if (!_waveFrameHooked)
-            return;
-        _waveFrameHooked = false;
-        CompositionTarget.Rendering -= WaveResize_Frame;
-    }
-
-    // ウィンドウの大きさは変えず、つかんだ端の移動分だけ隣の列を伸縮する。
-    void ApplyWaveColumn(double pointerX)
-    {
-        var total = EditorColumns.ActualWidth;
-        if (total < 1)
-            return;
-        var delta = pointerX - _waveGrabX;
-        if (_waveResizeLeft)
-        {
-            var max = total - ColumnWidth(SideColumn) - MinWavePane;
-            SetColumnWidth(FileColumn, ClampPane(_waveGrabWidth + delta, MinFilePane, max));
-            return;
-        }
-
-        var sideMax = total - ColumnWidth(FileColumn) - MinWavePane;
-        SetColumnWidth(SideColumn, ClampPane(_waveGrabWidth - delta, MinSidePane, sideMax));
-    }
-
-    static void SetColumnWidth(ColumnDefinition column, double width)
-    {
-        if (Math.Abs(ColumnWidth(column) - width) < 0.5)
-            return;
-        column.Width = new GridLength(width);
-    }
-
-    static double ColumnWidth(ColumnDefinition column) =>
-        column.Width.IsAbsolute ? column.Width.Value : column.ActualWidth;
-
-    static double ClampPane(double value, double min, double max)
-    {
-        if (double.IsNaN(value) || double.IsInfinity(value))
-            return min;
-        if (max < min)
-            return min;
-        return Math.Clamp(value, min, max);
-    }
-
-    void EndWaveResize()
-    {
-        if (!_waveResizing)
-            return;
-        _waveResizing = false;
-        UnhookWaveFrame();
-        Editor.SetColumnDrag(false);
-        Effects.SetColumnDrag(false);
-        WaveResizeLeft.ReleasePointerCaptures();
-        WaveResizeRight.ReleasePointerCaptures();
-        WaveResizeLeftMark.Opacity = 0;
-        WaveResizeRightMark.Opacity = 0;
-    }
-
-    void ShowWaveGrip(object sender, bool hot)
-    {
-        var mark = ReferenceEquals(sender, WaveResizeLeft) ? WaveResizeLeftMark : WaveResizeRightMark;
-        mark.Opacity = hot ? 1 : 0;
-    }
+    void ResetLayout_Click(object sender, RoutedEventArgs e) => Dock.Reset();
 
     void AttachMenuToTitleBar()
     {
@@ -271,15 +198,6 @@ public sealed partial class MainPage : Page
             return;
         window.PlaceMenuInTitleBar(AppMenuBar);
         AppMenuBar.Visibility = Visibility.Visible;
-    }
-
-    void SideTab_Checked(object sender, RoutedEventArgs e)
-    {
-        if (SourcePanel == null || ConfigBody == null)
-            return;
-        var oto = OtoTab.IsChecked == true;
-        ConfigBody.Visibility = oto ? Visibility.Visible : Visibility.Collapsed;
-        SourcePanel.Visibility = oto ? Visibility.Collapsed : Visibility.Visible;
     }
 
     void OtoMode_Checked(object sender, RoutedEventArgs e)
@@ -579,17 +497,9 @@ public sealed partial class MainPage : Page
 
     void OnPageWheel(object sender, PointerRoutedEventArgs e)
     {
-        if (EditorView.Visibility != Visibility.Visible || Editor.ActualWidth < 2)
+        if (EditorView.Visibility != Visibility.Visible)
             return;
-        var point = e.GetCurrentPoint(Editor);
-        if (point.Position.X < 0 || point.Position.Y < 0
-            || point.Position.X > Editor.ActualWidth
-            || point.Position.Y > Editor.ActualHeight)
-            return;
-        var delta = point.Properties.MouseWheelDelta;
-        if (delta == 0)
-            delta = e.GetCurrentPoint(this).Properties.MouseWheelDelta;
-        if (Editor.ZoomAt(point.Position.X, delta, e, SpanEditor.ShiftHeld(e)))
+        if (Editor.ZoomFromPointer(e))
             e.Handled = true;
     }
 
@@ -1782,13 +1692,5 @@ public sealed partial class MainPage : Page
             return folder;
         var file = paths.FirstOrDefault(File.Exists);
         return file == null ? null : Path.GetDirectoryName(file);
-    }
-}
-
-public sealed class EdgeGrip : Grid
-{
-    public EdgeGrip()
-    {
-        ProtectedCursor = InputSystemCursor.Create(InputSystemCursorShape.SizeWestEast);
     }
 }

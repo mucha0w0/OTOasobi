@@ -169,6 +169,7 @@ public sealed partial class SpanEditor
     {
         if (_file == null)
             return;
+        UseBand(_otoView);
         RefreshOtoMarks();
         EnsureOtoVisuals(_otoMarks.Count);
         var count = Math.Min(_otoMarks.Count, _otoRects.Count);
@@ -261,6 +262,31 @@ public sealed partial class SpanEditor
 
         if (_focusOto >= 0 && _drag != DragKind.Oto)
             RaiseFocusedOto();
+        PlaceWaveOtoLines();
+    }
+
+    void PlaceWaveOtoLines()
+    {
+        var height = ContentHeight(_waveView);
+        var show = _focusOto >= 0 && _focusOto < _otoMarks.Count && height > 1;
+        for (var point = 0; point < OtoTune.PointCount; point++)
+        {
+            var line = _waveOtoLines[point];
+            if (!show)
+            {
+                line.Visibility = Visibility.Collapsed;
+                continue;
+            }
+
+            var x = XOn(_waveView, _otoMarks[_focusOto].At(point));
+            var dragging = _drag == DragKind.Oto && _otoDragIndex == _focusOto && _otoStack[point];
+            line.Visibility = Visibility.Visible;
+            line.X1 = x;
+            line.X2 = x;
+            line.Y1 = 0;
+            line.Y2 = height;
+            line.StrokeThickness = dragging ? 4 : 3;
+        }
     }
 
     void RaiseFocusedOto()
@@ -283,11 +309,6 @@ public sealed partial class SpanEditor
 
         if (_otoCaption != null)
             Raise(_otoCaption);
-        if (_loudnessLabel != null)
-            Raise(_loudnessLabel);
-        Raise(_waveSplit);
-        Raise(_loudSplit);
-        Raise(_otoSplit);
     }
 
     void Raise(UIElement element)
@@ -436,7 +457,7 @@ public sealed partial class SpanEditor
 
     bool ReleaseFocusAt(double y, double x)
     {
-        if (_focusOto < 0 || y < 0 || y >= OtoTop)
+        if (_focusOto < 0 || _hitKind == BandKind.Oto)
             return false;
         return !FocusedOwnsTime(XToTime(x));
     }
@@ -542,7 +563,7 @@ public sealed partial class SpanEditor
             return;
         _focusOto = index;
         _hotOto = -1;
-        if (_file != null && _plot.Width >= 2 && _plot.Height >= 2)
+        if (_file != null && HasDrawnPlot)
             ArrangeOtoLabels();
         PaintWaveBoundaryOpacity();
     }
@@ -730,7 +751,7 @@ public sealed partial class SpanEditor
         _otoRects[index].Fill = hot ? OtoRegionHotBrush : OtoRegionBrush;
     }
 
-    bool InOtoBand(double y) => _file != null && y >= OtoTop && y < OtoTop + OtoHeight;
+    bool InOtoBand(double y) => _hitKind == BandKind.Oto && _file != null && y >= 0 && y < _otoView.Plot.Height;
 
     static int[] LaneOf(List<OtoMark> marks, int count)
     {
@@ -906,8 +927,8 @@ public sealed partial class SpanEditor
         var mark = _otoMarks[index];
         var start = Math.Min(mark.Offset, mark.Blank);
         var end = Math.Max(mark.Offset, mark.Blank);
-        var left = X(start);
-        var width = Math.Max(0, X(end) - left);
+        var left = XOn(_otoView, start);
+        var width = Math.Max(0, XOn(_otoView, end) - left);
         var rect = _otoRects[index];
         rect.Width = width;
         Canvas.SetLeft(rect, left);
@@ -928,7 +949,7 @@ public sealed partial class SpanEditor
             if (lineIndex >= _otoLines.Count)
                 break;
             var line = _otoLines[lineIndex];
-            var x = X(mark.At(point));
+            var x = XOn(_otoView, mark.At(point));
             line.X1 = x;
             line.X2 = x;
             if (_otoStack[point])
@@ -946,6 +967,8 @@ public sealed partial class SpanEditor
             var chipWidth = Math.Max(12, name.Text.Length * 10 + 8);
             Canvas.SetLeft(chip, x - chipWidth / 2);
         }
+
+        PlaceWaveOtoLines();
     }
 
     void SetTuned(int index, int point, double? time)
@@ -1024,7 +1047,7 @@ public sealed partial class SpanEditor
         if (_file == null || _labelsLocked || _otoMarks.Count == 0)
             return null;
         var inBand = InOtoBand(y);
-        var onWave = y >= 0 && y < OtoTop;
+        var onWave = _hitKind == BandKind.Wave;
         if (!inBand && !onWave)
             return null;
         if (!inBand && _focusOto < 0)

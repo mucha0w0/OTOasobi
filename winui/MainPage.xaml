@@ -10,7 +10,7 @@
     mc:Ignorable="d">
 
     <Page.Resources>
-        <x:String x:Key="EditorHelp">上の波形では境界をドラッグして時刻を分けます。波形の左右の端をドラッグすると、波形の幅が変わります。ファイル一覧とスライダーは、その分だけ広がったり縮んだりします。音量の下の oto.ini の線は、左右へドラッグしてその値だけを直せます。直したラベルの横には * が付き、スライダーを動かしてもその値は変わりません。自動推定の位置まで戻すと消えます。強調中の線は上の波形にも出て、そこでもドラッグできます。強調中は、上の波形の子音と母音の境界が半透明になり、ドラッグできません。線のないところをクリックすると、その音素の値を強調し、ほかの音素を半透明にします。重なっている場所ではクリックするたびに次の音素へ移ります。別の音素の波形、スペクトラム、音量をクリックすると解除します。音素のないところをクリックするか、Esc でも解除します。右ドラッグ、Shift＋ホイール、または選択中の左右キーでスクロールします。</x:String>
+        <x:String x:Key="EditorHelp">波形では境界をドラッグして時刻を分けます。パネルの境目をドラッグすると、隣との幅や高さが変わります。タイトルをドラッグして、上下左右の印の上で離すと、そこへ差し込めます。oto区間の線は左右へドラッグしてその値だけを直せます。直したラベルの横には * が付き、スライダーを動かしてもその値は変わりません。自動推定の位置まで戻すと消えます。強調中の線は波形にも出て、そこでもドラッグできます。強調中は、波形の子音と母音の境界が半透明になり、ドラッグできません。線のないところをクリックすると、その音素の値を強調し、ほかの音素を半透明にします。重なっている場所ではクリックするたびに次の音素へ移ります。別の音素の波形、スペクトラム、音量をクリックすると解除します。音素のないところをクリックするか、Esc でも解除します。右ドラッグ、Shift＋ホイール、または選択中の左右キーでスクロールします。</x:String>
         <Style x:Key="ToolbarButtonStyle" TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
             <Setter Property="MinHeight" Value="32" />
             <Setter Property="Padding" Value="10,6" />
@@ -194,6 +194,17 @@
                         Click="ReanalyzeSelected_Click"
                         IsEnabled="False" />
                 </MenuBarItem>
+                <MenuBarItem Title="表示">
+                    <ToggleMenuFlyoutItem x:Name="ShowFileItem" Tag="file" Text="ファイル" IsChecked="True" Click="PaneMenu_Click" />
+                    <ToggleMenuFlyoutItem x:Name="ShowWaveItem" Tag="wave" Text="波形" IsChecked="True" Click="PaneMenu_Click" />
+                    <ToggleMenuFlyoutItem x:Name="ShowSpecItem" Tag="spec" Text="スペクトログラム" IsChecked="True" Click="PaneMenu_Click" />
+                    <ToggleMenuFlyoutItem x:Name="ShowLoudItem" Tag="loud" Text="音量" IsChecked="True" Click="PaneMenu_Click" />
+                    <ToggleMenuFlyoutItem x:Name="ShowOtoBandItem" Tag="otoBand" Text="oto区間" IsChecked="True" Click="PaneMenu_Click" />
+                    <ToggleMenuFlyoutItem x:Name="ShowSourceItem" Tag="source" Text="原音修正" Click="PaneMenu_Click" />
+                    <ToggleMenuFlyoutItem x:Name="ShowOtoItem" Tag="oto" Text="oto調整" IsChecked="True" Click="PaneMenu_Click" />
+                    <MenuFlyoutSeparator />
+                    <MenuFlyoutItem Text="配置を初期状態に戻す" Click="ResetLayout_Click" />
+                </MenuBarItem>
         </MenuBar>
 
         <Grid Grid.Row="0">
@@ -310,16 +321,9 @@
             </StackPanel>
 
             <Grid x:Name="EditorView" Visibility="Collapsed">
-                <Grid x:Name="EditorColumns">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition x:Name="FileColumn" Width="280" />
-                        <ColumnDefinition x:Name="WaveColumn" Width="*" />
-                        <ColumnDefinition x:Name="SideColumn" Width="320" />
-                    </Grid.ColumnDefinitions>
-                    <Border
-                        x:Name="FilePane"
-                        BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
-                        BorderThickness="0,0,1,0">
+                <local:EditorDock x:Name="Dock" />
+                <Grid x:Name="PaneHolder" Visibility="Collapsed">
+                    <Border x:Name="FilePane">
                         <Grid>
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto" />
@@ -361,7 +365,7 @@
                             </ListView>
                         </Grid>
                     </Border>
-                    <Grid x:Name="WavePane" Grid.Column="1" Margin="0,0,0,8">
+                    <Grid x:Name="WavePane">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="*" />
@@ -381,108 +385,17 @@
                                     TextWrapping="NoWrap" />
                             </local:InfoNote.Header>
                         </local:InfoNote>
-                        <local:SpanEditor
-                            x:Name="Editor"
-                            Grid.Row="1"
-                            Margin="12,0,12,4"
-                            AutomationProperties.Name="波形と区間"
-                            AutomationProperties.HelpText="{StaticResource EditorHelp}" />
-                        <local:EdgeGrip
-                            x:Name="WaveResizeLeft"
-                            Grid.Row="1"
-                            Width="20"
-                            Margin="0,0,0,4"
-                            HorizontalAlignment="Left"
-                            VerticalAlignment="Stretch"
-                            AutomationProperties.Name="波形の左端"
-                            Background="Transparent"
-                            PointerCanceled="WaveResize_Released"
-                            PointerCaptureLost="WaveResize_Released"
-                            PointerEntered="WaveResize_Entered"
-                            PointerExited="WaveResize_Exited"
-                            PointerMoved="WaveResize_Moved"
-                            PointerPressed="WaveResize_Pressed"
-                            PointerReleased="WaveResize_Released"
-                            ToolTipService.ToolTip="ドラッグして波形の幅を変えます">
-                            <Border
-                                x:Name="WaveResizeLeftMark"
-                                Width="2"
-                                HorizontalAlignment="Center"
-                                VerticalAlignment="Stretch"
-                                Background="{ThemeResource AccentFillColorDefaultBrush}"
-                                IsHitTestVisible="False"
-                                Opacity="0" />
-                        </local:EdgeGrip>
-                        <local:EdgeGrip
-                            x:Name="WaveResizeRight"
-                            Grid.Row="1"
-                            Width="20"
-                            Margin="0,0,0,4"
-                            HorizontalAlignment="Right"
-                            VerticalAlignment="Stretch"
-                            AutomationProperties.Name="波形の右端"
-                            Background="Transparent"
-                            PointerCanceled="WaveResize_Released"
-                            PointerCaptureLost="WaveResize_Released"
-                            PointerEntered="WaveResize_Entered"
-                            PointerExited="WaveResize_Exited"
-                            PointerMoved="WaveResize_Moved"
-                            PointerPressed="WaveResize_Pressed"
-                            PointerReleased="WaveResize_Released"
-                            ToolTipService.ToolTip="ドラッグして波形の幅を変えます">
-                            <Border
-                                x:Name="WaveResizeRightMark"
-                                Width="2"
-                                HorizontalAlignment="Center"
-                                VerticalAlignment="Stretch"
-                                Background="{ThemeResource AccentFillColorDefaultBrush}"
-                                IsHitTestVisible="False"
-                                Opacity="0" />
-                        </local:EdgeGrip>
+                        <Grid x:Name="WaveHost" Grid.Row="1" />
                     </Grid>
-                    <Border
-                        x:Name="SidePane"
-                        Grid.Column="2"
-                        BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
-                        BorderThickness="1,0,0,0">
-                        <Grid>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="*" />
-                            </Grid.RowDefinitions>
-                            <Border
-                                Padding="12,10"
-                                BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
-                                BorderThickness="0,0,0,1">
-                                <Border
-                                    Padding="3"
-                                    Background="{ThemeResource ControlFillColorSecondaryBrush}"
-                                    CornerRadius="8">
-                                    <Grid ColumnSpacing="2">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="*" />
-                                        </Grid.ColumnDefinitions>
-                                        <RadioButton
-                                            x:Name="SourceTab"
-                                            AutomationProperties.Name="原音修正"
-                                            Checked="SideTab_Checked"
-                                            Content="原音修正"
-                                            GroupName="EditorSideTab"
-                                            Style="{StaticResource SegmentButtonStyle}" />
-                                        <RadioButton
-                                            x:Name="OtoTab"
-                                            Grid.Column="1"
-                                            AutomationProperties.Name="oto調整"
-                                            Checked="SideTab_Checked"
-                                            Content="oto調整"
-                                            GroupName="EditorSideTab"
-                                            IsChecked="True"
-                                            Style="{StaticResource SegmentButtonStyle}" />
-                                    </Grid>
-                                </Border>
-                            </Border>
-                            <Grid Grid.Row="1">
+                    <Grid x:Name="SpecHost" />
+                    <Grid x:Name="LoudHost" />
+                    <Grid x:Name="OtoBandHost" />
+                    <local:SpanEditor
+                        x:Name="Editor"
+                        Visibility="Collapsed"
+                        AutomationProperties.Name="波形と区間"
+                        AutomationProperties.HelpText="{StaticResource EditorHelp}" />
+                    <Grid x:Name="OtoPane">
                                 <ContentControl
                                     x:Name="ConfigBody"
                                     HorizontalContentAlignment="Stretch"
@@ -972,30 +885,28 @@
                                         </Border>
                                     </Grid>
                                 </ContentControl>
-                                <Grid x:Name="SourcePanel" Visibility="Collapsed">
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition Height="*" />
-                                        <RowDefinition Height="Auto" />
-                                    </Grid.RowDefinitions>
-                                    <local:EffectRack x:Name="Effects" />
-                                    <Border
-                                        Grid.Row="1"
-                                        Padding="12,10,12,12"
-                                        BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
-                                        BorderThickness="0,1,0,0">
-                                        <Button
-                                            x:Name="ApplyEffectsButton"
-                                            HorizontalAlignment="Stretch"
-                                            Click="ApplyEffects_Click"
-                                            Content="適用"
-                                            IsEnabled="False"
-                                            Style="{StaticResource ToolbarAccentButtonStyle}"
-                                            ToolTipService.ToolTip="original の音声に、オンのエフェクトをかけて、フォルダ直下の音声を上書きします。解析データは消えます。" />
-                                    </Border>
-                                </Grid>
-                            </Grid>
-                        </Grid>
-                    </Border>
+                    </Grid>
+                    <Grid x:Name="SourcePane">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <local:EffectRack x:Name="Effects" />
+                        <Border
+                            Grid.Row="1"
+                            Padding="12,10,12,12"
+                            BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                            BorderThickness="0,1,0,0">
+                            <Button
+                                x:Name="ApplyEffectsButton"
+                                HorizontalAlignment="Stretch"
+                                Click="ApplyEffects_Click"
+                                Content="適用"
+                                IsEnabled="False"
+                                Style="{StaticResource ToolbarAccentButtonStyle}"
+                                ToolTipService.ToolTip="original の音声に、オンのエフェクトをかけて、フォルダ直下の音声を上書きします。解析データは消えます。" />
+                        </Border>
+                    </Grid>
                 </Grid>
             </Grid>
 
