@@ -92,11 +92,9 @@ public sealed partial class SpanEditor : UserControl
     Line? _zero;
     Rectangle? _loudnessBack;
     Polyline? _loudnessLine;
-    Border? _loudnessLabel;
     Polygon? _otoWave;
     Polyline? _otoWaveLine;
     Line? _otoZero;
-    Border? _otoCaption;
     readonly List<Rectangle> _waveRects = [];
     readonly List<Rectangle> _specRects = [];
     readonly List<TextBlock> _waveTexts = [];
@@ -296,11 +294,9 @@ public sealed partial class SpanEditor : UserControl
         _zero = null;
         _loudnessBack = null;
         _loudnessLine = null;
-        _loudnessLabel = null;
         _otoWave = null;
         _otoWaveLine = null;
         _otoZero = null;
-        _otoCaption = null;
         UseCursor(_cursorArrow);
     }
 
@@ -437,7 +433,6 @@ public sealed partial class SpanEditor : UserControl
         _otoWave = null;
         _otoWaveLine = null;
         _otoZero = null;
-        _otoCaption = null;
         if (_file == null)
             return;
 
@@ -489,18 +484,6 @@ public sealed partial class SpanEditor : UserControl
         };
         _loudView.Plot.Children.Add(_loudnessLine);
 
-        _loudnessLabel = new Border
-        {
-            Background = BrushOf(200, 14, 14, 14),
-            Padding = new Thickness(4, 0, 4, 0),
-            IsHitTestVisible = false,
-            Child = new TextBlock
-            {
-                Text = "大きさ",
-                FontSize = 11,
-                Foreground = TickBrush,
-            },
-        };
         foreach (var span in _file.Spans)
         {
             var quiet = IsQuietSpan(span.Label);
@@ -572,7 +555,6 @@ public sealed partial class SpanEditor : UserControl
             _specView.Plot.Children.Add(line);
         UseBand(_otoView);
         AddOtoVisuals();
-        _loudView.Plot.Children.Add(_loudnessLabel);
         foreach (var line in _loudOtoLines)
             _loudView.Plot.Children.Add(line);
 
@@ -967,13 +949,6 @@ public sealed partial class SpanEditor : UserControl
             _loudnessBack.Width = _plot.Width;
             _loudnessBack.Height = Math.Max(0, height);
             _loudnessBack.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
-        }
-
-        if (_loudnessLabel != null)
-        {
-            Canvas.SetLeft(_loudnessLabel, Pad + 2);
-            Canvas.SetTop(_loudnessLabel, top + 3);
-            _loudnessLabel.Visibility = height > 22 ? Visibility.Visible : Visibility.Collapsed;
         }
 
         if (_loudnessLine == null)

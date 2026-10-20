@@ -78,19 +78,6 @@ public sealed partial class SpanEditor
         foreach (var _ in _otoMarks)
             AddOtoMarkVisual();
 
-        _otoCaption = new Border
-        {
-            Background = OtoChipBrush,
-            Padding = new Thickness(4, 0, 4, 0),
-            IsHitTestVisible = false,
-            Child = new TextBlock
-            {
-                Text = "oto.ini",
-                FontSize = 11,
-                Foreground = TickBrush,
-            },
-        };
-        _plot.Children.Add(_otoCaption);
         LiftOtoChrome();
     }
 
@@ -158,11 +145,6 @@ public sealed partial class SpanEditor
             _plot.Children.Remove(chip);
             _plot.Children.Add(chip);
         }
-
-        if (_otoCaption == null)
-            return;
-        _plot.Children.Remove(_otoCaption);
-        _plot.Children.Add(_otoCaption);
     }
 
     void ArrangeOtoLabels()
@@ -252,14 +234,6 @@ public sealed partial class SpanEditor
             PlaceOtoNames(count, nameY);
         }
 
-        if (_otoCaption != null)
-        {
-            var showCaption = height > 22;
-            _otoCaption.Visibility = showCaption ? Visibility.Visible : Visibility.Collapsed;
-            Canvas.SetLeft(_otoCaption, Pad + 2);
-            Canvas.SetTop(_otoCaption, top + 3);
-        }
-
         if (_focusOto >= 0 && _drag != DragKind.Oto)
             RaiseFocusedOto();
         PlaceWaveOtoLines();
@@ -321,9 +295,6 @@ public sealed partial class SpanEditor
             if (start + point < _otoPointChips.Count)
                 Raise(_otoPointChips[start + point]);
         }
-
-        if (_otoCaption != null)
-            Raise(_otoCaption);
     }
 
     void Raise(UIElement element)
