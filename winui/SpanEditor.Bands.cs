@@ -3,6 +3,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Shapes;
 using Windows.Foundation;
 
 namespace Otoasobi;
@@ -252,7 +253,7 @@ public sealed partial class SpanEditor
             EndResizePreview();
         }
 
-        // 拡縮のあいだは文字を隠し、絵だけを薄く見せる。位置の計算は離してから行う。
+        // 拡縮のあいだは文字と値の線を隠し、絵だけを薄く見せる。位置の計算は離してから行う。
         void BeginResizePreview()
         {
             if (_resizePreview)
@@ -281,6 +282,7 @@ public sealed partial class SpanEditor
             {
                 case TextBlock:
                 case Button:
+                case Line:
                     Park(element);
                     return;
                 case Panel panel:
