@@ -1,4 +1,5 @@
 using Microsoft.UI.Input;
+using Microsoft.UI.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
@@ -882,7 +883,7 @@ public sealed class EditorDock : Panel
             Title = title;
             RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-            var bar = new Grid { ColumnSpacing = 8, Padding = new Thickness(12, 6, 8, 6) };
+            var bar = new Grid { Height = 20, Padding = new Thickness(8, 0, 0, 0) };
             bar.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             bar.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             var label = new TextBlock
@@ -891,16 +892,22 @@ public sealed class EditorDock : Panel
                 VerticalAlignment = VerticalAlignment.Center,
                 TextTrimming = TextTrimming.CharacterEllipsis,
             };
-            if (Application.Current.Resources.TryGetValue("BodyStrongTextBlockStyle", out var style) && style is Style textStyle)
+            if (Application.Current.Resources.TryGetValue("CaptionTextBlockStyle", out var style) && style is Style textStyle)
                 label.Style = textStyle;
+            label.FontSize = 12;
+            label.FontWeight = FontWeights.SemiBold;
             CloseButton = new Button
             {
-                Width = 28,
-                Height = 28,
-                Padding = new Thickness(0),
-                Content = new SymbolIcon { Symbol = Symbol.Clear },
-                VerticalAlignment = VerticalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Stretch,
+                Content = new FontIcon
+                {
+                    FontFamily = new FontFamily("Segoe Fluent Icons"),
+                    Glyph = "\uE8BB",
+                    FontSize = 10,
+                },
             };
+            if (Application.Current.Resources.TryGetValue("PaneCloseButtonStyle", out var closeStyle) && closeStyle is Style buttonStyle)
+                CloseButton.Style = buttonStyle;
             AutomationProperties.SetName(CloseButton, title + "を閉じる");
             ToolTipService.SetToolTip(CloseButton, "閉じます");
             CloseButton.Click += (_, _) => CloseClicked?.Invoke(this, EventArgs.Empty);
