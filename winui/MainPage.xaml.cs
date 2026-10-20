@@ -1585,8 +1585,6 @@ public sealed partial class MainPage : Page
         ShowOnly("editor");
         HideStatus();
         ClearNotice();
-        FolderLabel.Text = folder;
-        ToolTipService.SetToolTip(FolderLabel, folder);
         FileCount.Text = $"{_files.Count} 件";
         FileTitle.Text = "";
         ToolTipService.SetToolTip(FileTitle, null);
@@ -1623,8 +1621,6 @@ public sealed partial class MainPage : Page
         ConfigBody.IsEnabled = true;
         ShowOnly("editor");
         HideStatus();
-        FolderLabel.Text = folder;
-        ToolTipService.SetToolTip(FolderLabel, folder);
         FileCount.Text = $"{_files.Count} 件";
         var title = cached ? "保存データから読み込みました" : "区間を確認してください";
         var body = cached

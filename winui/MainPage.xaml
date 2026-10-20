@@ -310,22 +310,7 @@
             </StackPanel>
 
             <Grid x:Name="EditorView" Visibility="Collapsed">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="*" />
-                </Grid.RowDefinitions>
-
-                <TextBlock
-                    x:Name="FolderLabel"
-                    Grid.Row="0"
-                    Margin="16,8,16,0"
-                    AutomationProperties.Name="開いているフォルダ"
-                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                    IsTextSelectionEnabled="True"
-                    Style="{StaticResource CaptionTextBlockStyle}"
-                    TextTrimming="CharacterEllipsis" />
-
-                <Grid x:Name="EditorColumns" Grid.Row="1" Margin="0,8,0,0">
+                <Grid x:Name="EditorColumns" Margin="0,8,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition x:Name="FileColumn" Width="280" />
                         <ColumnDefinition x:Name="WaveColumn" Width="*" />

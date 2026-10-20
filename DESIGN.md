@@ -36,7 +36,7 @@
 | 中央 | `*` | 選択ファイル名 + `SpanEditor`（波形・区間） |
 | 右 | 320px | サイドパネル（タブ切替） |
 
-列の区切りは `DividerStrokeColorDefaultBrush` の **1px 縦線**。フォルダパスは上部に **Caption** + 二次色、選択可能テキスト。
+列の区切りは `DividerStrokeColorDefaultBrush` の **1px 縦線**。開いているフォルダのパスは編集画面に出さない。
 
 右パネルは **セグメントタブ**（`原音修正` / `oto調整`）。本文は `ScrollViewer`、**主要操作はパネル最下部の固定フッター**（上ボーダー + `Padding 12,10,12,12`）。
 
