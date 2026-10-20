@@ -267,18 +267,25 @@ public sealed partial class SpanEditor
 
     void PlaceWaveOtoLines()
     {
-        var height = ContentHeight(_waveView);
+        PlaceOverlayOtoLines(_waveView, _waveOtoLines);
+        PlaceOverlayOtoLines(_specView, _specOtoLines);
+        PlaceOverlayOtoLines(_loudView, _loudOtoLines);
+    }
+
+    void PlaceOverlayOtoLines(BandView band, Line[] lines)
+    {
+        var height = ContentHeight(band);
         var show = _focusOto >= 0 && _focusOto < _otoMarks.Count && height > 1;
         for (var point = 0; point < OtoTune.PointCount; point++)
         {
-            var line = _waveOtoLines[point];
+            var line = lines[point];
             if (!show)
             {
                 line.Visibility = Visibility.Collapsed;
                 continue;
             }
 
-            var x = XOn(_waveView, _otoMarks[_focusOto].At(point));
+            var x = XOn(band, _otoMarks[_focusOto].At(point));
             var dragging = _drag == DragKind.Oto && _otoDragIndex == _focusOto && _otoStack[point];
             line.Visibility = Visibility.Visible;
             line.X1 = x;
@@ -288,6 +295,14 @@ public sealed partial class SpanEditor
             line.StrokeThickness = dragging ? 4 : 3;
         }
     }
+
+    static Line MakeOverlayOtoLine(int point) => new()
+    {
+        Stroke = OtoBrush(point),
+        StrokeThickness = 3,
+        IsHitTestVisible = false,
+        Visibility = Visibility.Collapsed,
+    };
 
     void RaiseFocusedOto()
     {
@@ -1047,12 +1062,12 @@ public sealed partial class SpanEditor
         if (_file == null || _labelsLocked || _otoMarks.Count == 0)
             return null;
         var inBand = InOtoBand(y);
-        var onWave = _hitKind == BandKind.Wave;
-        if (!inBand && !onWave)
+        var onOverlay = _hitKind is BandKind.Wave or BandKind.Spec or BandKind.Loud;
+        if (!inBand && !onOverlay)
             return null;
         if (!inBand && _focusOto < 0)
             return null;
-        var slop = inBand || InWaveBand(y) ? HitPx : 8;
+        var slop = inBand || InOverlayBand(y) ? HitPx : 8;
         var best = -1;
         var bestPoint = -1;
         var bestDist = slop;

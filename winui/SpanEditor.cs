@@ -32,6 +32,8 @@ public sealed partial class SpanEditor : UserControl
     readonly BandView _loudView = new(BandKind.Loud);
     readonly BandView _otoView = new(BandKind.Oto);
     readonly Line[] _waveOtoLines = new Line[OtoTune.PointCount];
+    readonly Line[] _specOtoLines = new Line[OtoTune.PointCount];
+    readonly Line[] _loudOtoLines = new Line[OtoTune.PointCount];
     readonly List<Line> _loudLines = [];
     BandView _xBand = null!;
     BandKind _hitKind;
@@ -159,13 +161,9 @@ public sealed partial class SpanEditor : UserControl
         _labelGate = MakeLabelGate();
         for (var point = 0; point < OtoTune.PointCount; point++)
         {
-            _waveOtoLines[point] = new Line
-            {
-                Stroke = OtoBrush(point),
-                StrokeThickness = 3,
-                IsHitTestVisible = false,
-                Visibility = Visibility.Collapsed,
-            };
+            _waveOtoLines[point] = MakeOverlayOtoLine(point);
+            _specOtoLines[point] = MakeOverlayOtoLine(point);
+            _loudOtoLines[point] = MakeOverlayOtoLine(point);
         }
 
         Background = BrushOf(255, 22, 22, 22);
@@ -578,9 +576,13 @@ public sealed partial class SpanEditor : UserControl
             _specView.Plot.Children.Add(text);
         foreach (var line in _waveOtoLines)
             _waveView.Plot.Children.Add(line);
+        foreach (var line in _specOtoLines)
+            _specView.Plot.Children.Add(line);
         UseBand(_otoView);
         AddOtoVisuals();
         _loudView.Plot.Children.Add(_loudnessLabel);
+        foreach (var line in _loudOtoLines)
+            _loudView.Plot.Children.Add(line);
 
         ArrangeAll();
     }
@@ -1097,6 +1099,7 @@ public sealed partial class SpanEditor : UserControl
 
             var time = GroupTime(i);
             PlaceBoundary(_lines[i], XOn(_specView, time), specHeight);
+            _lines[i].Opacity = _focusOto >= 0 ? OtoDimOpacity : 1;
             if (wave != null)
             {
                 PlaceBoundary(wave, XOn(_waveView, time), waveHeight);
@@ -1104,7 +1107,10 @@ public sealed partial class SpanEditor : UserControl
             }
 
             if (loud != null)
+            {
                 PlaceBoundary(loud, XOn(_loudView, time), loudHeight);
+                loud.Opacity = _focusOto >= 0 ? OtoDimOpacity : 1;
+            }
         }
     }
 
@@ -1310,6 +1316,10 @@ public sealed partial class SpanEditor : UserControl
         var opacity = _focusOto >= 0 ? OtoDimOpacity : 1;
         foreach (var line in _waveLines)
             line.Opacity = opacity;
+        foreach (var line in _lines)
+            line.Opacity = opacity;
+        foreach (var line in _loudLines)
+            line.Opacity = opacity;
     }
 
     int HitGroup(double x)
@@ -1428,10 +1438,15 @@ public sealed partial class SpanEditor : UserControl
 
     double WaveHeight => Math.Max(1, ContentHeight(_waveView));
 
-    bool InWaveBand(double y) => _hitKind == BandKind.Wave && _file != null && y >= 0 && y < _waveView.Plot.Height;
+    bool InOverlayBand(double y) =>
+        _file != null
+        && _hitKind is BandKind.Wave or BandKind.Spec or BandKind.Loud
+        && y >= 0
+        && y < _xBand.Plot.Height;
 
-    // 強調中は、波形の子音・母音境界を掴むと oto.ini の線と取り違える。
-    bool WaveBoundaryLocked(double y) => _focusOto >= 0 && _hitKind == BandKind.Wave;
+    // 強調中は、子音・母音境界を掴むと oto.ini の線と取り違える。
+    bool WaveBoundaryLocked(double y) =>
+        _focusOto >= 0 && _hitKind is BandKind.Wave or BandKind.Spec or BandKind.Loud;
 
     double OtoHeight => Math.Max(1, ContentHeight(_otoView));
 
