@@ -310,7 +310,7 @@
             </StackPanel>
 
             <Grid x:Name="EditorView" Visibility="Collapsed">
-                <Grid x:Name="EditorColumns" Margin="0,8,0,0">
+                <Grid x:Name="EditorColumns">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition x:Name="FileColumn" Width="280" />
                         <ColumnDefinition x:Name="WaveColumn" Width="*" />
