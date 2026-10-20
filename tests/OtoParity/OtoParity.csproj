@@ -20,6 +20,8 @@
 
   <ItemGroup>
     <Compile Include="..\..\winui\BlankRelease.cs" Link="Winui\BlankRelease.cs" />
+    <Compile Include="..\..\winui\EditorLayout.cs" Link="Winui\EditorLayout.cs" />
+    <Compile Include="..\..\winui\JsonFiles.cs" Link="Winui\JsonFiles.cs" />
     <Compile Include="..\..\winui\ConsonantOverlap.cs" Link="Winui\ConsonantOverlap.cs" />
     <Compile Include="..\..\winui\OtoExport.cs" Link="Winui\OtoExport.cs" />
     <Compile Include="..\..\winui\OtoMarks.cs" Link="Winui\OtoMarks.cs" />

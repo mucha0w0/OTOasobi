@@ -195,6 +195,172 @@ static class EditorLayout
         return Math.Clamp(ratio, min, 1 - min);
     }
 
+    // 各枝の境目の画面座標。軸に沿った位置だけを入れる。
+    public static Dictionary<LayoutNode, double> MeasureSplitters(LayoutNode? root, double width, double height)
+    {
+        var found = new Dictionary<LayoutNode, double>();
+        if (root == null || width < 1 || height < 1)
+            return found;
+        WalkSplitters(root, 0, 0, width, height, found);
+        return found;
+    }
+
+    // ドラッグ開始時の座標を frozen に固定し、dragged だけを proposed へ進める。
+    // ほかの境目が 1px でも動く位置は採用しない。途中にその区間があっても飛び越さない。
+    public static bool MoveSplitter(
+        LayoutNode root,
+        LayoutNode dragged,
+        double proposed,
+        IReadOnlyDictionary<LayoutNode, double> frozen,
+        double width,
+        double height)
+    {
+        if (width < 1 || height < 1 || double.IsNaN(proposed) || double.IsInfinity(proposed))
+            return false;
+        if (!frozen.ContainsKey(dragged))
+            return false;
+        if (!TrySplitterAt(root, dragged, width, height, out var current))
+            return false;
+        if (Math.Abs(proposed - current) < 0.5)
+            return false;
+
+        var dir = Math.Sign(proposed - current);
+        var accepted = current;
+        var steps = (int)Math.Min(4000, Math.Ceiling(Math.Abs(proposed - current)));
+        for (var i = 1; i <= steps; i++)
+        {
+            var next = i == steps ? proposed : current + dir * i;
+            PlaceSplitter(root, dragged, next, frozen, width, height);
+            if (!SplittersHeld(root, dragged, frozen, 0, 0, width, height))
+            {
+                PlaceSplitter(root, dragged, accepted, frozen, width, height);
+                break;
+            }
+
+            if (!TrySplitterAt(root, dragged, width, height, out var landed) || (landed - accepted) * dir < 0.25)
+                break;
+            accepted = landed;
+            if (Math.Abs(landed - proposed) < 0.5)
+                break;
+        }
+
+        return Math.Abs(accepted - current) >= 0.5;
+    }
+
+    static void WalkSplitters(LayoutNode node, double x, double y, double width, double height, Dictionary<LayoutNode, double> found)
+    {
+        if (!TrySpan(node, width, height, out var horizontal, out _, out var size))
+            return;
+        found[node] = (horizontal ? x : y) + size;
+        if (horizontal)
+        {
+            WalkSplitters(node.First!, x, y, size, height, found);
+            WalkSplitters(node.Second!, x + size, y, Math.Max(0, width - size), height, found);
+            return;
+        }
+
+        WalkSplitters(node.First!, x, y, width, size, found);
+        WalkSplitters(node.Second!, x, y + size, width, Math.Max(0, height - size), found);
+    }
+
+    static bool TrySplitterAt(LayoutNode root, LayoutNode dragged, double width, double height, out double at)
+    {
+        at = 0;
+        return TryFindSplitter(root, dragged, 0, 0, width, height, ref at);
+    }
+
+    static bool TryFindSplitter(LayoutNode node, LayoutNode dragged, double x, double y, double width, double height, ref double at)
+    {
+        if (!TrySpan(node, width, height, out var horizontal, out _, out var size))
+            return false;
+        if (ReferenceEquals(node, dragged))
+        {
+            at = (horizontal ? x : y) + size;
+            return true;
+        }
+
+        if (horizontal)
+        {
+            return TryFindSplitter(node.First!, dragged, x, y, size, height, ref at)
+                || TryFindSplitter(node.Second!, dragged, x + size, y, Math.Max(0, width - size), height, ref at);
+        }
+
+        return TryFindSplitter(node.First!, dragged, x, y, width, size, ref at)
+            || TryFindSplitter(node.Second!, dragged, x, y + size, width, Math.Max(0, height - size), ref at);
+    }
+
+    static void PlaceSplitter(
+        LayoutNode node,
+        LayoutNode dragged,
+        double dragAt,
+        IReadOnlyDictionary<LayoutNode, double> frozen,
+        double x,
+        double y,
+        double width,
+        double height)
+    {
+        if (!TrySpan(node, width, height, out var horizontal, out var span, out _))
+            return;
+        var at = ReferenceEquals(node, dragged)
+            ? dragAt
+            : frozen.TryGetValue(node, out var fixedAt) ? fixedAt : (horizontal ? x : y) + span * node.Ratio;
+        node.Ratio = ClampRatio((at - (horizontal ? x : y)) / span, span);
+        var size = span * node.Ratio;
+        if (horizontal)
+        {
+            PlaceSplitter(node.First!, dragged, dragAt, frozen, x, y, size, height);
+            PlaceSplitter(node.Second!, dragged, dragAt, frozen, x + size, y, Math.Max(0, width - size), height);
+            return;
+        }
+
+        PlaceSplitter(node.First!, dragged, dragAt, frozen, x, y, width, size);
+        PlaceSplitter(node.Second!, dragged, dragAt, frozen, x, y + size, width, Math.Max(0, height - size));
+    }
+
+    static void PlaceSplitter(
+        LayoutNode root,
+        LayoutNode dragged,
+        double dragAt,
+        IReadOnlyDictionary<LayoutNode, double> frozen,
+        double width,
+        double height) =>
+        PlaceSplitter(root, dragged, dragAt, frozen, 0, 0, width, height);
+
+    static bool SplittersHeld(LayoutNode node, LayoutNode dragged, IReadOnlyDictionary<LayoutNode, double> frozen, double x, double y, double width, double height)
+    {
+        if (!TrySpan(node, width, height, out var horizontal, out _, out var size))
+            return true;
+        if (!ReferenceEquals(node, dragged))
+        {
+            var at = (horizontal ? x : y) + size;
+            if (!frozen.TryGetValue(node, out var expected) || Math.Abs(at - expected) > 0.5)
+                return false;
+        }
+
+        if (horizontal)
+        {
+            return SplittersHeld(node.First!, dragged, frozen, x, y, size, height)
+                && SplittersHeld(node.Second!, dragged, frozen, x + size, y, Math.Max(0, width - size), height);
+        }
+
+        return SplittersHeld(node.First!, dragged, frozen, x, y, width, size)
+            && SplittersHeld(node.Second!, dragged, frozen, x, y + size, width, Math.Max(0, height - size));
+    }
+
+    static bool TrySpan(LayoutNode node, double width, double height, out bool horizontal, out double span, out double size)
+    {
+        horizontal = node.Axis == "h";
+        span = 0;
+        size = 0;
+        if (node.IsLeaf || node.First == null || node.Second == null)
+            return false;
+        span = horizontal ? width : height;
+        if (span < 1)
+            return false;
+        size = span * ClampRatio(node.Ratio, span);
+        return true;
+    }
+
     static bool ValidNode(LayoutNode node, HashSet<string> seen, int depth)
     {
         if (depth > 12 || seen.Count > 24)
