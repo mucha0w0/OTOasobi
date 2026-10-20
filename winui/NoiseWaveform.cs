@@ -22,6 +22,7 @@ sealed class NoiseWaveform : UserControl
     const double PlotHeight = 88;
     const double QuietWindowSeconds = 0.8;
     const double OpenViewSeconds = 2;
+    const double ResizePreviewOpacity = 0.55;
 
     readonly Border _frame = new()
     {
@@ -54,7 +55,9 @@ sealed class NoiseWaveform : UserControl
     double _dragAnchor;
     bool _barSync;
     bool _columnDrag;
+    bool _resizePreview;
     double _columnDragWidth = 1;
+    double _opacityBeforePreview = 1;
     ScaleTransform? _columnDragScale;
     FrameworkElement? _columnDragRoot;
 
@@ -107,6 +110,7 @@ sealed class NoiseWaveform : UserControl
             _columnDragRoot.Width = _columnDragWidth;
             _columnDragRoot.RenderTransformOrigin = new Point(0, 0);
             _columnDragRoot.RenderTransform = _columnDragScale;
+            BeginResizePreview();
             return;
         }
 
@@ -116,11 +120,29 @@ sealed class NoiseWaveform : UserControl
         _columnDragRoot.RenderTransform = null;
         _columnDragRoot.ClearValue(WidthProperty);
         _columnDragRoot.HorizontalAlignment = HorizontalAlignment.Stretch;
+        EndResizePreview();
         DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
         {
             if (!_columnDrag)
                 Draw();
         });
+    }
+
+    void BeginResizePreview()
+    {
+        if (_resizePreview)
+            return;
+        _resizePreview = true;
+        _opacityBeforePreview = Opacity;
+        Opacity = ResizePreviewOpacity;
+    }
+
+    void EndResizePreview()
+    {
+        if (!_resizePreview)
+            return;
+        _resizePreview = false;
+        Opacity = _opacityBeforePreview;
     }
 
     public event EventHandler<NoiseRangeEventArgs>? RangeChanging;

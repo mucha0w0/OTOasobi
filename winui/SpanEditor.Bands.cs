@@ -150,12 +150,17 @@ public sealed partial class SpanEditor
 
     sealed class BandView : UserControl
     {
+        const double ResizePreviewOpacity = 0.55;
+
         readonly Grid _root = new();
         readonly RectangleGeometry _clip = new();
+        readonly List<(UIElement Element, Visibility Visibility)> _parkedText = [];
         ScaleTransform? _scale;
         bool _columnDrag;
+        bool _resizePreview;
         double _dragWidth = 1;
         double _dragHeight = 1;
+        double _opacityBeforePreview = 1;
 
         public BandView(BandKind kind)
         {
@@ -257,6 +262,7 @@ public sealed partial class SpanEditor
                 _root.Height = _dragHeight;
                 _root.RenderTransformOrigin = new Point(0, 0);
                 _root.RenderTransform = _scale;
+                BeginResizePreview();
                 return;
             }
 
@@ -269,6 +275,90 @@ public sealed partial class SpanEditor
             _root.HorizontalAlignment = HorizontalAlignment.Stretch;
             _root.VerticalAlignment = VerticalAlignment.Stretch;
             SyncPlot(new Size(ActualWidth, ActualHeight));
+            EndResizePreview();
+        }
+
+        // 拡縮のあいだは文字を隠し、絵だけを薄く見せる。位置の計算は離してから行う。
+        void BeginResizePreview()
+        {
+            if (_resizePreview)
+                return;
+            _resizePreview = true;
+            _opacityBeforePreview = Opacity;
+            Opacity = ResizePreviewOpacity;
+            foreach (UIElement child in _root.Children)
+                ParkTextChrome(child);
+        }
+
+        void EndResizePreview()
+        {
+            if (!_resizePreview)
+                return;
+            _resizePreview = false;
+            Opacity = _opacityBeforePreview;
+            foreach (var (element, visibility) in _parkedText)
+                element.Visibility = visibility;
+            _parkedText.Clear();
+        }
+
+        void ParkTextChrome(UIElement element)
+        {
+            switch (element)
+            {
+                case TextBlock:
+                case Button:
+                    Park(element);
+                    return;
+                case Panel panel:
+                    for (var i = 0; i < panel.Children.Count; i++)
+                        ParkTextChrome(panel.Children[i]);
+                    return;
+                case Border border when border.Child is UIElement child && IsTextChrome(child):
+                    Park(border);
+                    return;
+                case Border border when border.Child is UIElement child:
+                    ParkTextChrome(child);
+                    return;
+                case ContentControl control when control.Content is UIElement content && IsTextChrome(content):
+                    Park(control);
+                    return;
+                case ContentControl control when control.Content is UIElement content:
+                    ParkTextChrome(content);
+                    return;
+            }
+        }
+
+        static bool IsTextChrome(UIElement element)
+        {
+            switch (element)
+            {
+                case TextBlock:
+                case Button:
+                    return true;
+                case Panel panel:
+                    if (panel.Children.Count == 0)
+                        return false;
+                    foreach (UIElement item in panel.Children)
+                    {
+                        if (!IsTextChrome(item))
+                            return false;
+                    }
+
+                    return true;
+                case Border border:
+                    return border.Child is UIElement nested && IsTextChrome(nested);
+                case ContentControl control:
+                    return control.Content is string
+                        || (control.Content is UIElement content && IsTextChrome(content));
+                default:
+                    return false;
+            }
+        }
+
+        void Park(UIElement element)
+        {
+            _parkedText.Add((element, element.Visibility));
+            element.Visibility = Visibility.Collapsed;
         }
 
         void SyncPlot(Size size)

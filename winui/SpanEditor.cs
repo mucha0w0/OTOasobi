@@ -135,7 +135,7 @@ public sealed partial class SpanEditor : UserControl
 
     public event EventHandler? AnalyzeRequested;
 
-    // 境目をドラッグしているあいだは、いまの絵を伸ばすだけにする。離したときに一度だけ描き直す。
+    // 境目をドラッグしているあいだは文字を隠し、絵を薄く伸ばす。離したときに一度だけ描き直す。
     public void SetColumnDrag(bool dragging)
     {
         foreach (var band in AllBands)
