@@ -123,9 +123,9 @@ jobs:
         run: |
           $tag = "v${{ steps.version.outputs.version }}"
           gh release upload $tag artifacts/OtoasobiSetup.exe --clobber
-          $assetId = gh release view $tag --json assets --jq '.assets[] | select(.name=="Otoasobi-win-Setup.exe") | .id'
-          if ($assetId) {
-            gh api --method DELETE "repos/${{ github.repository }}/releases/assets/$assetId"
+          $api = gh release view $tag --json assets --jq '.assets[] | select(.name=="Otoasobi-win-Setup.exe") | .apiUrl'
+          if ($api) {
+            gh api --method DELETE $api.Trim()
           }
 
       - name: Upload engine
