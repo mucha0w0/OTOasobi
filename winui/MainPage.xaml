@@ -202,6 +202,7 @@
                     <ToggleMenuFlyoutItem x:Name="ShowOtoBandItem" Tag="otoBand" Text="oto区間" IsChecked="True" Click="PaneMenu_Click" />
                     <ToggleMenuFlyoutItem x:Name="ShowSourceItem" Tag="source" Text="原音修正" Click="PaneMenu_Click" />
                     <ToggleMenuFlyoutItem x:Name="ShowOtoItem" Tag="oto" Text="oto調整" IsChecked="True" Click="PaneMenu_Click" />
+                    <ToggleMenuFlyoutItem x:Name="ShowOtoParamsItem" Tag="otoParams" Text="原音パラメータ" Click="PaneMenu_Click" />
                     <MenuFlyoutSeparator />
                     <MenuFlyoutItem Text="配置を初期状態に戻す" Click="ResetLayout_Click" />
                 </MenuBarItem>
@@ -347,6 +348,7 @@
                     <Grid x:Name="SpecHost" />
                     <Grid x:Name="LoudHost" />
                     <Grid x:Name="OtoBandHost" />
+                    <local:OtoParamTable x:Name="OtoParams" />
                     <local:SpanEditor
                         x:Name="Editor"
                         Visibility="Collapsed"

@@ -106,6 +106,7 @@ public sealed partial class MainPage : Page
         _configReady = true;
         OnConfigChanged();
         MountDock();
+        WireOtoTable();
         AddHandler(PointerWheelChangedEvent, new PointerEventHandler(OnPageWheel), true);
         BindRecentFolders();
         Loaded += (_, _) => AttachMenuToTitleBar();
@@ -141,7 +142,7 @@ public sealed partial class MainPage : Page
         LoudHost.Children.Add(Editor.LoudSurface);
         OtoBandHost.Children.Add(Editor.OtoSurface);
         // ページが読み込まれる前は Parent が空のままなので、ここから外してからドックへ入れる。
-        foreach (var pane in new UIElement[] { FilePane, WavePane, SpecHost, LoudHost, OtoBandHost, SourcePane, OtoPane })
+        foreach (var pane in new UIElement[] { FilePane, WavePane, SpecHost, LoudHost, OtoBandHost, SourcePane, OtoPane, OtoParams })
             PaneHolder.Children.Remove(pane);
         Dock.Mount(
         [
@@ -152,6 +153,7 @@ public sealed partial class MainPage : Page
             ("otoBand", "oto区間", OtoBandHost),
             ("source", "原音修正", SourcePane),
             ("oto", "oto調整", OtoPane),
+            ("otoParams", "原音パラメータ", OtoParams),
         ]);
         Dock.PaneResizing += (_, dragging) =>
         {
@@ -181,6 +183,7 @@ public sealed partial class MainPage : Page
         ShowOtoBandItem.IsChecked = Dock.Contains("otoBand");
         ShowSourceItem.IsChecked = Dock.Contains("source");
         ShowOtoItem.IsChecked = Dock.Contains("oto");
+        ShowOtoParamsItem.IsChecked = Dock.Contains("otoParams");
         _paneMenuWrite = false;
     }
 
@@ -799,6 +802,8 @@ public sealed partial class MainPage : Page
     {
         if (_suppressSelection)
             return;
+        if (!_revealNav)
+            _revealFile = null;
         UpdateCommands();
         if (FileList.SelectedItem is not WavFile file)
             return;
@@ -816,6 +821,7 @@ public sealed partial class MainPage : Page
         Effects.SetFolder(folderPath);
         _files.Clear();
         _notice = null;
+        ClearLoudness();
         var total = CountTargets(folderPath);
         ShowBusy(0, total);
         var queue = DispatcherQueue;
@@ -908,6 +914,7 @@ public sealed partial class MainPage : Page
             file.Engine = updated.Engine;
             file.Spans.Clear();
             file.Spans.AddRange(updated.Spans);
+            RefreshOtoTable();
             var saved = await SaveCacheAsync();
             if (folder != _folder)
                 return;
@@ -997,6 +1004,9 @@ public sealed partial class MainPage : Page
                 preview.Samples,
                 preview.SampleRate);
             Editor.SetTunes(TunesFor(file));
+            RememberLoudness(file.Name, preview.Loudness);
+            RefreshOtoTable();
+            TryRevealOto(file);
             var current = Editor.ViewportQuery();
             if (current.Columns == columns && current.Rows == rows
                 && Math.Abs(current.T0) < 1e-6
@@ -1174,6 +1184,7 @@ public sealed partial class MainPage : Page
         UpdatePresetDirty();
         UpdateCvvcPresetDirty();
         ScheduleSession();
+        ScheduleOtoTable();
         if (!_wrote)
             return;
         _wrote = false;
@@ -1386,6 +1397,7 @@ public sealed partial class MainPage : Page
             return;
         _adjust.Remember(CurrentMode(), entry);
         ScheduleSession();
+        RefreshOtoTable();
         if (!_wrote)
             return;
         _wrote = false;
@@ -1497,6 +1509,7 @@ public sealed partial class MainPage : Page
         Effects.SetFolder(folder);
         _files.Clear();
         _notice = null;
+        ClearLoudness();
         foreach (var name in names)
             _files.Add(new WavFile { Name = name });
         ShowOnly("editor");
@@ -1513,6 +1526,7 @@ public sealed partial class MainPage : Page
         if (_files.Count > 0)
             FileList.SelectedIndex = 0;
         UpdateCommands();
+        RefreshOtoTable();
     }
 
     bool RestoreUnanalyzed(string folder, string message)
@@ -1550,6 +1564,9 @@ public sealed partial class MainPage : Page
             FileList.SelectedIndex = 0;
             FileList.Focus(FocusState.Programmatic);
         }
+
+        RefreshOtoTable();
+        StartLoudness();
     }
 
     void ShowError(string message)

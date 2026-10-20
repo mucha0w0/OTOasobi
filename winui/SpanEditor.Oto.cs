@@ -535,6 +535,61 @@ public sealed partial class SpanEditor
         if (_file != null && HasDrawnPlot)
             ArrangeOtoLabels();
         PaintWaveBoundaryOpacity();
+        OtoFocused?.Invoke(this, _focusOto);
+    }
+
+    internal event EventHandler<int>? OtoFocused;
+
+    public void FocusOto(int index)
+    {
+        if (_file == null || _drag != DragKind.None)
+            return;
+        if (index < 0 || index >= _otoMarks.Count)
+        {
+            SetFocusOto(-1);
+            return;
+        }
+
+        SetFocusOto(index);
+        RevealOto(index);
+    }
+
+    void RevealOto(int index)
+    {
+        var mark = _otoMarks[index];
+        var start = mark.Offset;
+        var end = mark.Blank;
+        for (var point = 0; point < OtoTune.PointCount; point++)
+        {
+            var at = mark.At(point);
+            if (at < start)
+                start = at;
+            if (at > end)
+                end = at;
+        }
+
+        var span = Math.Max(1e-6, _view1 - _view0);
+        var pad = Math.Max(0.02, span * 0.04);
+        if (start >= _view0 + pad && end <= _view1 - pad)
+            return;
+        var before0 = _view0;
+        var before1 = _view1;
+        var region = Math.Max(0, end - start);
+        if (region + pad * 2 < span)
+        {
+            var mid = (start + end) * 0.5;
+            SetView(mid - span * 0.5, mid + span * 0.5);
+        }
+        else
+        {
+            var margin = Math.Max(0.03, region * 0.25);
+            SetView(start - margin, end + margin);
+        }
+
+        if (Math.Abs(_view0 - before0) < 1e-6 && Math.Abs(_view1 - before1) < 1e-6)
+            return;
+        ArrangeAll();
+        NotifyViewport();
     }
 
     List<int> OtoHitsAt(double x)
