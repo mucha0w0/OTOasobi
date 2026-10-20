@@ -18,7 +18,7 @@ sealed class AnalysisClient : IDisposable
 
     public AnalysisClient()
     {
-        var (repo, python) = Locate();
+        var (repo, python, bundled) = Locate();
         var psi = new ProcessStartInfo
         {
             FileName = python,
@@ -35,6 +35,10 @@ sealed class AnalysisClient : IDisposable
         };
         psi.Environment["PYTHONUTF8"] = "1";
         psi.Environment["PYTHONIOENCODING"] = "utf-8";
+        psi.Environment["PYTHONPATH"] = repo;
+        psi.Environment["TORCH_HOME"] = AppPaths.ModelsRoot;
+        if (bundled)
+            psi.Environment["PYTHONNOUSERSITE"] = "1";
 
         _process = new Process { StartInfo = psi, EnableRaisingEvents = true };
         if (!_process.Start())
@@ -412,19 +416,38 @@ sealed class AnalysisClient : IDisposable
         }
     }
 
-    static (string Repo, string Python) Locate()
+    // 高精度エンジン、同梱の音響用 Python、開発用 .venv の順。スクリプトはアプリ側を使う。
+    static (string Repo, string Python, bool Bundled) Locate()
+    {
+        var root = FindScriptRoot();
+        if (root == null)
+            throw new FileNotFoundException("解析用の Python が見つかりません。");
+
+        if (File.Exists(AppPaths.EnginePython))
+            return (root, AppPaths.EnginePython, true);
+
+        var slim = Path.Combine(root, "python", "python.exe");
+        if (File.Exists(slim))
+            return (root, slim, true);
+
+        var venv = Path.Combine(root, ".venv", "Scripts", "python.exe");
+        if (File.Exists(venv))
+            return (root, venv, false);
+
+        throw new FileNotFoundException("解析用の Python が見つかりません。");
+    }
+
+    static string? FindScriptRoot()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
         while (dir != null)
         {
-            var python = Path.Combine(dir.FullName, ".venv", "Scripts", "python.exe");
-            var worker = Path.Combine(dir.FullName, "otoasobi", "worker.py");
-            if (File.Exists(python) && File.Exists(worker))
-                return (dir.FullName, python);
+            if (File.Exists(Path.Combine(dir.FullName, "otoasobi", "worker.py")))
+                return dir.FullName;
             dir = dir.Parent;
         }
 
-        throw new FileNotFoundException("解析用の Python (.venv) が見つかりません。");
+        return null;
     }
 }
 

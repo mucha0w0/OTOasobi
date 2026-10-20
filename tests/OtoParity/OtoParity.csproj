@@ -28,6 +28,9 @@
     <Compile Include="..\..\winui\OtoMarks.cs" Link="Winui\OtoMarks.cs" />
     <Compile Include="..\..\winui\OtoTune.cs" Link="Winui\OtoTune.cs" />
     <Compile Include="..\..\winui\Session.cs" Link="Winui\Session.cs" />
+    <Compile Include="..\..\winui\AppPaths.cs" Link="Winui\AppPaths.cs" />
+    <Compile Include="..\..\winui\UpdatePrompt.cs" Link="Winui\UpdatePrompt.cs" />
+    <Compile Include="..\..\winui\EngineInstaller.cs" Link="Winui\EngineInstaller.cs" />
   </ItemGroup>
 
 </Project>

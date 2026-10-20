@@ -34,6 +34,12 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    public void BeginUpdateCheck()
+    {
+        if (RootFrame.Content is MainPage page)
+            page.BeginUpdateCheck();
+    }
+
     internal void PlaceMenuInTitleBar(MenuBar menuBar)
     {
         if (menuBar.Parent is Panel panel)

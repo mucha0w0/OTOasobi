@@ -1,0 +1,115 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Read version
+        id: version
+        shell: bash
+        run: |
+          version=$(grep -oE '<Version>[^<]+' winui/Otoasobi.csproj | head -1 | sed 's/<Version>//')
+          tag="${GITHUB_REF_NAME#v}"
+          if [ "$version" != "$tag" ]; then
+            echo "csproj Version $version とタグ $GITHUB_REF_NAME が一致しません。"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Publish
+        shell: pwsh
+        run: >
+          dotnet publish winui/Otoasobi.csproj -c Release -r win-x64 --self-contained true -o publish
+          -p:Platform=x64 -p:WindowsAppSDKSelfContained=true -p:DebugType=none -p:DebugSymbols=false
+
+      - name: Restore engine cache
+        id: engine-cache
+        uses: actions/cache@v4
+        with:
+          path: engine-dist
+          key: otoasobi-engine-${{ hashFiles('requirements-release.txt', 'scripts/stage_release.ps1') }}
+
+      - name: Stage runtime
+        shell: pwsh
+        run: |
+          $stage = @{
+            PublishDir = "publish"
+            OutputDir = "engine-dist"
+          }
+          if ("${{ steps.engine-cache.outputs.cache-hit }}" -eq "true") {
+            $stage.ReuseEngine = $true
+          }
+          ./scripts/stage_release.ps1 @stage
+
+      - name: Install Velopack
+        shell: pwsh
+        run: |
+          dotnet tool install -g vpk --version 1.2.161
+          Add-Content $env:GITHUB_PATH "$env:USERPROFILE\.dotnet\tools"
+
+      - name: Download previous release
+        continue-on-error: true
+        shell: pwsh
+        run: vpk download github --repoUrl https://github.com/${{ github.repository }} --outputDir artifacts --token ${{ github.token }}
+
+      - name: Pack
+        shell: pwsh
+        run: vpk pack -u Otoasobi -v ${{ steps.version.outputs.version }} -p publish -o artifacts -e Otoasobi.exe --packTitle "オトアソビ" --framework vcredist143-x64 -r win-x64
+
+      - name: Check package size
+        shell: pwsh
+        run: |
+          $githubMax = 2GB - 1
+          $fullMax = [int64](1.8GB)
+          $version = "${{ steps.version.outputs.version }}"
+          $files = @(Get-ChildItem artifacts -File -Recurse)
+          if ($files.Count -eq 0) { throw "パッケージがありません。" }
+          foreach ($file in $files) {
+            if ($file.Length -ge $githubMax) {
+              throw "$($file.Name) が GitHub の 1 ファイル上限を超えています。"
+            }
+          }
+          $full = @($files | Where-Object { $_.Name -eq "Otoasobi-$version-full.nupkg" })
+          if ($full.Count -ne 1) { throw "full パッケージが 1 つではありません。" }
+          if ($full[0].Length -gt $fullMax) {
+            throw "配布用の full パッケージが 1.8 GiB を超えています。音響エンジン用の Python が大きすぎます。"
+          }
+
+      - name: Rename setup
+        shell: pwsh
+        run: |
+          $generated = Join-Path artifacts "Otoasobi-win-Setup.exe"
+          $published = Join-Path artifacts "OtoasobiSetup.exe"
+          if (-not (Test-Path $generated)) { throw "Setup がありません。" }
+          if (Test-Path $published) { Remove-Item $published -Force }
+          Rename-Item $generated "OtoasobiSetup.exe"
+
+      - name: Upload Velopack release
+        shell: pwsh
+        run: >
+          vpk upload github --repoUrl https://github.com/${{ github.repository }}
+          --outputDir artifacts --token ${{ github.token }} --publish
+          --releaseName "OTOasobi ${{ steps.version.outputs.version }}"
+          --tag v${{ steps.version.outputs.version }}
+
+      - name: Upload engine
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: gh release upload "v${{ steps.version.outputs.version }}" engine-dist/OtoasobiEngine.zip engine-dist/mms-fa-model.pt engine-dist/engine.json --clobber

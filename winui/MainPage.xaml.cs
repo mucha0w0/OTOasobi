@@ -68,6 +68,7 @@ public sealed partial class MainPage : Page
     OtoAdjustBook _adjust = new();
     DispatcherQueueTimer? _sessionTimer;
     bool _layoutReady;
+    bool _autoUpdateStarted;
     bool _paneMenuWrite;
     WavFile? _shownFile;
 
@@ -652,6 +653,22 @@ public sealed partial class MainPage : Page
         var items = RecentFolders.Load().Select(path => new RecentFolder(path)).ToList();
         RecentList.ItemsSource = items;
         RecentSection.Visibility = items.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    public void BeginUpdateCheck()
+    {
+        if (_autoUpdateStarted)
+            return;
+        _autoUpdateStarted = true;
+        if (IsLoaded)
+            _ = AppUpdate.OfferAsync(XamlRoot, manual: false);
+        else
+            Loaded += (_, _) => _ = AppUpdate.OfferAsync(XamlRoot, manual: false);
+    }
+
+    void CheckUpdate_Click(object sender, RoutedEventArgs e)
+    {
+        _ = AppUpdate.OfferAsync(XamlRoot, manual: true);
     }
 
     void Exit_Click(object sender, RoutedEventArgs e)

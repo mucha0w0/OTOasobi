@@ -1,0 +1,7 @@
+# CPU torch and torchaudio 2.8. torchaudio 2.9 removed MMS_FA.
+--extra-index-url https://download.pytorch.org/whl/cpu
+numpy>=2.0
+soundfile>=0.12
+praat-parselmouth>=0.4.6
+torch==2.8.0+cpu
+torchaudio==2.8.0+cpu

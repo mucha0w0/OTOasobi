@@ -180,6 +180,7 @@
                         </MenuFlyoutItem.KeyboardAccelerators>
                     </MenuFlyoutItem>
                     <MenuFlyoutSeparator />
+                    <MenuFlyoutItem Text="更新を確認" Click="CheckUpdate_Click" />
                     <MenuFlyoutItem Text="終了" Click="Exit_Click" />
                 </MenuBarItem>
                 <MenuBarItem Title="解析">

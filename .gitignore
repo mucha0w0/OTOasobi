@@ -5,6 +5,9 @@ __pycache__/
 *.egg-info/
 build/
 dist/
+publish/
+artifacts/
+engine-dist/
 .idea/
 .vscode/
 [Bb]in/
