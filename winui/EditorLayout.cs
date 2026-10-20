@@ -45,6 +45,9 @@ public sealed class LayoutNode
 public sealed class LayoutFile
 {
     public LayoutNode? Root { get; set; }
+
+    // true のときは、160px 未満の面を残した比率をレイアウトのたびに広げない。
+    public bool KeepRatios { get; set; }
 }
 
 static class EditorLayout
@@ -189,11 +192,31 @@ static class EditorLayout
     {
         if (double.IsNaN(ratio) || double.IsInfinity(ratio))
             ratio = 0.5;
+        // 子を 0 にしない。160px へ引き上げる処理は、ドラッグの下限と FitDisplayedMinima が行う。
+        if (total <= 2)
+            return Math.Clamp(ratio, 0.08, 0.92);
+        var edge = Math.Min(0.49, 1 / total);
+        return Math.Clamp(ratio, edge, 1 - edge);
+    }
+
+    // 画面に出ていた下限。領域が 2 枚分より狭いときは 8%。広いときは 160px。
+    public static double MinimumRatio(double ratio, double total)
+    {
+        if (double.IsNaN(ratio) || double.IsInfinity(ratio))
+            ratio = 0.5;
         if (total <= MinPane * 2)
             return Math.Clamp(ratio, 0.08, 0.92);
         var min = MinPane / total;
         return Math.Clamp(ratio, min, 1 - min);
     }
+
+    // 保存済みの比率を、いまの窓で下限まで広げた見た目に合わせる。ドラッグ中は呼ばない。
+    public static void FitDisplayedMinima(LayoutNode node, double width, double height) =>
+        FitMinima(node, width, height);
+
+    // この比率のままだと、次のレイアウトで下限へ引き戻されて境目が動く。
+    public static bool HoldsUndersizedPane(LayoutNode node, double width, double height) =>
+        HoldsUndersized(node, width, height);
 
     // 各枝の境目の画面座標。軸に沿った位置だけを入れる。
     public static Dictionary<LayoutNode, double> MeasureSplitters(LayoutNode? root, double width, double height)
@@ -205,15 +228,26 @@ static class EditorLayout
         return found;
     }
 
-    // ドラッグ開始時の座標を frozen に固定し、dragged だけを proposed へ進める。
-    // ほかの境目が 1px でも動く位置は採用しない。途中にその区間があっても飛び越さない。
+    // 押し始めの座標にほかの境目を固定したまま、dragged だけを proposed へ進める。
+    // 固定した境目が動く位置は採用しない。途中にその区間があっても飛び越さない。
+    // 縮む面が下限を下回る位置も採用しない。領域が 320px を超えても、内側の境目は押し出さない。
+    public static Dictionary<LayoutNode, PaneBox> MeasureFloors(LayoutNode root, double width, double height)
+    {
+        var floors = new Dictionary<LayoutNode, PaneBox>();
+        if (width < 1 || height < 1)
+            return floors;
+        CollectFloors(root, width, height, width, height, floors);
+        return floors;
+    }
+
     public static bool MoveSplitter(
         LayoutNode root,
         LayoutNode dragged,
         double proposed,
         IReadOnlyDictionary<LayoutNode, double> frozen,
         double width,
-        double height)
+        double height,
+        IReadOnlyDictionary<LayoutNode, PaneBox>? floors = null)
     {
         if (width < 1 || height < 1 || double.IsNaN(proposed) || double.IsInfinity(proposed))
             return false;
@@ -224,6 +258,7 @@ static class EditorLayout
         if (Math.Abs(proposed - current) < 0.5)
             return false;
 
+        floors ??= MeasureFloors(root, width, height);
         var dir = Math.Sign(proposed - current);
         var accepted = current;
         var steps = (int)Math.Min(4000, Math.Ceiling(Math.Abs(proposed - current)));
@@ -231,14 +266,15 @@ static class EditorLayout
         {
             var next = i == steps ? proposed : current + dir * i;
             PlaceSplitter(root, dragged, next, frozen, width, height);
-            if (!SplittersHeld(root, dragged, frozen, 0, 0, width, height))
+            if (!SplittersHeld(root, dragged, frozen, 0, 0, width, height)
+                || !PanesAboveFloors(root, floors, width, height)
+                || !TrySplitterAt(root, dragged, width, height, out var landed)
+                || (landed - accepted) * dir < 0.25)
             {
                 PlaceSplitter(root, dragged, accepted, frozen, width, height);
                 break;
             }
 
-            if (!TrySplitterAt(root, dragged, width, height, out var landed) || (landed - accepted) * dir < 0.25)
-                break;
             accepted = landed;
             if (Math.Abs(landed - proposed) < 0.5)
                 break;
@@ -345,6 +381,110 @@ static class EditorLayout
 
         return SplittersHeld(node.First!, dragged, frozen, x, y, width, size)
             && SplittersHeld(node.Second!, dragged, frozen, x, y + size, width, Math.Max(0, height - size));
+    }
+
+    static void FitMinima(LayoutNode node, double width, double height)
+    {
+        if (node.IsLeaf || node.First == null || node.Second == null)
+            return;
+        var horizontal = node.Axis == "h";
+        var span = horizontal ? width : height;
+        if (span < 1)
+            return;
+        node.Ratio = MinimumRatio(node.Ratio, span);
+        var size = span * node.Ratio;
+        if (horizontal)
+        {
+            FitMinima(node.First, size, height);
+            FitMinima(node.Second, Math.Max(0, width - size), height);
+            return;
+        }
+
+        FitMinima(node.First, width, size);
+        FitMinima(node.Second, width, Math.Max(0, height - size));
+    }
+
+    static bool HoldsUndersized(LayoutNode node, double width, double height)
+    {
+        if (node.IsLeaf || node.First == null || node.Second == null)
+            return false;
+        var horizontal = node.Axis == "h";
+        var span = horizontal ? width : height;
+        if (span < 1)
+            return false;
+        if (Math.Abs(MinimumRatio(node.Ratio, span) - node.Ratio) > 0.0001)
+            return true;
+        var size = span * node.Ratio;
+        if (horizontal)
+        {
+            return HoldsUndersized(node.First, size, height)
+                || HoldsUndersized(node.Second, Math.Max(0, width - size), height);
+        }
+
+        return HoldsUndersized(node.First, width, size)
+            || HoldsUndersized(node.Second, width, Math.Max(0, height - size));
+    }
+
+    static void CollectFloors(
+        LayoutNode node,
+        double width,
+        double height,
+        double widthSpan,
+        double heightSpan,
+        Dictionary<LayoutNode, PaneBox> floors)
+    {
+        if (node.IsLeaf || node.First == null || node.Second == null)
+        {
+            if (node.IsLeaf)
+                floors[node] = new PaneBox(ShrinkFloor(width, widthSpan), ShrinkFloor(height, heightSpan));
+            return;
+        }
+
+        if (!TrySpan(node, width, height, out var horizontal, out var span, out var size))
+            return;
+        if (horizontal)
+        {
+            CollectFloors(node.First, size, height, span, heightSpan, floors);
+            CollectFloors(node.Second, Math.Max(0, width - size), height, span, heightSpan, floors);
+            return;
+        }
+
+        CollectFloors(node.First, width, size, widthSpan, span, floors);
+        CollectFloors(node.Second, width, Math.Max(0, height - size), widthSpan, span, floors);
+    }
+
+    static bool PanesAboveFloors(
+        LayoutNode node,
+        IReadOnlyDictionary<LayoutNode, PaneBox> floors,
+        double width,
+        double height)
+    {
+        if (node.IsLeaf || node.First == null || node.Second == null)
+        {
+            if (!node.IsLeaf)
+                return true;
+            if (!floors.TryGetValue(node, out var floor))
+                return false;
+            return width + 0.5 >= floor.Width && height + 0.5 >= floor.Height;
+        }
+
+        if (!TrySpan(node, width, height, out var horizontal, out _, out var size))
+            return false;
+        if (horizontal)
+        {
+            return PanesAboveFloors(node.First, floors, size, height)
+                && PanesAboveFloors(node.Second, floors, Math.Max(0, width - size), height);
+        }
+
+        return PanesAboveFloors(node.First, floors, width, size)
+            && PanesAboveFloors(node.Second, floors, width, Math.Max(0, height - size));
+    }
+
+    // 160px 以上の面は 160px。もともと狭い面は、その分割で許されていた幅より縮めない。
+    static double ShrinkFloor(double current, double axisSpan)
+    {
+        var limit = axisSpan <= MinPane * 2 ? Math.Max(1, axisSpan * 0.08) : MinPane;
+        return Math.Min(Math.Max(0, current), limit);
     }
 
     static bool TrySpan(LayoutNode node, double width, double height, out bool horizontal, out double span, out double size)
@@ -464,23 +604,25 @@ static class EditorLayoutStore
         "Otoasobi",
         "editor-layout.json");
 
-    public static bool TryLoad(out LayoutNode? root)
+    public static bool TryLoad(out LayoutNode? root, out bool keepRatios)
     {
         root = null;
+        keepRatios = false;
         if (!File.Exists(FilePath))
             return false;
         var file = JsonFiles.Read<LayoutFile>(FilePath);
         if (file == null || !EditorLayout.IsValid(file.Root))
             return false;
         root = file.Root;
+        keepRatios = file.KeepRatios;
         return true;
     }
 
-    public static void Save(LayoutNode? root)
+    public static void Save(LayoutNode? root, bool keepRatios)
     {
         try
         {
-            JsonFiles.Write(FilePath, new LayoutFile { Root = root });
+            JsonFiles.Write(FilePath, new LayoutFile { Root = root, KeepRatios = keepRatios });
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {

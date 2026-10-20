@@ -162,11 +162,11 @@ public sealed partial class MainPage : Page
         {
             SyncPaneMenu();
             if (_layoutReady)
-                EditorLayoutStore.Save(Dock.Root);
+                EditorLayoutStore.Save(Dock.Root, Dock.KeepRatios);
         };
-        if (!EditorLayoutStore.TryLoad(out var layout))
+        if (!EditorLayoutStore.TryLoad(out var layout, out var keepRatios))
             layout = EditorLayout.CreateDefault();
-        Dock.Load(layout);
+        Dock.Load(layout, keepRatios);
         SyncPaneMenu();
         _layoutReady = true;
     }

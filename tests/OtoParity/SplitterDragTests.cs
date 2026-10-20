@@ -81,7 +81,7 @@ public class SplitterDragTests
 
         Move(top, mid, 100, frozen);
         var far = EditorLayout.MeasureSplitters(top, Width, Height);
-        Assert.Equal(480, far[mid], 1);
+        Assert.Equal(360, far[mid], 1);
         Assert.Equal(200, far[top], 0.6);
         Assert.Equal(650, far[bottom], 0.6);
     }
@@ -140,21 +140,52 @@ public class SplitterDragTests
         const double width = 1400;
         const double height = 720;
         var frozen = EditorLayout.MeasureSplitters(root, width, height);
+        var floors = EditorLayout.MeasureFloors(root, width, height);
 
-        EditorLayout.MoveSplitter(root, spec, frozen[spec] + 36, frozen, width, height);
+        EditorLayout.MoveSplitter(root, spec, frozen[spec] + 36, frozen, width, height, floors);
         var nudged = EditorLayout.MeasureSplitters(root, width, height);
         Assert.Equal(frozen[spec] + 36, nudged[spec], 0.6);
         AssertSameExcept(frozen, nudged, spec);
 
-        EditorLayout.MoveSplitter(root, spec, 0, frozen, width, height);
+        EditorLayout.MoveSplitter(root, spec, 0, frozen, width, height, floors);
         var up = EditorLayout.MeasureSplitters(root, width, height);
         AssertSameExcept(frozen, up, spec);
         Assert.True(up[spec] < frozen[spec] - 1);
 
-        EditorLayout.MoveSplitter(root, spec, height, frozen, width, height);
+        EditorLayout.MoveSplitter(root, spec, height, frozen, width, height, floors);
         var down = EditorLayout.MeasureSplitters(root, width, height);
         AssertSameExcept(frozen, down, spec);
         Assert.True(down[spec] > frozen[spec] + 1);
+    }
+
+    [Fact]
+    public void GrowingAShortBandDoesNotStopBeforeTheFarPaneHitsTheMinimum()
+    {
+        var inner = V(0.25, Leaf("loud"), Leaf("spec"));
+        var mid = V(200.0 / 740.0, inner, Leaf("band"));
+        var root = V(160.0 / 900.0, Leaf("wave"), mid);
+        const double width = 1000;
+        const double height = 900;
+        var frozen = EditorLayout.MeasureSplitters(root, width, height);
+        Assert.Equal(160, frozen[root], 0.1);
+        Assert.Equal(360, frozen[mid], 0.1);
+        Assert.Equal(210, frozen[inner], 0.1);
+
+        EditorLayout.MoveSplitter(root, mid, height, frozen, width, height);
+
+        var now = EditorLayout.MeasureSplitters(root, width, height);
+        Assert.Equal(height - EditorLayout.MinPane, now[mid], 1);
+        Assert.Equal(210, now[inner], 0.6);
+        Assert.Equal(160, now[root], 0.6);
+    }
+
+    [Fact]
+    public void FitDisplayedMinimaLiftsAShortPaneWhenTheColumnIsTall()
+    {
+        var root = V(0.12, Leaf("wave"), Leaf("rest"));
+        EditorLayout.FitDisplayedMinima(root, 800, 900);
+        var at = EditorLayout.MeasureSplitters(root, 800, 900);
+        Assert.Equal(160, at[root], 0.1);
     }
 
     static void AssertSameExcept(Dictionary<LayoutNode, double> before, Dictionary<LayoutNode, double> after, LayoutNode dragged)

@@ -30,10 +30,12 @@ public sealed class EditorDock : Panel
     readonly Dictionary<DockEdge, Border> _arms = [];
 
     LayoutNode? _root;
+    bool _keepRatios;
     Size _layoutSize;
     SplitSlot? _resize;
     double _resizeRatio;
     Dictionary<LayoutNode, double>? _frozenSplits;
+    Dictionary<LayoutNode, PaneBox>? _paneFloors;
     PaneChrome? _pressPane;
     Point _pressPoint;
     bool _moving;
@@ -125,6 +127,8 @@ public sealed class EditorDock : Panel
 
     public LayoutNode? Root => _root;
 
+    public bool KeepRatios => _keepRatios;
+
     public event EventHandler? LayoutChanged;
 
     public event EventHandler<bool>? PaneResizing;
@@ -143,9 +147,10 @@ public sealed class EditorDock : Panel
         }
     }
 
-    public void Load(LayoutNode? root)
+    public void Load(LayoutNode? root, bool keepRatios = false)
     {
         _root = root;
+        _keepRatios = keepRatios;
         InvalidateMeasure();
     }
 
@@ -163,7 +168,11 @@ public sealed class EditorDock : Panel
 
     public void Hide(string id) => SetRoot(EditorLayout.Hide(_root, id));
 
-    public void Reset() => SetRoot(EditorLayout.CreateDefault());
+    public void Reset()
+    {
+        _keepRatios = false;
+        SetRoot(EditorLayout.CreateDefault());
+    }
 
     public void Move(string draggedId, LayoutNode target, DockEdge edge) =>
         SetRoot(EditorLayout.Move(_root, draggedId, target, edge));
@@ -230,6 +239,9 @@ public sealed class EditorDock : Panel
         _slots.Clear();
         if (_root == null || size.Width < 1 || size.Height < 1)
             return;
+        // ドラッグ中は、内側の境目を 160px へ押し戻さない。離したあとも、その比率を保つ。
+        if (!_keepRatios && _resize == null)
+            EditorLayout.FitDisplayedMinima(_root, size.Width, size.Height);
         Walk(_root, new Rect(0, 0, size.Width, size.Height));
     }
 
@@ -336,6 +348,9 @@ public sealed class EditorDock : Panel
         _frozenSplits = _root == null
             ? null
             : EditorLayout.MeasureSplitters(_root, _layoutSize.Width, _layoutSize.Height);
+        _paneFloors = _root == null
+            ? null
+            : EditorLayout.MeasureFloors(_root, _layoutSize.Width, _layoutSize.Height);
         PaintGrip(grip, true);
         grip.CapturePointer(e.Pointer);
         PaneResizing?.Invoke(this, true);
@@ -364,7 +379,8 @@ public sealed class EditorDock : Panel
         if (_resize == null || _root == null || _frozenSplits == null)
             return;
         var proposed = _resize.Horizontal ? point.X : point.Y;
-        if (EditorLayout.MoveSplitter(_root, _resize.Node, proposed, _frozenSplits, _layoutSize.Width, _layoutSize.Height))
+        if (_paneFloors != null && EditorLayout.MoveSplitter(
+            _root, _resize.Node, proposed, _frozenSplits, _layoutSize.Width, _layoutSize.Height, _paneFloors))
             InvalidateMeasure();
     }
 
@@ -373,9 +389,13 @@ public sealed class EditorDock : Panel
         if (_resize == null)
             return;
         var changed = Math.Abs(_resize.Node.Ratio - _resizeRatio) > 0.0005;
+        if (changed && _root != null && _layoutSize.Width >= 1 && _layoutSize.Height >= 1
+            && EditorLayout.HoldsUndersizedPane(_root, _layoutSize.Width, _layoutSize.Height))
+            _keepRatios = true;
         var held = _resize.Grip;
         _resize = null;
         _frozenSplits = null;
+        _paneFloors = null;
         if (held != null)
         {
             held.ReleasePointerCaptures();
