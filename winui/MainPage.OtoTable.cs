@@ -116,6 +116,7 @@ public sealed partial class MainPage
             return rows;
         var export = CurrentExport();
         var tunes = _adjust.For(CurrentMode());
+        var drafts = new List<OtoTableDraft>();
         foreach (var file in _files)
         {
             if (file.Spans.Count == 0)
@@ -147,25 +148,38 @@ public sealed partial class MainPage
                 var any = false;
                 foreach (var flag in tuned)
                     any |= flag;
-                rows.Add(new OtoParamSnapshot
-                {
-                    FileName = file.Name,
-                    FileLabel = Path.GetFileNameWithoutExtension(file.Name),
-                    Index = i,
-                    Alias = auto[i].Alias,
-                    AliasLabel = any ? shown.Alias + " *" : shown.Alias,
-                    Offset = OtoIni.Field(shown, 0),
-                    Overlap = OtoIni.Field(shown, 1),
-                    Preutter = OtoIni.Field(shown, 2),
-                    Consonant = OtoIni.Field(shown, 3),
-                    Blank = OtoIni.Field(shown, 4),
-                    OffsetTuned = tuned[0],
-                    OverlapTuned = tuned[1],
-                    PreutterTuned = tuned[2],
-                    ConsonantTuned = tuned[3],
-                    BlankTuned = tuned[4],
-                });
+                drafts.Add(new OtoTableDraft(file.Name, i, auto[i].Alias, shown, tuned, any));
             }
+        }
+
+        var aliases = new string[drafts.Count];
+        for (var i = 0; i < drafts.Count; i++)
+            aliases[i] = drafts[i].Alias;
+        var numbered = OtoIni.NumberDuplicateAliases(aliases);
+        for (var i = 0; i < drafts.Count; i++)
+        {
+            var draft = drafts[i];
+            var alias = numbered[i];
+            var shown = draft.Shown;
+            var tuned = draft.Tuned;
+            rows.Add(new OtoParamSnapshot
+            {
+                FileName = draft.FileName,
+                FileLabel = Path.GetFileNameWithoutExtension(draft.FileName),
+                Index = draft.Index,
+                Alias = draft.Alias,
+                AliasLabel = draft.Any ? alias + " *" : alias,
+                Offset = OtoIni.Field(shown, 0),
+                Overlap = OtoIni.Field(shown, 1),
+                Preutter = OtoIni.Field(shown, 2),
+                Consonant = OtoIni.Field(shown, 3),
+                Blank = OtoIni.Field(shown, 4),
+                OffsetTuned = tuned[0],
+                OverlapTuned = tuned[1],
+                PreutterTuned = tuned[2],
+                ConsonantTuned = tuned[3],
+                BlankTuned = tuned[4],
+            });
         }
 
         return rows;
@@ -282,4 +296,6 @@ public sealed partial class MainPage
         _revealFile = null;
         Editor.FocusOto(index);
     }
+
+    sealed record OtoTableDraft(string FileName, int Index, string Alias, OtoMark Shown, bool[] Tuned, bool Any);
 }

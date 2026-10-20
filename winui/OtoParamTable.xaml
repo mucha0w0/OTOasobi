@@ -114,7 +114,7 @@
                     <TextBlock
                         Style="{StaticResource OtoHeadStyle}"
                         Text="エイリアス"
-                        ToolTipService.ToolTip="oto.ini のエイリアス。直した行の末尾に * が付く" />
+                        ToolTipService.ToolTip="oto.ini のエイリアス。同じ名前の 2 回目以降には 2、3、… が付く。直した行の末尾に * が付く" />
                 </Border>
                 <Border Grid.Column="7" Style="{StaticResource OtoLineStyle}">
                     <TextBlock
@@ -233,7 +233,7 @@
                             <TextBlock
                                 Style="{StaticResource OtoNameStyle}"
                                 Text="{x:Bind AliasLabel, Mode=OneWay}"
-                                ToolTipService.ToolTip="{x:Bind Alias, Mode=OneWay}" />
+                                ToolTipService.ToolTip="{x:Bind AliasLabel, Mode=OneWay}" />
                         </Border>
                         <Border Grid.Column="7" Style="{StaticResource OtoLineStyle}" />
                     </Grid>

@@ -24,6 +24,7 @@
     <Compile Include="..\..\winui\JsonFiles.cs" Link="Winui\JsonFiles.cs" />
     <Compile Include="..\..\winui\ConsonantOverlap.cs" Link="Winui\ConsonantOverlap.cs" />
     <Compile Include="..\..\winui\OtoExport.cs" Link="Winui\OtoExport.cs" />
+    <Compile Include="..\..\winui\OtoIni.cs" Link="Winui\OtoIni.cs" />
     <Compile Include="..\..\winui\OtoMarks.cs" Link="Winui\OtoMarks.cs" />
     <Compile Include="..\..\winui\OtoTune.cs" Link="Winui\OtoTune.cs" />
     <Compile Include="..\..\winui\Session.cs" Link="Winui\Session.cs" />

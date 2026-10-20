@@ -77,5 +77,46 @@ static class OtoIni
         return true;
     }
 
+    // oto.py の number_duplicate_aliases と同じ。1 回目の名前は残し、2 回目以降へ 2、3、… を付ける。
+    // 付けた名前が、別のエイリアスや、すでに付けた名前と重なるときは空いている番号まで進める。
+    public static string[] NumberDuplicateAliases(IReadOnlyList<string> aliases)
+    {
+        var reserved = new HashSet<string>(aliases);
+        var used = new HashSet<string>();
+        var seen = new Dictionary<string, int>();
+        var result = new string[aliases.Count];
+        for (var i = 0; i < aliases.Count; i++)
+        {
+            var alias = aliases[i];
+            var count = seen.GetValueOrDefault(alias) + 1;
+            seen[alias] = count;
+            string chosen;
+            if (count == 1)
+            {
+                chosen = alias;
+            }
+            else
+            {
+                var number = 2;
+                while (true)
+                {
+                    var candidate = alias + number.ToString(CultureInfo.InvariantCulture);
+                    if (!reserved.Contains(candidate) && !used.Contains(candidate))
+                    {
+                        chosen = candidate;
+                        break;
+                    }
+
+                    number++;
+                }
+            }
+
+            used.Add(chosen);
+            result[i] = chosen;
+        }
+
+        return result;
+    }
+
     static double Ms(double seconds) => OtoMarks.Round3(seconds * 1000.0);
 }
