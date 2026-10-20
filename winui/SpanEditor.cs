@@ -1117,10 +1117,11 @@ public sealed partial class SpanEditor : UserControl
     static void PlaceBoundary(Line line, double x, double height)
     {
         line.Visibility = Visibility.Visible;
-        line.X1 = x;
-        line.X2 = x;
+        var at = Finite(x);
+        line.X1 = at;
+        line.X2 = at;
         line.Y1 = 0;
-        line.Y2 = Math.Max(1, height);
+        line.Y2 = Math.Max(1, Finite(height));
     }
 
     void ArrangeTicks(BandView band)
@@ -1462,8 +1463,16 @@ public sealed partial class SpanEditor : UserControl
 
     double XOn(BandView band, double time)
     {
-        var width = Math.Max(1, band.Plot.Width - Pad * 2);
-        return Pad + (time - _view0) / Math.Max(1e-9, _view1 - _view0) * width;
+        var width = Math.Max(1, Finite(band.Plot.Width) - Pad * 2);
+        var span = Finite(_view1 - _view0);
+        if (span < 1e-9)
+            span = 1e-9;
+        return Pad + (Finite(time) - Finite(_view0)) / span * width;
+    }
+
+    static double Finite(double value)
+    {
+        return double.IsFinite(value) ? value : 0;
     }
 
     double X(double time) => XOn(_xBand, time);
@@ -1478,15 +1487,15 @@ public sealed partial class SpanEditor : UserControl
         var mid = WaveHeight * 0.5;
         var amp = Math.Max(1, mid - 6);
         var peak = _wavePeak > 1e-9 ? _wavePeak : 0.2;
-        return mid - sample / peak * amp;
+        return Finite(mid - Finite(sample) / peak * amp);
     }
 
     double LoudnessY(double db)
     {
         var top = LoudnessTop + 5;
         var bottom = LoudnessTop + LoudnessHeight - 3;
-        var level = Math.Clamp((db - (_loudPeak - LoudnessRangeDb)) / LoudnessRangeDb, 0, 1);
-        return bottom - level * Math.Max(1, bottom - top);
+        var level = Math.Clamp((Finite(db) - (_loudPeak - LoudnessRangeDb)) / LoudnessRangeDb, 0, 1);
+        return Finite(bottom - level * Math.Max(1, bottom - top));
     }
 
     double OtoY(double sample)
@@ -1494,7 +1503,7 @@ public sealed partial class SpanEditor : UserControl
         var mid = OtoTop + OtoHeight * 0.5;
         var amp = Math.Max(1, OtoHeight * 0.5 - 6);
         var peak = _wavePeak > 1e-9 ? _wavePeak : 0.2;
-        return mid - sample / peak * amp;
+        return Finite(mid - Finite(sample) / peak * amp);
     }
 
     void SetFullView()
@@ -1577,10 +1586,10 @@ public sealed partial class SpanEditor : UserControl
         if (index >= rects.Count)
             return;
         var rect = rects[index];
-        Canvas.SetLeft(rect, left);
-        Canvas.SetTop(rect, top);
-        rect.Width = width;
-        rect.Height = Math.Max(0, height);
+        Canvas.SetLeft(rect, Finite(left));
+        Canvas.SetTop(rect, Finite(top));
+        rect.Width = Math.Max(0, Finite(width));
+        rect.Height = Math.Max(0, Finite(height));
     }
 
     static void PlaceText(List<TextBlock> texts, int index, double left, double top, double width)
@@ -1588,7 +1597,7 @@ public sealed partial class SpanEditor : UserControl
         if (index >= texts.Count)
             return;
         var text = texts[index];
-        text.Width = Math.Max(0, width);
+        text.Width = Math.Max(0, Finite(width));
         text.Visibility = width < 28 ? Visibility.Collapsed : Visibility.Visible;
         Canvas.SetLeft(text, left);
         Canvas.SetTop(text, top);

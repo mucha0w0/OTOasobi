@@ -182,10 +182,12 @@ public sealed class EditorDock : Panel
         Place(new Size(width, height));
         foreach (var pair in _panes)
         {
-            if (_rects.TryGetValue(pair.Key, out var rect))
-                pair.Value.Measure(new Size(Math.Max(0, rect.Width), Math.Max(0, rect.Height)));
-            else
-                pair.Value.Measure(new Size(0, 0));
+            // 0×0 で測ると、一覧やスクロールが範囲外の値で落ちる。無いパネルは並べない。
+            if (pair.Value.Visibility != Visibility.Visible)
+                continue;
+            if (!_rects.TryGetValue(pair.Key, out var rect) || rect.Width < 1 || rect.Height < 1)
+                continue;
+            pair.Value.Measure(new Size(rect.Width, rect.Height));
         }
 
         _empty.Measure(new Size(width, height));
@@ -604,8 +606,11 @@ public sealed class EditorDock : Panel
             return;
         _dragOrigin = _root;
         _root = EditorLayout.Hide(CloneLayout(_root), _pressPane.Id);
+        // ポインタ処理の中で UpdateLayout すると、一覧や図形が範囲外で落ちる。
+        _pressPane.Visibility = Visibility.Collapsed;
         InvalidateMeasure();
-        UpdateLayout();
+        if (_layoutSize.Width >= 1 && _layoutSize.Height >= 1)
+            Place(_layoutSize);
     }
 
     // 印か端で離したときだけ新しい木を残す。外したパネルが戻らない結果は、ドラッグ前に戻す。
@@ -618,13 +623,28 @@ public sealed class EditorDock : Panel
             moved = EditorLayout.Move(origin, dragged, target, edge.Value);
         if (moved != null && EditorLayout.Contains(moved, dragged!))
         {
+            ShowPanes(moved);
             SetRoot(moved);
-            UpdateLayout();
             return;
         }
 
+        ShowPanes(origin);
         SetRoot(origin, notify: false);
-        UpdateLayout();
+    }
+
+    void ShowPanes(LayoutNode? node)
+    {
+        if (node == null)
+            return;
+        if (node.IsLeaf)
+        {
+            if (node.Id != null && _panes.TryGetValue(node.Id, out var pane))
+                pane.Visibility = Visibility.Visible;
+            return;
+        }
+
+        ShowPanes(node.First);
+        ShowPanes(node.Second);
     }
 
     static LayoutNode CloneLayout(LayoutNode node) => new()

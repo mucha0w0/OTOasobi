@@ -221,7 +221,8 @@ public sealed partial class SpanEditor
                     return;
                 }
 
-                SyncPlot(e.NewSize);
+                if (!SyncPlot(e.NewSize))
+                    return;
                 Sized?.Invoke(this, EventArgs.Empty);
             };
         }
@@ -361,13 +362,15 @@ public sealed partial class SpanEditor
             element.Visibility = Visibility.Collapsed;
         }
 
-        void SyncPlot(Size size)
+        bool SyncPlot(Size size)
         {
-            var width = Math.Max(0, size.Width);
-            var height = Math.Max(0, size.Height);
-            Plot.Width = width;
-            Plot.Height = height;
-            _clip.Rect = new Rect(0, 0, width, height);
+            // 畳んだ瞬間の 0 や非数で幅を置くと、図形が範囲外で落ちる。
+            if (!double.IsFinite(size.Width) || !double.IsFinite(size.Height) || size.Width < 1 || size.Height < 1)
+                return false;
+            Plot.Width = size.Width;
+            Plot.Height = size.Height;
+            _clip.Rect = new Rect(0, 0, size.Width, size.Height);
+            return true;
         }
     }
 }

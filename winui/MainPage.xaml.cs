@@ -69,6 +69,7 @@ public sealed partial class MainPage : Page
     DispatcherQueueTimer? _sessionTimer;
     bool _layoutReady;
     bool _paneMenuWrite;
+    WavFile? _shownFile;
 
     public MainPage()
     {
@@ -801,6 +802,9 @@ public sealed partial class MainPage : Page
         UpdateCommands();
         if (FileList.SelectedItem is not WavFile file)
             return;
+        // パネル移動の配置で同じファイルの選択がもう一度来ると、波形を消して読み直してしまう。
+        if (ReferenceEquals(file, _shownFile) && Editor.HasContent)
+            return;
         _ = LoadPreviewAsync(file);
     }
 
@@ -959,6 +963,7 @@ public sealed partial class MainPage : Page
         _viewportTimer?.Stop();
         var gen = ++_previewGen;
         _appliedKey = "";
+        _shownFile = file;
         Editor.Clear("波形を読み込んでいます…");
         try
         {
