@@ -29,6 +29,7 @@ public sealed class EditorDock : Panel
     readonly Dictionary<DockEdge, Border> _arms = [];
 
     LayoutNode? _root;
+    Size _layoutSize;
     SplitSlot? _resize;
     double _resizeRatio;
     PaneChrome? _pressPane;
@@ -192,6 +193,7 @@ public sealed class EditorDock : Panel
 
     protected override Size ArrangeOverride(Size finalSize)
     {
+        _layoutSize = finalSize;
         Place(finalSize);
         foreach (var pair in _panes)
         {
@@ -360,8 +362,85 @@ public sealed class EditorDock : Panel
         var ratio = EditorLayout.ClampRatio(along / total, total);
         if (Math.Abs(ratio - slot.Node.Ratio) < 0.0005)
             return;
+        // 動かした境目より手前の分割は比率のまま残すと、パネルの上辺までずれて見える。
+        var saved = CaptureSplitters(slot.Node);
         slot.Node.Ratio = ratio;
+        RestoreSplitters(saved);
         InvalidateMeasure();
+    }
+
+    Dictionary<LayoutNode, double> CaptureSplitters(LayoutNode dragged)
+    {
+        var saved = new Dictionary<LayoutNode, double>();
+        if (_root == null || _layoutSize.Width < 1 || _layoutSize.Height < 1)
+            return saved;
+        Capture(_root, new Rect(0, 0, _layoutSize.Width, _layoutSize.Height));
+        return saved;
+
+        void Capture(LayoutNode node, Rect rect)
+        {
+            if (!TryDivide(node, rect, out var first, out var second, out var at))
+                return;
+            if (!ReferenceEquals(node, dragged))
+                saved[node] = at;
+            if (node.First != null)
+                Capture(node.First, first);
+            if (node.Second != null)
+                Capture(node.Second, second);
+        }
+    }
+
+    void RestoreSplitters(Dictionary<LayoutNode, double> saved)
+    {
+        if (_root == null || saved.Count == 0 || _layoutSize.Width < 1 || _layoutSize.Height < 1)
+            return;
+        Restore(_root, new Rect(0, 0, _layoutSize.Width, _layoutSize.Height));
+
+        void Restore(LayoutNode node, Rect rect)
+        {
+            if (node.IsLeaf || node.First == null || node.Second == null)
+                return;
+            var horizontal = node.Axis == "h";
+            var span = horizontal ? rect.Width : rect.Height;
+            if (saved.TryGetValue(node, out var at) && span > 1)
+            {
+                var offset = horizontal ? at - rect.X : at - rect.Y;
+                node.Ratio = EditorLayout.ClampRatio(offset / span, span);
+            }
+
+            if (!TryDivide(node, rect, out var first, out var second, out _))
+                return;
+            if (node.First != null)
+                Restore(node.First, first);
+            if (node.Second != null)
+                Restore(node.Second, second);
+        }
+    }
+
+    static bool TryDivide(LayoutNode node, Rect rect, out Rect first, out Rect second, out double at)
+    {
+        first = default;
+        second = default;
+        at = 0;
+        if (node.IsLeaf || node.First == null || node.Second == null)
+            return false;
+        var horizontal = node.Axis == "h";
+        var span = horizontal ? rect.Width : rect.Height;
+        var ratio = EditorLayout.ClampRatio(node.Ratio, span);
+        var size = span * ratio;
+        at = (horizontal ? rect.X : rect.Y) + size;
+        if (horizontal)
+        {
+            first = new Rect(rect.X, rect.Y, size, rect.Height);
+            second = new Rect(rect.X + size, rect.Y, Math.Max(0, rect.Width - size), rect.Height);
+        }
+        else
+        {
+            first = new Rect(rect.X, rect.Y, rect.Width, size);
+            second = new Rect(rect.X, rect.Y + size, rect.Width, Math.Max(0, rect.Height - size));
+        }
+
+        return true;
     }
 
     void EndResize(GripBar? grip)
