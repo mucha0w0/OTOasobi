@@ -201,6 +201,10 @@ public sealed class EditorDock : Panel
             if (_rects.TryGetValue(pair.Key, out var rect))
             {
                 pair.Value.Visibility = Visibility.Visible;
+                // 移動ドラッグ中にレイアウトが走っても、元のパネルは出したままにしない。
+                var hide = _moving && ReferenceEquals(pair.Value, _pressPane);
+                pair.Value.Opacity = hide ? 0 : 1;
+                pair.Value.IsHitTestVisible = !hide;
                 pair.Value.Arrange(rect);
             }
             else
@@ -507,6 +511,7 @@ public sealed class EditorDock : Panel
             if (dx * dx + dy * dy < 16)
                 return;
             _moving = true;
+            HideDragSource();
         }
 
         ShowGhost(_pressPane, point);
@@ -552,9 +557,10 @@ public sealed class EditorDock : Panel
         var dragged = _pressPane.Id;
         var target = _hoverNode;
         var edge = _hoverEdge;
-        EndTitleDrag();
-        if (target != null && edge != null)
-            Move(dragged, target, edge.Value);
+        var willMove = target != null && edge != null;
+        EndTitleDrag(showSource: !willMove);
+        if (willMove)
+            Move(dragged, target!, edge!.Value);
         e.Handled = true;
     }
 
@@ -565,31 +571,46 @@ public sealed class EditorDock : Panel
         EndTitleDrag();
     }
 
-    void EndTitleDrag()
+    void EndTitleDrag(bool showSource = true)
     {
-        if (_pointer != null)
-        {
-            var pointer = _pointer;
-            _pointer = null;
-            if (PointerCaptures != null)
-            {
-                foreach (var captured in PointerCaptures)
-                {
-                    if (captured.PointerId == pointer.PointerId)
-                    {
-                        ReleasePointerCapture(pointer);
-                        break;
-                    }
-                }
-            }
-        }
-
+        var pane = _pressPane;
+        var pointer = _pointer;
         _pressPane = null;
+        _pointer = null;
         _moving = false;
         _hoverNode = null;
         _hoverEdge = null;
         HideArms();
         _ghost.Visibility = Visibility.Collapsed;
+        if (showSource)
+            ShowDragSource(pane);
+        if (pointer == null || PointerCaptures == null)
+            return;
+        foreach (var captured in PointerCaptures)
+        {
+            if (captured.PointerId == pointer.PointerId)
+            {
+                ReleasePointerCapture(pointer);
+                break;
+            }
+        }
+    }
+
+    // 大きさは維持したまま消す。畳むと波形などが 0px で描き直される。
+    void HideDragSource()
+    {
+        if (_pressPane == null)
+            return;
+        _pressPane.Opacity = 0;
+        _pressPane.IsHitTestVisible = false;
+    }
+
+    static void ShowDragSource(PaneChrome? pane)
+    {
+        if (pane == null)
+            return;
+        pane.Opacity = 1;
+        pane.IsHitTestVisible = true;
     }
 
     string? HitPane(Point point)
