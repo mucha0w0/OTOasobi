@@ -91,6 +91,38 @@
 
 ブランクは、その子音の開始を 0%、終了を 100% とした割合です。子音部は、先行発声を 0%、ブランクの位置を 100% とした割合です。どちらも初期値は 100% で、子音ごとにスライダーがあります。重なるときは、共通の 1ms 空けに従います。
 
+## インストール
+
+配布版は [Releases](https://github.com/mucha0w0/OTOasobi/releases) の `OtoasobiSetup.exe` です。Windows 64 ビット用です。
+
+`OtoasobiSetup.exe` を実行すると、`%LocalAppData%\Otoasobi` に入ります。署名はまだ無いので、初回は SmartScreen が出ます。「詳細情報」から実行します。
+
+初回起動では、高精度エンジン（torch、Praat、音声モデル）をダウンロードするか聞きます。サイズはダイアログに出ます。進めると `%LocalAppData%\Otoasobi\engine` と `models` に入ります。断ったとき、またはダウンロードに失敗したときは、音響エンジンで動きます。あとからファイルメニューの「更新を確認」でも準備できます。
+
+2 回目以降は、起動時と「更新を確認」で GitHub の最新リリースを見ます。新しければ「バージョン x があります」と出て、進めるとアプリを差し替えて起動し直します。最近使ったフォルダやプリセットは、更新では消えません。アンインストールすると、`%LocalAppData%\Otoasobi` ごと消えます。
+
+更新の確認は、Setup から入れたアプリが行います。
+
+## リリース
+
+`winui/Otoasobi.csproj` の `Version` と、タグの `v` を除いた番号を同じにします。タグを push すると、GitHub Actions がリリースを作ります。
+
+```powershell
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+初回は CPU 版の torch と音声モデルを取るので、Actions は時間がかかります。リリースに載る主なファイルは次です。
+
+| ファイル | 役割 |
+| --- | --- |
+| `OtoasobiSetup.exe` | 画面と音響エンジン。利用者が実行する |
+| `OtoasobiEngine.zip` | 高精度エンジン。アプリが展開する |
+| `mms-fa-model.pt` | MMS の重み。アプリが配置する |
+| `engine.json` | エンジンとモデルの版と SHA256 |
+
+画面だけの更新は Setup の差分です。エンジンとモデルは、`engine.json` のハッシュが変わったときだけ落とします。
+
 ## 必要環境
 
 - Windows
@@ -211,13 +243,15 @@ dotnet run --project winui
 .\.venv\Scripts\python.exe -m otoasobi.cli そせす.wav
 ```
 
-開発用画面の exe は `powershell -File scripts\build_exe.ps1` で、`dist\OtoasobiLabel\OtoasobiLabel.exe` に出力されます。高精度エンジンは同梱しません。
+開発用画面の exe は `powershell -File scripts\build_exe.ps1` で、`dist\OtoasobiLabel\OtoasobiLabel.exe` に出力されます。高精度エンジンは同梱しません。配布版の `OtoasobiSetup.exe` とは別のファイルです。
 
 ## 構成
 
 | パス | 役割 |
 | --- | --- |
 | `winui/` | OTOasobi の画面（WinUI 3） |
+| `.github/workflows/release.yml` | タグ `v*` で Setup と高精度エンジンをリリースする |
+| `scripts/stage_release.ps1` | 音響用 Python、エンジン zip、`engine.json` を作る |
 | `otoasobi/worker.py` | 画面から呼ばれる解析プロセス |
 | `otoasobi/analyze.py` | WAV 読み込みとフォルダへの書き出し |
 | `otoasobi/oto.py` | 単独音、連続音、CVVC の `oto.ini` |
