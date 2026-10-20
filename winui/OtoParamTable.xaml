@@ -128,9 +128,30 @@
             ScrollViewer.HorizontalScrollBarVisibility="Auto"
             ScrollViewer.HorizontalScrollMode="Enabled"
             ScrollViewer.VerticalScrollBarVisibility="Auto">
+            <ListView.Resources>
+                <ResourceDictionary>
+                    <ResourceDictionary.ThemeDictionaries>
+                        <ResourceDictionary x:Key="Default">
+                            <SolidColorBrush x:Key="ListViewItemBackgroundSelected" Color="Transparent" />
+                            <SolidColorBrush x:Key="ListViewItemBackgroundSelectedPointerOver" Color="Transparent" />
+                            <SolidColorBrush x:Key="ListViewItemBackgroundSelectedPressed" Color="Transparent" />
+                            <SolidColorBrush x:Key="ListViewItemBackgroundSelectedDisabled" Color="Transparent" />
+                        </ResourceDictionary>
+                        <ResourceDictionary x:Key="Light">
+                            <SolidColorBrush x:Key="ListViewItemBackgroundSelected" Color="Transparent" />
+                            <SolidColorBrush x:Key="ListViewItemBackgroundSelectedPointerOver" Color="Transparent" />
+                            <SolidColorBrush x:Key="ListViewItemBackgroundSelectedPressed" Color="Transparent" />
+                            <SolidColorBrush x:Key="ListViewItemBackgroundSelectedDisabled" Color="Transparent" />
+                        </ResourceDictionary>
+                    </ResourceDictionary.ThemeDictionaries>
+                </ResourceDictionary>
+            </ListView.Resources>
             <ListView.ItemTemplate>
                 <DataTemplate x:DataType="local:OtoParamRow">
-                    <Grid Width="772" PointerPressed="Row_PointerPressed">
+                    <Grid
+                        Width="772"
+                        Background="{x:Bind EmphasisBrush, Mode=OneWay}"
+                        PointerPressed="Row_PointerPressed">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="140" />
                             <ColumnDefinition Width="92" />
@@ -209,6 +230,12 @@
                                 ToolTipService.ToolTip="{x:Bind Alias, Mode=OneWay}" />
                         </Border>
                         <Border Grid.Column="7" Style="{StaticResource OtoLineStyle}" />
+                        <Border
+                            Width="4"
+                            HorizontalAlignment="Left"
+                            VerticalAlignment="Stretch"
+                            Background="{x:Bind MarkBrush, Mode=OneWay}"
+                            IsHitTestVisible="False" />
                     </Grid>
                 </DataTemplate>
             </ListView.ItemTemplate>

@@ -9,6 +9,7 @@ public sealed partial class MainPage
     int _loudnessGen;
     string? _revealFile;
     int _revealIndex = -1;
+    int _tableFocus = -1;
     bool _revealNav;
 
     void WireOtoTable()
@@ -19,10 +20,8 @@ public sealed partial class MainPage
         {
             if (_shownFile == null)
                 return;
-            if (index < 0)
-                OtoParams.ClearSelection();
-            else
-                OtoParams.Select(_shownFile.Name, index);
+            _tableFocus = index;
+            OtoParams.SetEmphasis(_shownFile.Name, index);
         };
     }
 

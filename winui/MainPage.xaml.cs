@@ -971,6 +971,8 @@ public sealed partial class MainPage : Page
         var gen = ++_previewGen;
         _appliedKey = "";
         _shownFile = file;
+        _tableFocus = -1;
+        OtoParams.SetEmphasis(file.Name, -1);
         Editor.Clear();
         try
         {

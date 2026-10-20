@@ -8,6 +8,7 @@ using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.System;
+using Windows.UI;
 using Windows.UI.Core;
 using Windows.UI.Text;
 
@@ -68,6 +69,9 @@ public sealed class OtoParamEdit
 public sealed class OtoParamRow : INotifyPropertyChanged
 {
     readonly bool[] _tuned = new bool[5];
+    int _level = -1;
+    Brush _fill = OtoParamTable.EmptyBrush;
+    Brush _mark = OtoParamTable.EmptyBrush;
     string _alias = "";
     string _aliasLabel = "";
     double _offset;
@@ -85,6 +89,21 @@ public sealed class OtoParamRow : INotifyPropertyChanged
     public int Index { get; init; }
 
     public string Alias => _alias;
+
+    public Brush EmphasisBrush => _fill;
+
+    public Brush MarkBrush => _mark;
+
+    internal void SetLevel(int level, Brush fill, Brush mark)
+    {
+        if (_level == level)
+            return;
+        _level = level;
+        _fill = fill;
+        _mark = mark;
+        Raise(nameof(EmphasisBrush));
+        Raise(nameof(MarkBrush));
+    }
 
     public string AliasLabel => _aliasLabel;
 
@@ -178,16 +197,39 @@ public sealed class OtoParamRow : INotifyPropertyChanged
 
 public sealed partial class OtoParamTable : UserControl
 {
+    internal static readonly SolidColorBrush EmptyBrush = new(Color.FromArgb(0, 0, 0, 0));
+
     readonly ObservableCollection<OtoParamRow> _rows = [];
+    readonly SolidColorBrush _fileFill;
+    readonly SolidColorBrush _fileMark;
+    readonly SolidColorBrush _phonemeFill;
+    readonly SolidColorBrush _phonemeMark;
     ScrollViewer? _listScroll;
+    string? _viewFile;
+    int _focusIndex = -1;
     bool _silent;
     bool _commitLock;
 
     public OtoParamTable()
     {
         InitializeComponent();
+        var accent = AccentColor();
+        _fileFill = new SolidColorBrush(Color.FromArgb(48, accent.R, accent.G, accent.B));
+        _fileMark = new SolidColorBrush(Color.FromArgb(170, accent.R, accent.G, accent.B));
+        _phonemeFill = new SolidColorBrush(Color.FromArgb(150, accent.R, accent.G, accent.B));
+        _phonemeMark = new SolidColorBrush(Color.FromArgb(255, accent.R, accent.G, accent.B));
         Rows.ItemsSource = _rows;
         Loaded += (_, _) => HookScroll();
+    }
+
+    public void SetEmphasis(string? fileName, int focusIndex)
+    {
+        var changed = focusIndex != _focusIndex
+            || !string.Equals(fileName ?? "", _viewFile ?? "", StringComparison.OrdinalIgnoreCase);
+        _viewFile = fileName;
+        _focusIndex = focusIndex;
+        ApplyEmphasis();
+        SyncSelection(changed && focusIndex >= 0);
     }
 
     public event EventHandler<OtoParamRow>? RowChosen;
@@ -205,6 +247,8 @@ public sealed partial class OtoParamTable : UserControl
         {
             for (var i = 0; i < snaps.Count; i++)
                 _rows[i].Pull(snaps[i]);
+            ApplyEmphasis();
+            SyncSelection(false);
             return;
         }
 
@@ -225,6 +269,70 @@ public sealed partial class OtoParamTable : UserControl
 
         if (_listScroll != null && offset > 1)
             _listScroll.ChangeView(null, offset, null, true);
+        ApplyEmphasis();
+        SyncSelection(false);
+    }
+
+    void ApplyEmphasis()
+    {
+        foreach (var row in _rows)
+        {
+            var level = Level(row);
+            row.SetLevel(level, Fill(level), Mark(level));
+        }
+    }
+
+    int Level(OtoParamRow row)
+    {
+        if (string.IsNullOrEmpty(_viewFile) || !row.FileName.Equals(_viewFile, StringComparison.OrdinalIgnoreCase))
+            return 0;
+        if (_focusIndex >= 0 && row.Index == _focusIndex)
+            return 2;
+        return 1;
+    }
+
+    Brush Fill(int level) => level switch
+    {
+        2 => _phonemeFill,
+        1 => _fileFill,
+        _ => EmptyBrush,
+    };
+
+    Brush Mark(int level) => level switch
+    {
+        2 => _phonemeMark,
+        1 => _fileMark,
+        _ => EmptyBrush,
+    };
+
+    void SyncSelection(bool scroll)
+    {
+        if (string.IsNullOrEmpty(_viewFile) || _focusIndex < 0)
+        {
+            ClearSelection();
+            return;
+        }
+
+        var row = _rows.FirstOrDefault(item =>
+            item.Index == _focusIndex && item.FileName.Equals(_viewFile, StringComparison.OrdinalIgnoreCase));
+        if (row == null)
+            return;
+        if (!ReferenceEquals(Rows.SelectedItem, row))
+        {
+            _silent = true;
+            Rows.SelectedItem = row;
+            _silent = false;
+        }
+
+        if (scroll)
+            Rows.ScrollIntoView(row);
+    }
+
+    static Color AccentColor()
+    {
+        if (Application.Current?.Resources.TryGetValue("SystemAccentColor", out var value) == true && value is Color color)
+            return color;
+        return Color.FromArgb(255, 15, 157, 142);
     }
 
     public void Select(string fileName, int index)
