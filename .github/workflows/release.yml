@@ -102,11 +102,20 @@ jobs:
 
       - name: Upload Velopack release
         shell: pwsh
-        run: >
-          vpk upload github --repoUrl https://github.com/${{ github.repository }}
-          --outputDir artifacts --token ${{ github.token }} --publish
-          --releaseName "OTOasobi ${{ steps.version.outputs.version }}"
-          --tag v${{ steps.version.outputs.version }}
+        run: |
+          $upload = @(
+            "upload", "github",
+            "--repoUrl", "https://github.com/${{ github.repository }}",
+            "--outputDir", "artifacts",
+            "--token", "${{ github.token }}",
+            "--publish",
+            "--releaseName", "OTOasobi ${{ steps.version.outputs.version }}",
+            "--tag", "v${{ steps.version.outputs.version }}"
+          )
+          if ("${{ steps.version.outputs.version }}" -match "-") {
+            $upload += "--pre"
+          }
+          vpk @upload
 
       - name: Upload engine
         env:

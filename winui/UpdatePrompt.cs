@@ -54,6 +54,18 @@ static class EngineNeed
         && string.Equals(local?.Trim(), remote.Trim(), StringComparison.OrdinalIgnoreCase);
 }
 
+static class ReleaseTrack
+{
+    // 0.1.0-beta.1 や、そのうしろに + が付いた情報版。安定版はプレリリースを見ない。
+    public static bool IncludesPrerelease(string? informationalVersion)
+    {
+        if (string.IsNullOrWhiteSpace(informationalVersion))
+            return false;
+        var core = informationalVersion.Split('+')[0];
+        return core.Contains('-');
+    }
+}
+
 static class ByteSize
 {
     public static string Format(long bytes)

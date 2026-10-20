@@ -93,7 +93,7 @@
 
 ## インストール
 
-配布版は [Releases](https://github.com/mucha0w0/OTOasobi/releases) の `OtoasobiSetup.exe` です。Windows 64 ビット用です。
+配布版は [Releases](https://github.com/mucha0w0/OTOasobi/releases) の `OtoasobiSetup.exe` です。Windows 64 ビット用です。いまの版は開発中のベータです。
 
 `OtoasobiSetup.exe` を実行すると、`%LocalAppData%\Otoasobi` に入ります。署名はまだ無いので、初回は SmartScreen が出ます。「詳細情報」から実行します。
 
@@ -108,9 +108,11 @@
 `winui/Otoasobi.csproj` の `Version` と、タグの `v` を除いた番号を同じにします。タグを push すると、GitHub Actions がリリースを作ります。
 
 ```powershell
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.1.0-beta.1
+git push origin v0.1.0-beta.1
 ```
+
+ハイフンを含む版（`0.1.0-beta.1` など）は、GitHub ではプレリリースになります。その版を入れているアプリは、次のプレリリースも更新として見ます。ハイフンの無い版は、プレリリースを見ません。
 
 初回は CPU 版の torch と音声モデルを取るので、Actions は時間がかかります。リリースに載る主なファイルは次です。
 

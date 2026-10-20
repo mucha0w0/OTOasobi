@@ -1,4 +1,5 @@
 using System.Net.Http;
+using System.Reflection;
 using System.Text.Json;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -209,7 +210,15 @@ static class AppUpdate
         var feed = AppPaths.FeedDirectory;
         if (feed != null)
             return new UpdateManager(feed);
-        return new UpdateManager(new GithubSource(AppPaths.GitHubRepoUrl, null, false));
+        var beta = ReleaseTrack.IncludesPrerelease(InformationalVersion());
+        return new UpdateManager(new GithubSource(AppPaths.GitHubRepoUrl, null, beta));
+    }
+
+    static string InformationalVersion()
+    {
+        return Assembly.GetExecutingAssembly()
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
+            ?.InformationalVersion ?? "";
     }
 
     static long DownloadBytes(UpdateInfo info)

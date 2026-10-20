@@ -6,6 +6,16 @@ namespace OtoParity;
 public class UpdateTests
 {
     [Fact]
+    public void BetaInstallFollowsPrereleases()
+    {
+        Assert.True(Otoasobi.ReleaseTrack.IncludesPrerelease("0.1.0-beta.1"));
+        Assert.True(Otoasobi.ReleaseTrack.IncludesPrerelease("0.1.0-beta.1+abcdef"));
+        Assert.False(Otoasobi.ReleaseTrack.IncludesPrerelease("0.1.0"));
+        Assert.False(Otoasobi.ReleaseTrack.IncludesPrerelease("0.1.0+abcdef"));
+        Assert.False(Otoasobi.ReleaseTrack.IncludesPrerelease(null));
+    }
+
+    [Fact]
     public void EngineNeedSkipsPartsWhoseHashAndFileMatch()
     {
         var remote = new Otoasobi.EngineManifest
