@@ -1502,7 +1502,6 @@ public sealed partial class MainPage : Page
         ShowOnly("editor");
         HideStatus();
         ClearNotice();
-        FileCount.Text = $"{_files.Count} 件";
         Editor.IsEnabled = true;
         ConfigBody.IsEnabled = true;
         Editor.SetLabelsLocked(true);
@@ -1536,7 +1535,6 @@ public sealed partial class MainPage : Page
         ConfigBody.IsEnabled = true;
         ShowOnly("editor");
         HideStatus();
-        FileCount.Text = $"{_files.Count} 件";
         var title = cached ? "保存データから読み込みました" : "区間を確認してください";
         var body = cached
             ? "前回の区間を開きました。直すと保存データへ書き戻します。oto.ini へ反映するには「oto.iniを作成」を押してください。"

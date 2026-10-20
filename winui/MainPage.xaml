@@ -324,46 +324,22 @@
                 <local:EditorDock x:Name="Dock" />
                 <Grid x:Name="PaneHolder" Visibility="Collapsed">
                     <Border x:Name="FilePane">
-                        <Grid>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="*" />
-                            </Grid.RowDefinitions>
-                            <Border
-                                Padding="16,12,16,8"
-                                BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
-                                BorderThickness="0,0,0,1">
-                                <Grid>
+                        <ListView
+                            x:Name="FileList"
+                            AutomationProperties.Name="ファイル一覧"
+                            ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                            SelectionChanged="FileList_SelectionChanged"
+                            SelectionMode="Single">
+                            <ListView.ItemTemplate>
+                                <DataTemplate>
                                     <TextBlock
                                         VerticalAlignment="Center"
-                                        Style="{StaticResource BodyStrongTextBlockStyle}"
-                                        Text="ファイル" />
-                                    <TextBlock
-                                        x:Name="FileCount"
-                                        HorizontalAlignment="Right"
-                                        VerticalAlignment="Center"
-                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                        Style="{StaticResource CaptionTextBlockStyle}" />
-                                </Grid>
-                            </Border>
-                            <ListView
-                                x:Name="FileList"
-                                Grid.Row="1"
-                                AutomationProperties.Name="ファイル一覧"
-                                ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                                SelectionChanged="FileList_SelectionChanged"
-                                SelectionMode="Single">
-                                <ListView.ItemTemplate>
-                                    <DataTemplate>
-                                        <TextBlock
-                                            VerticalAlignment="Center"
-                                            Text="{Binding Name}"
-                                            TextTrimming="CharacterEllipsis"
-                                            ToolTipService.ToolTip="{Binding Name}" />
-                                    </DataTemplate>
-                                </ListView.ItemTemplate>
-                            </ListView>
-                        </Grid>
+                                        Text="{Binding Name}"
+                                        TextTrimming="CharacterEllipsis"
+                                        ToolTipService.ToolTip="{Binding Name}" />
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                        </ListView>
                     </Border>
                     <Grid x:Name="WavePane">
                         <Grid x:Name="WaveHost" />
