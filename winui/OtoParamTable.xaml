@@ -51,12 +51,17 @@
         </Grid.RowDefinitions>
         <ScrollViewer
             x:Name="HeaderScroll"
+            HorizontalAlignment="Stretch"
+            HorizontalContentAlignment="Left"
             HorizontalScrollBarVisibility="Hidden"
             HorizontalScrollMode="Enabled"
             VerticalScrollBarVisibility="Disabled"
             VerticalScrollMode="Disabled"
             ZoomMode="Disabled">
-            <Grid Width="772" Background="{ThemeResource SubtleFillColorSecondaryBrush}">
+            <Grid
+                Width="772"
+                HorizontalAlignment="Left"
+                Background="{ThemeResource SubtleFillColorSecondaryBrush}">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="140" />
                     <ColumnDefinition Width="92" />
@@ -150,6 +155,7 @@
                 <DataTemplate x:DataType="local:OtoParamRow">
                     <Grid
                         Width="772"
+                        HorizontalAlignment="Left"
                         Background="{x:Bind EmphasisBrush, Mode=OneWay}"
                         PointerPressed="Row_PointerPressed">
                         <Grid.ColumnDefinitions>
