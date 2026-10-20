@@ -236,12 +236,6 @@
                                 ToolTipService.ToolTip="{x:Bind Alias, Mode=OneWay}" />
                         </Border>
                         <Border Grid.Column="7" Style="{StaticResource OtoLineStyle}" />
-                        <Border
-                            Width="4"
-                            HorizontalAlignment="Left"
-                            VerticalAlignment="Stretch"
-                            Background="{x:Bind MarkBrush, Mode=OneWay}"
-                            IsHitTestVisible="False" />
                     </Grid>
                 </DataTemplate>
             </ListView.ItemTemplate>

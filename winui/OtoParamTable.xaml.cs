@@ -71,7 +71,6 @@ public sealed class OtoParamRow : INotifyPropertyChanged
     readonly bool[] _tuned = new bool[5];
     int _level = -1;
     Brush _fill = OtoParamTable.EmptyBrush;
-    Brush _mark = OtoParamTable.EmptyBrush;
     string _alias = "";
     string _aliasLabel = "";
     double _offset;
@@ -92,17 +91,13 @@ public sealed class OtoParamRow : INotifyPropertyChanged
 
     public Brush EmphasisBrush => _fill;
 
-    public Brush MarkBrush => _mark;
-
-    internal void SetLevel(int level, Brush fill, Brush mark)
+    internal void SetLevel(int level, Brush fill)
     {
         if (_level == level)
             return;
         _level = level;
         _fill = fill;
-        _mark = mark;
         Raise(nameof(EmphasisBrush));
-        Raise(nameof(MarkBrush));
     }
 
     public string AliasLabel => _aliasLabel;
@@ -201,9 +196,7 @@ public sealed partial class OtoParamTable : UserControl
 
     readonly ObservableCollection<OtoParamRow> _rows = [];
     readonly SolidColorBrush _fileFill;
-    readonly SolidColorBrush _fileMark;
     readonly SolidColorBrush _phonemeFill;
-    readonly SolidColorBrush _phonemeMark;
     ScrollViewer? _listScroll;
     string? _viewFile;
     int _focusIndex = -1;
@@ -215,9 +208,7 @@ public sealed partial class OtoParamTable : UserControl
         InitializeComponent();
         var accent = AccentColor();
         _fileFill = new SolidColorBrush(Color.FromArgb(48, accent.R, accent.G, accent.B));
-        _fileMark = new SolidColorBrush(Color.FromArgb(170, accent.R, accent.G, accent.B));
         _phonemeFill = new SolidColorBrush(Color.FromArgb(150, accent.R, accent.G, accent.B));
-        _phonemeMark = new SolidColorBrush(Color.FromArgb(255, accent.R, accent.G, accent.B));
         Rows.ItemsSource = _rows;
         Loaded += (_, _) => HookScroll();
     }
@@ -278,7 +269,7 @@ public sealed partial class OtoParamTable : UserControl
         foreach (var row in _rows)
         {
             var level = Level(row);
-            row.SetLevel(level, Fill(level), Mark(level));
+            row.SetLevel(level, Fill(level));
         }
     }
 
@@ -295,13 +286,6 @@ public sealed partial class OtoParamTable : UserControl
     {
         2 => _phonemeFill,
         1 => _fileFill,
-        _ => EmptyBrush,
-    };
-
-    Brush Mark(int level) => level switch
-    {
-        2 => _phonemeMark,
-        1 => _fileMark,
         _ => EmptyBrush,
     };
 
