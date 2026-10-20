@@ -97,8 +97,7 @@ jobs:
           $generated = Join-Path artifacts "Otoasobi-win-Setup.exe"
           $published = Join-Path artifacts "OtoasobiSetup.exe"
           if (-not (Test-Path $generated)) { throw "Setup がありません。" }
-          if (Test-Path $published) { Remove-Item $published -Force }
-          Rename-Item $generated "OtoasobiSetup.exe"
+          Copy-Item $generated $published -Force
 
       - name: Upload Velopack release
         shell: pwsh
@@ -116,6 +115,18 @@ jobs:
             $upload += "--pre"
           }
           vpk @upload
+
+      - name: Publish setup name
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          $tag = "v${{ steps.version.outputs.version }}"
+          gh release upload $tag artifacts/OtoasobiSetup.exe --clobber
+          $assetId = gh release view $tag --json assets --jq '.assets[] | select(.name=="Otoasobi-win-Setup.exe") | .id'
+          if ($assetId) {
+            gh api --method DELETE "repos/${{ github.repository }}/releases/assets/$assetId"
+          }
 
       - name: Upload engine
         env:
