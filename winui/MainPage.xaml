@@ -366,15 +366,7 @@
                         </Grid>
                     </Border>
                     <Grid x:Name="WavePane">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="*" />
-                        </Grid.RowDefinitions>
-                        <local:InfoNote
-                            Margin="16,8,16,8"
-                            Label="波形の操作"
-                            Text="{StaticResource EditorHelp}" />
-                        <Grid x:Name="WaveHost" Grid.Row="1" />
+                        <Grid x:Name="WaveHost" />
                     </Grid>
                     <Grid x:Name="SpecHost" />
                     <Grid x:Name="LoudHost" />
