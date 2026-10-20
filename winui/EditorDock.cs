@@ -12,9 +12,12 @@ namespace Otoasobi;
 public sealed class EditorDock : Panel
 {
     const double GripSlop = 8;
+    const double EdgeBand = 44;
+    const double EndBand = 16;
 
     readonly Dictionary<string, PaneChrome> _panes = [];
     readonly Dictionary<string, Rect> _rects = [];
+    readonly List<DockRegion> _regions = [];
     readonly List<SplitSlot> _slots = [];
         readonly List<GripBar> _grips = [];
     readonly Canvas _bars = new() { IsHitTestVisible = true };
@@ -32,7 +35,7 @@ public sealed class EditorDock : Panel
     Point _pressPoint;
     bool _moving;
     Pointer? _pointer;
-    string? _hoverPane;
+    LayoutNode? _hoverNode;
     DockEdge? _hoverEdge;
 
     public EditorDock()
@@ -158,8 +161,8 @@ public sealed class EditorDock : Panel
 
     public void Reset() => SetRoot(EditorLayout.CreateDefault());
 
-    public void Move(string draggedId, string targetId, DockEdge edge) =>
-        SetRoot(EditorLayout.Move(_root, draggedId, targetId, edge));
+    public void Move(string draggedId, LayoutNode target, DockEdge edge) =>
+        SetRoot(EditorLayout.Move(_root, draggedId, target, edge));
 
     void SetRoot(LayoutNode? root)
     {
@@ -215,6 +218,7 @@ public sealed class EditorDock : Panel
     void Place(Size size)
     {
         _rects.Clear();
+        _regions.Clear();
         _slots.Clear();
         if (_root == null || size.Width < 1 || size.Height < 1)
             return;
@@ -223,6 +227,7 @@ public sealed class EditorDock : Panel
 
     void Walk(LayoutNode node, Rect rect)
     {
+        _regions.Add(new DockRegion(node, rect));
         if (node.IsLeaf)
         {
             if (node.Id != null && _panes.ContainsKey(node.Id))
@@ -426,19 +431,37 @@ public sealed class EditorDock : Panel
 
         ShowGhost(_pressPane, point);
         var pane = HitPane(point);
-        if (pane == null || pane == _pressPane.Id || !_rects.TryGetValue(pane, out var rect))
+        var overSelf = pane == _pressPane.Id;
+        Rect? leafRect = pane != null && _rects.TryGetValue(pane, out var found) ? found : null;
+        var arm = leafRect is { } armRect && !overSelf ? HitArm(armRect, point) : null;
+        if (arm != null && leafRect is { } compassRect)
         {
-            HideArms();
-            _hoverPane = null;
-            _hoverEdge = null;
+            var leaf = FindRegion(pane);
+            _hoverNode = leaf?.Node;
+            _hoverEdge = _hoverNode == null ? null : arm;
+            ShowArms(compassRect, _hoverNode == null ? null : Half(compassRect, arm.Value), arm);
             e.Handled = true;
             return;
         }
 
-        var edge = HitArm(rect, point);
-        _hoverPane = pane;
-        _hoverEdge = edge;
-        ShowArms(rect, edge);
+        if (HitRegionEdge(point, _pressPane.Id) is { } region)
+        {
+            _hoverNode = region.Node;
+            _hoverEdge = region.Edge;
+            if (leafRect is { } showRect)
+                ShowArms(showRect, Half(region.Rect, region.Edge), null);
+            else
+                ShowHighlight(Half(region.Rect, region.Edge));
+            e.Handled = true;
+            return;
+        }
+
+        _hoverNode = null;
+        _hoverEdge = null;
+        if (leafRect is { } idleRect && !overSelf)
+            ShowArms(idleRect, null, null);
+        else
+            HideArms();
         e.Handled = true;
     }
 
@@ -447,7 +470,7 @@ public sealed class EditorDock : Panel
         if (_pressPane == null)
             return;
         var dragged = _pressPane.Id;
-        var target = _hoverPane;
+        var target = _hoverNode;
         var edge = _hoverEdge;
         EndTitleDrag();
         if (target != null && edge != null)
@@ -483,7 +506,7 @@ public sealed class EditorDock : Panel
 
         _pressPane = null;
         _moving = false;
-        _hoverPane = null;
+        _hoverNode = null;
         _hoverEdge = null;
         HideArms();
         _ghost.Visibility = Visibility.Collapsed;
@@ -508,17 +531,103 @@ public sealed class EditorDock : Panel
         Canvas.SetTop(_ghost, point.Y + 14);
     }
 
-    void ShowArms(Rect rect, DockEdge? hot)
+    DockRegion? FindRegion(string? id)
     {
-        _highlight.Visibility = hot == null ? Visibility.Collapsed : Visibility.Visible;
-        if (hot != null)
+        if (id == null)
+            return null;
+        foreach (var region in _regions)
         {
-            var half = Half(rect, hot.Value);
-            Canvas.SetLeft(_highlight, half.X);
-            Canvas.SetTop(_highlight, half.Y);
-            _highlight.Width = Math.Max(0, half.Width);
-            _highlight.Height = Math.Max(0, half.Height);
+            if (region.Node.IsLeaf && region.Node.Id == id)
+                return region;
         }
+
+        return null;
+    }
+
+    // 端の帯では、その端を共有するいちばん大きなまとまりを割る。中央の印は、その1枚だけを割る。
+    DockRegion? HitRegionEdge(Point point, string draggedId)
+    {
+        DockRegion? best = null;
+        var bestDistance = double.MaxValue;
+        var bestArea = -1.0;
+        foreach (var region in _regions)
+        {
+            if (!SharesEdge(region.Rect, point, out var edge, out var distance))
+                continue;
+            if (!HasOtherPane(region.Node, draggedId))
+                continue;
+            var area = region.Rect.Width * region.Rect.Height;
+            var nearer = distance < bestDistance - 0.5;
+            var sameAndLarger = Math.Abs(distance - bestDistance) <= 0.5 && area > bestArea + 0.5;
+            if (!nearer && !sameAndLarger)
+                continue;
+            region.Edge = edge;
+            best = region;
+            bestDistance = distance;
+            bestArea = area;
+        }
+
+        return best;
+    }
+
+    static bool HasOtherPane(LayoutNode node, string draggedId)
+    {
+        if (node.IsLeaf)
+            return node.Id != draggedId;
+        var first = node.First != null && HasOtherPane(node.First, draggedId);
+        var second = node.Second != null && HasOtherPane(node.Second, draggedId);
+        return first || second;
+    }
+
+    static bool SharesEdge(Rect rect, Point point, out DockEdge edge, out double distance)
+    {
+        edge = DockEdge.Left;
+        distance = double.MaxValue;
+        if (point.X < rect.X || point.Y < rect.Y || point.X > rect.Right || point.Y > rect.Bottom)
+            return false;
+        distance = point.X - rect.X;
+        var right = rect.Right - point.X;
+        var top = point.Y - rect.Y;
+        var bottom = rect.Bottom - point.Y;
+        if (right < distance)
+        {
+            distance = right;
+            edge = DockEdge.Right;
+        }
+
+        if (top < distance)
+        {
+            distance = top;
+            edge = DockEdge.Top;
+        }
+
+        if (bottom < distance)
+        {
+            distance = bottom;
+            edge = DockEdge.Bottom;
+        }
+
+        var band = edge is DockEdge.Left or DockEdge.Right ? EdgeBand : EndBand;
+        return distance <= band;
+    }
+
+    void ShowHighlight(Rect half)
+    {
+        _highlight.Visibility = Visibility.Visible;
+        Canvas.SetLeft(_highlight, half.X);
+        Canvas.SetTop(_highlight, half.Y);
+        _highlight.Width = Math.Max(0, half.Width);
+        _highlight.Height = Math.Max(0, half.Height);
+        foreach (var arm in _arms.Values)
+            arm.Visibility = Visibility.Collapsed;
+    }
+
+    void ShowArms(Rect rect, Rect? highlight, DockEdge? hot)
+    {
+        if (highlight is { } half)
+            ShowHighlight(half);
+        else
+            _highlight.Visibility = Visibility.Collapsed;
 
         foreach (var pair in _arms)
         {
@@ -628,6 +737,21 @@ public sealed class EditorDock : Panel
         if (Application.Current?.Resources.TryGetValue(key, out var value) == true && value is Brush brush)
             return brush;
         return new SolidColorBrush(fallback);
+    }
+
+    sealed class DockRegion
+    {
+        public DockRegion(LayoutNode node, Rect rect)
+        {
+            Node = node;
+            Rect = rect;
+        }
+
+        public LayoutNode Node { get; }
+
+        public Rect Rect { get; }
+
+        public DockEdge Edge { get; set; }
     }
 
     sealed class GripBar : Grid

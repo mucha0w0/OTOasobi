@@ -100,11 +100,15 @@ static class EditorLayout
         return Remove(root, id);
     }
 
-    public static LayoutNode? Move(LayoutNode? root, string draggedId, string targetId, DockEdge edge)
+    // target は葉でも、葉をまとめた枝でもよい。ドラッグ中のパネルを外したあとに、残った範囲を割る。
+    public static LayoutNode? Move(LayoutNode? root, string draggedId, LayoutNode target, DockEdge edge)
     {
-        if (root == null || draggedId == targetId)
+        if (root == null || !Contains(root, draggedId))
             return root;
-        if (!Contains(root, draggedId) || !Contains(root, targetId))
+        var stay = new List<string>();
+        Collect(target, stay);
+        stay.Remove(draggedId);
+        if (stay.Count == 0)
             return root;
         var dragged = Find(root, draggedId);
         if (dragged == null)
@@ -112,17 +116,56 @@ static class EditorLayout
         var without = Remove(root, draggedId);
         if (without == null)
             return dragged;
-        var target = Find(without, targetId);
-        if (target == null)
-            return without;
+        var resolved = SmallestContaining(without, stay) ?? without;
         var split = edge switch
         {
-            DockEdge.Left => H(0.5, dragged, target),
-            DockEdge.Right => H(0.5, target, dragged),
-            DockEdge.Top => V(0.5, dragged, target),
-            _ => V(0.5, target, dragged),
+            DockEdge.Left => H(0.5, dragged, resolved),
+            DockEdge.Right => H(0.5, resolved, dragged),
+            DockEdge.Top => V(0.5, dragged, resolved),
+            _ => V(0.5, resolved, dragged),
         };
-        return Replace(without, target, split);
+        return Replace(without, resolved, split);
+    }
+
+    static void Collect(LayoutNode node, List<string> ids)
+    {
+        if (node.IsLeaf)
+        {
+            if (node.Id != null)
+                ids.Add(node.Id);
+            return;
+        }
+
+        if (node.First != null)
+            Collect(node.First, ids);
+        if (node.Second != null)
+            Collect(node.Second, ids);
+    }
+
+    static LayoutNode? SmallestContaining(LayoutNode? node, List<string> ids)
+    {
+        if (node == null || !ContainsAll(node, ids))
+            return null;
+        if (!node.IsLeaf)
+        {
+            if (node.First != null && ContainsAll(node.First, ids))
+                return SmallestContaining(node.First, ids);
+            if (node.Second != null && ContainsAll(node.Second, ids))
+                return SmallestContaining(node.Second, ids);
+        }
+
+        return node;
+    }
+
+    static bool ContainsAll(LayoutNode node, List<string> ids)
+    {
+        foreach (var id in ids)
+        {
+            if (!Contains(node, id))
+                return false;
+        }
+
+        return true;
     }
 
     public static LayoutNode? Find(LayoutNode? node, string id)
