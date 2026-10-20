@@ -39,6 +39,7 @@ public sealed class EditorDock : Panel
     Pointer? _pointer;
     LayoutNode? _hoverNode;
     DockEdge? _hoverEdge;
+    LayoutNode? _dragOrigin;
 
     public EditorDock()
     {
@@ -166,11 +167,12 @@ public sealed class EditorDock : Panel
     public void Move(string draggedId, LayoutNode target, DockEdge edge) =>
         SetRoot(EditorLayout.Move(_root, draggedId, target, edge));
 
-    void SetRoot(LayoutNode? root)
+    void SetRoot(LayoutNode? root, bool notify = true)
     {
         _root = root;
         InvalidateMeasure();
-        LayoutChanged?.Invoke(this, EventArgs.Empty);
+        if (notify)
+            LayoutChanged?.Invoke(this, EventArgs.Empty);
     }
 
     protected override Size MeasureOverride(Size available)
@@ -201,10 +203,6 @@ public sealed class EditorDock : Panel
             if (_rects.TryGetValue(pair.Key, out var rect))
             {
                 pair.Value.Visibility = Visibility.Visible;
-                // 移動ドラッグ中にレイアウトが走っても、元のパネルは出したままにしない。
-                var hide = _moving && ReferenceEquals(pair.Value, _pressPane);
-                pair.Value.Opacity = hide ? 0 : 1;
-                pair.Value.IsHitTestVisible = !hide;
                 pair.Value.Arrange(rect);
             }
             else
@@ -511,7 +509,8 @@ public sealed class EditorDock : Panel
             if (dx * dx + dy * dy < 16)
                 return;
             _moving = true;
-            HideDragSource();
+            // 閉じたときと同じ木にする。ヒット判定も、埋めたあとの領域で行う。
+            PullDragSource();
         }
 
         ShowGhost(_pressPane, point);
@@ -554,13 +553,14 @@ public sealed class EditorDock : Panel
     {
         if (_pressPane == null)
             return;
+        var origin = _dragOrigin;
         var dragged = _pressPane.Id;
         var target = _hoverNode;
         var edge = _hoverEdge;
-        var willMove = target != null && edge != null;
-        EndTitleDrag(showSource: !willMove);
-        if (willMove)
-            Move(dragged, target!, edge!.Value);
+        var moving = _moving;
+        EndTitleDrag();
+        if (moving)
+            FinishTitleDrag(origin, dragged, target, edge);
         e.Handled = true;
     }
 
@@ -568,22 +568,24 @@ public sealed class EditorDock : Panel
     {
         if (_pressPane == null)
             return;
+        var origin = _dragOrigin;
+        var moving = _moving;
         EndTitleDrag();
+        if (moving)
+            FinishTitleDrag(origin, null, null, null);
     }
 
-    void EndTitleDrag(bool showSource = true)
+    void EndTitleDrag()
     {
-        var pane = _pressPane;
         var pointer = _pointer;
         _pressPane = null;
         _pointer = null;
         _moving = false;
+        _dragOrigin = null;
         _hoverNode = null;
         _hoverEdge = null;
         HideArms();
         _ghost.Visibility = Visibility.Collapsed;
-        if (showSource)
-            ShowDragSource(pane);
         if (pointer == null || PointerCaptures == null)
             return;
         foreach (var captured in PointerCaptures)
@@ -596,22 +598,43 @@ public sealed class EditorDock : Panel
         }
     }
 
-    // 大きさは維持したまま消す。畳むと波形などが 0px で描き直される。
-    void HideDragSource()
+    void PullDragSource()
     {
-        if (_pressPane == null)
+        if (_pressPane == null || _root == null || !EditorLayout.Contains(_root, _pressPane.Id))
             return;
-        _pressPane.Opacity = 0;
-        _pressPane.IsHitTestVisible = false;
+        _dragOrigin = _root;
+        _root = EditorLayout.Hide(CloneLayout(_root), _pressPane.Id);
+        InvalidateMeasure();
+        UpdateLayout();
     }
 
-    static void ShowDragSource(PaneChrome? pane)
+    // 印か端で離したときだけ新しい木を残す。外したパネルが戻らない結果は、ドラッグ前に戻す。
+    void FinishTitleDrag(LayoutNode? origin, string? dragged, LayoutNode? target, DockEdge? edge)
     {
-        if (pane == null)
+        if (origin == null)
             return;
-        pane.Opacity = 1;
-        pane.IsHitTestVisible = true;
+        LayoutNode? moved = null;
+        if (dragged != null && target != null && edge != null)
+            moved = EditorLayout.Move(origin, dragged, target, edge.Value);
+        if (moved != null && EditorLayout.Contains(moved, dragged!))
+        {
+            SetRoot(moved);
+            UpdateLayout();
+            return;
+        }
+
+        SetRoot(origin, notify: false);
+        UpdateLayout();
     }
+
+    static LayoutNode CloneLayout(LayoutNode node) => new()
+    {
+        Id = node.Id,
+        Axis = node.Axis,
+        Ratio = node.Ratio,
+        First = node.First == null ? null : CloneLayout(node.First),
+        Second = node.Second == null ? null : CloneLayout(node.Second),
+    };
 
     string? HitPane(Point point)
     {
