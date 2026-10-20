@@ -199,7 +199,9 @@ public sealed partial class OtoParamTable : UserControl
     readonly SolidColorBrush _phonemeFill;
     ScrollViewer? _listScroll;
     string? _viewFile;
+    string? _scrolledFile;
     int _focusIndex = -1;
+    int _scrolledIndex = int.MinValue;
     bool _silent;
     bool _commitLock;
 
@@ -210,17 +212,26 @@ public sealed partial class OtoParamTable : UserControl
         _fileFill = new SolidColorBrush(Color.FromArgb(48, accent.R, accent.G, accent.B));
         _phonemeFill = new SolidColorBrush(Color.FromArgb(150, accent.R, accent.G, accent.B));
         Rows.ItemsSource = _rows;
-        Loaded += (_, _) => HookScroll();
+        Loaded += (_, _) =>
+        {
+            HookScroll();
+            FollowIfNeeded();
+        };
+        Rows.SizeChanged += (_, _) => FollowIfNeeded();
     }
 
     public void SetEmphasis(string? fileName, int focusIndex)
     {
-        var changed = focusIndex != _focusIndex
-            || !string.Equals(fileName ?? "", _viewFile ?? "", StringComparison.OrdinalIgnoreCase);
+        var fileChanged = !string.Equals(fileName ?? "", _viewFile ?? "", StringComparison.OrdinalIgnoreCase);
+        var focusChanged = focusIndex != _focusIndex;
         _viewFile = fileName;
         _focusIndex = focusIndex;
         ApplyEmphasis();
-        SyncSelection(changed && focusIndex >= 0);
+        SyncSelection();
+        if (fileChanged || (focusChanged && focusIndex >= 0))
+            FollowEmphasis();
+        else if (focusChanged)
+            RememberScroll();
     }
 
     public event EventHandler<OtoParamRow>? RowChosen;
@@ -239,7 +250,8 @@ public sealed partial class OtoParamTable : UserControl
             for (var i = 0; i < snaps.Count; i++)
                 _rows[i].Pull(snaps[i]);
             ApplyEmphasis();
-            SyncSelection(false);
+            SyncSelection();
+            FollowIfNeeded();
             return;
         }
 
@@ -258,10 +270,11 @@ public sealed partial class OtoParamTable : UserControl
             _silent = false;
         }
 
-        if (_listScroll != null && offset > 1)
+        if (SameScrollTarget() && _listScroll != null && offset > 1)
             _listScroll.ChangeView(null, offset, null, true);
         ApplyEmphasis();
-        SyncSelection(false);
+        SyncSelection();
+        FollowIfNeeded();
     }
 
     void ApplyEmphasis()
@@ -289,7 +302,7 @@ public sealed partial class OtoParamTable : UserControl
         _ => EmptyBrush,
     };
 
-    void SyncSelection(bool scroll)
+    void SyncSelection()
     {
         if (string.IsNullOrEmpty(_viewFile) || _focusIndex < 0)
         {
@@ -297,8 +310,7 @@ public sealed partial class OtoParamTable : UserControl
             return;
         }
 
-        var row = _rows.FirstOrDefault(item =>
-            item.Index == _focusIndex && item.FileName.Equals(_viewFile, StringComparison.OrdinalIgnoreCase));
+        var row = FocusedRow();
         if (row == null)
             return;
         if (!ReferenceEquals(Rows.SelectedItem, row))
@@ -307,9 +319,53 @@ public sealed partial class OtoParamTable : UserControl
             Rows.SelectedItem = row;
             _silent = false;
         }
+    }
 
-        if (scroll)
-            Rows.ScrollIntoView(row);
+    void FollowIfNeeded()
+    {
+        if (SameScrollTarget())
+            return;
+        FollowEmphasis();
+    }
+
+    void FollowEmphasis()
+    {
+        if (!IsLoaded || Rows.ActualHeight <= 1 || string.IsNullOrEmpty(_viewFile))
+            return;
+        var focused = _focusIndex >= 0 ? FocusedRow() : null;
+        var row = focused ?? FileRow();
+        if (row == null)
+            return;
+        var alignment = focused != null
+            ? ScrollIntoViewAlignment.Default
+            : ScrollIntoViewAlignment.Leading;
+        Rows.ScrollIntoView(row, alignment);
+        RememberScroll();
+    }
+
+    void RememberScroll()
+    {
+        _scrolledFile = _viewFile;
+        _scrolledIndex = _focusIndex;
+    }
+
+    bool SameScrollTarget() =>
+        _scrolledIndex == _focusIndex
+        && string.Equals(_scrolledFile ?? "", _viewFile ?? "", StringComparison.OrdinalIgnoreCase);
+
+    OtoParamRow? FocusedRow()
+    {
+        if (string.IsNullOrEmpty(_viewFile) || _focusIndex < 0)
+            return null;
+        return _rows.FirstOrDefault(item =>
+            item.Index == _focusIndex && item.FileName.Equals(_viewFile, StringComparison.OrdinalIgnoreCase));
+    }
+
+    OtoParamRow? FileRow()
+    {
+        if (string.IsNullOrEmpty(_viewFile))
+            return null;
+        return _rows.FirstOrDefault(item => item.FileName.Equals(_viewFile, StringComparison.OrdinalIgnoreCase));
     }
 
     static Color AccentColor()

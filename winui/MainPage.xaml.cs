@@ -971,8 +971,11 @@ public sealed partial class MainPage : Page
         var gen = ++_previewGen;
         _appliedKey = "";
         _shownFile = file;
-        _tableFocus = -1;
-        OtoParams.SetEmphasis(file.Name, -1);
+        var focus = -1;
+        if (_revealFile != null && _revealFile.Equals(file.Name, StringComparison.OrdinalIgnoreCase))
+            focus = _revealIndex;
+        _tableFocus = focus;
+        OtoParams.SetEmphasis(file.Name, focus);
         Editor.Clear();
         try
         {
