@@ -890,6 +890,45 @@
                                             TextWrapping="Wrap" />
                                     </StackPanel>
                                 </Border>
+                                <Border Style="{StaticResource PanelCardStyle}">
+                                    <StackPanel Spacing="8">
+                                        <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="対象" />
+                                        <RadioButton
+                                            x:Name="FrqModeAll"
+                                            AutomationProperties.Name="全てのfrqファイルを上書きして生成する"
+                                            GroupName="FrqScope"
+                                            IsChecked="True">
+                                            <TextBlock Text="全てのfrqファイルを上書きして生成する" TextWrapping="Wrap" />
+                                        </RadioButton>
+                                        <RadioButton
+                                            x:Name="FrqModeMissing"
+                                            AutomationProperties.Name="frqが存在しないファイルだけ生成する"
+                                            GroupName="FrqScope">
+                                            <TextBlock Text="frqが存在しないファイルだけ生成する" TextWrapping="Wrap" />
+                                        </RadioButton>
+                                        <RadioButton
+                                            x:Name="FrqModeSelected"
+                                            AutomationProperties.Name="現在選択中のファイルだけ生成する"
+                                            GroupName="FrqScope">
+                                            <TextBlock Text="現在選択中のファイルだけ生成する" TextWrapping="Wrap" />
+                                        </RadioButton>
+                                    </StackPanel>
+                                </Border>
+                                <Border Style="{StaticResource PanelCardStyle}">
+                                    <StackPanel Spacing="4">
+                                        <CheckBox
+                                            x:Name="FrqClearPreutterBox"
+                                            AutomationProperties.Name="先行発声までを０に統一する"
+                                            Content="先行発声までを０に統一する"
+                                            IsChecked="False" />
+                                        <TextBlock
+                                            Margin="28,0,0,0"
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            Style="{StaticResource CaptionTextBlockStyle}"
+                                            Text="これは単独音のときのみオンにしてください。"
+                                            TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </Border>
                             </StackPanel>
                         </ScrollViewer>
                         <Border

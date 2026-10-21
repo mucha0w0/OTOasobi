@@ -180,22 +180,62 @@ def frq_path_for(wav: str | Path) -> Path:
     return Path(wav).with_suffix(".frq")
 
 
+def clear_preutterance(
+    frequency: np.ndarray,
+    sr: int,
+    ranges: list[tuple[float, float]],
+) -> np.ndarray:
+    """各範囲 [開始秒, 終了秒) に重なるフレームの周波数を 0 にする。"""
+    out = np.array(frequency, dtype=np.float64, copy=True)
+    if sr < 1 or out.size == 0:
+        return out
+    hop_s = HOP / float(sr)
+    for start, end in ranges:
+        if end <= start:
+            continue
+        first = int(np.floor(start / hop_s))
+        last = int(np.ceil(end / hop_s - 1e-12))
+        if first < 0:
+            first = 0
+        if last > out.size:
+            last = int(out.size)
+        if first < last:
+            out[first:last] = 0.0
+    return out
+
+
+@dataclass(frozen=True)
+class FrqBatch:
+    written: int
+    failed: list[str]
+    notes: list[str]
+
+
 def write_folder_frq(
     folder: str | Path,
     on_progress: Callable[[int, int], None] | None = None,
     on_file: Callable[[str, float, str], None] | None = None,
-) -> tuple[int, list[str]]:
-    """直下の WAV ごとに .frq を書く。戻り値は書けた件数と、失敗した説明。"""
+    mode: str = "all",
+    only: str | None = None,
+    clear: dict[str, list[tuple[float, float]]] | None = None,
+) -> FrqBatch:
+    """直下の WAV に .frq を書く。mode は all、missing、selected。"""
     folder = Path(folder)
     if not folder.is_dir():
         raise RuntimeError("フォルダが見つかりません。")
     wavs = list_wavs(folder)
     if not wavs:
         raise RuntimeError("WAV ファイルがありません。")
+    targets, notes = _frq_targets(wavs, mode, only)
+    if not targets:
+        if mode == "missing":
+            return FrqBatch(0, [], notes or ["新しく書くファイルはありません。"])
+        raise RuntimeError("WAV ファイルがありません。")
     written = 0
     failed: list[str] = []
-    total = len(wavs)
-    for index, wav in enumerate(wavs):
+    uncleared: list[str] = []
+    total = len(targets)
+    for index, wav in enumerate(targets):
         if on_progress is not None:
             on_progress(index, total)
         try:
@@ -208,6 +248,12 @@ def write_folder_frq(
                     on_file(name, 0.05 + 0.9 * fraction, "周波数を計算しています")
 
             frequency, amplitude = estimate_pitch(y, sr, step)
+            if clear is not None:
+                ranges = clear.get(wav.name.casefold())
+                if ranges is None:
+                    uncleared.append(wav.name)
+                elif ranges:
+                    frequency = clear_preutterance(frequency, sr, ranges)
             if on_file is not None:
                 on_file(wav.name, 0.96, "書き込んでいます")
             write_frq(frq_path_for(wav), frequency, amplitude)
@@ -218,4 +264,30 @@ def write_folder_frq(
             failed.append(f"{wav.name}（{exc}）")
     if on_progress is not None:
         on_progress(total, total)
-    return written, failed
+    if uncleared:
+        names = "\n".join(uncleared)
+        notes.append(f"原音設定がないので、先行発声までは 0 にしていません。\n{names}")
+    return FrqBatch(written, failed, notes)
+
+
+def _frq_targets(wavs: list[Path], mode: str, only: str | None) -> tuple[list[Path], list[str]]:
+    if mode == "selected":
+        if not isinstance(only, str) or not only or Path(only).name != only:
+            raise RuntimeError("ファイルを選んでください。")
+        match = [wav for wav in wavs if wav.name.casefold() == only.casefold()]
+        if len(match) != 1:
+            raise RuntimeError("選んだ音声が見つかりません。")
+        return match, []
+    if mode == "missing":
+        targets: list[Path] = []
+        skipped = 0
+        for wav in wavs:
+            if frq_path_for(wav).is_file():
+                skipped += 1
+            else:
+                targets.append(wav)
+        notes = [f"すでにある .frq {skipped} 件は飛ばしました。"] if skipped else []
+        return targets, notes
+    if mode != "all":
+        raise RuntimeError("生成の対象が不正です。")
+    return list(wavs), []

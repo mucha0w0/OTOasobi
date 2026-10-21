@@ -1,5 +1,4 @@
 using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Controls;
 
 namespace Otoasobi;
 
@@ -15,20 +14,25 @@ public sealed partial class MainPage
         if (_busy || _folder == null || _files.Count == 0)
             return;
         var folder = _folder;
-        if (CountFrq(folder).Frq > 0)
+        var mode = "all";
+        string? only = null;
+        if (FrqModeMissing.IsChecked == true)
+            mode = "missing";
+        else if (FrqModeSelected.IsChecked == true)
         {
-            var dialog = new ContentDialog
+            mode = "selected";
+            if (FileList.SelectedItem is not WavFile selected)
             {
-                Title = "すでにある .frq を上書きしますか？",
-                Content = "フォルダ直下の WAV と同じ名前の .frq を作り直します。",
-                PrimaryButtonText = "上書きする",
-                CloseButtonText = "キャンセル",
-                DefaultButton = ContentDialogButton.Primary,
-                XamlRoot = XamlRoot,
-            };
-            if (await dialog.ShowAsync() != ContentDialogResult.Primary || _busy || _folder != folder)
+                ShowNotice(".frqを生成できませんでした", "ファイルを選んでください。");
                 return;
+            }
+
+            only = selected.Name;
         }
+
+        object? clear = null;
+        if (FrqClearPreutterBox.IsChecked == true)
+            clear = PreutterClears();
 
         _busy = true;
         UpdateCommands();
@@ -39,7 +43,7 @@ public sealed partial class MainPage
         try
         {
             _analysis ??= new AnalysisClient();
-            var result = await _analysis.WriteFrqAsync(folder, (done, total) =>
+            var result = await _analysis.WriteFrqAsync(folder, mode, only, clear, (done, total) =>
             {
                 queue.TryEnqueue(() =>
                 {
@@ -122,5 +126,26 @@ public sealed partial class MainPage
         }
 
         return (wavs, frq);
+    }
+
+    object[] PreutterClears()
+    {
+        var map = new Dictionary<string, List<double[]>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var draft in CollectOtoDrafts())
+        {
+            if (!map.TryGetValue(draft.FileName, out var ranges))
+            {
+                ranges = [];
+                map[draft.FileName] = ranges;
+            }
+
+            var start = draft.Shown.Offset;
+            var end = draft.Shown.Preutter;
+            if (double.IsNaN(start) || double.IsNaN(end) || end <= start)
+                continue;
+            ranges.Add([start, end]);
+        }
+
+        return map.Select(pair => new { name = pair.Key, ranges = pair.Value }).ToArray();
     }
 }

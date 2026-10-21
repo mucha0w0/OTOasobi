@@ -158,11 +158,14 @@ sealed class AnalysisClient : IDisposable
 
     public async Task<FrqResult> WriteFrqAsync(
         string folder,
+        string mode,
+        string? only,
+        object? clear,
         Action<int, int>? onProgress = null,
         Action<string, double, string>? onFile = null)
     {
         using var doc = await SendAsync(
-            id => JsonSerializer.Serialize(new { id, cmd = "frq", folder }),
+            id => JsonSerializer.Serialize(new { id, cmd = "frq", folder, mode, only, clear }),
             onProgress,
             onFile).ConfigureAwait(true);
         var root = doc.RootElement;

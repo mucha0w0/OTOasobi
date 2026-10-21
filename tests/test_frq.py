@@ -16,7 +16,15 @@ if str(ROOT) not in sys.path:
 import numpy as np
 import soundfile as sf
 
-from otoasobi.frq import HOP, estimate_pitch, read_frq, read_mono, write_folder_frq, write_frq
+from otoasobi.frq import (
+    HOP,
+    clear_preutterance,
+    estimate_pitch,
+    read_frq,
+    read_mono,
+    write_folder_frq,
+    write_frq,
+)
 
 
 SR = 44100
@@ -101,10 +109,10 @@ class FrqTests(unittest.TestCase):
             nested = root / "original"
             nested.mkdir()
             sf.write(nested / "あ.wav", _sine(220, 0.3), SR, subtype="PCM_16")
-            written, failed = write_folder_frq(root)
-            self.assertEqual(written, 1)
-            self.assertEqual(len(failed), 1)
-            self.assertIn("bad.wav", failed[0])
+            batch = write_folder_frq(root)
+            self.assertEqual(batch.written, 1)
+            self.assertEqual(len(batch.failed), 1)
+            self.assertIn("bad.wav", batch.failed[0])
             loaded = read_frq(root / "あ.frq")
             self.assertEqual(loaded.hop, 256)
             self.assertGreater(loaded.average, 400)
@@ -112,3 +120,29 @@ class FrqTests(unittest.TestCase):
             self.assertFalse((nested / "あ.frq").exists())
             with wave.open(str(root / "あ.wav"), "rb") as wav:
                 self.assertEqual(wav.getnchannels(), 1)
+
+    def test_clear_preutterance_and_scope(self) -> None:
+        frequency = np.full(10, 440.0)
+        hop_s = HOP / SR
+        cleared = clear_preutterance(frequency, SR, [(0.0, 3 * hop_s), (8 * hop_s, 8 * hop_s)])
+        self.assertTrue(np.all(cleared[:3] == 0))
+        self.assertTrue(np.all(cleared[3:8] == 440))
+        self.assertTrue(np.all(cleared[8:] == 440))
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            sf.write(root / "a.wav", _sine(440, 0.25), SR, subtype="PCM_16")
+            sf.write(root / "b.wav", _sine(330, 0.25), SR, subtype="PCM_16")
+            first = write_folder_frq(root, mode="selected", only="a.wav")
+            self.assertEqual(first.written, 1)
+            self.assertTrue((root / "a.frq").is_file())
+            self.assertFalse((root / "b.frq").is_file())
+            second = write_folder_frq(
+                root,
+                mode="missing",
+                clear={"b.wav": [(0.0, 0.05)]},
+            )
+            self.assertEqual(second.written, 1)
+            self.assertTrue(any("1 件" in note for note in second.notes))
+            loaded = read_frq(root / "b.frq")
+            self.assertEqual(float(np.max(loaded.frequency[:8])), 0.0)
+            self.assertGreater(float(np.median(loaded.frequency[12:])), 300)
