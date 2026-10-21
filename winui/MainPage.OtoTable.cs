@@ -275,7 +275,7 @@ public sealed partial class MainPage
         _wrote = false;
         ShowNotice(
             "修正はまだファイルに入っていません",
-            WithSkip("もう一度「oto.iniを作成」を押すと、oto.ini に反映されます。"));
+            WithSkip("もう一度「oto.iniを生成」を押すと、oto.ini に反映されます。"));
     }
 
     void ApplyAliasEdits(IReadOnlyList<OtoAliasEdit> edits)
@@ -331,7 +331,7 @@ public sealed partial class MainPage
         _wrote = false;
         ShowNotice(
             "修正はまだファイルに入っていません",
-            WithSkip("もう一度「oto.iniを作成」を押すと、oto.ini に反映されます。"));
+            WithSkip("もう一度「oto.iniを生成」を押すと、oto.ini に反映されます。"));
     }
 
     void ApplyCommentEdits(IReadOnlyList<OtoCommentEdit> edits)

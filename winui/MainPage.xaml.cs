@@ -143,7 +143,7 @@ public sealed partial class MainPage : Page
         LoudHost.Children.Add(Editor.LoudSurface);
         OtoBandHost.Children.Add(Editor.OtoSurface);
         // ページが読み込まれる前は Parent が空のままなので、ここから外してからドックへ入れる。
-        foreach (var pane in new UIElement[] { FilePane, WavePane, SpecHost, LoudHost, OtoBandHost, SourcePane, OtoPane, OtoParams, FrqPane })
+        foreach (var pane in new UIElement[] { FilePane, WavePane, SpecHost, LoudHost, OtoBandHost, SourcePane, OtoPane, OtoParams, OtoIniPane, FrqPane })
             PaneHolder.Children.Remove(pane);
         Dock.Mount(
         [
@@ -153,8 +153,9 @@ public sealed partial class MainPage : Page
             ("loud", "音量", LoudHost),
             ("otoBand", "oto区間", OtoBandHost),
             ("source", "原音修正", SourcePane),
-            ("oto", "oto調整", OtoPane),
+            ("oto", "oto推定設定", OtoPane),
             ("otoParams", "原音パラメータ", OtoParams),
+            ("otoIni", "oto.ini生成", OtoIniPane),
             ("frq", ".frq生成", FrqPane),
         ]);
         Dock.PaneResizing += (_, dragging) =>
@@ -192,6 +193,7 @@ public sealed partial class MainPage : Page
         ShowSourceItem.IsChecked = Dock.Contains("source");
         ShowOtoItem.IsChecked = Dock.Contains("oto");
         ShowOtoParamsItem.IsChecked = Dock.Contains("otoParams");
+        ShowOtoIniItem.IsChecked = Dock.Contains("otoIni");
         ShowFrqItem.IsChecked = Dock.Contains("frq");
         _paneMenuWrite = false;
     }
@@ -1125,7 +1127,7 @@ public sealed partial class MainPage : Page
             if (!result.Ok || string.IsNullOrEmpty(result.Txt))
             {
                 ShowNotice(
-                    "oto.iniを作成できませんでした",
+                    "oto.iniを生成できませんでした",
                     string.IsNullOrEmpty(result.Error) ? null : result.Error);
                 return;
             }
@@ -1138,11 +1140,11 @@ public sealed partial class MainPage : Page
                     : _notice + "\n" + result.Notice;
             }
 
-            ShowNotice("oto.iniを作成しました", WithSkip(null));
+            ShowNotice("oto.iniを生成しました", WithSkip(null));
         }
         catch (Exception ex)
         {
-            ShowNotice("oto.iniを作成できませんでした", ex.Message);
+            ShowNotice("oto.iniを生成できませんでした", ex.Message);
         }
         finally
         {
@@ -1220,7 +1222,7 @@ public sealed partial class MainPage : Page
         _wrote = false;
         ShowNotice(
             "修正はまだファイルに入っていません",
-            WithSkip("もう一度「oto.iniを作成」を押すと、oto.ini に反映されます。"));
+            WithSkip("もう一度「oto.iniを生成」を押すと、oto.ini に反映されます。"));
     }
 
     void LoadPresets()
@@ -1433,7 +1435,7 @@ public sealed partial class MainPage : Page
         _wrote = false;
         ShowNotice(
             "修正はまだファイルに入っていません",
-            WithSkip("もう一度「oto.iniを作成」を押すと、oto.ini に反映されます。"));
+            WithSkip("もう一度「oto.iniを生成」を押すと、oto.ini に反映されます。"));
     }
 
     void PushTunes()
@@ -1464,7 +1466,7 @@ public sealed partial class MainPage : Page
         _wrote = false;
         ShowNotice(
             "修正はまだファイルに入っていません",
-            WithSkip("もう一度「oto.iniを作成」を押すと、oto.ini に反映されます。"));
+            WithSkip("もう一度「oto.iniを生成」を押すと、oto.ini に反映されます。"));
     }
 
     async Task<bool> SaveCacheAsync()
@@ -1583,8 +1585,8 @@ public sealed partial class MainPage : Page
         HideStatus();
         var title = cached ? "保存データから読み込みました" : "区間を確認してください";
         var body = cached
-            ? "前回の区間を開きました。直すと保存データへ書き戻します。oto.ini へ反映するには「oto.iniを作成」を押してください。"
-            : "位置を直したら「oto.iniを作成」を押してください。区間は OTOasibi_cache.json に保存してあり、次に開くときは再解析しません。";
+            ? "前回の区間を開きました。直すと保存データへ書き戻します。oto.ini へ反映するには「oto.iniを生成」を押してください。"
+            : "位置を直したら「oto.iniを生成」を押してください。区間は OTOasibi_cache.json に保存してあり、次に開くときは再解析しません。";
         ShowNotice(title, WithSkip(body));
         Widen();
         _suppressSelection = true;

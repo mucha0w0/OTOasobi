@@ -54,9 +54,9 @@ static class EditorLayout
 {
     public const double MinPane = 160;
 
-    public static readonly string[] PaneIds = ["file", "wave", "spec", "loud", "otoBand", "source", "oto", "otoParams", "frq"];
+    public static readonly string[] PaneIds = ["file", "wave", "spec", "loud", "otoBand", "source", "oto", "otoParams", "otoIni", "frq"];
 
-    // 1540px 幅でファイル約 280、oto調整約 320。グラフの高さ比は、以前の 1 枚キャンバスの帯に合わせる。
+    // 1540px 幅でファイル約 280、oto推定設定約 320。グラフの高さ比は、以前の 1 枚キャンバスの帯に合わせる。
     public static LayoutNode CreateDefault() =>
         H(0.182,
             Leaf("file"),
@@ -68,7 +68,9 @@ static class EditorLayout
                         V(0.368,
                             Leaf("loud"),
                             Leaf("otoBand")))),
-                Leaf("oto")));
+                V(0.78,
+                    Leaf("oto"),
+                    Leaf("otoIni"))));
 
     public static LayoutNode? Clone(LayoutNode? node)
     {

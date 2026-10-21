@@ -172,7 +172,7 @@
                         Text="設定を読み込む" />
                     <MenuFlyoutItem
                         x:Name="WriteMenuItem"
-                        Text="oto.iniを作成"
+                        Text="oto.iniを生成"
                         Click="WriteOto_Click"
                         IsEnabled="False">
                         <MenuFlyoutItem.KeyboardAccelerators>
@@ -202,8 +202,9 @@
                     <ToggleMenuFlyoutItem x:Name="ShowLoudItem" Tag="loud" Text="音量" IsChecked="True" Click="PaneMenu_Click" />
                     <ToggleMenuFlyoutItem x:Name="ShowOtoBandItem" Tag="otoBand" Text="oto区間" IsChecked="True" Click="PaneMenu_Click" />
                     <ToggleMenuFlyoutItem x:Name="ShowSourceItem" Tag="source" Text="原音修正" Click="PaneMenu_Click" />
-                    <ToggleMenuFlyoutItem x:Name="ShowOtoItem" Tag="oto" Text="oto調整" IsChecked="True" Click="PaneMenu_Click" />
+                    <ToggleMenuFlyoutItem x:Name="ShowOtoItem" Tag="oto" Text="oto推定設定" IsChecked="True" Click="PaneMenu_Click" />
                     <ToggleMenuFlyoutItem x:Name="ShowOtoParamsItem" Tag="otoParams" Text="原音パラメータ" Click="PaneMenu_Click" />
+                    <ToggleMenuFlyoutItem x:Name="ShowOtoIniItem" Tag="otoIni" Text="oto.ini生成" Click="PaneMenu_Click" />
                     <ToggleMenuFlyoutItem x:Name="ShowFrqItem" Tag="frq" Text=".frq生成" Click="PaneMenu_Click" />
                     <MenuFlyoutSeparator />
                     <MenuFlyoutSubItem x:Name="LayoutTemplateMenu" Text="配置テンプレート" />
@@ -366,10 +367,6 @@
                                     HorizontalContentAlignment="Stretch"
                                     VerticalContentAlignment="Stretch">
                                     <Grid>
-                                        <Grid.RowDefinitions>
-                                            <RowDefinition Height="*" />
-                                            <RowDefinition Height="Auto" />
-                                        </Grid.RowDefinitions>
                                         <ScrollViewer
                                             HorizontalScrollBarVisibility="Disabled"
                                             VerticalScrollBarVisibility="Auto">
@@ -829,25 +826,6 @@
                                                 </StackPanel>
                                             </StackPanel>
                                         </ScrollViewer>
-                                        <Border
-                                            Grid.Row="1"
-                                            Padding="12,10,12,12"
-                                            BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
-                                            BorderThickness="0,1,0,0">
-                                            <StackPanel Spacing="8">
-                                                <Button
-                                                    x:Name="WriteButton"
-                                                    HorizontalAlignment="Stretch"
-                                                    Click="WriteOto_Click"
-                                                    Style="{StaticResource ToolbarAccentButtonStyle}"
-                                                    ToolTipService.ToolTip="直した区間から oto.ini を計算して、フォルダに保存します（Ctrl+S）">
-                                                    <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
-                                                        <SymbolIcon Symbol="Save" />
-                                                        <TextBlock Text="oto.iniを作成" />
-                                                    </StackPanel>
-                                                </Button>
-                                            </StackPanel>
-                                        </Border>
                                     </Grid>
                                 </ContentControl>
                     </Grid>
@@ -949,6 +927,41 @@
                                 IsEnabled="False"
                                 Style="{StaticResource ToolbarAccentButtonStyle}"
                                 ToolTipService.ToolTip="フォルダ直下の各 WAV の横に .frq を書きます。UTAU の合成が、この高さの表を使います。原音修正のあとや、WAV を差し替えたあとは作り直します。" />
+                        </Border>
+                    </Grid>
+                    <Grid x:Name="OtoIniPane">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <ScrollViewer
+                            HorizontalScrollBarVisibility="Disabled"
+                            VerticalScrollBarVisibility="Auto">
+                            <StackPanel Padding="12" Spacing="10">
+                                <Border Style="{StaticResource PanelCardStyle}">
+                                    <local:InfoNote
+                                        Title="oto.ini"
+                                        Text="直した区間から計算して、フォルダに保存します。モードとスライダーは oto推定設定の値を使います。" />
+                                </Border>
+                            </StackPanel>
+                        </ScrollViewer>
+                        <Border
+                            Grid.Row="1"
+                            Padding="12,10,12,12"
+                            BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                            BorderThickness="0,1,0,0">
+                            <Button
+                                x:Name="WriteButton"
+                                HorizontalAlignment="Stretch"
+                                AutomationProperties.Name="oto.iniを生成"
+                                Click="WriteOto_Click"
+                                Style="{StaticResource ToolbarAccentButtonStyle}"
+                                ToolTipService.ToolTip="直した区間から oto.ini を計算して、フォルダに保存します（Ctrl+S）">
+                                <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
+                                    <SymbolIcon Symbol="Save" />
+                                    <TextBlock Text="oto.iniを生成" />
+                                </StackPanel>
+                            </Button>
                         </Border>
                     </Grid>
                 </Grid>

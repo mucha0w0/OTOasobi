@@ -327,7 +327,7 @@ def _write(folder: str, files: object, config: object, adjustments: object = Non
         return {
             "ok": True,
             "txt": str(out),
-            "notice": f"oto.ini は作成しましたが、保存データを更新できませんでした。{exc}",
+            "notice": f"oto.ini は生成しましたが、保存データを更新できませんでした。{exc}",
         }
     return {"ok": True, "txt": str(out)}
 
