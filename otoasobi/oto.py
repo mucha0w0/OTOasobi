@@ -852,11 +852,64 @@ def _rename_existing_as_log(path: Path) -> None:
         index += 1
 
 
-def write_oto_ini(path: str | Path, lines: list[str], pinned: set[int] | None = None) -> Path:
+def read_oto_ini_lines(path: str | Path) -> list[str]:
+    """既存の oto.ini。空行は捨てる。読めないバイトは置き換える。"""
+    file = Path(path)
+    if not file.is_file():
+        return []
+    text = file.read_text(encoding=ANSI, errors="replace")
+    return [line.strip() for line in text.splitlines() if line.strip()]
+
+
+def _alias_key(line: str) -> str | None:
+    parsed = _split_oto_alias(line)
+    if parsed is None:
+        return None
+    alias = parsed[1].replace("*", "").strip()
+    return alias or None
+
+
+def merge_existing_aliases(existing: list[str], generated: list[str], scope: str) -> list[str]:
+    """all は生成した行だけ。missing は無いエイリアスを足す。overlap は既にあるエイリアスだけ差し替える。"""
+    if scope == "all" or not existing:
+        return generated
+    fresh: dict[str, str] = {}
+    for line in generated:
+        alias = _alias_key(line)
+        if alias and alias not in fresh:
+            fresh[alias] = line
+    kept = [line for line in existing if line.strip()]
+    if scope == "missing":
+        have = {alias for line in kept if (alias := _alias_key(line))}
+        return kept + [line for line in generated if (alias := _alias_key(line)) and alias not in have]
+    if scope == "overlap":
+        used: set[str] = set()
+        out: list[str] = []
+        for line in kept:
+            alias = _alias_key(line)
+            if alias and alias in fresh:
+                if alias not in used:
+                    out.append(fresh[alias])
+                    used.add(alias)
+                continue
+            out.append(line)
+        return out
+    return generated
+
+
+def write_oto_ini(
+    path: str | Path,
+    lines: list[str],
+    pinned: set[int] | None = None,
+    *,
+    already_numbered: bool = False,
+) -> Path:
     path = Path(path)
     _rename_existing_as_log(path)
+    if not already_numbered:
+        lines = number_duplicate_aliases(_strip_alias_marks(lines), pinned)
     path.write_text(
-        render_oto_ini(number_duplicate_aliases(_strip_alias_marks(lines), pinned)),
+        render_oto_ini(lines),
         encoding=ANSI,
         newline="\r\n",
     )

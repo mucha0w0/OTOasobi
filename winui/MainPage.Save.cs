@@ -621,6 +621,33 @@ public sealed partial class MainPage
         ApplyAliasChoiceVisual();
     }
 
+    void RefreshOtoIniScope()
+    {
+        if (OtoScopeOptions == null || OtoScopeNote == null || OtoScopeAll == null
+            || OtoScopeMissing == null || OtoScopeOverlap == null)
+            return;
+        var exists = !string.IsNullOrEmpty(_folder) && File.Exists(Path.Combine(_folder, "oto.ini"));
+        OtoScopeOptions.Opacity = exists ? 1 : 0.45;
+        OtoScopeOptions.IsHitTestVisible = exists;
+        OtoScopeAll.IsTabStop = exists;
+        OtoScopeMissing.IsTabStop = exists;
+        OtoScopeOverlap.IsTabStop = exists;
+        OtoScopeNote.Visibility = exists ? Visibility.Collapsed : Visibility.Visible;
+        if (!exists && OtoScopeAll.IsChecked != true)
+            OtoScopeAll.IsChecked = true;
+    }
+
+    string OtoWriteScope()
+    {
+        if (string.IsNullOrEmpty(_folder) || !File.Exists(Path.Combine(_folder, "oto.ini")))
+            return "all";
+        if (OtoScopeOverlap?.IsChecked == true)
+            return "overlap";
+        if (OtoScopeMissing?.IsChecked == true)
+            return "missing";
+        return "all";
+    }
+
     List<string> CaptureAliases()
     {
         var list = new List<string>();

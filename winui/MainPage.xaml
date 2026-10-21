@@ -975,6 +975,45 @@
                                             Unchecked="AliasChoice_Changed" />
                                     </StackPanel>
                                 </Border>
+                                <Border Style="{StaticResource PanelCardStyle}">
+                                    <StackPanel Spacing="8">
+                                        <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="対象" />
+                                        <StackPanel
+                                            x:Name="OtoScopeOptions"
+                                            Spacing="4"
+                                            Opacity="0.45"
+                                            IsHitTestVisible="False">
+                                            <RadioButton
+                                                x:Name="OtoScopeAll"
+                                                AutomationProperties.Name="全てのエイリアスを上書きして生成する"
+                                                GroupName="OtoScope"
+                                                IsChecked="True"
+                                                IsTabStop="False">
+                                                <TextBlock Text="全てのエイリアスを上書きして生成する" TextWrapping="Wrap" />
+                                            </RadioButton>
+                                            <RadioButton
+                                                x:Name="OtoScopeMissing"
+                                                AutomationProperties.Name="存在しないエイリアスだけ生成する"
+                                                GroupName="OtoScope"
+                                                IsTabStop="False">
+                                                <TextBlock Text="存在しないエイリアスだけ生成する" TextWrapping="Wrap" />
+                                            </RadioButton>
+                                            <RadioButton
+                                                x:Name="OtoScopeOverlap"
+                                                AutomationProperties.Name="重複するエイリアスのみ上書きして生成する"
+                                                GroupName="OtoScope"
+                                                IsTabStop="False">
+                                                <TextBlock Text="重複するエイリアスのみ上書きして生成する" TextWrapping="Wrap" />
+                                            </RadioButton>
+                                        </StackPanel>
+                                        <TextBlock
+                                            x:Name="OtoScopeNote"
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            Style="{StaticResource CaptionTextBlockStyle}"
+                                            Text="まずはoto.iniを生成してください。"
+                                            TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </Border>
                             </StackPanel>
                         </ScrollViewer>
                         <Border

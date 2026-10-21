@@ -13,7 +13,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from otoasobi.analyze import AnalyzedFile, export_folder
-from otoasobi.oto import OtoSettings, mono_oto_lines, renzoku_oto_lines
+from otoasobi.oto import OtoSettings, merge_existing_aliases, mono_oto_lines, renzoku_oto_lines
 from otoasobi.segment import Span
 
 
@@ -30,6 +30,35 @@ class WritePartsTests(unittest.TestCase):
             path = export_folder(tmp, [item], parts=[(mono, []), (renzoku, [])])
             text = path.read_text(encoding=locale.getpreferredencoding(False))
         self.assertEqual([line for line in text.splitlines() if line], expected)
+
+    def test_merge_keeps_missing_and_replaces_overlap(self) -> None:
+        existing = ["a.wav=あ,1,2,3,4,5", "b.wav=か,1,2,3,4,5"]
+        generated = ["a.wav=あ,9,9,9,9,9", "c.wav=さ,1,2,3,4,5"]
+        self.assertEqual(
+            merge_existing_aliases(existing, generated, "missing"),
+            ["a.wav=あ,1,2,3,4,5", "b.wav=か,1,2,3,4,5", "c.wav=さ,1,2,3,4,5"],
+        )
+        self.assertEqual(
+            merge_existing_aliases(existing, generated, "overlap"),
+            ["a.wav=あ,9,9,9,9,9", "b.wav=か,1,2,3,4,5"],
+        )
+        self.assertEqual(merge_existing_aliases(existing, generated, "all"), generated)
+
+    def test_export_missing_keeps_the_previous_line(self) -> None:
+        spans = [Span(0.0, 0.2, "k", "k"), Span(0.2, 0.6, "a", "あ")]
+        item = AnalyzedFile("a.wav", 0.8, spans)
+        encoding = locale.getpreferredencoding(False)
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            previous = folder / "oto.ini"
+            previous.write_text("a.wav=あ,1.000,2.000,3.000,4.000,5.000\r\n", encoding=encoding)
+            export_folder(folder, [item], OtoSettings(mode="mono"), scope="missing")
+            text = (folder / "oto.ini").read_text(encoding=encoding)
+            log = (folder / "oto.log.ini").read_text(encoding=encoding)
+        lines = [line for line in text.splitlines() if line]
+        self.assertTrue(lines[0].startswith("a.wav=あ,1.000,"))
+        self.assertEqual(log.strip(), "a.wav=あ,1.000,2.000,3.000,4.000,5.000")
+        self.assertEqual(len(lines), 1)
 
 
 if __name__ == "__main__":

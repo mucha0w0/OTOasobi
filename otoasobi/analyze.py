@@ -13,6 +13,10 @@ from otoasobi.oto import (
     OTO_INI_NAME,
     OtoSettings,
     _names_for_file,
+    merge_existing_aliases,
+    number_duplicate_aliases,
+    read_oto_ini_lines,
+    _strip_alias_marks,
     apply_alias_names,
     apply_file_adjustments,
     cvvc_oto_lines,
@@ -251,6 +255,7 @@ def export_folder(
     settings: OtoSettings | None = None,
     adjustments: list[dict] | None = None,
     parts: list[tuple[OtoSettings | None, list[dict] | None]] | None = None,
+    scope: str = "all",
 ) -> Path:
     """直した区間から oto.ini とラベルを書く。settings が無いときはいまの初期値。
 
@@ -303,5 +308,12 @@ def export_folder(
     onset = folder / BATCH_TXT_NAME
     log.write_text(format_batch_log(span_entries), encoding="utf-8")
     onset.write_text(format_batch_txt(span_entries), encoding="utf-8")
-    write_oto_ini(out, oto_lines, pinned)
+    if scope not in ("missing", "overlap"):
+        scope = "all"
+    if scope != "all" and out.is_file():
+        numbered = number_duplicate_aliases(_strip_alias_marks(oto_lines), pinned)
+        oto_lines = merge_existing_aliases(read_oto_ini_lines(out), numbered, scope)
+        write_oto_ini(out, oto_lines, already_numbered=True)
+    else:
+        write_oto_ini(out, oto_lines, pinned)
     return out

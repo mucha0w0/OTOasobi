@@ -1127,7 +1127,7 @@ public sealed partial class MainPage : Page
         {
             _analysis ??= new AnalysisClient();
             var parts = modes.Select(mode => new OtoWritePart(ExportFor(mode), _adjust.For(mode))).ToList();
-            var result = await _analysis.WriteAsync(_folder, _files, parts);
+            var result = await _analysis.WriteAsync(_folder, _files, parts, OtoWriteScope());
             if (!result.Ok || string.IsNullOrEmpty(result.Txt))
             {
                 ShowNotice(
@@ -1145,6 +1145,7 @@ public sealed partial class MainPage : Page
             }
 
             ShowNotice("oto.iniを生成しました", WithSkip(null));
+            RefreshOtoIniScope();
         }
         catch (Exception ex)
         {
@@ -1572,6 +1573,7 @@ public sealed partial class MainPage : Page
         UpdateCommands();
         RefreshOtoTable();
         RefreshFrqSummary();
+        RefreshOtoIniScope();
     }
 
     bool RestoreUnanalyzed(string folder, string message)
@@ -1612,6 +1614,7 @@ public sealed partial class MainPage : Page
 
         RefreshOtoTable();
         RefreshFrqSummary();
+        RefreshOtoIniScope();
         StartLoudness();
     }
 

@@ -330,19 +330,33 @@ def _write_parts(raw: object) -> list[tuple] | None:
     return parts or None
 
 
+def _scope_name(raw: object) -> str:
+    if raw in ("missing", "overlap", "all"):
+        return str(raw)
+    return "all"
+
+
 def _write(
     folder: str,
     files: object,
     config: object,
     adjustments: object = None,
     parts: object = None,
+    scope: object = None,
 ) -> dict:
     parsed = _parsed_files(files)
+    chosen = _scope_name(scope)
     built = _write_parts(parts)
     if built:
-        out = export_folder(folder, parsed, parts=built)
+        out = export_folder(folder, parsed, parts=built, scope=chosen)
     else:
-        out = export_folder(folder, parsed, oto_settings_from(config), adjustments_from(adjustments))
+        out = export_folder(
+            folder,
+            parsed,
+            oto_settings_from(config),
+            adjustments_from(adjustments),
+            scope=chosen,
+        )
     try:
         save_cache(folder, parsed)
     except Exception as exc:
@@ -403,6 +417,7 @@ def main() -> None:
                     request.get("config"),
                     request.get("adjustments"),
                     request.get("parts"),
+                    request.get("scope"),
                 )
             else:
                 raise RuntimeError("未対応のコマンドです")

@@ -107,7 +107,8 @@ sealed class AnalysisClient : IDisposable
     public async Task<AnalyzeResult> WriteAsync(
         string folder,
         IReadOnlyList<WavFile> files,
-        IReadOnlyList<OtoWritePart> parts)
+        IReadOnlyList<OtoWritePart> parts,
+        string scope)
     {
         using var doc = await SendAsync(id => JsonSerializer.Serialize(new
         {
@@ -115,6 +116,7 @@ sealed class AnalysisClient : IDisposable
             cmd = "write",
             folder,
             files = FilePayload(files),
+            scope,
             parts = parts.Select(part => new
             {
                 config = ConfigPayload(part.Config),
