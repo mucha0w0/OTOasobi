@@ -318,6 +318,7 @@ public sealed partial class MainPage
         FlushSession();
         _folder = folder;
         LoadFolderSettings();
+        LoadBank();
     }
 
     void LoadFolderSettings()

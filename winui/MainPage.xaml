@@ -206,6 +206,7 @@
                     <ToggleMenuFlyoutItem x:Name="ShowOtoParamsItem" Tag="otoParams" Text="原音パラメータ" Click="PaneMenu_Click" />
                     <ToggleMenuFlyoutItem x:Name="ShowOtoIniItem" Tag="otoIni" Text="oto.ini生成" Click="PaneMenu_Click" />
                     <ToggleMenuFlyoutItem x:Name="ShowFrqItem" Tag="frq" Text=".frq生成" Click="PaneMenu_Click" />
+                    <ToggleMenuFlyoutItem x:Name="ShowBankItem" Tag="bank" Text="音源の各種設定" Click="PaneMenu_Click" />
                     <MenuFlyoutSeparator />
                     <MenuFlyoutSubItem x:Name="LayoutTemplateMenu" Text="配置テンプレート" />
                     <MenuFlyoutItem Text="いまの配置をテンプレートとして保存" Click="SaveLayoutTemplate_Click" />
@@ -1033,6 +1034,356 @@
                                     <TextBlock Text="oto.iniを生成" />
                                 </StackPanel>
                             </Button>
+                        </Border>
+                    </Grid>
+                    <Grid x:Name="BankPane">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <ScrollViewer
+                            HorizontalScrollBarVisibility="Disabled"
+                            VerticalScrollBarVisibility="Auto">
+                            <StackPanel Padding="12" Spacing="10">
+                                <Border Style="{StaticResource PanelCardStyle}">
+                                    <StackPanel Spacing="8">
+                                        <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="アイコン" />
+                                        <TextBlock
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            Style="{StaticResource CaptionTextBlockStyle}"
+                                            Text="100×100 の icon.bmp として、音源フォルダの直下に保存します。"
+                                            TextWrapping="Wrap" />
+                                        <Image
+                                            x:Name="BankIconImage"
+                                            Width="100"
+                                            Height="100"
+                                            HorizontalAlignment="Left"
+                                            AutomationProperties.Name="アイコンのプレビュー"
+                                            Stretch="Uniform"
+                                            Visibility="Collapsed" />
+                                        <TextBlock
+                                            x:Name="BankIconMissing"
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            Style="{StaticResource CaptionTextBlockStyle}"
+                                            Text="アイコン画像が設定されていません"
+                                            TextWrapping="Wrap" />
+                                        <Button
+                                            x:Name="BankPickIconButton"
+                                            HorizontalAlignment="Stretch"
+                                            AutomationProperties.Name="アイコンのファイルを選ぶ"
+                                            Click="BankPickIcon_Click"
+                                            Content="ファイルを選ぶ"
+                                            IsEnabled="False"
+                                            Style="{StaticResource ToolbarButtonStyle}" />
+                                    </StackPanel>
+                                </Border>
+                                <Border Style="{StaticResource PanelCardStyle}">
+                                    <StackPanel Spacing="8">
+                                        <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="character.txt" />
+                                        <TextBlock
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            Style="{StaticResource CaptionTextBlockStyle}"
+                                            Text="UTAU の原音プロパティに出る内容です。"
+                                            TextWrapping="Wrap" />
+                                        <TextBlock Text="名前" />
+                                        <TextBox
+                                            x:Name="BankNameBox"
+                                            MinWidth="0"
+                                            HorizontalAlignment="Stretch"
+                                            AutomationProperties.Name="音源名"
+                                            PlaceholderText="音源名"
+                                            Tag="name"
+                                            TextChanged="BankShared_TextChanged" />
+                                        <TextBlock Text="画像ファイル名" />
+                                        <TextBox
+                                            x:Name="BankImageBox"
+                                            MinWidth="0"
+                                            HorizontalAlignment="Stretch"
+                                            AutomationProperties.Name="画像ファイル名"
+                                            PlaceholderText="icon.bmp"
+                                            Tag="image"
+                                            TextChanged="BankShared_TextChanged" />
+                                        <TextBlock
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            Style="{StaticResource CaptionTextBlockStyle}"
+                                            Text="アイコンを選ぶと icon.bmp になります。"
+                                            TextWrapping="Wrap" />
+                                        <TextBlock Text="サンプル" />
+                                        <ComboBox
+                                            x:Name="BankSampleBox"
+                                            MinWidth="0"
+                                            HorizontalAlignment="Stretch"
+                                            AutomationProperties.Name="サンプルの原音"
+                                            MaxDropDownHeight="320"
+                                            SelectionChanged="BankSample_Changed" />
+                                        <TextBlock
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            Style="{StaticResource CaptionTextBlockStyle}"
+                                            Text="[Sample] で再生する原音です。ランダムのときは空欄になります。"
+                                            TextWrapping="Wrap" />
+                                        <TextBlock Text="作者" />
+                                        <TextBox
+                                            x:Name="BankAuthorBox"
+                                            MinWidth="0"
+                                            HorizontalAlignment="Stretch"
+                                            AutomationProperties.Name="作者"
+                                            PlaceholderText="中の人の名前"
+                                            Tag="author"
+                                            TextChanged="BankShared_TextChanged" />
+                                        <TextBlock Text="配布サイト" />
+                                        <TextBox
+                                            x:Name="BankWebBox"
+                                            MinWidth="0"
+                                            HorizontalAlignment="Stretch"
+                                            AutomationProperties.Name="配布サイト"
+                                            PlaceholderText="https://"
+                                            Tag="web"
+                                            TextChanged="BankShared_TextChanged" />
+                                        <TextBlock Text="プロフィール" />
+                                        <TextBlock
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            Style="{StaticResource CaptionTextBlockStyle}"
+                                            Text="「：」または「:」を含む行は、原音のプロパティで優先して表示されます。"
+                                            TextWrapping="Wrap" />
+                                        <StackPanel x:Name="BankProfileHost" Spacing="8" />
+                                        <Button
+                                            HorizontalAlignment="Left"
+                                            AutomationProperties.Name="プロフィールの行を追加"
+                                            Click="BankAddProfile_Click"
+                                            Content="行を追加"
+                                            Style="{StaticResource ToolbarButtonStyle}" />
+                                        <TextBlock Text="その他の行" />
+                                        <TextBlock
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            Style="{StaticResource CaptionTextBlockStyle}"
+                                            Text="「：」や「:」の無い行です。"
+                                            TextWrapping="Wrap" />
+                                        <TextBox
+                                            x:Name="BankExtraBox"
+                                            MinWidth="0"
+                                            MinHeight="72"
+                                            HorizontalAlignment="Stretch"
+                                            AcceptsReturn="True"
+                                            AutomationProperties.Name="character.txt のその他の行"
+                                            PlaceholderText="記号の無い行"
+                                            TextChanged="BankForm_Changed"
+                                            TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </Border>
+                                <Border Style="{StaticResource PanelCardStyle}">
+                                    <StackPanel Spacing="8">
+                                        <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="readme.txt" />
+                                        <TextBlock
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            Style="{StaticResource CaptionTextBlockStyle}"
+                                            Text="ANSI（Shift_JIS）で保存します。内容は自由です。"
+                                            TextWrapping="Wrap" />
+                                        <TextBox
+                                            x:Name="BankReadmeBox"
+                                            MinWidth="0"
+                                            MinHeight="140"
+                                            HorizontalAlignment="Stretch"
+                                            AcceptsReturn="True"
+                                            AutomationProperties.Name="readme.txt"
+                                            TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </Border>
+                                <Border Height="1" Margin="0,8,0,4" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                                <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="OPENUTAU用設定" />
+                                <TextBlock
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Style="{StaticResource CaptionTextBlockStyle}"
+                                    Text="ここから下は character.yaml に保存します。このファイルは UTF-8 です。"
+                                    TextWrapping="Wrap" />
+                                <Border Style="{StaticResource PanelCardStyle}">
+                                    <StackPanel Spacing="8">
+                                        <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="エンコード" />
+                                        <TextBlock
+                                            x:Name="BankEncodingText"
+                                            IsTextSelectionEnabled="True"
+                                            Text="text_file_encoding: shift_jis"
+                                            TextWrapping="Wrap" />
+                                        <TextBlock
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            Style="{StaticResource CaptionTextBlockStyle}"
+                                            Text="character.txt、prefix.map、oto.ini を読むときの文字コードです。ファイルの内容から決めます。"
+                                            TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </Border>
+                                <Border Style="{StaticResource PanelCardStyle}">
+                                    <StackPanel Spacing="8">
+                                        <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="キャラクター情報" />
+                                        <TextBlock
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            Style="{StaticResource CaptionTextBlockStyle}"
+                                            Text="name、image、author、web は character.txt と揃えます。どちらかを書き換えると、もう片方も同じになります。シンガータイプは UTAU です。"
+                                            TextWrapping="Wrap" />
+                                        <TextBlock Text="シンガータイプ" />
+                                        <TextBlock Text="utau" />
+                                        <TextBlock Text="名前" />
+                                        <TextBox
+                                            x:Name="BankYamlNameBox"
+                                            MinWidth="0"
+                                            HorizontalAlignment="Stretch"
+                                            AutomationProperties.Name="OpenUTAU の名前"
+                                            Tag="name"
+                                            TextChanged="BankShared_TextChanged" />
+                                        <TextBlock Text="画像ファイル名" />
+                                        <TextBox
+                                            x:Name="BankYamlImageBox"
+                                            MinWidth="0"
+                                            HorizontalAlignment="Stretch"
+                                            AutomationProperties.Name="OpenUTAU の画像ファイル名"
+                                            Tag="image"
+                                            TextChanged="BankShared_TextChanged" />
+                                        <TextBlock Text="作者" />
+                                        <TextBox
+                                            x:Name="BankYamlAuthorBox"
+                                            MinWidth="0"
+                                            HorizontalAlignment="Stretch"
+                                            AutomationProperties.Name="OpenUTAU の作者"
+                                            Tag="author"
+                                            TextChanged="BankShared_TextChanged" />
+                                        <TextBlock Text="声" />
+                                        <TextBox
+                                            x:Name="BankVoiceBox"
+                                            MinWidth="0"
+                                            HorizontalAlignment="Stretch"
+                                            AutomationProperties.Name="声"
+                                            PlaceholderText="声を担当した人" />
+                                        <TextBlock
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            Style="{StaticResource CaptionTextBlockStyle}"
+                                            Text="character.txt には無い項目です。"
+                                            TextWrapping="Wrap" />
+                                        <TextBlock Text="バージョン" />
+                                        <TextBox
+                                            x:Name="BankVersionBox"
+                                            MinWidth="0"
+                                            HorizontalAlignment="Stretch"
+                                            AutomationProperties.Name="バージョン"
+                                            PlaceholderText="1.0" />
+                                        <TextBlock Text="配布サイト" />
+                                        <TextBox
+                                            x:Name="BankYamlWebBox"
+                                            MinWidth="0"
+                                            HorizontalAlignment="Stretch"
+                                            AutomationProperties.Name="OpenUTAU の配布サイト"
+                                            PlaceholderText="https://"
+                                            Tag="web"
+                                            TextChanged="BankShared_TextChanged" />
+                                    </StackPanel>
+                                </Border>
+                                <Border Style="{StaticResource PanelCardStyle}">
+                                    <StackPanel Spacing="8">
+                                        <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="ローカライズ名" />
+                                        <TextBlock
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            Style="{StaticResource CaptionTextBlockStyle}"
+                                            Text="表示言語に合わせてシンガー名を変えるときに使います。"
+                                            TextWrapping="Wrap" />
+                                        <StackPanel x:Name="BankLocaleHost" Spacing="10" />
+                                        <Button
+                                            HorizontalAlignment="Left"
+                                            AutomationProperties.Name="ローカライズの言語を追加"
+                                            Click="BankAddLocale_Click"
+                                            Content="言語を追加"
+                                            Style="{StaticResource ToolbarButtonStyle}" />
+                                    </StackPanel>
+                                </Border>
+                                <Border Style="{StaticResource PanelCardStyle}">
+                                    <StackPanel Spacing="8">
+                                        <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="立ち絵" />
+                                        <TextBlock
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            Style="{StaticResource CaptionTextBlockStyle}"
+                                            Text="ピアノロールに出す画像です。images/portrait.png のような、音源フォルダの中の相対パスも使えます。高さ 0 は既定で、小さい画像を 800px まで拡大しません。"
+                                            TextWrapping="Wrap" />
+                                        <Image
+                                            x:Name="BankPortraitImage"
+                                            MaxWidth="280"
+                                            MaxHeight="220"
+                                            HorizontalAlignment="Left"
+                                            AutomationProperties.Name="立ち絵のプレビュー"
+                                            Stretch="Uniform"
+                                            Visibility="Collapsed" />
+                                        <TextBlock
+                                            x:Name="BankPortraitMissing"
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            Style="{StaticResource CaptionTextBlockStyle}"
+                                            Text="立ち絵が設定されていません"
+                                            TextWrapping="Wrap" />
+                                        <TextBlock Text="ファイル" />
+                                        <TextBox
+                                            x:Name="BankPortraitPathBox"
+                                            MinWidth="0"
+                                            HorizontalAlignment="Stretch"
+                                            AutomationProperties.Name="立ち絵のパス"
+                                            PlaceholderText="portrait.png"
+                                            TextChanged="BankPortraitPath_Changed" />
+                                        <Button
+                                            x:Name="BankPickPortraitButton"
+                                            HorizontalAlignment="Stretch"
+                                            AutomationProperties.Name="立ち絵のファイルを選ぶ"
+                                            Click="BankPickPortrait_Click"
+                                            Content="ファイルを選ぶ"
+                                            IsEnabled="False"
+                                            Style="{StaticResource ToolbarButtonStyle}" />
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock VerticalAlignment="Center" Text="不透明度" />
+                                            <TextBlock
+                                                x:Name="BankOpacityValue"
+                                                Grid.Column="1"
+                                                Style="{StaticResource OverlapValueStyle}"
+                                                Text="0.67" />
+                                        </Grid>
+                                        <Slider
+                                            x:Name="BankOpacitySlider"
+                                            AutomationProperties.Name="立ち絵の不透明度"
+                                            Maximum="1"
+                                            Minimum="0"
+                                            StepFrequency="0.01"
+                                            SnapsTo="StepValues"
+                                            Value="0.67"
+                                            ValueChanged="BankOpacity_Changed" />
+                                        <TextBlock Text="高さ" />
+                                        <NumberBox
+                                            x:Name="BankPortraitHeightBox"
+                                            HorizontalAlignment="Stretch"
+                                            AutomationProperties.Name="立ち絵の高さ"
+                                            LargeChange="100"
+                                            Maximum="10000"
+                                            Minimum="0"
+                                            SmallChange="1"
+                                            SpinButtonPlacementMode="Inline"
+                                            Value="0" />
+                                        <TextBlock
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            Style="{StaticResource CaptionTextBlockStyle}"
+                                            Text="0 は既定です。未指定のときは、高さが 800 を超える画像だけ 800 に縮みます。"
+                                            TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </ScrollViewer>
+                        <Border
+                            Grid.Row="1"
+                            Padding="12,10,12,12"
+                            BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                            BorderThickness="0,1,0,0">
+                            <Button
+                                x:Name="BankSaveButton"
+                                HorizontalAlignment="Stretch"
+                                AutomationProperties.Name="音源設定を保存"
+                                Click="BankSave_Click"
+                                Content="音源設定を保存"
+                                IsEnabled="False"
+                                Style="{StaticResource ToolbarAccentButtonStyle}"
+                                ToolTipService.ToolTip="character.txt、readme.txt、character.yaml を音源フォルダに保存します。" />
                         </Border>
                     </Grid>
                 </Grid>

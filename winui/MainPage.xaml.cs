@@ -143,7 +143,7 @@ public sealed partial class MainPage : Page
         LoudHost.Children.Add(Editor.LoudSurface);
         OtoBandHost.Children.Add(Editor.OtoSurface);
         // ページが読み込まれる前は Parent が空のままなので、ここから外してからドックへ入れる。
-        foreach (var pane in new UIElement[] { FilePane, WavePane, SpecHost, LoudHost, OtoBandHost, SourcePane, OtoPane, OtoParams, OtoIniPane, FrqPane })
+        foreach (var pane in new UIElement[] { FilePane, WavePane, SpecHost, LoudHost, OtoBandHost, SourcePane, OtoPane, OtoParams, OtoIniPane, FrqPane, BankPane })
             PaneHolder.Children.Remove(pane);
         Dock.Mount(
         [
@@ -157,6 +157,7 @@ public sealed partial class MainPage : Page
             ("otoParams", "原音パラメータ", OtoParams),
             ("otoIni", "oto.ini生成", OtoIniPane),
             ("frq", ".frq生成", FrqPane),
+            ("bank", "音源の各種設定", BankPane),
         ]);
         Dock.PaneResizing += (_, dragging) =>
         {
@@ -195,6 +196,7 @@ public sealed partial class MainPage : Page
         ShowOtoParamsItem.IsChecked = Dock.Contains("otoParams");
         ShowOtoIniItem.IsChecked = Dock.Contains("otoIni");
         ShowFrqItem.IsChecked = Dock.Contains("frq");
+        ShowBankItem.IsChecked = Dock.Contains("bank");
         _paneMenuWrite = false;
     }
 
@@ -1652,6 +1654,10 @@ public sealed partial class MainPage : Page
         ReanalyzeSelectedMenuItem.IsEnabled = ready && FileList.SelectedItem is WavFile;
         ApplyEffectsButton.IsEnabled = editing;
         WriteFrqButton.IsEnabled = editing;
+        var bank = idle && hasFolder;
+        BankSaveButton.IsEnabled = bank;
+        BankPickIconButton.IsEnabled = bank;
+        BankPickPortraitButton.IsEnabled = bank;
     }
 
     void UpdateFileStatus(string name, double done, string label)
