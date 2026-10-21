@@ -250,8 +250,12 @@ def export_folder(
     files: list[AnalyzedFile],
     settings: OtoSettings | None = None,
     adjustments: list[dict] | None = None,
+    parts: list[tuple[OtoSettings | None, list[dict] | None]] | None = None,
 ) -> Path:
-    """直した区間から oto.ini とラベルを書く。settings が無いときはいまの初期値。"""
+    """直した区間から oto.ini とラベルを書く。settings が無いときはいまの初期値。
+
+    parts があるときは、その順のエイリアスを 1 つの oto.ini に足す。
+    """
     folder = Path(folder)
     if not folder.is_dir():
         raise RuntimeError("フォルダが見つかりません。")
@@ -260,35 +264,40 @@ def export_folder(
     span_entries = [(item.name, item.spans) for item in files]
     oto_lines: list[str] = []
     pinned: set[int] = set()
-    if settings is not None and settings.mode == "renzoku":
-        write_lines = renzoku_oto_lines
-    elif settings is not None and settings.mode == "cvvc":
-        write_lines = cvvc_oto_lines
-    else:
-        write_lines = mono_oto_lines
-    adjustments = adjustments or []
+    # parts は選んだエイリアス順。ファイルごとに、その順で行を足す。
+    if parts is None:
+        parts = [(settings, adjustments)]
     for item in files:
-        names = _names_for_file(adjustments, item.name)
-        lines = apply_alias_names(
-            apply_file_adjustments(
-                write_lines(
+        loudness = _file_loudness(folder, item.name)
+        for part_settings, part_adjustments in parts:
+            if part_settings is not None and part_settings.mode == "renzoku":
+                write_lines = renzoku_oto_lines
+            elif part_settings is not None and part_settings.mode == "cvvc":
+                write_lines = cvvc_oto_lines
+            else:
+                write_lines = mono_oto_lines
+            part_adjustments = part_adjustments or []
+            names = _names_for_file(part_adjustments, item.name)
+            lines = apply_alias_names(
+                apply_file_adjustments(
+                    write_lines(
+                        item.name,
+                        item.spans,
+                        item.duration,
+                        part_settings,
+                        loudness,
+                    ),
                     item.name,
-                    item.spans,
+                    part_adjustments,
                     item.duration,
-                    settings,
-                    _file_loudness(folder, item.name),
                 ),
-                item.name,
-                adjustments,
-                item.duration,
-            ),
-            names,
-        )
-        start = len(oto_lines)
-        for index in names:
-            if 0 <= index < len(lines):
-                pinned.add(start + index)
-        oto_lines.extend(lines)
+                names,
+            )
+            start = len(oto_lines)
+            for index in names:
+                if 0 <= index < len(lines):
+                    pinned.add(start + index)
+            oto_lines.extend(lines)
     out = folder / OTO_INI_NAME
     log = folder / BATCH_LOG_NAME
     onset = folder / BATCH_TXT_NAME

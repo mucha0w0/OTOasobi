@@ -1002,7 +1002,7 @@ public sealed partial class MainPage : Page
         if (_revealFile != null && _revealFile.Equals(file.Name, StringComparison.OrdinalIgnoreCase))
             focus = _revealIndex;
         _tableFocus = focus;
-        OtoParams.SetEmphasis(file.Name, focus);
+        OtoParams.SetEmphasis(file.Name, focus, focus >= 0 ? CurrentMode() : "");
         Editor.Clear();
         try
         {
@@ -1111,6 +1111,13 @@ public sealed partial class MainPage : Page
     {
         if (_busy || _folder == null || _files.Count == 0)
             return;
+        var modes = SelectedAliasModes();
+        if (modes.Count == 0)
+        {
+            ShowNotice("生成するエイリアスがありません", "単独音、連続音、CVVC のどれかを選んでください。");
+            return;
+        }
+
         _busy = true;
         UpdateCommands();
         Editor.IsEnabled = false;
@@ -1119,11 +1126,8 @@ public sealed partial class MainPage : Page
         try
         {
             _analysis ??= new AnalysisClient();
-            var result = await _analysis.WriteAsync(
-                _folder,
-                _files,
-                CurrentExport(),
-                _adjust.For(CurrentMode()));
+            var parts = modes.Select(mode => new OtoWritePart(ExportFor(mode), _adjust.For(mode))).ToList();
+            var result = await _analysis.WriteAsync(_folder, _files, parts);
             if (!result.Ok || string.IsNullOrEmpty(result.Txt))
             {
                 ShowNotice(
@@ -1156,25 +1160,19 @@ public sealed partial class MainPage : Page
         }
     }
 
-    OtoExport CurrentExport()
-    {
-        if (OtoModeCvvc.IsChecked == true)
-            return CvvcExport();
-        if (OtoModeRenzoku.IsChecked == true)
-        {
-            return new(
-                Math.Round(-RenzokuOffsetSlider.Value * 1000.0),
-                Math.Round(RenzokuConsonantSlider.Value * 1000.0),
-                RenzokuBlankSlider.Value,
-                new Dictionary<string, double>(),
-                "renzoku",
-                RenzokuOverlapSlider.Value / 100.0,
-                Math.Round(-_restPreset.Offset * 1000.0),
-                Math.Round(_restPreset.Consonant * 1000.0),
-                _restPreset.Blank,
-                RestOverlap(_restPreset));
-        }
+    OtoExport CurrentExport() => ExportFor(CurrentMode());
 
+    OtoExport ExportFor(string mode)
+    {
+        if (mode == "cvvc")
+            return CvvcExport();
+        if (mode == "renzoku")
+            return RenzokuExport();
+        return MonoExport();
+    }
+
+    OtoExport MonoExport()
+    {
         var overlap = new Dictionary<string, double>(ConsonantOverlap.Kinds.Length);
         foreach (var (_, key, _) in ConsonantOverlap.Kinds)
         {
@@ -1188,6 +1186,19 @@ public sealed partial class MainPage : Page
             BlankSlider.Value,
             overlap);
     }
+
+    OtoExport RenzokuExport() =>
+        new(
+            Math.Round(-RenzokuOffsetSlider.Value * 1000.0),
+            Math.Round(RenzokuConsonantSlider.Value * 1000.0),
+            RenzokuBlankSlider.Value,
+            new Dictionary<string, double>(),
+            "renzoku",
+            RenzokuOverlapSlider.Value / 100.0,
+            Math.Round(-_restPreset.Offset * 1000.0),
+            Math.Round(_restPreset.Consonant * 1000.0),
+            _restPreset.Blank,
+            RestOverlap(_restPreset));
 
     void OnConfigChanged()
     {

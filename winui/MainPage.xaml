@@ -941,7 +941,39 @@
                                 <Border Style="{StaticResource PanelCardStyle}">
                                     <local:InfoNote
                                         Title="oto.ini"
-                                        Text="直した区間から計算して、フォルダに保存します。モードとスライダーは oto推定設定の値を使います。" />
+                                        Text="選んだエイリアスを、直した区間から計算してフォルダに保存します。位置は oto推定設定のスライダーを使います。" />
+                                </Border>
+                                <Border Style="{StaticResource PanelCardStyle}">
+                                    <StackPanel Spacing="8">
+                                        <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="生成するエイリアス" />
+                                        <CheckBox
+                                            x:Name="AliasMonoBox"
+                                            AutomationProperties.Name="単独音"
+                                            Content="単独音"
+                                            IsChecked="True"
+                                            Checked="AliasChoice_Changed"
+                                            Unchecked="AliasChoice_Changed" />
+                                        <TextBlock
+                                            x:Name="AliasMonoNote"
+                                            Margin="28,0,0,0"
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            Style="{StaticResource CaptionTextBlockStyle}"
+                                            Text="単独音はエイリアスに自動的に含まれます。"
+                                            TextWrapping="Wrap"
+                                            Visibility="Collapsed" />
+                                        <CheckBox
+                                            x:Name="AliasRenzokuBox"
+                                            AutomationProperties.Name="連続音"
+                                            Content="連続音"
+                                            Checked="AliasChoice_Changed"
+                                            Unchecked="AliasChoice_Changed" />
+                                        <CheckBox
+                                            x:Name="AliasCvvcBox"
+                                            AutomationProperties.Name="CVVC"
+                                            Content="CVVC"
+                                            Checked="AliasChoice_Changed"
+                                            Unchecked="AliasChoice_Changed" />
+                                    </StackPanel>
                                 </Border>
                             </StackPanel>
                         </ScrollViewer>

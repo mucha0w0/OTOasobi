@@ -6,6 +6,9 @@ namespace Otoasobi;
 
 public sealed partial class MainPage
 {
+    bool _aliasMonoWanted = true;
+    bool _aliasChoiceWrite;
+
     void SaveSettings_Click(object sender, RoutedEventArgs e)
     {
         if (_busy)
@@ -436,6 +439,7 @@ public sealed partial class MainPage
                     break;
             }
 
+            ApplyAliasSelection(file.Aliases, file.Mode);
             PointStandalone(FindUserOto(file.StandalonePreset));
             PointRest(FindUserOto(file.RestPreset));
             PointLead(FindUserOto(file.LeadPreset));
@@ -454,6 +458,7 @@ public sealed partial class MainPage
             Version = OtoSaveFile.CurrentVersion,
             Kind = OtoSaveFile.KindId,
             Mode = CurrentMode(),
+            Aliases = CaptureAliases(),
             StandalonePreset = _selectedPreset?.Name ?? OtoPreset.BuiltInName,
             RestPreset = _restPreset.Name,
             CvvcPreset = _selectedCvvc?.Name ?? CvvcPreset.BuiltInName,
@@ -518,6 +523,114 @@ public sealed partial class MainPage
         if (OtoModeRenzoku.IsChecked == true)
             return "renzoku";
         return "mono";
+    }
+
+    void AliasChoice_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_aliasChoiceWrite || AliasMonoBox == null || AliasRenzokuBox == null || AliasCvvcBox == null)
+            return;
+        if (AliasIncludesStandalone() && ReferenceEquals(sender, AliasMonoBox))
+        {
+            ApplyAliasChoiceVisual();
+            return;
+        }
+
+        if (!AliasIncludesStandalone() && ReferenceEquals(sender, AliasMonoBox))
+            _aliasMonoWanted = AliasMonoBox.IsChecked == true;
+        ApplyAliasChoiceVisual();
+        if (!_configReady || _applyingSave || _applyingPreset)
+            return;
+        ScheduleSession();
+        ScheduleOtoTable();
+        if (!_wrote)
+            return;
+        _wrote = false;
+        ShowNotice(
+            "修正はまだファイルに入っていません",
+            WithSkip("もう一度「oto.iniを生成」を押すと、oto.ini に反映されます。"));
+    }
+
+    bool AliasIncludesStandalone() =>
+        AliasRenzokuBox.IsChecked == true || AliasCvvcBox.IsChecked == true;
+
+    void ApplyAliasChoiceVisual()
+    {
+        if (AliasMonoBox == null || AliasMonoNote == null || AliasRenzokuBox == null || AliasCvvcBox == null)
+            return;
+        var forced = AliasIncludesStandalone();
+        _aliasChoiceWrite = true;
+        AliasMonoBox.IsChecked = forced || _aliasMonoWanted;
+        AliasMonoBox.Opacity = forced ? 0.45 : 1;
+        AliasMonoBox.IsHitTestVisible = !forced;
+        AliasMonoBox.IsTabStop = !forced;
+        AliasMonoNote.Visibility = forced ? Visibility.Visible : Visibility.Collapsed;
+        _aliasChoiceWrite = false;
+    }
+
+    List<string> SelectedAliasModes()
+    {
+        var modes = new List<string>();
+        if (AliasMonoBox == null || AliasRenzokuBox == null || AliasCvvcBox == null)
+        {
+            modes.Add("mono");
+            return modes;
+        }
+
+        if (AliasIncludesStandalone() || AliasMonoBox.IsChecked == true)
+            modes.Add("mono");
+        if (AliasRenzokuBox.IsChecked == true)
+            modes.Add("renzoku");
+        if (AliasCvvcBox.IsChecked == true)
+            modes.Add("cvvc");
+        return modes;
+    }
+
+    void ShowEstimationMode(string mode)
+    {
+        if (string.IsNullOrEmpty(mode) || CurrentMode() == mode)
+            return;
+        switch (mode)
+        {
+            case "renzoku":
+                OtoModeRenzoku.IsChecked = true;
+                break;
+            case "cvvc":
+                OtoModeCvvc.IsChecked = true;
+                break;
+            default:
+                OtoModeStandalone.IsChecked = true;
+                break;
+        }
+    }
+
+    void ApplyAliasSelection(IReadOnlyList<string>? aliases, string mode)
+    {
+        IReadOnlyList<string> chosen = aliases ?? mode switch
+        {
+            "cvvc" => ["cvvc"],
+            "renzoku" => ["renzoku"],
+            _ => ["mono"],
+        };
+        _aliasMonoWanted = chosen.Contains("mono");
+        _aliasChoiceWrite = true;
+        if (AliasRenzokuBox != null)
+            AliasRenzokuBox.IsChecked = chosen.Contains("renzoku");
+        if (AliasCvvcBox != null)
+            AliasCvvcBox.IsChecked = chosen.Contains("cvvc");
+        _aliasChoiceWrite = false;
+        ApplyAliasChoiceVisual();
+    }
+
+    List<string> CaptureAliases()
+    {
+        var list = new List<string>();
+        if (_aliasMonoWanted)
+            list.Add("mono");
+        if (AliasRenzokuBox?.IsChecked == true)
+            list.Add("renzoku");
+        if (AliasCvvcBox?.IsChecked == true)
+            list.Add("cvvc");
+        return list;
     }
 
     OtoPreset FindUserOto(string? name)

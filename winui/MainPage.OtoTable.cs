@@ -14,7 +14,7 @@ public sealed partial class MainPage
 
     void WireOtoTable()
     {
-        OtoParams.RowChosen += (_, row) => RevealOtoRow(row.FileName, row.Index);
+        OtoParams.RowChosen += (_, row) => RevealOtoRow(row.FileName, row.Index, row.Mode);
         OtoParams.ValuesEdited += (_, edits) => ApplyOtoEdits(edits);
         OtoParams.AliasEdited += (_, edits) => ApplyAliasEdits(edits);
         OtoParams.CommentEdited += (_, edits) => ApplyCommentEdits(edits);
@@ -23,7 +23,7 @@ public sealed partial class MainPage
             if (_shownFile == null)
                 return;
             _tableFocus = index;
-            OtoParams.SetEmphasis(_shownFile.Name, index);
+            OtoParams.SetEmphasis(_shownFile.Name, index, CurrentMode());
         };
     }
 
@@ -51,9 +51,12 @@ public sealed partial class MainPage
     void RefreshOtoTable()
     {
         _otoTableTimer?.Stop();
-        OtoParams.Show(BuildOtoSnapshots(), _analyzed
-            ? "書き出す行がありません。"
-            : "解析すると、oto.ini に出す値がここに出ます。");
+        var empty = !_analyzed
+            ? "解析すると、oto.ini に出す値がここに出ます。"
+            : SelectedAliasModes().Count == 0
+                ? "生成するエイリアスが選ばれていません。"
+                : "書き出す行がありません。";
+        OtoParams.Show(BuildOtoSnapshots(), empty);
     }
 
     void ClearLoudness()
@@ -136,6 +139,7 @@ public sealed partial class MainPage
             {
                 FileName = draft.FileName,
                 FileLabel = Path.GetFileNameWithoutExtension(draft.FileName),
+                Mode = draft.Mode,
                 Index = draft.Index,
                 Alias = draft.Alias,
                 AliasText = numbered[i],
@@ -163,55 +167,59 @@ public sealed partial class MainPage
         var drafts = new List<OtoTableDraft>();
         if (!_analyzed || _files.Count == 0)
             return drafts;
-        var export = CurrentExport();
-        var tunes = _adjust.For(CurrentMode());
         foreach (var file in _files)
         {
             if (file.Spans.Count == 0)
                 continue;
-            var auto = new List<OtoMark>();
-            _loudnessByFile.TryGetValue(file.Name, out var loud);
-            OtoMarks.Fill(file, export, auto, loud);
-            for (var i = 0; i < auto.Count; i++)
-            {
-                double?[]? points = null;
-                string? name = null;
-                string? comment = null;
-                foreach (var entry in tunes)
-                {
-                    if (entry.Index != i || !entry.File.Equals(file.Name, StringComparison.OrdinalIgnoreCase))
-                        continue;
-                    if (!string.Equals(entry.Alias, auto[i].Alias, StringComparison.Ordinal))
-                        continue;
-                    points = entry.Points();
-                    name = string.IsNullOrEmpty(entry.Name) ? null : entry.Name;
-                    comment = string.IsNullOrEmpty(entry.Comment) ? null : entry.Comment;
-                    break;
-                }
-
-                var shown = OtoTune.Apply(auto[i], points, Math.Max(file.Duration, 0));
-                var tuned = new bool[OtoTune.PointCount];
-                if (points != null)
-                {
-                    for (var point = 0; point < tuned.Length; point++)
-                        tuned[point] = points[point] != null;
-                }
-
-                var any = false;
-                foreach (var flag in tuned)
-                    any |= flag;
-                drafts.Add(new OtoTableDraft(file.Name, i, auto[i].Alias, name, comment, shown, tuned, any));
-            }
+            foreach (var mode in SelectedAliasModes())
+                AppendOtoDrafts(drafts, file, mode);
         }
 
         return drafts;
+    }
+
+    void AppendOtoDrafts(List<OtoTableDraft> drafts, WavFile file, string mode)
+    {
+        var auto = new List<OtoMark>();
+        _loudnessByFile.TryGetValue(file.Name, out var loud);
+        OtoMarks.Fill(file, ExportFor(mode), auto, loud);
+        var tunes = _adjust.For(mode);
+        for (var i = 0; i < auto.Count; i++)
+        {
+            double?[]? points = null;
+            string? name = null;
+            string? comment = null;
+            foreach (var entry in tunes)
+            {
+                if (entry.Index != i || !entry.File.Equals(file.Name, StringComparison.OrdinalIgnoreCase))
+                    continue;
+                if (!string.Equals(entry.Alias, auto[i].Alias, StringComparison.Ordinal))
+                    continue;
+                points = entry.Points();
+                name = string.IsNullOrEmpty(entry.Name) ? null : entry.Name;
+                comment = string.IsNullOrEmpty(entry.Comment) ? null : entry.Comment;
+                break;
+            }
+
+            var shown = OtoTune.Apply(auto[i], points, Math.Max(file.Duration, 0));
+            var tuned = new bool[OtoTune.PointCount];
+            if (points != null)
+            {
+                for (var point = 0; point < tuned.Length; point++)
+                    tuned[point] = points[point] != null;
+            }
+
+            var any = false;
+            foreach (var flag in tuned)
+                any |= flag;
+            drafts.Add(new OtoTableDraft(file.Name, mode, i, auto[i].Alias, name, comment, shown, tuned, any));
+        }
     }
 
     void ApplyOtoEdits(IReadOnlyList<OtoParamEdit> edits)
     {
         if (_applyingSave || edits.Count == 0)
             return;
-        var export = CurrentExport();
         var touchedShown = false;
         var changed = false;
         foreach (var edit in edits)
@@ -230,7 +238,8 @@ public sealed partial class MainPage
                 continue;
             var autoList = new List<OtoMark>();
             _loudnessByFile.TryGetValue(file.Name, out var loud);
-            OtoMarks.Fill(file, export, autoList, loud);
+            var mode = string.IsNullOrEmpty(edit.Mode) ? CurrentMode() : edit.Mode;
+            OtoMarks.Fill(file, ExportFor(mode), autoList, loud);
             if (edit.Index < 0 || edit.Index >= autoList.Count)
                 continue;
             var auto = autoList[edit.Index];
@@ -258,9 +267,11 @@ public sealed partial class MainPage
                 entry.SetPoint(point, Math.Abs(at - auto.At(point)) <= OtoTune.MagnetSeconds ? null : at);
             }
 
-            _adjust.Remember(CurrentMode(), entry);
+            _adjust.Remember(mode, entry);
             changed = true;
-            if (_shownFile != null && _shownFile.Name.Equals(file.Name, StringComparison.OrdinalIgnoreCase))
+            if (_shownFile != null
+                && mode == CurrentMode()
+                && _shownFile.Name.Equals(file.Name, StringComparison.OrdinalIgnoreCase))
                 touchedShown = true;
         }
 
@@ -291,9 +302,7 @@ public sealed partial class MainPage
             for (var i = 0; i < drafts.Count; i++)
             {
                 var draft = drafts[i];
-                if (draft.Index != edit.Index || !draft.FileName.Equals(edit.FileName, StringComparison.OrdinalIgnoreCase))
-                    continue;
-                if (!string.Equals(draft.Alias, edit.Alias, StringComparison.Ordinal))
+                if (!SameOtoRow(draft, edit.FileName, edit.Mode, edit.Index, edit.Alias))
                     continue;
                 index = i;
                 break;
@@ -314,7 +323,7 @@ public sealed partial class MainPage
             var stored = string.Equals(edit.Name, natural, StringComparison.Ordinal) ? null : edit.Name;
             if (string.Equals(stored ?? "", drafts[index].Name ?? "", StringComparison.Ordinal))
                 continue;
-            _adjust.RememberName(CurrentMode(), drafts[index].FileName, drafts[index].Index, drafts[index].Alias, stored);
+            _adjust.RememberName(drafts[index].Mode, drafts[index].FileName, drafts[index].Index, drafts[index].Alias, stored);
             changed = true;
             if (_shownFile != null && _shownFile.Name.Equals(drafts[index].FileName, StringComparison.OrdinalIgnoreCase))
                 touchedShown = true;
@@ -345,9 +354,7 @@ public sealed partial class MainPage
             OtoTableDraft? draft = null;
             foreach (var item in drafts)
             {
-                if (item.Index != edit.Index || !item.FileName.Equals(edit.FileName, StringComparison.OrdinalIgnoreCase))
-                    continue;
-                if (!string.Equals(item.Alias, edit.Alias, StringComparison.Ordinal))
+                if (!SameOtoRow(item, edit.FileName, edit.Mode, edit.Index, edit.Alias))
                     continue;
                 draft = item;
                 break;
@@ -358,7 +365,7 @@ public sealed partial class MainPage
             var stored = string.IsNullOrEmpty(edit.Comment) ? null : edit.Comment;
             if (string.Equals(stored ?? "", draft.Comment ?? "", StringComparison.Ordinal))
                 continue;
-            _adjust.RememberComment(CurrentMode(), draft.FileName, draft.Index, draft.Alias, stored);
+            _adjust.RememberComment(draft.Mode, draft.FileName, draft.Index, draft.Alias, stored);
             changed = true;
         }
 
@@ -368,7 +375,7 @@ public sealed partial class MainPage
         RefreshOtoTable();
     }
 
-    void RevealOtoRow(string fileName, int index)
+    void RevealOtoRow(string fileName, int index, string mode)
     {
         WavFile? file = null;
         foreach (var candidate in _files)
@@ -382,6 +389,7 @@ public sealed partial class MainPage
 
         if (file == null)
             return;
+        ShowEstimationMode(mode);
         _revealFile = file.Name;
         _revealIndex = index;
         FileList.ScrollIntoView(file);
@@ -409,5 +417,11 @@ public sealed partial class MainPage
         Editor.FocusOto(index);
     }
 
-    sealed record OtoTableDraft(string FileName, int Index, string Alias, string? Name, string? Comment, OtoMark Shown, bool[] Tuned, bool Any);
+    static bool SameOtoRow(OtoTableDraft draft, string fileName, string mode, int index, string alias) =>
+        draft.Index == index
+        && draft.Mode == mode
+        && draft.FileName.Equals(fileName, StringComparison.OrdinalIgnoreCase)
+        && string.Equals(draft.Alias, alias, StringComparison.Ordinal);
+
+    sealed record OtoTableDraft(string FileName, string Mode, int Index, string Alias, string? Name, string? Comment, OtoMark Shown, bool[] Tuned, bool Any);
 }

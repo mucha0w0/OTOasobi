@@ -29,7 +29,7 @@ CVVC の lead は単独音と同じ形の config。発音の先頭の音素だ�
 CVVC の consonant_ms と blank は通常音素。overlap は子音ラベルから 0〜1 で、0 が子音の開始、1 が先行発声。負の秒は使わない。
 CVVC の vc_offset_ms と vc_overlap は子音音素で、連続音のオフセットとオーバーラップと同じ。母音音素もこの 2 つを使う。vc_consonant と vc_blank は子音ラベルから 0〜1。
 blank の 0 は音量の上辺の右端。正は減衰側、負は手前へ、その秒数だけずらす。子音部とブランクは単独音と連続音と CVVC の通常音素で同じ。
-応答の txt はそのモードの oto.ini。全区間は OTOasibi_log.txt、母音始まりは OTOasibi_out.txt。
+応答の txt は oto.ini。parts があるときは、その順のエイリアスを 1 つのファイルに足す。全区間は OTOasibi_log.txt、母音始まりは OTOasibi_out.txt。
 画面で区間を直したあとは save が保存データを更新し、write が oto.ini を計算して書く。
 write の adjustments は、ドラッグで直した位置。file、index、alias と、直した点だけの秒。無い点は自動推定のまま。name は手で直したエイリアス。編集印の * は oto.ini に書かない。
 要求: {"id": 5, "cmd": "frq", "folder": "C:/音声フォルダ", "mode": "all", "only": null, "clear": null}
@@ -318,9 +318,31 @@ def _frq(request_id: object, folder: str, request: dict) -> dict:
     return payload
 
 
-def _write(folder: str, files: object, config: object, adjustments: object = None) -> dict:
+def _write_parts(raw: object) -> list[tuple] | None:
+    """選んだエイリアス。各要素は config と、そのエイリアスの adjustments。"""
+    if not isinstance(raw, list) or not raw:
+        return None
+    parts: list[tuple] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        parts.append((oto_settings_from(item.get("config")), adjustments_from(item.get("adjustments"))))
+    return parts or None
+
+
+def _write(
+    folder: str,
+    files: object,
+    config: object,
+    adjustments: object = None,
+    parts: object = None,
+) -> dict:
     parsed = _parsed_files(files)
-    out = export_folder(folder, parsed, oto_settings_from(config), adjustments_from(adjustments))
+    built = _write_parts(parts)
+    if built:
+        out = export_folder(folder, parsed, parts=built)
+    else:
+        out = export_folder(folder, parsed, oto_settings_from(config), adjustments_from(adjustments))
     try:
         save_cache(folder, parsed)
     except Exception as exc:
@@ -380,6 +402,7 @@ def main() -> None:
                     request.get("files"),
                     request.get("config"),
                     request.get("adjustments"),
+                    request.get("parts"),
                 )
             else:
                 raise RuntimeError("未対応のコマンドです")

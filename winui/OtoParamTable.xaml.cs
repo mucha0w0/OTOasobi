@@ -21,6 +21,8 @@ public sealed class OtoParamSnapshot
 
     public string FileLabel { get; init; } = "";
 
+    public string Mode { get; init; } = "";
+
     public int Index { get; init; }
 
     public string Alias { get; init; } = "";
@@ -58,6 +60,8 @@ public sealed class OtoParamEdit
 {
     public string FileName { get; init; } = "";
 
+    public string Mode { get; init; } = "";
+
     public int Index { get; init; }
 
     public string Alias { get; init; } = "";
@@ -77,6 +81,8 @@ public sealed class OtoAliasEdit
 {
     public string FileName { get; init; } = "";
 
+    public string Mode { get; init; } = "";
+
     public int Index { get; init; }
 
     public string Alias { get; init; } = "";
@@ -87,6 +93,8 @@ public sealed class OtoAliasEdit
 public sealed class OtoCommentEdit
 {
     public string FileName { get; init; } = "";
+
+    public string Mode { get; init; } = "";
 
     public int Index { get; init; }
 
@@ -118,6 +126,8 @@ public sealed class OtoParamRow : INotifyPropertyChanged
     public string FileName { get; init; } = "";
 
     public string FileLabel { get; init; } = "";
+
+    public string Mode { get; init; } = "";
 
     public int Index { get; init; }
 
@@ -174,6 +184,7 @@ public sealed class OtoParamRow : INotifyPropertyChanged
         {
             FileName = snap.FileName,
             FileLabel = snap.FileLabel,
+            Mode = snap.Mode,
             Index = snap.Index,
         };
         row.Pull(snap);
@@ -249,6 +260,7 @@ public sealed class OtoParamRow : INotifyPropertyChanged
         new()
         {
             FileName = FileName,
+            Mode = Mode,
             Index = Index,
             Alias = _alias,
             Offset = offset,
@@ -292,7 +304,9 @@ public sealed partial class OtoParamTable : UserControl
     bool _barLock;
     string? _viewFile;
     string? _scrolledFile;
+    string _scrolledMode = "";
     int _focusIndex = -1;
+    string _focusMode = "";
     int _scrolledIndex = int.MinValue;
     bool _silent;
     bool _commitLock;
@@ -321,12 +335,14 @@ public sealed partial class OtoParamTable : UserControl
         VBar.ValueChanged += VBar_ValueChanged;
     }
 
-    public void SetEmphasis(string? fileName, int focusIndex)
+    public void SetEmphasis(string? fileName, int focusIndex, string? mode = null)
     {
         var fileChanged = !string.Equals(fileName ?? "", _viewFile ?? "", StringComparison.OrdinalIgnoreCase);
-        var focusChanged = focusIndex != _focusIndex;
+        var nextMode = mode ?? "";
+        var focusChanged = focusIndex != _focusIndex || !string.Equals(nextMode, _focusMode, StringComparison.Ordinal);
         _viewFile = fileName;
         _focusIndex = focusIndex;
+        _focusMode = nextMode;
         ApplyEmphasis();
         SyncSelection();
         if (fileChanged || (focusChanged && focusIndex >= 0))
@@ -371,6 +387,7 @@ public sealed partial class OtoParamTable : UserControl
             _silent = true;
             Rows.SelectedItem = _rows.FirstOrDefault(row =>
                 row.Index == selected.Index
+                && row.Mode == selected.Mode
                 && row.Alias == selected.Alias
                 && row.FileName.Equals(selected.FileName, StringComparison.OrdinalIgnoreCase));
             _silent = false;
@@ -397,7 +414,7 @@ public sealed partial class OtoParamTable : UserControl
     {
         if (string.IsNullOrEmpty(_viewFile) || !row.FileName.Equals(_viewFile, StringComparison.OrdinalIgnoreCase))
             return 0;
-        if (_focusIndex >= 0 && row.Index == _focusIndex)
+        if (_focusIndex >= 0 && row.Index == _focusIndex && row.Mode == _focusMode)
             return 2;
         return 1;
     }
@@ -454,10 +471,12 @@ public sealed partial class OtoParamTable : UserControl
     {
         _scrolledFile = _viewFile;
         _scrolledIndex = _focusIndex;
+        _scrolledMode = _focusMode;
     }
 
     bool SameScrollTarget() =>
         _scrolledIndex == _focusIndex
+        && string.Equals(_scrolledMode, _focusMode, StringComparison.Ordinal)
         && string.Equals(_scrolledFile ?? "", _viewFile ?? "", StringComparison.OrdinalIgnoreCase);
 
     OtoParamRow? FocusedRow()
@@ -465,7 +484,9 @@ public sealed partial class OtoParamTable : UserControl
         if (string.IsNullOrEmpty(_viewFile) || _focusIndex < 0)
             return null;
         return _rows.FirstOrDefault(item =>
-            item.Index == _focusIndex && item.FileName.Equals(_viewFile, StringComparison.OrdinalIgnoreCase));
+            item.Index == _focusIndex
+            && item.Mode == _focusMode
+            && item.FileName.Equals(_viewFile, StringComparison.OrdinalIgnoreCase));
     }
 
     OtoParamRow? FileRow()
@@ -482,10 +503,12 @@ public sealed partial class OtoParamTable : UserControl
         return Color.FromArgb(255, 15, 157, 142);
     }
 
-    public void Select(string fileName, int index)
+    public void Select(string fileName, int index, string mode)
     {
         var row = _rows.FirstOrDefault(item =>
-            item.Index == index && item.FileName.Equals(fileName, StringComparison.OrdinalIgnoreCase));
+            item.Index == index
+            && item.Mode == mode
+            && item.FileName.Equals(fileName, StringComparison.OrdinalIgnoreCase));
         if (row == null)
             return;
         if (!ReferenceEquals(Rows.SelectedItem, row))
@@ -513,7 +536,7 @@ public sealed partial class OtoParamTable : UserControl
         {
             var row = _rows[i];
             var snap = snaps[i];
-            if (row.Index != snap.Index || row.Alias != snap.Alias
+            if (row.Index != snap.Index || row.Mode != snap.Mode || row.Alias != snap.Alias
                 || !row.FileName.Equals(snap.FileName, StringComparison.OrdinalIgnoreCase))
                 return false;
         }
@@ -698,6 +721,7 @@ public sealed partial class OtoParamTable : UserControl
             edits.Add(new OtoAliasEdit
             {
                 FileName = row.FileName,
+                Mode = row.Mode,
                 Index = row.Index,
                 Alias = row.Alias,
                 Name = cleaned,
@@ -732,6 +756,7 @@ public sealed partial class OtoParamTable : UserControl
             edits.Add(new OtoCommentEdit
             {
                 FileName = row.FileName,
+                Mode = row.Mode,
                 Index = row.Index,
                 Alias = row.Alias,
                 Comment = cleaned,
@@ -860,6 +885,7 @@ public sealed partial class OtoParamTable : UserControl
             AliasEdited?.Invoke(this, [new OtoAliasEdit
             {
                 FileName = row.FileName,
+                Mode = row.Mode,
                 Index = row.Index,
                 Alias = row.Alias,
                 Name = cleaned,
@@ -888,6 +914,7 @@ public sealed partial class OtoParamTable : UserControl
             CommentEdited?.Invoke(this, [new OtoCommentEdit
             {
                 FileName = row.FileName,
+                Mode = row.Mode,
                 Index = row.Index,
                 Alias = row.Alias,
                 Comment = cleaned,

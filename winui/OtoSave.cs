@@ -19,8 +19,11 @@ sealed class OtoSaveFile
 
     public DateTimeOffset SavedAt { get; set; }
 
-    // mono / renzoku / cvvc。画面の単独音、連続音、CVVC。
+    // mono / renzoku / cvvc。oto推定設定で開いている計算方法。
     public string Mode { get; set; } = "mono";
+
+    // 生成するエイリアス。mono、renzoku、cvvc。null は Mode と同じ 1 種類。
+    public List<string>? Aliases { get; set; }
 
     public string StandalonePreset { get; set; } = OtoPreset.BuiltInName;
 
@@ -518,6 +521,7 @@ static class OtoSaveStore
             "cvvc" => "cvvc",
             _ => "mono",
         };
+        file.Aliases = CleanAliases(file.Aliases, file.Mode);
         file.StandalonePreset = PresetName(file.StandalonePreset, OtoPreset.BuiltInName);
         file.RestPreset = PresetName(file.RestPreset, OtoPreset.BuiltInName);
         file.CvvcPreset = PresetName(file.CvvcPreset, CvvcPreset.BuiltInName);
@@ -605,6 +609,29 @@ static class OtoSaveStore
         library.NoisePresets = NoisePresetStore.Normalize(library.NoisePresets);
         library.CompressorPresets = CompressorPresetStore.Normalize(library.CompressorPresets);
         library.RackPresets = EffectRackPresetStore.Normalize(library.RackPresets);
+    }
+
+    static List<string> CleanAliases(List<string>? aliases, string mode)
+    {
+        if (aliases == null)
+        {
+            return mode switch
+            {
+                "cvvc" => ["cvvc"],
+                "renzoku" => ["renzoku"],
+                _ => ["mono"],
+            };
+        }
+
+        var result = new List<string>();
+        foreach (var name in aliases)
+        {
+            if (name is not ("mono" or "renzoku" or "cvvc") || result.Contains(name))
+                continue;
+            result.Add(name);
+        }
+
+        return result;
     }
 
     static void CleanStandalone(OtoSliderState state)

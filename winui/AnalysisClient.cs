@@ -107,8 +107,7 @@ sealed class AnalysisClient : IDisposable
     public async Task<AnalyzeResult> WriteAsync(
         string folder,
         IReadOnlyList<WavFile> files,
-        OtoExport config,
-        IReadOnlyList<OtoAdjustedEntry>? adjustments = null)
+        IReadOnlyList<OtoWritePart> parts)
     {
         using var doc = await SendAsync(id => JsonSerializer.Serialize(new
         {
@@ -116,37 +115,11 @@ sealed class AnalysisClient : IDisposable
             cmd = "write",
             folder,
             files = FilePayload(files),
-            adjustments = AdjustPayload(adjustments),
-            config = new
+            parts = parts.Select(part => new
             {
-                offset_ms = config.OffsetMs,
-                consonant_ms = config.ConsonantMs,
-                blank = config.Blank,
-                overlap = config.Mode == "renzoku" ? (object)config.OverlapAt : config.Overlap,
-                mode = config.Mode,
-                rest = config.Mode == "renzoku"
-                    ? new
-                    {
-                        offset_ms = config.RestOffsetMs,
-                        consonant_ms = config.RestConsonantMs,
-                        blank = config.RestBlank,
-                        overlap = config.RestOverlap,
-                    }
-                    : null,
-                lead = config.Mode == "cvvc"
-                    ? new
-                    {
-                        offset_ms = config.LeadOffsetMs,
-                        consonant_ms = config.LeadConsonantMs,
-                        blank = config.LeadBlank,
-                        overlap = config.LeadOverlap,
-                    }
-                    : null,
-                vc_offset_ms = config.VcOffsetMs,
-                vc_consonant = config.VcConsonant,
-                vc_blank = config.VcBlank,
-                vc_overlap = config.VcOverlapAt,
-            },
+                config = ConfigPayload(part.Config),
+                adjustments = AdjustPayload(part.Adjustments),
+            }).ToArray(),
         }), null).ConfigureAwait(true);
         var root = doc.RootElement;
         var ok = root.TryGetProperty("ok", out var okValue) && okValue.GetBoolean();
@@ -250,6 +223,37 @@ sealed class AnalysisClient : IDisposable
         var cached = root.TryGetProperty("cached", out var cachedValue) && cachedValue.ValueKind == JsonValueKind.True;
         return new FolderData(ok, error, notice, files, cached);
     }
+
+    static object ConfigPayload(OtoExport config) => new
+    {
+        offset_ms = config.OffsetMs,
+        consonant_ms = config.ConsonantMs,
+        blank = config.Blank,
+        overlap = config.Mode == "renzoku" ? (object)config.OverlapAt : config.Overlap,
+        mode = config.Mode,
+        rest = config.Mode == "renzoku"
+            ? new
+            {
+                offset_ms = config.RestOffsetMs,
+                consonant_ms = config.RestConsonantMs,
+                blank = config.RestBlank,
+                overlap = config.RestOverlap,
+            }
+            : null,
+        lead = config.Mode == "cvvc"
+            ? new
+            {
+                offset_ms = config.LeadOffsetMs,
+                consonant_ms = config.LeadConsonantMs,
+                blank = config.LeadBlank,
+                overlap = config.LeadOverlap,
+            }
+            : null,
+        vc_offset_ms = config.VcOffsetMs,
+        vc_consonant = config.VcConsonant,
+        vc_blank = config.VcBlank,
+        vc_overlap = config.VcOverlapAt,
+    };
 
     static object[] AdjustPayload(IReadOnlyList<OtoAdjustedEntry>? entries)
     {
@@ -492,5 +496,7 @@ sealed class AnalysisClient : IDisposable
 }
 
 sealed record AnalyzeResult(bool Ok, string? Txt, string? Error, string? Notice);
+
+sealed record OtoWritePart(OtoExport Config, IReadOnlyList<OtoAdjustedEntry> Adjustments);
 
 sealed record FrqResult(bool Ok, int Written, string? Error, string? Notice);
