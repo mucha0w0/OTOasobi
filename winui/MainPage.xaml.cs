@@ -1449,6 +1449,7 @@ public sealed partial class MainPage : Page
 
     void OnEdited()
     {
+        ScheduleOtoTable();
         _ = SaveCacheAsync();
         if (!_wrote)
             return;

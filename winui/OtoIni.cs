@@ -94,6 +94,19 @@ static class OtoIni
         return source;
     }
 
+    // 表のメモ。改行は潰す。空なら null。oto.ini には出さない。
+    public static string? CleanComment(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return null;
+        var source = text.Replace('\r', ' ').Replace('\n', ' ').Replace('\t', ' ').Trim();
+        if (source.Length == 0)
+            return null;
+        if (source.Length > 200)
+            source = source[..200];
+        return source;
+    }
+
     // overrides の入っている行は、その文字列のまま残す。ほかは重複へ番号を付ける。
     public static string[] ResolveAliases(IReadOnlyList<string> aliases, IReadOnlyList<string?>? overrides)
     {

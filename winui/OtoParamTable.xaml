@@ -44,31 +44,39 @@
             <Setter Property="Padding" Value="0" />
             <Setter Property="MinHeight" Value="0" />
             <Setter Property="Margin" Value="0" />
-            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
             <Setter Property="VerticalContentAlignment" Value="Stretch" />
         </Style>
     </UserControl.Resources>
     <Grid>
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
-        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
         <ScrollViewer
-            x:Name="HeaderScroll"
+            x:Name="TableScroll"
             HorizontalAlignment="Stretch"
+            VerticalAlignment="Stretch"
             HorizontalContentAlignment="Left"
-            HorizontalScrollBarVisibility="Hidden"
+            HorizontalScrollBarVisibility="Auto"
             HorizontalScrollMode="Enabled"
             VerticalScrollBarVisibility="Disabled"
             VerticalScrollMode="Disabled"
             ZoomMode="Disabled">
             <Grid
-                x:Name="HeaderGrid"
+                x:Name="Sheet"
                 Width="772"
                 MinWidth="640"
                 MaxWidth="1180"
-                HorizontalAlignment="Left"
-                Background="{ThemeResource SubtleFillColorSecondaryBrush}">
+                HorizontalAlignment="Left">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+                <Grid
+                    x:Name="HeaderGrid"
+                    Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                    PointerWheelChanged="OnShiftWheel">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="140*" />
                     <ColumnDefinition Width="92*" />
@@ -127,19 +135,19 @@
                     <TextBlock
                         Style="{StaticResource OtoHeadStyle}"
                         Text="コメント"
-                        ToolTipService.ToolTip="oto.ini には書き出さない" />
+                        ToolTipService.ToolTip="メモ。oto.ini には書き出さない" />
                 </Border>
             </Grid>
-        </ScrollViewer>
-        <ListView
-            x:Name="Rows"
-            Grid.Row="1"
-            ItemContainerStyle="{StaticResource OtoRowStyle}"
-            SelectionChanged="Rows_SelectionChanged"
-            SelectionMode="Single"
-            ScrollViewer.HorizontalScrollBarVisibility="Auto"
-            ScrollViewer.HorizontalScrollMode="Enabled"
-            ScrollViewer.VerticalScrollBarVisibility="Auto">
+            <ListView
+                x:Name="Rows"
+                Grid.Row="1"
+                ItemContainerStyle="{StaticResource OtoRowStyle}"
+                SelectionChanged="Rows_SelectionChanged"
+                SelectionMode="Single"
+                ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                ScrollViewer.HorizontalScrollMode="Disabled"
+                ScrollViewer.VerticalScrollBarVisibility="Hidden"
+                ScrollViewer.VerticalScrollMode="Enabled">
             <ListView.Resources>
                 <ResourceDictionary>
                     <ResourceDictionary.ThemeDictionaries>
@@ -161,10 +169,7 @@
             <ListView.ItemTemplate>
                 <DataTemplate x:DataType="local:OtoParamRow">
                     <Grid
-                        Width="{x:Bind TableWidth, Mode=OneWay}"
-                        MinWidth="640"
-                        MaxWidth="1180"
-                        HorizontalAlignment="Left"
+                        HorizontalAlignment="Stretch"
                         Background="{x:Bind EmphasisBrush, Mode=OneWay}"
                         PointerPressed="Row_PointerPressed">
                         <Grid.ColumnDefinitions>
@@ -253,14 +258,34 @@
                                 Text="{x:Bind AliasText, Mode=OneWay}"
                                 ToolTipService.ToolTip="{x:Bind AliasTip, Mode=OneWay}" />
                         </Border>
-                        <Border Grid.Column="7" Style="{StaticResource OtoLineStyle}" />
+                        <Border Grid.Column="7" Style="{StaticResource OtoLineStyle}">
+                            <TextBox
+                                GotFocus="Cell_GotFocus"
+                                PreviewKeyDown="Cell_KeyDown"
+                                LostFocus="Cell_LostFocus"
+                                Paste="Cell_Paste"
+                                Style="{StaticResource OtoAliasStyle}"
+                                Tag="7"
+                                FontWeight="{x:Bind CommentWeight, Mode=OneWay}"
+                                Text="{x:Bind CommentText, Mode=OneWay}"
+                                ToolTipService.ToolTip="oto.ini には書き出さない" />
+                        </Border>
                     </Grid>
                 </DataTemplate>
             </ListView.ItemTemplate>
-        </ListView>
+            </ListView>
+            </Grid>
+        </ScrollViewer>
+        <ScrollBar
+            x:Name="VBar"
+            Grid.Column="1"
+            IndicatorMode="MouseIndicator"
+            Orientation="Vertical"
+            Scroll="VBar_Scroll"
+            VerticalAlignment="Stretch" />
         <TextBlock
             x:Name="EmptyText"
-            Grid.Row="1"
+            Grid.Column="0"
             Margin="24"
             HorizontalAlignment="Center"
             VerticalAlignment="Center"

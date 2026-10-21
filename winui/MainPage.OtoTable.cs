@@ -17,6 +17,7 @@ public sealed partial class MainPage
         OtoParams.RowChosen += (_, row) => RevealOtoRow(row.FileName, row.Index);
         OtoParams.ValuesEdited += (_, edits) => ApplyOtoEdits(edits);
         OtoParams.AliasEdited += (_, edits) => ApplyAliasEdits(edits);
+        OtoParams.CommentEdited += (_, edits) => ApplyCommentEdits(edits);
         Editor.OtoFocused += (_, index) =>
         {
             if (_shownFile == null)
@@ -140,6 +141,7 @@ public sealed partial class MainPage
                 AliasText = numbered[i],
                 AliasPinned = !string.IsNullOrEmpty(draft.Name),
                 AliasDuplicate = duplicates[i],
+                Comment = draft.Comment ?? "",
                 Offset = OtoIni.Field(shown, 0),
                 Overlap = OtoIni.Field(shown, 1),
                 Preutter = OtoIni.Field(shown, 2),
@@ -174,6 +176,7 @@ public sealed partial class MainPage
             {
                 double?[]? points = null;
                 string? name = null;
+                string? comment = null;
                 foreach (var entry in tunes)
                 {
                     if (entry.Index != i || !entry.File.Equals(file.Name, StringComparison.OrdinalIgnoreCase))
@@ -182,6 +185,7 @@ public sealed partial class MainPage
                         continue;
                     points = entry.Points();
                     name = string.IsNullOrEmpty(entry.Name) ? null : entry.Name;
+                    comment = string.IsNullOrEmpty(entry.Comment) ? null : entry.Comment;
                     break;
                 }
 
@@ -196,7 +200,7 @@ public sealed partial class MainPage
                 var any = false;
                 foreach (var flag in tuned)
                     any |= flag;
-                drafts.Add(new OtoTableDraft(file.Name, i, auto[i].Alias, name, shown, tuned, any));
+                drafts.Add(new OtoTableDraft(file.Name, i, auto[i].Alias, name, comment, shown, tuned, any));
             }
         }
 
@@ -330,6 +334,40 @@ public sealed partial class MainPage
             WithSkip("もう一度「oto.iniを作成」を押すと、oto.ini に反映されます。"));
     }
 
+    void ApplyCommentEdits(IReadOnlyList<OtoCommentEdit> edits)
+    {
+        if (_applyingSave || edits.Count == 0)
+            return;
+        var changed = false;
+        foreach (var edit in edits)
+        {
+            var drafts = CollectOtoDrafts();
+            OtoTableDraft? draft = null;
+            foreach (var item in drafts)
+            {
+                if (item.Index != edit.Index || !item.FileName.Equals(edit.FileName, StringComparison.OrdinalIgnoreCase))
+                    continue;
+                if (!string.Equals(item.Alias, edit.Alias, StringComparison.Ordinal))
+                    continue;
+                draft = item;
+                break;
+            }
+
+            if (draft == null)
+                continue;
+            var stored = string.IsNullOrEmpty(edit.Comment) ? null : edit.Comment;
+            if (string.Equals(stored ?? "", draft.Comment ?? "", StringComparison.Ordinal))
+                continue;
+            _adjust.RememberComment(CurrentMode(), draft.FileName, draft.Index, draft.Alias, stored);
+            changed = true;
+        }
+
+        if (!changed)
+            return;
+        ScheduleSession();
+        RefreshOtoTable();
+    }
+
     void RevealOtoRow(string fileName, int index)
     {
         WavFile? file = null;
@@ -371,5 +409,5 @@ public sealed partial class MainPage
         Editor.FocusOto(index);
     }
 
-    sealed record OtoTableDraft(string FileName, int Index, string Alias, string? Name, OtoMark Shown, bool[] Tuned, bool Any);
+    sealed record OtoTableDraft(string FileName, int Index, string Alias, string? Name, string? Comment, OtoMark Shown, bool[] Tuned, bool Any);
 }

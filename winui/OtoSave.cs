@@ -115,6 +115,9 @@ sealed class OtoAdjustedEntry
     // 手で直したエイリアス。null は自動の名前。編集印の * は入れない。
     public string? Name { get; set; }
 
+    // 表のメモ。oto.ini には書かない。
+    public string? Comment { get; set; }
+
     public double? Offset { get; set; }
 
     public double? Overlap { get; set; }
@@ -167,6 +170,7 @@ sealed class OtoAdjustedEntry
         Index = Index,
         Alias = Alias,
         Name = Name,
+        Comment = Comment,
         Offset = Offset,
         Overlap = Overlap,
         Preutter = Preutter,
@@ -203,15 +207,16 @@ sealed class OtoAdjustBook
     {
         var list = For(mode);
         string? keptName = entry.Name;
-        if (string.IsNullOrEmpty(keptName))
+        string? keptComment = entry.Comment;
+        foreach (var item in list)
         {
-            foreach (var item in list)
-            {
-                if (item.Index != entry.Index || !item.File.Equals(entry.File, StringComparison.OrdinalIgnoreCase))
-                    continue;
+            if (item.Index != entry.Index || !item.File.Equals(entry.File, StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (string.IsNullOrEmpty(keptName))
                 keptName = item.Name;
-                break;
-            }
+            if (string.IsNullOrEmpty(keptComment))
+                keptComment = item.Comment;
+            break;
         }
 
         list.RemoveAll(item =>
@@ -219,7 +224,8 @@ sealed class OtoAdjustBook
             && item.File.Equals(entry.File, StringComparison.OrdinalIgnoreCase));
         var stored = entry.Copy();
         stored.Name = string.IsNullOrEmpty(keptName) ? null : keptName;
-        if (stored.Any || !string.IsNullOrEmpty(stored.Name))
+        stored.Comment = string.IsNullOrEmpty(keptComment) ? null : keptComment;
+        if (stored.Any || !string.IsNullOrEmpty(stored.Name) || !string.IsNullOrEmpty(stored.Comment))
             list.Add(stored);
     }
 
@@ -235,7 +241,7 @@ sealed class OtoAdjustBook
             item.Name = cleaned;
             if (!string.IsNullOrEmpty(autoAlias))
                 item.Alias = autoAlias;
-            if (!item.Any && string.IsNullOrEmpty(item.Name))
+            if (!item.Any && string.IsNullOrEmpty(item.Name) && string.IsNullOrEmpty(item.Comment))
                 list.RemoveAt(i);
             return;
         }
@@ -248,6 +254,34 @@ sealed class OtoAdjustBook
             Index = index,
             Alias = autoAlias,
             Name = cleaned,
+        });
+    }
+
+    public void RememberComment(string? mode, string file, int index, string autoAlias, string? comment)
+    {
+        var list = For(mode);
+        var cleaned = string.IsNullOrEmpty(comment) ? null : comment;
+        for (var i = 0; i < list.Count; i++)
+        {
+            var item = list[i];
+            if (item.Index != index || !item.File.Equals(file, StringComparison.OrdinalIgnoreCase))
+                continue;
+            item.Comment = cleaned;
+            if (!string.IsNullOrEmpty(autoAlias))
+                item.Alias = autoAlias;
+            if (!item.Any && string.IsNullOrEmpty(item.Name) && string.IsNullOrEmpty(item.Comment))
+                list.RemoveAt(i);
+            return;
+        }
+
+        if (cleaned == null)
+            return;
+        list.Add(new OtoAdjustedEntry
+        {
+            File = file,
+            Index = index,
+            Alias = autoAlias,
+            Comment = cleaned,
         });
     }
 }
@@ -540,12 +574,13 @@ static class OtoSaveStore
             entry.File = file;
             entry.Alias = alias;
             entry.Name = OtoIni.CleanAlias(entry.Name);
+            entry.Comment = OtoIni.CleanComment(entry.Comment);
             entry.Offset = CleanTime(entry.Offset);
             entry.Overlap = CleanTime(entry.Overlap);
             entry.Preutter = CleanTime(entry.Preutter);
             entry.Consonant = CleanTime(entry.Consonant);
             entry.Blank = CleanTime(entry.Blank);
-            if (!entry.Any && string.IsNullOrEmpty(entry.Name))
+            if (!entry.Any && string.IsNullOrEmpty(entry.Name) && string.IsNullOrEmpty(entry.Comment))
                 continue;
             result.Add(entry);
         }

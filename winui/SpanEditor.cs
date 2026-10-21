@@ -777,8 +777,10 @@ public sealed partial class SpanEditor : UserControl
 
         FlushDeferredTunes();
 
-        if (changed)
-            Edited?.Invoke(this, EventArgs.Empty);
+        if (!changed)
+            return;
+        ArrangeOtoLabels();
+        Edited?.Invoke(this, EventArgs.Empty);
     }
 
     void ZoomBy(double factor, double? anchorX = null)

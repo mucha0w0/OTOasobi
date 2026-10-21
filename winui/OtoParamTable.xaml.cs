@@ -4,6 +4,7 @@ using Microsoft.UI.Input;
 using Microsoft.UI.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Windows.ApplicationModel.DataTransfer;
@@ -29,6 +30,8 @@ public sealed class OtoParamSnapshot
     public bool AliasPinned { get; init; }
 
     public bool AliasDuplicate { get; init; }
+
+    public string Comment { get; init; } = "";
 
     public double Offset { get; init; }
 
@@ -81,6 +84,17 @@ public sealed class OtoAliasEdit
     public string Name { get; init; } = "";
 }
 
+public sealed class OtoCommentEdit
+{
+    public string FileName { get; init; } = "";
+
+    public int Index { get; init; }
+
+    public string Alias { get; init; } = "";
+
+    public string Comment { get; init; } = "";
+}
+
 public sealed class OtoParamRow : INotifyPropertyChanged
 {
     readonly bool[] _tuned = new bool[5];
@@ -90,8 +104,9 @@ public sealed class OtoParamRow : INotifyPropertyChanged
     string _alias = "";
     string _aliasText = "";
     string _aliasTip = "";
+    string _comment = "";
     bool _aliasPinned;
-    double _tableWidth = OtoParamTable.DefaultTableWidth;
+    bool _commentSet;
     double _offset;
     double _overlap;
     double _preutter;
@@ -116,7 +131,9 @@ public sealed class OtoParamRow : INotifyPropertyChanged
 
     public FontWeight AliasWeight => _aliasPinned ? FontWeights.SemiBold : FontWeights.Normal;
 
-    public double TableWidth => _tableWidth;
+    public string CommentText => _comment;
+
+    public FontWeight CommentWeight => _commentSet ? FontWeights.SemiBold : FontWeights.Normal;
 
     public Brush EmphasisBrush => _fill;
 
@@ -127,14 +144,6 @@ public sealed class OtoParamRow : INotifyPropertyChanged
         _level = level;
         _fill = fill;
         Raise(nameof(EmphasisBrush));
-    }
-
-    internal void SetTableWidth(double width)
-    {
-        if (Math.Abs(_tableWidth - width) < 0.5)
-            return;
-        _tableWidth = width;
-        Raise(nameof(TableWidth));
     }
 
     internal int? EditingColumn { get; set; }
@@ -210,6 +219,23 @@ public sealed class OtoParamRow : INotifyPropertyChanged
             Raise(nameof(AliasTip));
         }
 
+        if (_comment != snap.Comment && editing != 7)
+        {
+            _comment = snap.Comment;
+            Raise(nameof(CommentText));
+        }
+        else
+        {
+            _comment = snap.Comment;
+        }
+
+        var commentSet = snap.Comment.Length > 0;
+        if (_commentSet != commentSet)
+        {
+            _commentSet = commentSet;
+            Raise(nameof(CommentWeight));
+        }
+
         Set(ref _offset, snap.Offset, snap.OffsetTuned, 0, editing, nameof(OffsetText), nameof(OffsetWeight));
         Set(ref _overlap, snap.Overlap, snap.OverlapTuned, 1, editing, nameof(OverlapText), nameof(OverlapWeight));
         Set(ref _preutter, snap.Preutter, snap.PreutterTuned, 2, editing, nameof(PreutterText), nameof(PreutterWeight));
@@ -254,7 +280,6 @@ public sealed partial class OtoParamTable : UserControl
     // パネル幅に合わせて表を伸縮する。これより狭くも広くもしない。
     public const double MinTableWidth = 640;
     public const double MaxTableWidth = 1180;
-    internal const double DefaultTableWidth = 772;
 
     internal static readonly SolidColorBrush EmptyBrush = new(Color.FromArgb(0, 0, 0, 0));
     internal static readonly SolidColorBrush AliasWarnBrush = new(Color.FromArgb(128, 220, 72, 72));
@@ -263,7 +288,8 @@ public sealed partial class OtoParamTable : UserControl
     readonly SolidColorBrush _fileFill;
     readonly SolidColorBrush _phonemeFill;
     ScrollViewer? _listScroll;
-    double _tableWidth = DefaultTableWidth;
+    bool _wheelHooked;
+    bool _barLock;
     string? _viewFile;
     string? _scrolledFile;
     int _focusIndex = -1;
@@ -287,9 +313,12 @@ public sealed partial class OtoParamTable : UserControl
         Rows.SizeChanged += (_, _) =>
         {
             UpdateTableWidth();
+            SyncVBar();
             FollowIfNeeded();
         };
         SizeChanged += (_, _) => UpdateTableWidth();
+        TableScroll.SizeChanged += (_, _) => UpdateTableWidth();
+        VBar.ValueChanged += VBar_ValueChanged;
     }
 
     public void SetEmphasis(string? fileName, int focusIndex)
@@ -312,6 +341,8 @@ public sealed partial class OtoParamTable : UserControl
 
     public event EventHandler<IReadOnlyList<OtoAliasEdit>>? AliasEdited;
 
+    public event EventHandler<IReadOnlyList<OtoCommentEdit>>? CommentEdited;
+
     public void Show(IReadOnlyList<OtoParamSnapshot> snaps, string emptyMessage)
     {
         HookScroll();
@@ -326,6 +357,7 @@ public sealed partial class OtoParamTable : UserControl
             ApplyEmphasis();
             SyncSelection();
             FollowIfNeeded();
+            SyncVBar();
             return;
         }
 
@@ -333,11 +365,7 @@ public sealed partial class OtoParamTable : UserControl
         var offset = _listScroll?.VerticalOffset ?? 0;
         _rows.Clear();
         foreach (var snap in snaps)
-        {
-            var row = OtoParamRow.From(snap);
-            row.SetTableWidth(_tableWidth);
-            _rows.Add(row);
-        }
+            _rows.Add(OtoParamRow.From(snap));
         if (selected != null)
         {
             _silent = true;
@@ -353,6 +381,7 @@ public sealed partial class OtoParamTable : UserControl
         ApplyEmphasis();
         SyncSelection();
         FollowIfNeeded();
+        SyncVBar();
     }
 
     void ApplyEmphasis()
@@ -613,6 +642,12 @@ public sealed partial class OtoParamTable : UserControl
             return;
         }
 
+        if (Column(box) == 7)
+        {
+            ApplyPastedComments(origin, text);
+            return;
+        }
+
         var edits = new List<OtoParamEdit>();
         var lines = text.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
         if (lines.Length > 0 && lines[^1].Length == 0)
@@ -674,6 +709,40 @@ public sealed partial class OtoParamTable : UserControl
         foreach (var row in _rows)
             row.EditingColumn = null;
         AliasEdited?.Invoke(this, edits);
+    }
+
+    void ApplyPastedComments(OtoParamRow origin, string text)
+    {
+        var edits = new List<OtoCommentEdit>();
+        var lines = text.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
+        if (lines.Length > 0 && lines[^1].Length == 0)
+            lines = lines[..^1];
+        var rowIndex = _rows.IndexOf(origin);
+        foreach (var line in lines)
+        {
+            if (rowIndex < 0 || rowIndex >= _rows.Count)
+                break;
+            var row = _rows[rowIndex];
+            rowIndex++;
+            if (line.Length == 0)
+                continue;
+            var cleaned = OtoIni.CleanComment(line.Split('\t')[0]) ?? "";
+            if (string.Equals(cleaned, row.CommentText, StringComparison.Ordinal))
+                continue;
+            edits.Add(new OtoCommentEdit
+            {
+                FileName = row.FileName,
+                Index = row.Index,
+                Alias = row.Alias,
+                Comment = cleaned,
+            });
+        }
+
+        if (edits.Count == 0)
+            return;
+        foreach (var row in _rows)
+            row.EditingColumn = null;
+        CommentEdited?.Invoke(this, edits);
     }
 
     static bool TryValues(OtoParamRow row, string line, int startCol, out double[] values)
@@ -741,6 +810,12 @@ public sealed partial class OtoParamTable : UserControl
             return;
         }
 
+        if (column == 7)
+        {
+            CommitComment(row, box);
+            return;
+        }
+
         if (_commitLock || column is < 1 or > 5)
             return;
         var values = row.Values();
@@ -788,6 +863,34 @@ public sealed partial class OtoParamTable : UserControl
                 Index = row.Index,
                 Alias = row.Alias,
                 Name = cleaned,
+            }]);
+        }
+        finally
+        {
+            _commitLock = false;
+        }
+    }
+
+    void CommitComment(OtoParamRow row, TextBox box)
+    {
+        if (_commitLock)
+            return;
+        var cleaned = OtoIni.CleanComment(box.Text) ?? "";
+        if (string.Equals(cleaned, row.CommentText, StringComparison.Ordinal))
+        {
+            box.Text = row.CommentText;
+            return;
+        }
+
+        _commitLock = true;
+        try
+        {
+            CommentEdited?.Invoke(this, [new OtoCommentEdit
+            {
+                FileName = row.FileName,
+                Index = row.Index,
+                Alias = row.Alias,
+                Comment = cleaned,
             }]);
         }
         finally
@@ -844,6 +947,7 @@ public sealed partial class OtoParamTable : UserControl
         3 => row.PreutterText,
         4 => row.ConsonantText,
         6 => row.AliasText,
+        7 => row.CommentText,
         _ => row.BlankText,
     };
 
@@ -868,36 +972,112 @@ public sealed partial class OtoParamTable : UserControl
 
     void HookScroll()
     {
-        if (_listScroll != null)
-            return;
-        _listScroll = FindScrollViewer(Rows);
         if (_listScroll == null)
-            return;
-        _listScroll.ViewChanged += (_, _) =>
         {
-            if (Math.Abs(HeaderScroll.HorizontalOffset - _listScroll.HorizontalOffset) < 0.5)
-                return;
-            HeaderScroll.ChangeView(_listScroll.HorizontalOffset, null, null, true);
-        };
-        _listScroll.SizeChanged += (_, _) => UpdateTableWidth();
+            _listScroll = FindScrollViewer(Rows);
+            if (_listScroll != null)
+            {
+                _listScroll.ViewChanged += (_, _) => SyncVBar();
+                _listScroll.SizeChanged += (_, _) =>
+                {
+                    UpdateTableWidth();
+                    SyncVBar();
+                };
+            }
+        }
+
+        HookWheel();
+    }
+
+    void HookWheel()
+    {
+        if (_wheelHooked)
+            return;
+        var presenter = FindPresenter(Rows);
+        if (presenter == null)
+            return;
+        presenter.AddHandler(PointerWheelChangedEvent, new PointerEventHandler(OnShiftWheel), true);
+        _wheelHooked = true;
+    }
+
+    void OnShiftWheel(object sender, PointerRoutedEventArgs e)
+    {
+        if (!SpanEditor.ShiftHeld(e))
+            return;
+        var delta = e.GetCurrentPoint(this).Properties.MouseWheelDelta;
+        if (delta == 0)
+            return;
+        e.Handled = true;
+        var next = Math.Clamp(TableScroll.HorizontalOffset - delta, 0, Math.Max(0, TableScroll.ScrollableWidth));
+        TableScroll.ChangeView(next, null, null, true);
+    }
+
+    void VBar_Scroll(object sender, ScrollEventArgs e)
+    {
+        if (_barLock || _listScroll == null)
+            return;
+        _barLock = true;
+        _listScroll.ChangeView(null, e.NewValue, null, true);
+        _barLock = false;
+    }
+
+    void VBar_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
+    {
+        if (_barLock || _listScroll == null)
+            return;
+        if (Math.Abs(_listScroll.VerticalOffset - e.NewValue) < 0.5)
+            return;
+        _barLock = true;
+        _listScroll.ChangeView(null, e.NewValue, null, true);
+        _barLock = false;
+    }
+
+    void SyncVBar()
+    {
+        if (_listScroll == null || _barLock)
+            return;
+        _barLock = true;
+        var height = Math.Max(0, _listScroll.ViewportHeight);
+        var max = Math.Max(0, _listScroll.ScrollableHeight);
+        VBar.ViewportSize = height;
+        VBar.LargeChange = Math.Max(1, height);
+        VBar.SmallChange = 16;
+        VBar.Maximum = max;
+        VBar.Value = Math.Clamp(_listScroll.VerticalOffset, 0, max);
+        VBar.Visibility = max > 1 ? Visibility.Visible : Visibility.Collapsed;
+        _barLock = false;
     }
 
     void UpdateTableWidth()
     {
-        var viewport = _listScroll?.ViewportWidth ?? 0;
-        if (viewport < 1)
-            viewport = Rows.ActualWidth;
+        var viewport = TableScroll.ViewportWidth;
+        var height = TableScroll.ViewportHeight;
         if (viewport < 1)
             viewport = ActualWidth;
-        if (viewport < 1 || double.IsNaN(viewport) || double.IsInfinity(viewport))
+        if (height < 1)
+            height = ActualHeight;
+        if (viewport < 1 || height < 1 || double.IsNaN(viewport) || double.IsNaN(height) || double.IsInfinity(viewport))
             return;
         var width = Math.Clamp(viewport, MinTableWidth, MaxTableWidth);
-        if (Math.Abs(width - _tableWidth) < 0.5)
-            return;
-        _tableWidth = width;
-        HeaderGrid.Width = width;
-        foreach (var row in _rows)
-            row.SetTableWidth(width);
+        if (Math.Abs(Sheet.Width - width) >= 0.5)
+            Sheet.Width = width;
+        if (Math.Abs(Sheet.Height - height) >= 0.5)
+            Sheet.Height = height;
+    }
+
+    static ScrollContentPresenter? FindPresenter(DependencyObject root)
+    {
+        if (root is ScrollContentPresenter presenter)
+            return presenter;
+        var count = VisualTreeHelper.GetChildrenCount(root);
+        for (var i = 0; i < count; i++)
+        {
+            var found = FindPresenter(VisualTreeHelper.GetChild(root, i));
+            if (found != null)
+                return found;
+        }
+
+        return null;
     }
 
     static ScrollViewer? FindScrollViewer(DependencyObject root)
