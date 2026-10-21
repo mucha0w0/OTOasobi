@@ -206,6 +206,10 @@
                     <ToggleMenuFlyoutItem x:Name="ShowOtoParamsItem" Tag="otoParams" Text="原音パラメータ" Click="PaneMenu_Click" />
                     <ToggleMenuFlyoutItem x:Name="ShowFrqItem" Tag="frq" Text=".frq生成" Click="PaneMenu_Click" />
                     <MenuFlyoutSeparator />
+                    <MenuFlyoutSubItem x:Name="LayoutTemplateMenu" Text="配置テンプレート" />
+                    <MenuFlyoutItem Text="いまの配置をテンプレートとして保存" Click="SaveLayoutTemplate_Click" />
+                    <MenuFlyoutSubItem x:Name="DeleteLayoutTemplateMenu" Text="配置テンプレートを削除" IsEnabled="False" />
+                    <MenuFlyoutSeparator />
                     <MenuFlyoutItem Text="配置を初期状態に戻す" Click="ResetLayout_Click" />
                 </MenuBarItem>
         </MenuBar>

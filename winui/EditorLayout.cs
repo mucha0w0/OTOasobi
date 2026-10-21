@@ -70,6 +70,39 @@ static class EditorLayout
                             Leaf("otoBand")))),
                 Leaf("oto")));
 
+    public static LayoutNode? Clone(LayoutNode? node)
+    {
+        if (node == null)
+            return null;
+        if (node.IsLeaf)
+            return new LayoutNode { Id = node.Id };
+        return new LayoutNode
+        {
+            Axis = node.Axis,
+            Ratio = node.Ratio,
+            First = Clone(node.First),
+            Second = Clone(node.Second),
+        };
+    }
+
+    public static bool Same(LayoutNode? left, bool leftKeepRatios, LayoutNode? right, bool rightKeepRatios)
+    {
+        if (leftKeepRatios != rightKeepRatios)
+            return false;
+        return SameTree(left, right);
+    }
+
+    static bool SameTree(LayoutNode? left, LayoutNode? right)
+    {
+        if (left == null || right == null)
+            return left == null && right == null;
+        if (left.IsLeaf || right.IsLeaf)
+            return left.IsLeaf && right.IsLeaf && left.Id == right.Id;
+        if (left.Axis != right.Axis || Math.Abs(left.Ratio - right.Ratio) > 0.0001)
+            return false;
+        return SameTree(left.First, right.First) && SameTree(left.Second, right.Second);
+    }
+
     public static bool Contains(LayoutNode? node, string id)
     {
         if (node == null)
@@ -628,4 +661,74 @@ static class EditorLayoutStore
         {
         }
     }
+}
+
+// 表示中のパネルと分割位置。初期配置は常にあり、それ以外は LocalAppData に残す。
+sealed class LayoutTemplate
+{
+    public const string BuiltInName = "初期配置";
+
+    public string Name { get; set; } = "";
+
+    public LayoutNode? Root { get; set; }
+
+    public bool KeepRatios { get; set; }
+
+    [JsonIgnore]
+    public bool BuiltIn { get; set; }
+
+    public static LayoutTemplate CreateBuiltIn() =>
+        new()
+        {
+            Name = BuiltInName,
+            BuiltIn = true,
+            Root = EditorLayout.CreateDefault(),
+            KeepRatios = false,
+        };
+
+    public bool Matches(LayoutNode? root, bool keepRatios) =>
+        EditorLayout.Same(Root, KeepRatios, root, keepRatios);
+}
+
+static class LayoutTemplateStore
+{
+    public static string FilePath { get; } = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "Otoasobi",
+        "layout-templates.json");
+
+    public static IReadOnlyList<LayoutTemplate> Load() =>
+        JsonFiles.ReadList<LayoutTemplate>(FilePath, Normalize);
+
+    public static List<LayoutTemplate> Normalize(IEnumerable<LayoutTemplate>? list)
+    {
+        var seen = new HashSet<string>();
+        var result = new List<LayoutTemplate>();
+        if (list == null)
+            return result;
+        foreach (var template in list)
+        {
+            if (template == null)
+                continue;
+            var name = (template.Name ?? "").Trim();
+            if (name.Length == 0 || name.Length > 40 || name.Any(char.IsControl))
+                continue;
+            if (name == LayoutTemplate.BuiltInName || !seen.Add(name))
+                continue;
+            if (!EditorLayout.IsValid(template.Root))
+                continue;
+            result.Add(new LayoutTemplate
+            {
+                Name = name,
+                BuiltIn = false,
+                Root = EditorLayout.Clone(template.Root),
+                KeepRatios = template.KeepRatios,
+            });
+        }
+
+        return result;
+    }
+
+    public static void Save(IEnumerable<LayoutTemplate> templates) =>
+        JsonFiles.Write(FilePath, templates.Where(template => !template.BuiltIn));
 }

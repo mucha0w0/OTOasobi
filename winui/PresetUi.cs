@@ -55,11 +55,12 @@ static class PresetUi
         string title,
         string prompt,
         string? currentUserName,
-        Func<string, string?> validate)
+        Func<string, string?> validate,
+        string placeholder = "プリセット名")
     {
         if (root == null)
             return null;
-        var box = new TextBox { PlaceholderText = "プリセット名" };
+        var box = new TextBox { PlaceholderText = placeholder };
         if (!string.IsNullOrEmpty(currentUserName))
         {
             box.Text = currentUserName;

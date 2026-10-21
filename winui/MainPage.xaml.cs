@@ -165,13 +165,19 @@ public sealed partial class MainPage : Page
         Dock.LayoutChanged += (_, _) =>
         {
             SyncPaneMenu();
+            if (!_applyingLayoutTemplate)
+                _appliedLayoutTemplate = null;
+            SyncLayoutTemplateMenu();
             if (_layoutReady)
                 EditorLayoutStore.Save(Dock.Root, Dock.KeepRatios);
         };
+        LoadLayoutTemplates();
         if (!EditorLayoutStore.TryLoad(out var layout, out var keepRatios))
             layout = EditorLayout.CreateDefault();
+        _appliedLayoutTemplate = MatchLayoutTemplate(layout, keepRatios);
         Dock.Load(layout, keepRatios);
         SyncPaneMenu();
+        SyncLayoutTemplateMenu();
         _layoutReady = true;
     }
 
@@ -200,7 +206,7 @@ public sealed partial class MainPage : Page
             Dock.Hide(id);
     }
 
-    void ResetLayout_Click(object sender, RoutedEventArgs e) => Dock.Reset();
+    void ResetLayout_Click(object sender, RoutedEventArgs e) => ApplyLayoutTemplate(_builtInLayout);
 
     void AttachMenuToTitleBar()
     {

@@ -154,6 +154,12 @@ public sealed class EditorDock : Panel
         InvalidateMeasure();
     }
 
+    public void Apply(LayoutNode? root, bool keepRatios)
+    {
+        _keepRatios = keepRatios;
+        SetRoot(root);
+    }
+
     public bool Contains(string id) => EditorLayout.Contains(_root, id);
 
     public void Show(string id)
