@@ -154,6 +154,25 @@ sealed class AnalysisClient : IDisposable
         return new AnalyzeResult(ok, txt, error, notice);
     }
 
+    public async Task<FrqResult> WriteFrqAsync(
+        string folder,
+        Action<int, int>? onProgress = null,
+        Action<string, double, string>? onFile = null)
+    {
+        using var doc = await SendAsync(
+            id => JsonSerializer.Serialize(new { id, cmd = "frq", folder }),
+            onProgress,
+            onFile).ConfigureAwait(true);
+        var root = doc.RootElement;
+        var ok = root.TryGetProperty("ok", out var okValue) && okValue.GetBoolean();
+        var written = root.TryGetProperty("written", out var writtenValue) && writtenValue.TryGetInt32(out var parsed)
+            ? parsed
+            : 0;
+        string? error = root.TryGetProperty("error", out var errorValue) ? errorValue.GetString() : null;
+        string? notice = root.TryGetProperty("notice", out var noticeValue) ? noticeValue.GetString() : null;
+        return new FrqResult(ok, written, error, notice);
+    }
+
     async Task<JsonDocument> SendAsync(
         Func<int, string> build,
         Action<int, int>? onProgress,
@@ -453,3 +472,5 @@ sealed class AnalysisClient : IDisposable
 }
 
 sealed record AnalyzeResult(bool Ok, string? Txt, string? Error, string? Notice);
+
+sealed record FrqResult(bool Ok, int Written, string? Error, string? Notice);

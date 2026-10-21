@@ -32,6 +32,10 @@ blank の 0 は音量の上辺の右端。正は減衰側、負は手前へ、�
 応答の txt はそのモードの oto.ini。全区間は OTOasibi_log.txt、母音始まりは OTOasibi_out.txt。
 画面で区間を直したあとは save が保存データを更新し、write が oto.ini を計算して書く。
 write の adjustments は、ドラッグで直した位置。file、index、alias と、直した点だけの秒。無い点は自動推定のまま。name は手で直したエイリアス。編集印の * は oto.ini に書かない。
+要求: {"id": 5, "cmd": "frq", "folder": "C:/音声フォルダ"}
+frq はフォルダ直下の WAV ごとに、同じ名前の .frq（FREQ0003）を書く。original は見ない。区間や oto.ini は変えない。
+応答: {"id": 5, "ok": true, "written": 12, "notice": "..."}
+1 件も書けないときは ok が false。一部だけの失敗は ok が true で、notice に名前が入る。
 """
 
 from __future__ import annotations
@@ -52,6 +56,7 @@ from otoasobi.analyze import (
     skipped_notice,
 )
 from otoasobi.cache import file_from_mapping, file_to_mapping, read_cache, save_cache
+from otoasobi.frq import write_folder_frq
 from otoasobi.oto import adjustments_from, oto_settings_from
 from otoasobi.parser import FilenameError
 from otoasobi.preview import render_preview
@@ -240,6 +245,33 @@ def _save(folder: str, files: object) -> dict:
     return {"ok": True}
 
 
+def _frq(request_id: object, folder: str) -> dict:
+    def on_progress(done: int, total: int) -> None:
+        _respond({"id": request_id, "event": "progress", "done": done, "total": total})
+
+    shown = {"name": "", "done": -1.0, "label": ""}
+
+    def on_file(name: str, fraction: float, label: str) -> None:
+        _note_file(request_id, shown, name, fraction, label)
+
+    written, failed = write_folder_frq(folder, on_progress=on_progress, on_file=on_file)
+    notice = None
+    if failed:
+        names = "\n".join(failed)
+        notice = f"{len(failed)}個のファイルをスキップしました。スキップしたファイル↓\n{names}"
+    if written == 0:
+        return {
+            "id": request_id,
+            "ok": False,
+            "written": 0,
+            "error": notice or "frqを書けませんでした。",
+        }
+    payload: dict = {"id": request_id, "ok": True, "written": written}
+    if notice:
+        payload["notice"] = notice
+    return payload
+
+
 def _write(folder: str, files: object, config: object, adjustments: object = None) -> dict:
     parsed = _parsed_files(files)
     out = export_folder(folder, parsed, oto_settings_from(config), adjustments_from(adjustments))
@@ -288,6 +320,11 @@ def main() -> None:
                 if not isinstance(folder, str) or not folder:
                     raise RuntimeError("folder がありません")
                 payload = _save(folder, request.get("files"))
+            elif command == "frq":
+                folder = request.get("folder")
+                if not isinstance(folder, str) or not folder:
+                    raise RuntimeError("folder がありません")
+                payload = _frq(request_id, folder)
             elif command == "write":
                 folder = request.get("folder")
                 if not isinstance(folder, str) or not folder:

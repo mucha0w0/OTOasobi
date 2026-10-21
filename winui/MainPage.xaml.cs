@@ -143,7 +143,7 @@ public sealed partial class MainPage : Page
         LoudHost.Children.Add(Editor.LoudSurface);
         OtoBandHost.Children.Add(Editor.OtoSurface);
         // ページが読み込まれる前は Parent が空のままなので、ここから外してからドックへ入れる。
-        foreach (var pane in new UIElement[] { FilePane, WavePane, SpecHost, LoudHost, OtoBandHost, SourcePane, OtoPane, OtoParams })
+        foreach (var pane in new UIElement[] { FilePane, WavePane, SpecHost, LoudHost, OtoBandHost, SourcePane, OtoPane, OtoParams, FrqPane })
             PaneHolder.Children.Remove(pane);
         Dock.Mount(
         [
@@ -155,6 +155,7 @@ public sealed partial class MainPage : Page
             ("source", "原音修正", SourcePane),
             ("oto", "oto調整", OtoPane),
             ("otoParams", "原音パラメータ", OtoParams),
+            ("frq", ".frq生成", FrqPane),
         ]);
         Dock.PaneResizing += (_, dragging) =>
         {
@@ -185,6 +186,7 @@ public sealed partial class MainPage : Page
         ShowSourceItem.IsChecked = Dock.Contains("source");
         ShowOtoItem.IsChecked = Dock.Contains("oto");
         ShowOtoParamsItem.IsChecked = Dock.Contains("otoParams");
+        ShowFrqItem.IsChecked = Dock.Contains("frq");
         _paneMenuWrite = false;
     }
 
@@ -1550,6 +1552,7 @@ public sealed partial class MainPage : Page
             FileList.SelectedIndex = 0;
         UpdateCommands();
         RefreshOtoTable();
+        RefreshFrqSummary();
     }
 
     bool RestoreUnanalyzed(string folder, string message)
@@ -1589,6 +1592,7 @@ public sealed partial class MainPage : Page
         }
 
         RefreshOtoTable();
+        RefreshFrqSummary();
         StartLoudness();
     }
 
@@ -1625,6 +1629,7 @@ public sealed partial class MainPage : Page
         ReanalyzeMenuItem.IsEnabled = editing;
         ReanalyzeSelectedMenuItem.IsEnabled = ready && FileList.SelectedItem is WavFile;
         ApplyEffectsButton.IsEnabled = editing;
+        WriteFrqButton.IsEnabled = editing;
     }
 
     void UpdateFileStatus(string name, double done, string label)

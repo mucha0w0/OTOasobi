@@ -204,6 +204,7 @@
                     <ToggleMenuFlyoutItem x:Name="ShowSourceItem" Tag="source" Text="原音修正" Click="PaneMenu_Click" />
                     <ToggleMenuFlyoutItem x:Name="ShowOtoItem" Tag="oto" Text="oto調整" IsChecked="True" Click="PaneMenu_Click" />
                     <ToggleMenuFlyoutItem x:Name="ShowOtoParamsItem" Tag="otoParams" Text="原音パラメータ" Click="PaneMenu_Click" />
+                    <ToggleMenuFlyoutItem x:Name="ShowFrqItem" Tag="frq" Text=".frq生成" Click="PaneMenu_Click" />
                     <MenuFlyoutSeparator />
                     <MenuFlyoutItem Text="配置を初期状態に戻す" Click="ResetLayout_Click" />
                 </MenuBarItem>
@@ -865,6 +866,46 @@
                                 IsEnabled="False"
                                 Style="{StaticResource ToolbarAccentButtonStyle}"
                                 ToolTipService.ToolTip="original の音声に、オンのエフェクトをかけて、フォルダ直下の音声を上書きします。解析データは消えます。" />
+                        </Border>
+                    </Grid>
+                    <Grid x:Name="FrqPane">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <ScrollViewer
+                            HorizontalScrollBarVisibility="Disabled"
+                            VerticalScrollBarVisibility="Auto">
+                            <StackPanel Padding="12" Spacing="10">
+                                <Border Style="{StaticResource PanelCardStyle}">
+                                    <StackPanel Spacing="8">
+                                        <local:InfoNote
+                                            Title="周波数表"
+                                            Text="フォルダ直下の各 WAV と同じ名前で、UTAU 用の .frq を書きます。256 サンプルごとの高さと、有声部分の平均です。原音修正のあとや WAV を差し替えたあとは作り直します。original には書きません。" />
+                                        <TextBlock
+                                            x:Name="FrqSummary"
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            Style="{StaticResource CaptionTextBlockStyle}"
+                                            Text="フォルダを開くと、WAV と .frq の件数がここに出ます。"
+                                            TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </ScrollViewer>
+                        <Border
+                            Grid.Row="1"
+                            Padding="12,10,12,12"
+                            BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                            BorderThickness="0,1,0,0">
+                            <Button
+                                x:Name="WriteFrqButton"
+                                HorizontalAlignment="Stretch"
+                                AutomationProperties.Name=".frqを生成"
+                                Click="WriteFrq_Click"
+                                Content=".frqを生成"
+                                IsEnabled="False"
+                                Style="{StaticResource ToolbarAccentButtonStyle}"
+                                ToolTipService.ToolTip="フォルダ直下の各 WAV の横に .frq を書きます。UTAU の合成が、この高さの表を使います。原音修正のあとや、WAV を差し替えたあとは作り直します。" />
                         </Border>
                     </Grid>
                 </Grid>
