@@ -112,6 +112,9 @@ sealed class OtoAdjustedEntry
 
     public string Alias { get; set; } = "";
 
+    // 手で直したエイリアス。null は自動の名前。編集印の * は入れない。
+    public string? Name { get; set; }
+
     public double? Offset { get; set; }
 
     public double? Overlap { get; set; }
@@ -163,6 +166,7 @@ sealed class OtoAdjustedEntry
         File = File,
         Index = Index,
         Alias = Alias,
+        Name = Name,
         Offset = Offset,
         Overlap = Overlap,
         Preutter = Preutter,
@@ -198,11 +202,53 @@ sealed class OtoAdjustBook
     public void Remember(string? mode, OtoAdjustedEntry entry)
     {
         var list = For(mode);
+        string? keptName = entry.Name;
+        if (string.IsNullOrEmpty(keptName))
+        {
+            foreach (var item in list)
+            {
+                if (item.Index != entry.Index || !item.File.Equals(entry.File, StringComparison.OrdinalIgnoreCase))
+                    continue;
+                keptName = item.Name;
+                break;
+            }
+        }
+
         list.RemoveAll(item =>
             item.Index == entry.Index
             && item.File.Equals(entry.File, StringComparison.OrdinalIgnoreCase));
-        if (entry.Any)
-            list.Add(entry.Copy());
+        var stored = entry.Copy();
+        stored.Name = string.IsNullOrEmpty(keptName) ? null : keptName;
+        if (stored.Any || !string.IsNullOrEmpty(stored.Name))
+            list.Add(stored);
+    }
+
+    public void RememberName(string? mode, string file, int index, string autoAlias, string? name)
+    {
+        var list = For(mode);
+        var cleaned = string.IsNullOrEmpty(name) ? null : name;
+        for (var i = 0; i < list.Count; i++)
+        {
+            var item = list[i];
+            if (item.Index != index || !item.File.Equals(file, StringComparison.OrdinalIgnoreCase))
+                continue;
+            item.Name = cleaned;
+            if (!string.IsNullOrEmpty(autoAlias))
+                item.Alias = autoAlias;
+            if (!item.Any && string.IsNullOrEmpty(item.Name))
+                list.RemoveAt(i);
+            return;
+        }
+
+        if (cleaned == null)
+            return;
+        list.Add(new OtoAdjustedEntry
+        {
+            File = file,
+            Index = index,
+            Alias = autoAlias,
+            Name = cleaned,
+        });
     }
 }
 
@@ -493,12 +539,13 @@ static class OtoSaveStore
                 continue;
             entry.File = file;
             entry.Alias = alias;
+            entry.Name = OtoIni.CleanAlias(entry.Name);
             entry.Offset = CleanTime(entry.Offset);
             entry.Overlap = CleanTime(entry.Overlap);
             entry.Preutter = CleanTime(entry.Preutter);
             entry.Consonant = CleanTime(entry.Consonant);
             entry.Blank = CleanTime(entry.Blank);
-            if (!entry.Any)
+            if (!entry.Any && string.IsNullOrEmpty(entry.Name))
                 continue;
             result.Add(entry);
         }

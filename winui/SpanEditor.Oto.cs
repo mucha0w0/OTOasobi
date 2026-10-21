@@ -751,6 +751,7 @@ public sealed partial class SpanEditor
     {
         if (_pendingTunes == null || _file == null)
             return;
+        _aliasNames.Clear();
         foreach (var entry in _pendingTunes)
         {
             if (entry.Index < 0 || entry.Index >= count)
@@ -759,6 +760,8 @@ public sealed partial class SpanEditor
                 continue;
             if (!string.Equals(entry.Alias, _otoAuto[entry.Index].Alias, StringComparison.Ordinal))
                 continue;
+            if (!string.IsNullOrEmpty(entry.Name))
+                _aliasNames[entry.Index] = entry.Name;
             var points = entry.Points();
             if (!OtoTune.Has(points))
                 continue;
@@ -779,6 +782,15 @@ public sealed partial class SpanEditor
 
         foreach (var index in drop)
             _tune.Remove(index);
+        drop.Clear();
+        foreach (var index in _aliasNames.Keys)
+        {
+            if (index < 0 || index >= count)
+                drop.Add(index);
+        }
+
+        foreach (var index in drop)
+            _aliasNames.Remove(index);
     }
 
     void ArmOtoStack(int index, int point)
@@ -1036,8 +1048,13 @@ public sealed partial class SpanEditor
         return Tuned(index, point) ? name + " *" : name;
     }
 
-    string AliasLabel(OtoMark mark, int index) =>
-        TunedAny(index) ? mark.Alias + " *" : mark.Alias;
+    string AliasLabel(OtoMark mark, int index)
+    {
+        var renamed = _aliasNames.TryGetValue(index, out var name) && !string.IsNullOrEmpty(name);
+        var shown = renamed ? name! : mark.Alias;
+        // * は oto区間の編集印。書き出すエイリアスには付けない。
+        return TunedAny(index) || renamed ? shown + " *" : shown;
+    }
 
     static string OtoPointName(int point) => point switch
     {

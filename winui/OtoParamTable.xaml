@@ -32,6 +32,10 @@
             <Setter Property="AcceptsReturn" Value="False" />
             <Setter Property="VerticalAlignment" Value="Stretch" />
         </Style>
+        <Style x:Key="OtoAliasStyle" TargetType="TextBox" BasedOn="{StaticResource OtoCellStyle}">
+            <Setter Property="TextAlignment" Value="Left" />
+            <Setter Property="FontFamily" Value="{ThemeResource ContentControlThemeFontFamily}" />
+        </Style>
         <Style x:Key="OtoLineStyle" TargetType="Border">
             <Setter Property="BorderBrush" Value="{ThemeResource DividerStrokeColorDefaultBrush}" />
             <Setter Property="BorderThickness" Value="0,0,1,1" />
@@ -59,18 +63,21 @@
             VerticalScrollMode="Disabled"
             ZoomMode="Disabled">
             <Grid
+                x:Name="HeaderGrid"
                 Width="772"
+                MinWidth="640"
+                MaxWidth="1180"
                 HorizontalAlignment="Left"
                 Background="{ThemeResource SubtleFillColorSecondaryBrush}">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="140" />
-                    <ColumnDefinition Width="92" />
-                    <ColumnDefinition Width="84" />
-                    <ColumnDefinition Width="84" />
-                    <ColumnDefinition Width="84" />
-                    <ColumnDefinition Width="92" />
-                    <ColumnDefinition Width="112" />
-                    <ColumnDefinition Width="84" />
+                    <ColumnDefinition Width="140*" />
+                    <ColumnDefinition Width="92*" />
+                    <ColumnDefinition Width="84*" />
+                    <ColumnDefinition Width="84*" />
+                    <ColumnDefinition Width="84*" />
+                    <ColumnDefinition Width="92*" />
+                    <ColumnDefinition Width="112*" />
+                    <ColumnDefinition Width="84*" />
                 </Grid.ColumnDefinitions>
                 <Border Style="{StaticResource OtoLineStyle}">
                     <TextBlock Style="{StaticResource OtoHeadStyle}" Text="音" ToolTipService.ToolTip="WAV の名前" />
@@ -114,7 +121,7 @@
                     <TextBlock
                         Style="{StaticResource OtoHeadStyle}"
                         Text="エイリアス"
-                        ToolTipService.ToolTip="oto.ini のエイリアス。同じ名前の 2 回目以降には 2、3、… が付く。直した行の末尾に * が付く" />
+                        ToolTipService.ToolTip="oto.ini に書く名前。同じ名前の 2 回目以降には 2、3、… が付く。手で同じ名前にすると、その欄が赤くなる。編集印の * は oto区間に出て、ここにも oto.ini にも入らない" />
                 </Border>
                 <Border Grid.Column="7" Style="{StaticResource OtoLineStyle}">
                     <TextBlock
@@ -154,19 +161,21 @@
             <ListView.ItemTemplate>
                 <DataTemplate x:DataType="local:OtoParamRow">
                     <Grid
-                        Width="772"
+                        Width="{x:Bind TableWidth, Mode=OneWay}"
+                        MinWidth="640"
+                        MaxWidth="1180"
                         HorizontalAlignment="Left"
                         Background="{x:Bind EmphasisBrush, Mode=OneWay}"
                         PointerPressed="Row_PointerPressed">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="140" />
-                            <ColumnDefinition Width="92" />
-                            <ColumnDefinition Width="84" />
-                            <ColumnDefinition Width="84" />
-                            <ColumnDefinition Width="84" />
-                            <ColumnDefinition Width="92" />
-                            <ColumnDefinition Width="112" />
-                            <ColumnDefinition Width="84" />
+                            <ColumnDefinition Width="140*" />
+                            <ColumnDefinition Width="92*" />
+                            <ColumnDefinition Width="84*" />
+                            <ColumnDefinition Width="84*" />
+                            <ColumnDefinition Width="84*" />
+                            <ColumnDefinition Width="92*" />
+                            <ColumnDefinition Width="112*" />
+                            <ColumnDefinition Width="84*" />
                         </Grid.ColumnDefinitions>
                         <Border Style="{StaticResource OtoLineStyle}">
                             <TextBlock
@@ -229,11 +238,20 @@
                                 FontWeight="{x:Bind BlankWeight, Mode=OneWay}"
                                 Text="{x:Bind BlankText, Mode=OneWay}" />
                         </Border>
-                        <Border Grid.Column="6" Style="{StaticResource OtoLineStyle}">
-                            <TextBlock
-                                Style="{StaticResource OtoNameStyle}"
-                                Text="{x:Bind AliasLabel, Mode=OneWay}"
-                                ToolTipService.ToolTip="{x:Bind AliasLabel, Mode=OneWay}" />
+                        <Border
+                            Grid.Column="6"
+                            Background="{x:Bind AliasBrush, Mode=OneWay}"
+                            Style="{StaticResource OtoLineStyle}">
+                            <TextBox
+                                GotFocus="Cell_GotFocus"
+                                PreviewKeyDown="Cell_KeyDown"
+                                LostFocus="Cell_LostFocus"
+                                Paste="Cell_Paste"
+                                Style="{StaticResource OtoAliasStyle}"
+                                Tag="6"
+                                FontWeight="{x:Bind AliasWeight, Mode=OneWay}"
+                                Text="{x:Bind AliasText, Mode=OneWay}"
+                                ToolTipService.ToolTip="{x:Bind AliasTip, Mode=OneWay}" />
                         </Border>
                         <Border Grid.Column="7" Style="{StaticResource OtoLineStyle}" />
                     </Grid>

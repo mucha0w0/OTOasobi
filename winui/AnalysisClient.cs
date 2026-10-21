@@ -231,11 +231,12 @@ sealed class AnalysisClient : IDisposable
     {
         if (entries == null || entries.Count == 0)
             return [];
-        return entries.Where(entry => entry.Any).Select(entry => new
+        return entries.Where(entry => entry.Any || !string.IsNullOrEmpty(entry.Name)).Select(entry => new
         {
             file = entry.File,
             index = entry.Index,
             alias = entry.Alias,
+            name = string.IsNullOrEmpty(entry.Name) ? null : entry.Name,
             offset = entry.Offset,
             overlap = entry.Overlap,
             preutter = entry.Preutter,

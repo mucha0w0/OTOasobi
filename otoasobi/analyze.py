@@ -12,6 +12,8 @@ from otoasobi.features import compute_features, loudness_db
 from otoasobi.oto import (
     OTO_INI_NAME,
     OtoSettings,
+    _names_for_file,
+    apply_alias_names,
     apply_file_adjustments,
     cvvc_oto_lines,
     mono_oto_lines,
@@ -257,14 +259,17 @@ def export_folder(
         raise RuntimeError("書き出す解析結果がありません。")
     span_entries = [(item.name, item.spans) for item in files]
     oto_lines: list[str] = []
+    pinned: set[int] = set()
     if settings is not None and settings.mode == "renzoku":
         write_lines = renzoku_oto_lines
     elif settings is not None and settings.mode == "cvvc":
         write_lines = cvvc_oto_lines
     else:
         write_lines = mono_oto_lines
+    adjustments = adjustments or []
     for item in files:
-        oto_lines.extend(
+        names = _names_for_file(adjustments, item.name)
+        lines = apply_alias_names(
             apply_file_adjustments(
                 write_lines(
                     item.name,
@@ -276,12 +281,18 @@ def export_folder(
                 item.name,
                 adjustments,
                 item.duration,
-            )
+            ),
+            names,
         )
+        start = len(oto_lines)
+        for index in names:
+            if 0 <= index < len(lines):
+                pinned.add(start + index)
+        oto_lines.extend(lines)
     out = folder / OTO_INI_NAME
     log = folder / BATCH_LOG_NAME
     onset = folder / BATCH_TXT_NAME
     log.write_text(format_batch_log(span_entries), encoding="utf-8")
     onset.write_text(format_batch_txt(span_entries), encoding="utf-8")
-    write_oto_ini(out, oto_lines)
+    write_oto_ini(out, oto_lines, pinned)
     return out

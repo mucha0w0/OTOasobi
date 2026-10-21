@@ -24,7 +24,11 @@ public sealed class OtoParamSnapshot
 
     public string Alias { get; init; } = "";
 
-    public string AliasLabel { get; init; } = "";
+    public string AliasText { get; init; } = "";
+
+    public bool AliasPinned { get; init; }
+
+    public bool AliasDuplicate { get; init; }
 
     public double Offset { get; init; }
 
@@ -66,13 +70,28 @@ public sealed class OtoParamEdit
     public double Blank { get; init; }
 }
 
+public sealed class OtoAliasEdit
+{
+    public string FileName { get; init; } = "";
+
+    public int Index { get; init; }
+
+    public string Alias { get; init; } = "";
+
+    public string Name { get; init; } = "";
+}
+
 public sealed class OtoParamRow : INotifyPropertyChanged
 {
     readonly bool[] _tuned = new bool[5];
     int _level = -1;
     Brush _fill = OtoParamTable.EmptyBrush;
+    Brush _aliasFill = OtoParamTable.EmptyBrush;
     string _alias = "";
-    string _aliasLabel = "";
+    string _aliasText = "";
+    string _aliasTip = "";
+    bool _aliasPinned;
+    double _tableWidth = OtoParamTable.DefaultTableWidth;
     double _offset;
     double _overlap;
     double _preutter;
@@ -89,6 +108,16 @@ public sealed class OtoParamRow : INotifyPropertyChanged
 
     public string Alias => _alias;
 
+    public string AliasText => _aliasText;
+
+    public string AliasTip => _aliasTip;
+
+    public Brush AliasBrush => _aliasFill;
+
+    public FontWeight AliasWeight => _aliasPinned ? FontWeights.SemiBold : FontWeights.Normal;
+
+    public double TableWidth => _tableWidth;
+
     public Brush EmphasisBrush => _fill;
 
     internal void SetLevel(int level, Brush fill)
@@ -100,7 +129,13 @@ public sealed class OtoParamRow : INotifyPropertyChanged
         Raise(nameof(EmphasisBrush));
     }
 
-    public string AliasLabel => _aliasLabel;
+    internal void SetTableWidth(double width)
+    {
+        if (Math.Abs(_tableWidth - width) < 0.5)
+            return;
+        _tableWidth = width;
+        Raise(nameof(TableWidth));
+    }
 
     internal int? EditingColumn { get; set; }
 
@@ -145,10 +180,34 @@ public sealed class OtoParamRow : INotifyPropertyChanged
             Raise(nameof(Alias));
         }
 
-        if (_aliasLabel != snap.AliasLabel)
+        if (_aliasText != snap.AliasText && editing != 6)
         {
-            _aliasLabel = snap.AliasLabel;
-            Raise(nameof(AliasLabel));
+            _aliasText = snap.AliasText;
+            Raise(nameof(AliasText));
+        }
+        else
+        {
+            _aliasText = snap.AliasText;
+        }
+
+        if (_aliasPinned != snap.AliasPinned)
+        {
+            _aliasPinned = snap.AliasPinned;
+            Raise(nameof(AliasWeight));
+        }
+
+        var warn = snap.AliasDuplicate ? OtoParamTable.AliasWarnBrush : OtoParamTable.EmptyBrush;
+        if (!ReferenceEquals(_aliasFill, warn))
+        {
+            _aliasFill = warn;
+            Raise(nameof(AliasBrush));
+        }
+
+        var tip = snap.AliasDuplicate ? snap.AliasText + " — 同じエイリアスが複数あります" : snap.AliasText;
+        if (_aliasTip != tip)
+        {
+            _aliasTip = tip;
+            Raise(nameof(AliasTip));
         }
 
         Set(ref _offset, snap.Offset, snap.OffsetTuned, 0, editing, nameof(OffsetText), nameof(OffsetWeight));
@@ -192,12 +251,19 @@ public sealed class OtoParamRow : INotifyPropertyChanged
 
 public sealed partial class OtoParamTable : UserControl
 {
+    // パネル幅に合わせて表を伸縮する。これより狭くも広くもしない。
+    public const double MinTableWidth = 640;
+    public const double MaxTableWidth = 1180;
+    internal const double DefaultTableWidth = 772;
+
     internal static readonly SolidColorBrush EmptyBrush = new(Color.FromArgb(0, 0, 0, 0));
+    internal static readonly SolidColorBrush AliasWarnBrush = new(Color.FromArgb(128, 220, 72, 72));
 
     readonly ObservableCollection<OtoParamRow> _rows = [];
     readonly SolidColorBrush _fileFill;
     readonly SolidColorBrush _phonemeFill;
     ScrollViewer? _listScroll;
+    double _tableWidth = DefaultTableWidth;
     string? _viewFile;
     string? _scrolledFile;
     int _focusIndex = -1;
@@ -215,9 +281,15 @@ public sealed partial class OtoParamTable : UserControl
         Loaded += (_, _) =>
         {
             HookScroll();
+            UpdateTableWidth();
             FollowIfNeeded();
         };
-        Rows.SizeChanged += (_, _) => FollowIfNeeded();
+        Rows.SizeChanged += (_, _) =>
+        {
+            UpdateTableWidth();
+            FollowIfNeeded();
+        };
+        SizeChanged += (_, _) => UpdateTableWidth();
     }
 
     public void SetEmphasis(string? fileName, int focusIndex)
@@ -237,6 +309,8 @@ public sealed partial class OtoParamTable : UserControl
     public event EventHandler<OtoParamRow>? RowChosen;
 
     public event EventHandler<IReadOnlyList<OtoParamEdit>>? ValuesEdited;
+
+    public event EventHandler<IReadOnlyList<OtoAliasEdit>>? AliasEdited;
 
     public void Show(IReadOnlyList<OtoParamSnapshot> snaps, string emptyMessage)
     {
@@ -259,7 +333,11 @@ public sealed partial class OtoParamTable : UserControl
         var offset = _listScroll?.VerticalOffset ?? 0;
         _rows.Clear();
         foreach (var snap in snaps)
-            _rows.Add(OtoParamRow.From(snap));
+        {
+            var row = OtoParamRow.From(snap);
+            row.SetTableWidth(_tableWidth);
+            _rows.Add(row);
+        }
         if (selected != null)
         {
             _silent = true;
@@ -529,6 +607,12 @@ public sealed partial class OtoParamTable : UserControl
 
         if (box.DataContext is not OtoParamRow origin)
             return;
+        if (Column(box) == 6)
+        {
+            ApplyPastedAliases(origin, text);
+            return;
+        }
+
         var edits = new List<OtoParamEdit>();
         var lines = text.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
         if (lines.Length > 0 && lines[^1].Length == 0)
@@ -555,6 +639,41 @@ public sealed partial class OtoParamTable : UserControl
         foreach (var row in _rows)
             row.EditingColumn = null;
         ValuesEdited?.Invoke(this, edits);
+    }
+
+    void ApplyPastedAliases(OtoParamRow origin, string text)
+    {
+        var edits = new List<OtoAliasEdit>();
+        var lines = text.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
+        if (lines.Length > 0 && lines[^1].Length == 0)
+            lines = lines[..^1];
+        var rowIndex = _rows.IndexOf(origin);
+        foreach (var line in lines)
+        {
+            if (rowIndex < 0 || rowIndex >= _rows.Count)
+                break;
+            var row = _rows[rowIndex];
+            rowIndex++;
+            if (line.Length == 0)
+                continue;
+            var cell = line.Split('\t')[0];
+            var cleaned = OtoIni.CleanAlias(cell);
+            if (cleaned == null || string.Equals(cleaned, row.AliasText, StringComparison.Ordinal))
+                continue;
+            edits.Add(new OtoAliasEdit
+            {
+                FileName = row.FileName,
+                Index = row.Index,
+                Alias = row.Alias,
+                Name = cleaned,
+            });
+        }
+
+        if (edits.Count == 0)
+            return;
+        foreach (var row in _rows)
+            row.EditingColumn = null;
+        AliasEdited?.Invoke(this, edits);
     }
 
     static bool TryValues(OtoParamRow row, string line, int startCol, out double[] values)
@@ -616,6 +735,12 @@ public sealed partial class OtoParamTable : UserControl
 
     void Commit(OtoParamRow row, int column, TextBox box)
     {
+        if (column == 6)
+        {
+            CommitAlias(row, box);
+            return;
+        }
+
         if (_commitLock || column is < 1 or > 5)
             return;
         var values = row.Values();
@@ -636,6 +761,34 @@ public sealed partial class OtoParamTable : UserControl
         try
         {
             ValuesEdited?.Invoke(this, [row.Edit(values[0], values[1], values[2], values[3], values[4])]);
+        }
+        finally
+        {
+            _commitLock = false;
+        }
+    }
+
+    void CommitAlias(OtoParamRow row, TextBox box)
+    {
+        if (_commitLock)
+            return;
+        var cleaned = OtoIni.CleanAlias(box.Text);
+        if (cleaned == null || string.Equals(cleaned, row.AliasText, StringComparison.Ordinal))
+        {
+            box.Text = row.AliasText;
+            return;
+        }
+
+        _commitLock = true;
+        try
+        {
+            AliasEdited?.Invoke(this, [new OtoAliasEdit
+            {
+                FileName = row.FileName,
+                Index = row.Index,
+                Alias = row.Alias,
+                Name = cleaned,
+            }]);
         }
         finally
         {
@@ -690,6 +843,7 @@ public sealed partial class OtoParamTable : UserControl
         2 => row.OverlapText,
         3 => row.PreutterText,
         4 => row.ConsonantText,
+        6 => row.AliasText,
         _ => row.BlankText,
     };
 
@@ -725,6 +879,25 @@ public sealed partial class OtoParamTable : UserControl
                 return;
             HeaderScroll.ChangeView(_listScroll.HorizontalOffset, null, null, true);
         };
+        _listScroll.SizeChanged += (_, _) => UpdateTableWidth();
+    }
+
+    void UpdateTableWidth()
+    {
+        var viewport = _listScroll?.ViewportWidth ?? 0;
+        if (viewport < 1)
+            viewport = Rows.ActualWidth;
+        if (viewport < 1)
+            viewport = ActualWidth;
+        if (viewport < 1 || double.IsNaN(viewport) || double.IsInfinity(viewport))
+            return;
+        var width = Math.Clamp(viewport, MinTableWidth, MaxTableWidth);
+        if (Math.Abs(width - _tableWidth) < 0.5)
+            return;
+        _tableWidth = width;
+        HeaderGrid.Width = width;
+        foreach (var row in _rows)
+            row.SetTableWidth(width);
     }
 
     static ScrollViewer? FindScrollViewer(DependencyObject root)

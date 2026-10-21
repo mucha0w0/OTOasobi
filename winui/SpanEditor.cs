@@ -105,6 +105,7 @@ public sealed partial class SpanEditor : UserControl
     readonly List<OtoMark> _otoMarks = [];
     readonly List<OtoMark> _otoAuto = [];
     readonly Dictionary<int, double?[]> _tune = [];
+    readonly Dictionary<int, string> _aliasNames = [];
     List<OtoAdjustedEntry>? _pendingTunes;
     List<int>? _tuneDefer;
     readonly List<Rectangle> _otoRects = [];

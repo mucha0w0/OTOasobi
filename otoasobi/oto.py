@@ -305,7 +305,9 @@ def adjustments_from(raw: object) -> list[dict]:
             if number != number or number in (float("inf"), float("-inf")):
                 continue
             points[key] = max(-0.1, min(36000.0, number))
-        if not points:
+        raw_name = item.get("name")
+        cleaned_name = _clean_alias_name(raw_name) if isinstance(raw_name, str) else None
+        if not points and cleaned_name is None:
             continue
         found.append(
             {
@@ -313,6 +315,7 @@ def adjustments_from(raw: object) -> list[dict]:
                 "index": index,
                 "alias": alias.strip(),
                 "points": points,
+                "name": cleaned_name,
             }
         )
     return found
@@ -421,7 +424,69 @@ def apply_file_adjustments(
         if item is None:
             out.append(line)
             continue
-        out.append(_apply_line(line, str(item.get("alias") or ""), item["points"], duration))
+        points = item.get("points") or {}
+        if not points:
+            out.append(line)
+            continue
+        out.append(_apply_line(line, str(item.get("alias") or ""), points, duration))
+    return out
+
+
+def _clean_alias_name(name: str) -> str | None:
+    """編集印の * を外す。空、長すぎ、oto.ini の区切り文字がある名前は使わない。"""
+    text = name.replace("*", "").strip()
+    if not text or len(text) > 80:
+        return None
+    if any(ch in text for ch in "\r\n\t=,"):
+        return None
+    return text
+
+
+def _names_for_file(adjustments: list[dict] | None, filename: str) -> dict[int, str]:
+    found: dict[int, str] = {}
+    for item in adjustments or []:
+        if item.get("file") != filename:
+            continue
+        name = item.get("name")
+        index = item.get("index")
+        if isinstance(index, int) and isinstance(name, str) and name:
+            found[index] = name
+    return found
+
+
+def apply_alias_names(lines: list[str], names: dict[int, str]) -> list[str]:
+    """手で直したエイリアスを、その行へ載せる。* はここに来ない。"""
+    if not names:
+        return lines
+    out: list[str] = []
+    for index, line in enumerate(lines):
+        name = names.get(index)
+        if not name:
+            out.append(line)
+            continue
+        parsed = _split_oto_alias(line)
+        if parsed is None:
+            out.append(line)
+            continue
+        filename, _alias, tail = parsed
+        out.append(f"{filename}={name}{tail}")
+    return out
+
+
+def _strip_alias_marks(lines: list[str]) -> list[str]:
+    """エイリアスから編集印の * を外す。行の位置は変えない。"""
+    out: list[str] = []
+    for line in lines:
+        parsed = _split_oto_alias(line)
+        if parsed is None:
+            out.append(line)
+            continue
+        filename, alias, tail = parsed
+        cleaned = alias.replace("*", "").strip()
+        if not cleaned or cleaned == alias:
+            out.append(line)
+            continue
+        out.append(f"{filename}={cleaned}{tail}")
     return out
 
 
@@ -726,24 +791,30 @@ def _split_oto_alias(line: str) -> tuple[str, str, str] | None:
     return line[:eq], body[:comma], body[comma:]
 
 
-def number_duplicate_aliases(lines: list[str]) -> list[str]:
+def number_duplicate_aliases(lines: list[str], pinned: set[int] | None = None) -> list[str]:
     """同じエイリアスの 2 回目以降へ 2、3、… を付ける。
 
     1 回目の名前は残す。付けた名前が、別のエイリアスの 1 回目や、
     すでに付けた名前と重なるときは、空いている番号まで進める。
     「あ」が 3 行なら「あ」「あ2」「あ3」です。
+    pinned の行は手入力なので、番号を付け足さない。
     """
+    pinned = pinned or set()
     parsed = [_split_oto_alias(line) for line in lines]
     reserved = {item[1] for item in parsed if item is not None}
     used: set[str] = set()
     seen: dict[str, int] = {}
     out: list[str] = []
-    for line, item in zip(lines, parsed, strict=True):
+    for index, (line, item) in enumerate(zip(lines, parsed, strict=True)):
         if item is None:
             out.append(line)
             continue
         filename, alias, tail = item
         seen[alias] = seen.get(alias, 0) + 1
+        if index in pinned:
+            used.add(alias)
+            out.append(line)
+            continue
         if seen[alias] == 1:
             chosen = alias
         else:
@@ -781,11 +852,11 @@ def _rename_existing_as_log(path: Path) -> None:
         index += 1
 
 
-def write_oto_ini(path: str | Path, lines: list[str]) -> Path:
+def write_oto_ini(path: str | Path, lines: list[str], pinned: set[int] | None = None) -> Path:
     path = Path(path)
     _rename_existing_as_log(path)
     path.write_text(
-        render_oto_ini(number_duplicate_aliases(lines)),
+        render_oto_ini(number_duplicate_aliases(_strip_alias_marks(lines), pinned)),
         encoding=ANSI,
         newline="\r\n",
     )

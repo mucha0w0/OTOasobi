@@ -18,7 +18,16 @@ if str(ROOT) not in sys.path:
 import numpy as np
 
 from otoasobi.blank import release_blank_seconds
-from otoasobi.oto import OtoSettings, _apply_line, mono_oto_lines, renzoku_oto_lines
+from otoasobi.oto import (
+    OtoSettings,
+    _apply_line,
+    _clean_alias_name,
+    _strip_alias_marks,
+    apply_alias_names,
+    mono_oto_lines,
+    number_duplicate_aliases,
+    renzoku_oto_lines,
+)
 from otoasobi.segment import Span
 
 CASES = Path(__file__).with_name("oto_parity.json")
@@ -158,6 +167,38 @@ class OtoParityTest(unittest.TestCase):
     def test_recorded_python_values(self) -> None:
         doc = json.loads(CASES.read_text(encoding="utf-8"))
         self.assertEqual(compute(doc), doc["expected"])
+
+
+class AliasNameTest(unittest.TestCase):
+    def test_override_stays_and_later_copies_are_numbered(self) -> None:
+        lines = apply_alias_names(
+            ["a.wav=あ,1,2,3,4,5", "b.wav=あ,1,2,3,4,5", "c.wav=あ,1,2,3,4,5"],
+            {1: "か"},
+        )
+        numbered = number_duplicate_aliases(lines, {1})
+        self.assertEqual(
+            numbered,
+            [
+                "a.wav=あ,1,2,3,4,5",
+                "b.wav=か,1,2,3,4,5",
+                "c.wav=あ2,1,2,3,4,5",
+            ],
+        )
+
+    def test_editor_mark_is_removed_before_numbering(self) -> None:
+        self.assertEqual(_clean_alias_name("あ *"), "あ")
+        self.assertIsNone(_clean_alias_name("*"))
+        cleaned = _strip_alias_marks(
+            [
+                "a.wav=あ,1,2,3,4,5",
+                "b.wav=あ *,1,2,3,4,5",
+                "c.wav=あ,1,2,3,4,5",
+            ]
+        )
+        numbered = number_duplicate_aliases(cleaned, {1})
+        self.assertFalse(any("*" in line for line in numbered))
+        self.assertEqual(numbered[1], "b.wav=あ,1,2,3,4,5")
+        self.assertEqual(numbered[2], "c.wav=あ2,1,2,3,4,5")
 
 
 if __name__ == "__main__":

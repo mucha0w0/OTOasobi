@@ -77,9 +77,62 @@ static class OtoIni
         return true;
     }
 
+    // 画面の * は編集印なので外す。oto.ini の区切り文字も入れない。空や長すぎる名前は null。
+    public static string? CleanAlias(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return null;
+        var source = text.Replace("*", "").Trim();
+        if (source.Length == 0 || source.Length > 80)
+            return null;
+        foreach (var ch in source)
+        {
+            if (ch is '\r' or '\n' or '\t' or '=' or ',')
+                return null;
+        }
+
+        return source;
+    }
+
+    // overrides の入っている行は、その文字列のまま残す。ほかは重複へ番号を付ける。
+    public static string[] ResolveAliases(IReadOnlyList<string> aliases, IReadOnlyList<string?>? overrides)
+    {
+        var raw = new string[aliases.Count];
+        var pinned = new bool[aliases.Count];
+        for (var i = 0; i < aliases.Count; i++)
+        {
+            string? over = null;
+            if (overrides != null && i < overrides.Count)
+                over = overrides[i];
+            if (!string.IsNullOrEmpty(over))
+            {
+                raw[i] = over;
+                pinned[i] = true;
+            }
+            else
+            {
+                raw[i] = aliases[i] ?? "";
+            }
+        }
+
+        return NumberDuplicateAliases(raw, pinned);
+    }
+
+    public static bool[] DuplicateAliasFlags(IReadOnlyList<string> aliases)
+    {
+        var counts = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var alias in aliases)
+            counts[alias] = counts.GetValueOrDefault(alias) + 1;
+        var flags = new bool[aliases.Count];
+        for (var i = 0; i < aliases.Count; i++)
+            flags[i] = counts.GetValueOrDefault(aliases[i]) >= 2;
+        return flags;
+    }
+
     // oto.py の number_duplicate_aliases と同じ。1 回目の名前は残し、2 回目以降へ 2、3、… を付ける。
     // 付けた名前が、別のエイリアスや、すでに付けた名前と重なるときは空いている番号まで進める。
-    public static string[] NumberDuplicateAliases(IReadOnlyList<string> aliases)
+    // pinned の行は手入力の名前なので、番号を付け足さない。
+    public static string[] NumberDuplicateAliases(IReadOnlyList<string> aliases, IReadOnlyList<bool>? pinned = null)
     {
         var reserved = new HashSet<string>(aliases);
         var used = new HashSet<string>();
@@ -90,6 +143,13 @@ static class OtoIni
             var alias = aliases[i];
             var count = seen.GetValueOrDefault(alias) + 1;
             seen[alias] = count;
+            if (pinned != null && i < pinned.Count && pinned[i])
+            {
+                used.Add(alias);
+                result[i] = alias;
+                continue;
+            }
+
             string chosen;
             if (count == 1)
             {

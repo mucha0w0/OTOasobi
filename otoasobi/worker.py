@@ -31,7 +31,7 @@ CVVC の vc_offset_ms と vc_overlap は子音音素で、連続音のオフセ�
 blank の 0 は音量の上辺の右端。正は減衰側、負は手前へ、その秒数だけずらす。子音部とブランクは単独音と連続音と CVVC の通常音素で同じ。
 応答の txt はそのモードの oto.ini。全区間は OTOasibi_log.txt、母音始まりは OTOasibi_out.txt。
 画面で区間を直したあとは save が保存データを更新し、write が oto.ini を計算して書く。
-write の adjustments は、ドラッグで直した位置。file、index、alias と、直した点だけの秒。無い点は自動推定のまま。
+write の adjustments は、ドラッグで直した位置。file、index、alias と、直した点だけの秒。無い点は自動推定のまま。name は手で直したエイリアス。編集印の * は oto.ini に書かない。
 """
 
 from __future__ import annotations
