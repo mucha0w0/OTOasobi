@@ -115,6 +115,7 @@ public sealed partial class MainPage : Page
         {
             try
             {
+                FlushBank();
                 FlushSession();
             }
             catch (Exception)
@@ -127,6 +128,7 @@ public sealed partial class MainPage : Page
             {
                 try
                 {
+                    FlushBank();
                     FlushSession();
                 }
                 catch (Exception)
@@ -1654,10 +1656,9 @@ public sealed partial class MainPage : Page
         ReanalyzeSelectedMenuItem.IsEnabled = ready && FileList.SelectedItem is WavFile;
         ApplyEffectsButton.IsEnabled = editing;
         WriteFrqButton.IsEnabled = editing;
-        var bank = idle && hasFolder;
-        BankSaveButton.IsEnabled = bank;
-        BankPickIconButton.IsEnabled = bank;
-        BankPickPortraitButton.IsEnabled = bank;
+        var bankReady = idle && hasFolder;
+        BankPickIconButton.IsEnabled = bankReady;
+        BankPickPortraitButton.IsEnabled = bankReady;
     }
 
     void UpdateFileStatus(string name, double done, string label)

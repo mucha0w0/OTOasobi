@@ -1,4 +1,5 @@
 using System.Text;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
@@ -17,9 +18,18 @@ public sealed partial class MainPage
     readonly List<ProfileRow> _profileRows = [];
     readonly List<LocaleRow> _localeRows = [];
     bool _bankApplying;
+    bool _bankDirty;
     bool _bankPreserveLocales;
+    bool _portraitFrameHooked;
+    bool _portraitFraming;
+    double _bankShownOpacity = double.NaN;
+    double _bankShownHeight = double.NaN;
+    string? _bankShownSample;
     int _iconGen;
     int _portraitGen;
+    int _portraitPixelWidth;
+    int _portraitPixelHeight;
+    DispatcherQueueTimer? _bankTimer;
     InMemoryRandomAccessStream? _bankIconStream;
     InMemoryRandomAccessStream? _bankPortraitStream;
 
@@ -59,6 +69,10 @@ public sealed partial class MainPage
 
     void ApplyBank(string folder, CharacterFile character, VoicebankYaml yaml, string readme)
     {
+        _bankTimer?.Stop();
+        _bankDirty = false;
+        _portraitPixelWidth = 0;
+        _portraitPixelHeight = 0;
         _bankApplying = true;
         try
         {
@@ -85,6 +99,8 @@ public sealed partial class MainPage
             _profileRows.Clear();
             foreach (var line in character.Profile)
                 AddProfileRow(line.Label, line.Value, line.Fullwidth);
+            if (_profileRows.Count == 0)
+                AddProfileRow("", "", fullwidth: true);
             BankExtraBox.Text = string.Join('\n', character.Extra);
             BankReadmeBox.Text = readme;
             BankLocaleHost.Children.Clear();
@@ -95,6 +111,8 @@ public sealed partial class MainPage
             BankOpacitySlider.Value = yaml.HasOpacity ? yaml.PortraitOpacity : 0.67;
             BankOpacityValue.Text = VoicebankText.FormatOpacity(BankOpacitySlider.Value);
             BankPortraitHeightBox.Value = yaml.HasHeight ? yaml.PortraitHeight : 0;
+            _bankShownOpacity = BankOpacitySlider.Value;
+            _bankShownHeight = BankPortraitHeightBox.Value;
         }
         finally
         {
@@ -136,6 +154,7 @@ public sealed partial class MainPage
         var wanted = selected.Length == 0 ? VoicebankText.RandomSample : selected;
         BankSampleBox.SelectedItem = names.FirstOrDefault(name => name.Equals(wanted, StringComparison.OrdinalIgnoreCase))
             ?? VoicebankText.RandomSample;
+        _bankShownSample = BankSampleBox.SelectedItem as string ?? "";
     }
 
     void BankShared_TextChanged(object sender, TextChangedEventArgs e)
@@ -157,19 +176,24 @@ public sealed partial class MainPage
             _bankApplying = false;
         }
 
-        RefreshBankEncoding();
+        ScheduleBankSave();
     }
 
     void BankSample_Changed(object sender, SelectionChangedEventArgs e)
     {
-        if (!_bankApplying)
-            RefreshBankEncoding();
+        if (_bankApplying)
+            return;
+        var name = BankSampleBox.SelectedItem as string ?? "";
+        if (name == _bankShownSample)
+            return;
+        _bankShownSample = name;
+        ScheduleBankSave();
     }
 
     void BankForm_Changed(object sender, TextChangedEventArgs e)
     {
         if (!_bankApplying)
-            RefreshBankEncoding();
+            ScheduleBankSave();
     }
 
     void BankPortraitPath_Changed(object sender, TextChangedEventArgs e)
@@ -178,6 +202,7 @@ public sealed partial class MainPage
             return;
         _portraitGen++;
         _ = ShowPortraitAsync(_folder, _portraitGen);
+        ScheduleBankSave();
     }
 
     void BankOpacity_Changed(object sender, RangeBaseValueChangedEventArgs e)
@@ -185,6 +210,24 @@ public sealed partial class MainPage
         if (BankOpacityValue == null)
             return;
         BankOpacityValue.Text = VoicebankText.FormatOpacity(e.NewValue);
+        ApplyPortraitFrame();
+        if (_bankApplying || string.IsNullOrEmpty(_folder))
+            return;
+        if (double.IsFinite(_bankShownOpacity) && Math.Abs(_bankShownOpacity - e.NewValue) < 0.0000001)
+            return;
+        _bankShownOpacity = e.NewValue;
+        ScheduleBankSave();
+    }
+
+    void BankPortraitHeight_Changed(NumberBox sender, NumberBoxValueChangedEventArgs args)
+    {
+        ApplyPortraitFrame();
+        if (_bankApplying || string.IsNullOrEmpty(_folder) || !double.IsFinite(args.NewValue))
+            return;
+        if (double.IsFinite(_bankShownHeight) && Math.Abs(_bankShownHeight - args.NewValue) < 0.0000001)
+            return;
+        _bankShownHeight = args.NewValue;
+        ScheduleBankSave();
     }
 
     void BankAddProfile_Click(object sender, RoutedEventArgs e) => AddProfileRow("", "", fullwidth: true);
@@ -195,7 +238,42 @@ public sealed partial class MainPage
 
     void BankPickPortrait_Click(object sender, RoutedEventArgs e) => _ = PickPortraitAsync();
 
-    void BankSave_Click(object sender, RoutedEventArgs e) => SaveBank();
+    void ScheduleBankSave()
+    {
+        if (_bankApplying || string.IsNullOrEmpty(_folder))
+            return;
+        RefreshBankEncoding();
+        _bankDirty = true;
+        EnsureBankTimer();
+        if (_bankTimer == null)
+        {
+            SaveBank();
+            return;
+        }
+
+        _bankTimer.Stop();
+        _bankTimer.Start();
+    }
+
+    void EnsureBankTimer()
+    {
+        if (_bankTimer != null)
+            return;
+        var queue = DispatcherQueue;
+        if (queue == null)
+            return;
+        _bankTimer = queue.CreateTimer();
+        _bankTimer.IsRepeating = false;
+        _bankTimer.Interval = TimeSpan.FromMilliseconds(400);
+        _bankTimer.Tick += (_, _) => SaveBank();
+    }
+
+    void FlushBank()
+    {
+        if (!_bankDirty)
+            return;
+        SaveBank(ignoreBusy: true);
+    }
 
     void AddProfileRow(string label, string value, bool fullwidth)
     {
@@ -205,22 +283,51 @@ public sealed partial class MainPage
         row.Value.TextChanged += BankForm_Changed;
         row.Remove.Click += (_, _) =>
         {
+            if (_profileRows.Count <= 1)
+                return;
             _profileRows.Remove(row);
             BankProfileHost.Children.Remove(row.Root);
-            RefreshBankEncoding();
+            SyncProfileRemoves();
+            ScheduleBankSave();
         };
         BankProfileHost.Children.Add(row.Root);
         _profileRows.Add(row);
+        SyncProfileRemoves();
+    }
+
+    void SyncProfileRemoves()
+    {
+        var show = _profileRows.Count > 1 ? Visibility.Visible : Visibility.Collapsed;
+        foreach (var row in _profileRows)
+            row.Remove.Visibility = show;
     }
 
     void AddLocaleRow(string code, string name)
     {
         var row = new LocaleRow(code, name);
         row.Remove.Style = (Style)Resources["ToolbarButtonStyle"];
+        var language = (row.Language.SelectedItem as ComboBoxItem)?.Tag as string ?? "";
+        var localized = row.Name.Text;
+        row.Language.SelectionChanged += (_, _) =>
+        {
+            var code = (row.Language.SelectedItem as ComboBoxItem)?.Tag as string ?? "";
+            if (code == language)
+                return;
+            language = code;
+            ScheduleBankSave();
+        };
+        row.Name.TextChanged += (_, _) =>
+        {
+            if (row.Name.Text == localized)
+                return;
+            localized = row.Name.Text;
+            ScheduleBankSave();
+        };
         row.Remove.Click += (_, _) =>
         {
             _localeRows.Remove(row);
             BankLocaleHost.Children.Remove(row.Root);
+            ScheduleBankSave();
         };
         BankLocaleHost.Children.Add(row.Root);
         _localeRows.Add(row);
@@ -302,10 +409,19 @@ public sealed partial class MainPage
         return list;
     }
 
-    void SaveBank()
+    bool SaveBank(bool ignoreBusy = false)
     {
-        if (_busy || string.IsNullOrEmpty(_folder))
-            return;
+        _bankTimer?.Stop();
+        if (_bankApplying || string.IsNullOrEmpty(_folder))
+            return false;
+        if (_busy && !ignoreBusy)
+        {
+            _bankDirty = true;
+            _bankTimer?.Start();
+            return false;
+        }
+
+        _bankDirty = false;
         var folder = _folder;
         try
         {
@@ -314,10 +430,11 @@ public sealed partial class MainPage
             var encoding = VoicebankText.Resolve(_bankVotes, body);
             if (!VoicebankText.CanEncode(body, encoding))
             {
+                _bankDirty = true;
                 ShowNotice(
                     "音源設定を保存できませんでした",
                     "character.txt に、Shift_JIS で保存できない文字があります。oto.ini か prefix.map が Shift_JIS なので、文字コードは変えられません。");
-                return;
+                return false;
             }
 
             var readme = BankReadmeBox.Text ?? "";
@@ -325,22 +442,25 @@ public sealed partial class MainPage
             var writeReadme = readme.Length > 0 || File.Exists(readmePath);
             if (writeReadme && !VoicebankText.CanEncode(readme, VoicebankText.ShiftJis))
             {
+                _bankDirty = true;
                 ShowNotice("音源設定を保存できませんでした", "readme.txt に、ANSI（Shift_JIS）で保存できない文字があります。");
-                return;
+                return false;
             }
 
             var locales = CollectLocales(out var localeError);
             if (localeError != null)
             {
+                _bankDirty = true;
                 ShowNotice("音源設定を保存できませんでした", localeError);
-                return;
+                return false;
             }
 
             var portrait = VoicebankText.NormalizeRelative(BankPortraitPathBox.Text);
             if (portrait.Length > 0 && !VoicebankText.TryResolveInside(folder, portrait, out _))
             {
+                _bankDirty = true;
                 ShowNotice("音源設定を保存できませんでした", "立ち絵のパスが、音源フォルダの外を指しています。");
-                return;
+                return false;
             }
 
             var yaml = new VoicebankYaml
@@ -374,23 +494,21 @@ public sealed partial class MainPage
             var yamlText = VoicebankText.ApplyYaml(existing, yaml);
             WriteBytes(yamlPath, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetBytes(yamlText));
             if (_folder != folder)
-                return;
+                return true;
             _bankVotes.Clear();
             _bankVotes.AddRange(VoicebankText.CollectVotes(folder));
             if (locales.Count > 0)
                 _bankPreserveLocales = false;
             RefreshBankEncoding();
             BankEncodingText.Text = "text_file_encoding: " + encoding;
-            ShowNotice(
-                "音源設定を保存しました",
-                writeReadme
-                    ? "character.txt、readme.txt、character.yaml を書きました。"
-                    : "character.txt と character.yaml を書きました。");
+            return true;
         }
         catch (Exception ex)
         {
+            _bankDirty = true;
             if (_folder == folder)
                 ShowNotice("音源設定を保存できませんでした", ex.Message);
+            return false;
         }
     }
 
@@ -428,7 +546,8 @@ public sealed partial class MainPage
             RefreshBankEncoding();
             _iconGen++;
             await ShowIconAsync(folder, _iconGen);
-            ShowNotice("アイコンを設定しました", "100×100 の icon.bmp にしました。文字の設定は「音源設定を保存」で書き込みます。");
+            if (SaveBank())
+                ShowNotice("アイコンを設定しました", "100×100 の icon.bmp にしました。");
         }
         catch (Exception ex)
         {
@@ -463,10 +582,13 @@ public sealed partial class MainPage
                 return;
             var encoded = await EncodePortraitAsync(pixels, width, height, relative);
             WriteBytes(full, encoded);
+            _bankApplying = true;
             BankPortraitPathBox.Text = relative;
+            _bankApplying = false;
             _portraitGen++;
             await ShowPortraitAsync(folder, _portraitGen);
-            ShowNotice("立ち絵を設定しました", "パスは「音源設定を保存」で character.yaml に書き込みます。");
+            if (SaveBank())
+                ShowNotice("立ち絵を設定しました", relative + " にしました。");
         }
         catch (Exception ex)
         {
@@ -526,6 +648,13 @@ public sealed partial class MainPage
             image.Source = null;
             image.Visibility = Visibility.Collapsed;
             missing.Visibility = Visibility.Visible;
+            if (ReferenceEquals(image, BankPortraitImage))
+            {
+                _portraitPixelWidth = 0;
+                _portraitPixelHeight = 0;
+                ApplyPortraitFrame();
+            }
+
             return;
         }
 
@@ -543,6 +672,8 @@ public sealed partial class MainPage
             image.Visibility = Visibility.Visible;
             missing.Visibility = Visibility.Collapsed;
             keep(loaded.Stream);
+            if (ReferenceEquals(image, BankPortraitImage))
+                NotePortraitBitmap(loaded.Image, generation);
         }
         catch (Exception)
         {
@@ -552,6 +683,71 @@ public sealed partial class MainPage
             image.Source = null;
             image.Visibility = Visibility.Collapsed;
             missing.Visibility = Visibility.Visible;
+            if (ReferenceEquals(image, BankPortraitImage))
+            {
+                _portraitPixelWidth = 0;
+                _portraitPixelHeight = 0;
+                ApplyPortraitFrame();
+            }
+        }
+    }
+
+    void NotePortraitBitmap(BitmapImage bmp, int generation)
+    {
+        void Read()
+        {
+            if (generation != _portraitGen)
+                return;
+            _portraitPixelWidth = bmp.PixelWidth;
+            _portraitPixelHeight = bmp.PixelHeight;
+            ApplyPortraitFrame();
+        }
+
+        if (bmp.PixelWidth > 0 && bmp.PixelHeight > 0)
+            Read();
+        else
+            bmp.ImageOpened += (_, _) => Read();
+    }
+
+    void ApplyPortraitFrame()
+    {
+        if (_portraitFraming || BankPortraitImage == null || BankOpacitySlider == null)
+            return;
+        _portraitFraming = true;
+        try
+        {
+            if (!_portraitFrameHooked && BankScroll != null)
+            {
+                _portraitFrameHooked = true;
+                BankScroll.SizeChanged += (_, _) => ApplyPortraitFrame();
+            }
+
+            var opacity = BankOpacitySlider.Value;
+            BankPortraitImage.Opacity = double.IsFinite(opacity) ? Math.Clamp(opacity, 0, 1) : 1;
+            var pixelH = _portraitPixelHeight;
+            var pixelW = _portraitPixelWidth;
+            var requested = BankPortraitHeightBox == null ? 0 : PortraitHeightFromUi();
+            var displayH = requested > 0 ? (double)requested : pixelH > 800 ? 800 : pixelH;
+            if (displayH <= 0 || pixelH <= 0 || pixelW <= 0)
+            {
+                BankPortraitImage.ClearValue(FrameworkElement.WidthProperty);
+                BankPortraitImage.ClearValue(FrameworkElement.HeightProperty);
+                return;
+            }
+
+            var logicalW = pixelW * (displayH / pixelH);
+            var referenceH = pixelH > 800 ? 800 : pixelH;
+            var referenceW = pixelW * (referenceH / (double)pixelH);
+            var viewport = BankScroll == null ? 0 : BankScroll.ViewportWidth > 1 ? BankScroll.ViewportWidth : BankScroll.ActualWidth;
+            // 画面の余白（外側 12、カード 12、枠 1）を左右ぶん除いた幅。
+            var limit = viewport - 50;
+            var scale = limit > 32 && referenceW > limit ? limit / referenceW : 1;
+            BankPortraitImage.Width = Math.Max(1, logicalW * scale);
+            BankPortraitImage.Height = Math.Max(1, displayH * scale);
+        }
+        finally
+        {
+            _portraitFraming = false;
         }
     }
 
@@ -737,6 +933,7 @@ public sealed partial class MainPage
             Language = new ComboBox
             {
                 HorizontalAlignment = HorizontalAlignment.Stretch,
+                VerticalAlignment = VerticalAlignment.Center,
                 MinWidth = 0,
                 PlaceholderText = "言語",
             };
@@ -766,6 +963,7 @@ public sealed partial class MainPage
                 Text = name,
                 MinWidth = 0,
                 HorizontalAlignment = HorizontalAlignment.Stretch,
+                VerticalAlignment = VerticalAlignment.Center,
                 PlaceholderText = "その言語での名前",
             };
             AutomationProperties.SetName(Name, "ローカライズした名前");
@@ -773,21 +971,21 @@ public sealed partial class MainPage
             {
                 Content = "削除",
                 MinWidth = 0,
-                HorizontalAlignment = HorizontalAlignment.Left,
+                VerticalAlignment = VerticalAlignment.Center,
             };
             AutomationProperties.SetName(Remove, "ローカライズの行を削除");
-            var line = new Grid { ColumnSpacing = 8 };
-            line.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            line.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            Grid.SetColumn(Remove, 1);
-            line.Children.Add(Name);
-            line.Children.Add(Remove);
-            Root = new StackPanel { Spacing = 4 };
+            Root = new Grid { ColumnSpacing = 8 };
+            Root.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1.15, GridUnitType.Star), MinWidth = 0 });
+            Root.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1.4, GridUnitType.Star), MinWidth = 0 });
+            Root.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            Grid.SetColumn(Name, 1);
+            Grid.SetColumn(Remove, 2);
             Root.Children.Add(Language);
-            Root.Children.Add(line);
+            Root.Children.Add(Name);
+            Root.Children.Add(Remove);
         }
 
-        public StackPanel Root { get; }
+        public Grid Root { get; }
 
         public ComboBox Language { get; }
 

@@ -41,6 +41,18 @@ public class VoicebankTests
     }
 
     [Fact]
+    public void BlankProfileLinesAreLeftOut()
+    {
+        var file = new CharacterFile { Name = "あ" };
+        file.Profile.Add(new ProfileLine("  ", " ", true));
+        file.Profile.Add(new ProfileLine("", "", false));
+        var text = VoicebankText.FormatCharacter(file);
+        Assert.DoesNotContain("：", text);
+        Assert.DoesNotContain(" : ", text);
+        Assert.Contains("name=あ", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ShiftJisAndUtf8AreToldApart()
     {
         var sjis = VoicebankText.EncodeCharacter(new CharacterFile { Name = "名前" }, VoicebankText.ShiftJis);

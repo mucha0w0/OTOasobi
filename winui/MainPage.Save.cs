@@ -315,6 +315,7 @@ public sealed partial class MainPage
             return;
         }
 
+        FlushBank();
         FlushSession();
         _folder = folder;
         LoadFolderSettings();
