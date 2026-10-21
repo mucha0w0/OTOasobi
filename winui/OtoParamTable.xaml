@@ -8,6 +8,42 @@
     HorizontalAlignment="Stretch"
     VerticalAlignment="Stretch">
     <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Default">
+                    <CornerRadius x:Key="ControlCornerRadius">0</CornerRadius>
+                    <CornerRadius x:Key="ListViewItemCornerRadius">0</CornerRadius>
+                    <x:Boolean x:Key="ListViewItemSelectionIndicatorVisualEnabled">False</x:Boolean>
+                    <Thickness x:Key="TextControlBorderThemeThicknessFocused">1</Thickness>
+                    <SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="{ThemeResource FocusStrokeColorOuter}" />
+                    <SolidColorBrush x:Key="ListViewItemBackgroundSelected" Color="Transparent" />
+                    <SolidColorBrush x:Key="ListViewItemBackgroundSelectedPointerOver" Color="Transparent" />
+                    <SolidColorBrush x:Key="ListViewItemBackgroundSelectedPressed" Color="Transparent" />
+                    <SolidColorBrush x:Key="ListViewItemBackgroundSelectedDisabled" Color="Transparent" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Light">
+                    <CornerRadius x:Key="ControlCornerRadius">0</CornerRadius>
+                    <CornerRadius x:Key="ListViewItemCornerRadius">0</CornerRadius>
+                    <x:Boolean x:Key="ListViewItemSelectionIndicatorVisualEnabled">False</x:Boolean>
+                    <Thickness x:Key="TextControlBorderThemeThicknessFocused">1</Thickness>
+                    <SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="{ThemeResource FocusStrokeColorOuter}" />
+                    <SolidColorBrush x:Key="ListViewItemBackgroundSelected" Color="Transparent" />
+                    <SolidColorBrush x:Key="ListViewItemBackgroundSelectedPointerOver" Color="Transparent" />
+                    <SolidColorBrush x:Key="ListViewItemBackgroundSelectedPressed" Color="Transparent" />
+                    <SolidColorBrush x:Key="ListViewItemBackgroundSelectedDisabled" Color="Transparent" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="HighContrast">
+                    <CornerRadius x:Key="ControlCornerRadius">0</CornerRadius>
+                    <CornerRadius x:Key="ListViewItemCornerRadius">0</CornerRadius>
+                    <x:Boolean x:Key="ListViewItemSelectionIndicatorVisualEnabled">False</x:Boolean>
+                    <Thickness x:Key="TextControlBorderThemeThicknessFocused">1</Thickness>
+                    <SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="{ThemeResource FocusStrokeColorOuter}" />
+                    <SolidColorBrush x:Key="ListViewItemBackgroundSelected" Color="Transparent" />
+                    <SolidColorBrush x:Key="ListViewItemBackgroundSelectedPointerOver" Color="Transparent" />
+                    <SolidColorBrush x:Key="ListViewItemBackgroundSelectedPressed" Color="Transparent" />
+                    <SolidColorBrush x:Key="ListViewItemBackgroundSelectedDisabled" Color="Transparent" />
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
         <Style x:Key="OtoHeadStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionTextBlockStyle}">
             <Setter Property="VerticalAlignment" Value="Center" />
             <Setter Property="Padding" Value="6,4" />
@@ -21,6 +57,7 @@
         </Style>
         <Style x:Key="OtoCellStyle" TargetType="TextBox" BasedOn="{StaticResource DefaultTextBoxStyle}">
             <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="CornerRadius" Value="0" />
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="Padding" Value="6,2" />
             <Setter Property="MinHeight" Value="0" />
@@ -46,7 +83,9 @@
             <Setter Property="Margin" Value="0" />
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
             <Setter Property="VerticalContentAlignment" Value="Stretch" />
+            <Setter Property="CornerRadius" Value="0" />
         </Style>
+        </ResourceDictionary>
     </UserControl.Resources>
     <Grid>
         <Grid.ColumnDefinitions>
@@ -141,6 +180,7 @@
             <ListView
                 x:Name="Rows"
                 Grid.Row="1"
+                CornerRadius="0"
                 ItemContainerStyle="{StaticResource OtoRowStyle}"
                 SelectionChanged="Rows_SelectionChanged"
                 SelectionMode="Single"
@@ -148,24 +188,6 @@
                 ScrollViewer.HorizontalScrollMode="Disabled"
                 ScrollViewer.VerticalScrollBarVisibility="Hidden"
                 ScrollViewer.VerticalScrollMode="Enabled">
-            <ListView.Resources>
-                <ResourceDictionary>
-                    <ResourceDictionary.ThemeDictionaries>
-                        <ResourceDictionary x:Key="Default">
-                            <SolidColorBrush x:Key="ListViewItemBackgroundSelected" Color="Transparent" />
-                            <SolidColorBrush x:Key="ListViewItemBackgroundSelectedPointerOver" Color="Transparent" />
-                            <SolidColorBrush x:Key="ListViewItemBackgroundSelectedPressed" Color="Transparent" />
-                            <SolidColorBrush x:Key="ListViewItemBackgroundSelectedDisabled" Color="Transparent" />
-                        </ResourceDictionary>
-                        <ResourceDictionary x:Key="Light">
-                            <SolidColorBrush x:Key="ListViewItemBackgroundSelected" Color="Transparent" />
-                            <SolidColorBrush x:Key="ListViewItemBackgroundSelectedPointerOver" Color="Transparent" />
-                            <SolidColorBrush x:Key="ListViewItemBackgroundSelectedPressed" Color="Transparent" />
-                            <SolidColorBrush x:Key="ListViewItemBackgroundSelectedDisabled" Color="Transparent" />
-                        </ResourceDictionary>
-                    </ResourceDictionary.ThemeDictionaries>
-                </ResourceDictionary>
-            </ListView.Resources>
             <ListView.ItemTemplate>
                 <DataTemplate x:DataType="local:OtoParamRow">
                     <Grid
