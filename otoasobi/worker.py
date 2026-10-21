@@ -47,6 +47,9 @@ import sys
 import traceback
 from pathlib import Path
 
+# torch.hub の進捗表示は改行しない。標準エラーのパイプが埋まると、音素対応のまま止まる。
+os.environ.setdefault("TQDM_DISABLE", "1")
+
 from otoasobi.analyze import (
     AnalyzedFile,
     analyze_folder_files,

@@ -4,7 +4,13 @@ from collections.abc import Callable
 
 import numpy as np
 
-from otoasobi.align_mms import AlignedChar, align_chars, available as mms_available
+from otoasobi.align_mms import (
+    AlignedChar,
+    align_chars,
+    available as mms_available,
+    load_model,
+    model_is_loaded,
+)
 from otoasobi.cv_edge import refine_cv_boundary
 from otoasobi.features import FrameTrack
 from otoasobi.parser import Token, rest_layout, speech_group_chunks
@@ -522,6 +528,9 @@ def segment_precision(
         harm_fine = None
         formants_fine = None
 
+    if not model_is_loaded():
+        step(0.57, "高精度モデルを読み込んでいます")
+        load_model()
     step(0.58, "音素を対応しています")
     try:
         aligned = _align_chunks(y, sr, tokens, index_chunks, chunk_bounds, duration, on_step)

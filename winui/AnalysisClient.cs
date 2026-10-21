@@ -36,7 +36,9 @@ sealed class AnalysisClient : IDisposable
         psi.Environment["PYTHONUTF8"] = "1";
         psi.Environment["PYTHONIOENCODING"] = "utf-8";
         psi.Environment["PYTHONPATH"] = repo;
-        psi.Environment["TORCH_HOME"] = AppPaths.ModelsRoot;
+        psi.Environment["TORCH_HOME"] = ResolveTorchHome();
+        // ダウンロード表示が改行せず、標準エラーが詰まると解析が戻ってこない。
+        psi.Environment["TQDM_DISABLE"] = "1";
         if (bundled)
             psi.Environment["PYTHONNOUSERSITE"] = "1";
 
@@ -434,6 +436,21 @@ sealed class AnalysisClient : IDisposable
             if (_pending.TryRemove(id, out var done))
                 done.TrySetException(new IOException(message));
         }
+    }
+
+    // アプリ用の model.pt が無いときは、既にある torch のキャッシュを使う。
+    // 空の保存先のままだと、音素対応の途中で 1.2GB を取り直して止まる。
+    static string ResolveTorchHome()
+    {
+        if (File.Exists(AppPaths.ModelFile))
+            return AppPaths.ModelsRoot;
+
+        var profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var cached = Path.Combine(profile, ".cache", "torch", "hub", "checkpoints", "model.pt");
+        if (File.Exists(cached))
+            return Path.Combine(profile, ".cache", "torch");
+
+        return AppPaths.ModelsRoot;
     }
 
     // 高精度エンジン、同梱の音響用 Python、開発用 .venv の順。スクリプトはアプリ側を使う。
