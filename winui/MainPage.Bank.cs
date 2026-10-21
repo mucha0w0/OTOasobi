@@ -107,6 +107,8 @@ public sealed partial class MainPage
             _localeRows.Clear();
             foreach (var (code, name) in yaml.LocalizedNames)
                 AddLocaleRow(code, name);
+            if (_localeRows.Count == 0)
+                AddLocaleRow("", "");
             BankPortraitPathBox.Text = yaml.HasPortrait ? VoicebankText.NormalizeRelative(yaml.Portrait) : "";
             BankOpacitySlider.Value = yaml.HasOpacity ? yaml.PortraitOpacity : 0.67;
             BankOpacityValue.Text = VoicebankText.FormatOpacity(BankOpacitySlider.Value);
@@ -325,12 +327,23 @@ public sealed partial class MainPage
         };
         row.Remove.Click += (_, _) =>
         {
+            if (_localeRows.Count <= 1)
+                return;
             _localeRows.Remove(row);
             BankLocaleHost.Children.Remove(row.Root);
+            SyncLocaleRemoves();
             ScheduleBankSave();
         };
         BankLocaleHost.Children.Add(row.Root);
         _localeRows.Add(row);
+        SyncLocaleRemoves();
+    }
+
+    void SyncLocaleRemoves()
+    {
+        var show = _localeRows.Count > 1 ? Visibility.Visible : Visibility.Collapsed;
+        foreach (var row in _localeRows)
+            row.Remove.Visibility = show;
     }
 
     void RefreshBankEncoding()
