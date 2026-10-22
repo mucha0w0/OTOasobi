@@ -15,7 +15,11 @@ public partial class App : Application
     {
         var window = new MainWindow();
         MainWindow = window;
-        window.Closed += (_, _) => MainPage.ShutdownAnalysis();
+        window.Closed += (_, _) =>
+        {
+            SettingsWindow.CloseIfOpen();
+            MainPage.ShutdownAnalysis();
+        };
         window.Activate();
         window.BeginUpdateCheck();
     }

@@ -690,6 +690,11 @@ public sealed partial class MainPage : Page
         App.MainWindow?.Close();
     }
 
+    void OpenSettings_Click(object sender, RoutedEventArgs e)
+    {
+        SettingsWindow.Show();
+    }
+
     async Task PickFolderAsync()
     {
         if (_busy || App.MainWindow == null)

@@ -183,6 +183,9 @@
                     <MenuFlyoutItem Text="更新を確認" Click="CheckUpdate_Click" />
                     <MenuFlyoutItem Text="終了" Click="Exit_Click" />
                 </MenuBarItem>
+                <MenuBarItem Title="編集">
+                    <MenuFlyoutItem Text="環境設定" Click="OpenSettings_Click" />
+                </MenuBarItem>
                 <MenuBarItem Title="解析">
                     <MenuFlyoutItem
                         x:Name="ReanalyzeMenuItem"
