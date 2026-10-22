@@ -11,6 +11,7 @@ public sealed partial class SettingsWindow : Window
     const int WindowHeight = 640;
 
     static SettingsWindow? _open;
+    DisplaySettings? _display;
 
     public static void Show()
     {
@@ -24,6 +25,7 @@ public sealed partial class SettingsWindow : Window
         _open = window;
         window.Closed += (_, _) =>
         {
+            window.FlushPending();
             if (ReferenceEquals(_open, window))
                 _open = null;
         };
@@ -31,6 +33,12 @@ public sealed partial class SettingsWindow : Window
     }
 
     public static void CloseIfOpen() => _open?.Close();
+
+    internal static void ApplyThemeIfOpen()
+    {
+        if (_open != null)
+            AppearanceTheme.ApplyTo(_open);
+    }
 
     public SettingsWindow()
     {
@@ -48,8 +56,11 @@ public sealed partial class SettingsWindow : Window
         }
 
         PlaceOnMainWindow();
+        AppearanceTheme.ApplyTo(this);
         foreach (var section in Sections())
         {
+            if (section.Content is DisplaySettings display)
+                _display = display;
             SettingsNav.MenuItems.Add(new NavigationViewItem
             {
                 Content = section.Title,
@@ -109,10 +120,12 @@ public sealed partial class SettingsWindow : Window
         SectionHost.Content = null;
     }
 
+    void FlushPending() => _display?.Flush();
+
     // 見出しと右に出す画面。項目を足すときはここに返す。
     static IEnumerable<SettingsSection> Sections()
     {
-        yield break;
+        yield return new SettingsSection("表示", new DisplaySettings());
     }
 
     sealed class SettingsSection(string title, UIElement content)

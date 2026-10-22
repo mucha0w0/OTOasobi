@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="Otoasobi.DisplaySettings"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:Otoasobi">
+    <UserControl.Resources>
+        <Style x:Key="SettingsCardStyle" TargetType="Border">
+            <Setter Property="Padding" Value="12" />
+            <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
+            <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="8" />
+        </Style>
+    </UserControl.Resources>
+    <StackPanel Spacing="12">
+        <Border Style="{StaticResource SettingsCardStyle}">
+            <StackPanel Spacing="10">
+                <local:InfoNote
+                    Title="テーマ"
+                    Text="ライト、ダーク、または Windows の設定に合わせます。" />
+                <StackPanel Spacing="8">
+                    <RadioButton
+                        x:Name="ThemeLight"
+                        GroupName="ThemeChoice"
+                        Content="ライト"
+                        Checked="Theme_Checked" />
+                    <RadioButton
+                        x:Name="ThemeDark"
+                        GroupName="ThemeChoice"
+                        Content="ダーク"
+                        Checked="Theme_Checked" />
+                    <RadioButton
+                        x:Name="ThemeSystem"
+                        GroupName="ThemeChoice"
+                        Content="端末に合わせる"
+                        Checked="Theme_Checked" />
+                </StackPanel>
+            </StackPanel>
+        </Border>
+        <Border Style="{StaticResource SettingsCardStyle}">
+            <StackPanel Spacing="10">
+                <local:InfoNote
+                    Title="アクセントカラー"
+                    Text="ボタンや選択の色です。端末に合わせるときは Windows のアクセントカラーを使います。色を指定すると、明るい画面では濃く、暗い画面では明るくして使います。" />
+                <StackPanel Spacing="8">
+                    <RadioButton
+                        x:Name="AccentSystem"
+                        GroupName="AccentChoice"
+                        Content="端末に合わせる"
+                        Checked="AccentMode_Checked" />
+                    <RadioButton
+                        x:Name="AccentCustom"
+                        GroupName="AccentChoice"
+                        Content="色を指定する"
+                        Checked="AccentMode_Checked" />
+                </StackPanel>
+                <ColorPicker
+                    x:Name="AccentPicker"
+                    Width="336"
+                    HorizontalAlignment="Left"
+                    AutomationProperties.Name="アクセントカラー"
+                    IsAlphaEnabled="False"
+                    IsAlphaSliderVisible="False"
+                    IsAlphaTextInputVisible="False"
+                    IsColorChannelTextInputVisible="True"
+                    IsColorSliderVisible="True"
+                    IsHexInputVisible="True"
+                    IsMoreButtonVisible="False"
+                    ColorChanged="AccentPicker_ColorChanged" />
+            </StackPanel>
+        </Border>
+    </StackPanel>
+</UserControl>

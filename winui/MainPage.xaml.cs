@@ -111,8 +111,10 @@ public sealed partial class MainPage : Page
         AddHandler(PointerWheelChangedEvent, new PointerEventHandler(OnPageWheel), true);
         BindRecentFolders();
         Loaded += (_, _) => AttachMenuToTitleBar();
+        AppAppearance.Changed += RefreshAppearanceColors;
         Unloaded += (_, _) =>
         {
+            AppAppearance.Changed -= RefreshAppearanceColors;
             try
             {
                 FlushBank();
@@ -497,6 +499,17 @@ public sealed partial class MainPage : Page
 
     static Brush? ThemeBrush(string key) =>
         Application.Current.Resources.TryGetValue(key, out var value) ? value as Brush : null;
+
+    void RefreshAppearanceColors()
+    {
+        _secondsFrameBrush = null;
+        foreach (var (key, frame) in _overlapFrames)
+        {
+            if (frame.Background == null || !_overlapSliders.TryGetValue(key, out var slider))
+                continue;
+            TintOverlap(slider, seconds: true);
+        }
+    }
 
     static double StepOverlap(double intent, int direction, int steps)
     {

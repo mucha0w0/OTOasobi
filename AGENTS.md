@@ -75,8 +75,10 @@ id は `bank`。ロジックは `VoicebankText` と `VoicebankImage`、画面は
 - タイトルバーの「編集」→「環境設定」。`MainPage.OpenSettings_Click` が `SettingsWindow.Show` を呼ぶ。開いているときは前面へ出すだけで、ウィンドウは増やさない。
 - メインウィンドウを閉じると、`App` が `CloseIfOpen` する。
 - 左は `NavigationView` の見出し。右は、選んだ見出しと同じ文言と、その中身。中身の置き場は `SectionHost`。長い中身はウィンドウ側の `ScrollViewer` がスクロールする。
-- 項目はまだ無い。足すときは `SettingsWindow.Sections` で `SettingsSection` を返す。第1引数が左の見出し、第2引数が右の画面。並びの先頭が、開いたときに選ばれる。
+- 足すときは `SettingsWindow.Sections` で `SettingsSection` を返す。第1引数が左の見出し、第2引数が右の画面。並びの先頭が、開いたときに選ばれる。
 - 初期サイズは 960×640、最小は 720×480。メインウィンドウの中央に出す。
+
+「表示」は `DisplaySettings` です。テーマはライト、ダーク、端末に合わせる。アクセントカラーは端末に合わせるか、カラーピッカーで指定します。保存先は `%LocalAppData%\Otoasobi\appearance.json` で、読み書きは `AppAppearanceStore`、起動時の適用は `AppearanceTheme` です。明暗は各ウィンドウの `RequestedTheme`。アクセントは既存のアクセント用ブラシの色だけを差し替え、ブラシのインスタンスは替えません。端末の色へ戻すときは、差し替えた色を外します。
 
 ## 確認
 

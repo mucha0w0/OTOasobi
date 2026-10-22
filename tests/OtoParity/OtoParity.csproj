@@ -29,6 +29,7 @@
     <Compile Include="..\..\winui\OtoTune.cs" Link="Winui\OtoTune.cs" />
     <Compile Include="..\..\winui\Session.cs" Link="Winui\Session.cs" />
     <Compile Include="..\..\winui\AppPaths.cs" Link="Winui\AppPaths.cs" />
+    <Compile Include="..\..\winui\AppAppearance.cs" Link="Winui\AppAppearance.cs" />
     <Compile Include="..\..\winui\UpdatePrompt.cs" Link="Winui\UpdatePrompt.cs" />
     <Compile Include="..\..\winui\EngineInstaller.cs" Link="Winui\EngineInstaller.cs" />
     <Compile Include="..\..\winui\VoicebankText.cs" Link="Winui\VoicebankText.cs" />

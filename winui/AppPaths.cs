@@ -21,6 +21,8 @@ static class AppPaths
 
     public static string EngineStateFile => Path.Combine(DataRoot, "engine-state.json");
 
+    public static string AppearanceFile => Path.Combine(DataRoot, "appearance.json");
+
     public static string? FeedDirectory
     {
         get

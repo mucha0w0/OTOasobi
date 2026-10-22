@@ -13,6 +13,8 @@ public partial class App : Application
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
+        AppAppearance.Load();
+        AppearanceTheme.ApplyAccent();
         var window = new MainWindow();
         MainWindow = window;
         window.Closed += (_, _) =>
@@ -20,6 +22,7 @@ public partial class App : Application
             SettingsWindow.CloseIfOpen();
             MainPage.ShutdownAnalysis();
         };
+        AppearanceTheme.ApplyTo(window);
         window.Activate();
         window.BeginUpdateCheck();
     }

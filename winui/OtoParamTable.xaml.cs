@@ -317,6 +317,8 @@ public sealed partial class OtoParamTable : UserControl
         var accent = AccentColor();
         _fileFill = new SolidColorBrush(Color.FromArgb(48, accent.R, accent.G, accent.B));
         _phonemeFill = new SolidColorBrush(Color.FromArgb(150, accent.R, accent.G, accent.B));
+        AppAppearance.Changed += RefreshAccent;
+        Unloaded += (_, _) => AppAppearance.Changed -= RefreshAccent;
         Rows.ItemsSource = _rows;
         Loaded += (_, _) =>
         {
@@ -501,6 +503,13 @@ public sealed partial class OtoParamTable : UserControl
         if (Application.Current?.Resources.TryGetValue("SystemAccentColor", out var value) == true && value is Color color)
             return color;
         return Color.FromArgb(255, 15, 157, 142);
+    }
+
+    void RefreshAccent()
+    {
+        var accent = AccentColor();
+        _fileFill.Color = Color.FromArgb(48, accent.R, accent.G, accent.B);
+        _phonemeFill.Color = Color.FromArgb(150, accent.R, accent.G, accent.B);
     }
 
     public void Select(string fileName, int index, string mode)
