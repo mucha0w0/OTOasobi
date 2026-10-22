@@ -10,7 +10,7 @@
     mc:Ignorable="d">
 
     <Page.Resources>
-        <x:String x:Key="EditorHelp">波形では境界をドラッグして時刻を分けます。パネルの境目をドラッグすると、隣との幅や高さが変わります。タイトルをドラッグして、上下左右の印の上で離すと、そのパネルを半分にして差し込みます。端へ寄せると、その先のまとまりごと割って入れます。oto区間の線は左右へドラッグしてその値だけを直せます。直したラベルの横には * が付きます。この * は oto区間だけの印で、oto.ini には書きません。スライダーを動かしても、直した値は変わりません。自動推定の位置まで戻すと消えます。強調中の線は波形にも出て、そこでもドラッグできます。強調中は、波形の子音と母音の境界が半透明になり、ドラッグできません。線のないところをクリックすると、その音素の値を強調し、ほかの音素を半透明にします。重なっている場所ではクリックするたびに次の音素へ移ります。別の音素の波形、スペクトラム、音量をクリックすると解除します。音素のないところをクリックするか、Esc でも解除します。右ドラッグ、Shift＋ホイール、または選択中の左右キーでスクロールします。</x:String>
+        <x:String x:Key="EditorHelp">音素推定では境界をドラッグして時刻を分けます。パネルの境目をドラッグすると、隣との幅や高さが変わります。タイトルをドラッグして、上下左右の印の上で離すと、そのパネルを半分にして差し込みます。端へ寄せると、その先のまとまりごと割って入れます。oto設定の線は左右へドラッグしてその値だけを直せます。直したラベルの横には * が付きます。この * は oto設定だけの印で、oto.ini には書きません。スライダーを動かしても、直した値は変わりません。自動推定の位置まで戻すと消えます。強調中の線は音素推定にも出て、そこでもドラッグできます。強調中は、音素推定の子音と母音の境界が半透明になり、ドラッグできません。線のないところをクリックすると、その音素の値を強調し、ほかの音素を半透明にします。重なっている場所ではクリックするたびに次の音素へ移ります。別の音素の音素推定、スペクトラム、音量をクリックすると解除します。音素のないところをクリックするか、Esc でも解除します。右ドラッグ、Shift＋ホイール、または選択中の左右キーでスクロールします。</x:String>
         <Style x:Key="ToolbarButtonStyle" TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
             <Setter Property="MinHeight" Value="32" />
             <Setter Property="Padding" Value="10,6" />
@@ -196,14 +196,14 @@
                         IsEnabled="False" />
                 </MenuBarItem>
                 <MenuBarItem Title="表示">
-                    <ToggleMenuFlyoutItem x:Name="ShowFileItem" Tag="file" Text="ファイル" IsChecked="True" Click="PaneMenu_Click" />
-                    <ToggleMenuFlyoutItem x:Name="ShowWaveItem" Tag="wave" Text="波形" IsChecked="True" Click="PaneMenu_Click" />
+                    <ToggleMenuFlyoutItem x:Name="ShowFileItem" Tag="file" Text="ファイルリスト" IsChecked="True" Click="PaneMenu_Click" />
+                    <ToggleMenuFlyoutItem x:Name="ShowWaveItem" Tag="wave" Text="音素推定" IsChecked="True" Click="PaneMenu_Click" />
                     <ToggleMenuFlyoutItem x:Name="ShowSpecItem" Tag="spec" Text="スペクトログラム" IsChecked="True" Click="PaneMenu_Click" />
                     <ToggleMenuFlyoutItem x:Name="ShowLoudItem" Tag="loud" Text="音量" IsChecked="True" Click="PaneMenu_Click" />
-                    <ToggleMenuFlyoutItem x:Name="ShowOtoBandItem" Tag="otoBand" Text="oto区間" IsChecked="True" Click="PaneMenu_Click" />
-                    <ToggleMenuFlyoutItem x:Name="ShowSourceItem" Tag="source" Text="原音修正" Click="PaneMenu_Click" />
+                    <ToggleMenuFlyoutItem x:Name="ShowOtoBandItem" Tag="otoBand" Text="oto設定" IsChecked="True" Click="PaneMenu_Click" />
+                    <ToggleMenuFlyoutItem x:Name="ShowSourceItem" Tag="source" Text="エフェクター" Click="PaneMenu_Click" />
                     <ToggleMenuFlyoutItem x:Name="ShowOtoItem" Tag="oto" Text="oto推定設定" IsChecked="True" Click="PaneMenu_Click" />
-                    <ToggleMenuFlyoutItem x:Name="ShowOtoParamsItem" Tag="otoParams" Text="原音パラメータ" Click="PaneMenu_Click" />
+                    <ToggleMenuFlyoutItem x:Name="ShowOtoParamsItem" Tag="otoParams" Text="oto数値表" Click="PaneMenu_Click" />
                     <ToggleMenuFlyoutItem x:Name="ShowOtoIniItem" Tag="otoIni" Text="oto.ini生成" Click="PaneMenu_Click" />
                     <ToggleMenuFlyoutItem x:Name="ShowFrqItem" Tag="frq" Text=".frq生成" Click="PaneMenu_Click" />
                     <ToggleMenuFlyoutItem x:Name="ShowBankItem" Tag="bank" Text="音源の各種設定" Click="PaneMenu_Click" />
@@ -335,7 +335,7 @@
                     <Border x:Name="FilePane">
                         <ListView
                             x:Name="FileList"
-                            AutomationProperties.Name="ファイル一覧"
+                            AutomationProperties.Name="ファイルリスト"
                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                             SelectionChanged="FileList_SelectionChanged"
                             SelectionMode="Single">
@@ -360,7 +360,7 @@
                     <local:SpanEditor
                         x:Name="Editor"
                         Visibility="Collapsed"
-                        AutomationProperties.Name="波形と区間"
+                        AutomationProperties.Name="音素推定と区間"
                         AutomationProperties.HelpText="{StaticResource EditorHelp}" />
                     <Grid x:Name="OtoPane">
                                 <ContentControl
@@ -864,7 +864,7 @@
                                     <StackPanel Spacing="8">
                                         <local:InfoNote
                                             Title="周波数表"
-                                            Text="フォルダ直下の各 WAV と同じ名前で、UTAU 用の .frq を書きます。256 サンプルごとの高さと、有声部分の平均です。原音修正のあとや WAV を差し替えたあとは作り直します。original には書きません。" />
+                                            Text="フォルダ直下の各 WAV と同じ名前で、UTAU 用の .frq を書きます。256 サンプルごとの高さと、有声部分の平均です。エフェクターのあとや WAV を差し替えたあとは作り直します。original には書きません。" />
                                         <TextBlock
                                             x:Name="FrqSummary"
                                             Foreground="{ThemeResource TextFillColorSecondaryBrush}"
@@ -927,7 +927,7 @@
                                 Content=".frqを生成"
                                 IsEnabled="False"
                                 Style="{StaticResource ToolbarAccentButtonStyle}"
-                                ToolTipService.ToolTip="フォルダ直下の各 WAV の横に .frq を書きます。UTAU の合成が、この高さの表を使います。原音修正のあとや、WAV を差し替えたあとは作り直します。" />
+                                ToolTipService.ToolTip="フォルダ直下の各 WAV の横に .frq を書きます。UTAU の合成が、この高さの表を使います。エフェクターのあとや、WAV を差し替えたあとは作り直します。" />
                         </Border>
                     </Grid>
                     <Grid x:Name="OtoIniPane">

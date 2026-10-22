@@ -34,7 +34,7 @@ public sealed partial class MainPage
         var panel = new StackPanel { Spacing = 8, MinWidth = 360 };
         panel.Children.Add(new TextBlock
         {
-            Text = "いまの計算方法、スライダー、プリセットを、このフォルダに保存します。原音修正の設定と、線で直した oto.ini の値も含みます。",
+            Text = "いまの計算方法、スライダー、プリセットを、このフォルダに保存します。エフェクターの設定と、線で直した oto.ini の値も含みます。",
             TextWrapping = TextWrapping.Wrap,
         });
         panel.Children.Add(box);
@@ -260,7 +260,7 @@ public sealed partial class MainPage
         var panel = new StackPanel { Spacing = 8, MinWidth = 360, MaxWidth = 520 };
         panel.Children.Add(new TextBlock
         {
-            Text = "読み込むと、計算方法とスライダーが戻り、単独音、CVVC、原音修正のプリセット一覧は、このファイルの内容に置き換わります。",
+            Text = "読み込むと、計算方法とスライダーが戻り、単独音、CVVC、エフェクターのプリセット一覧は、このファイルの内容に置き換わります。",
             TextWrapping = TextWrapping.Wrap,
         });
         panel.Children.Add(empty);

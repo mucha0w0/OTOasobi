@@ -29,7 +29,7 @@
 編集画面のパネルはタブにも別ウィンドウにもしません。`EditorDock` の葉です。配置の分割はドックが行うので、パネル側で画面を割りません。
 
 1. `EditorLayout.PaneIds` に短い id を足す。ここに無い id は `Show` が無視します。保存済みの `editor-layout.json` に新しい id が無くても、そのファイルは無効になりません。単にそのパネルが出ないだけです。
-2. 初期画面に出すかは `CreateDefault()` だけが決めます。頼まれない限りここへは入れません。初期で閉じているのは、原音修正 `source`、原音パラメータ `otoParams`、`.frq生成` `frq`、音源の各種設定 `bank` です。
+2. 初期画面に出すかは `CreateDefault()` だけが決めます。頼まれない限りここへは入れません。初期で閉じているのは、エフェクター `source`、oto数値表 `otoParams`、`.frq生成` `frq`、音源の各種設定 `bank` です。
 3. `MainPage.xaml` の `PaneHolder`（`Visibility="Collapsed"` の置き場）に、中身の `Grid` を足す。起動時に `MountDock` がここから外してドックへ入れます。
 4. 表示メニューに `ToggleMenuFlyoutItem` を足す。`Tag` は id、`Click` は `PaneMenu_Click`、`Text` はパネルタイトルと同じ日本語です。初期で開くものだけ `IsChecked="True"` にします。
 5. `MountDock` の2か所を足す。`PaneHolder` から外す配列と、`Dock.Mount` の `(id, タイトル, 要素)` です。`SyncPaneMenu` に `IsChecked = Dock.Contains(id)` を足します。

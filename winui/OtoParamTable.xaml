@@ -4,7 +4,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:Otoasobi"
-    AutomationProperties.Name="原音パラメータ"
+    AutomationProperties.Name="oto数値表"
     HorizontalAlignment="Stretch"
     VerticalAlignment="Stretch">
     <UserControl.Resources>
@@ -168,7 +168,7 @@
                     <TextBlock
                         Style="{StaticResource OtoHeadStyle}"
                         Text="エイリアス"
-                        ToolTipService.ToolTip="oto.ini に書く名前。同じ名前の 2 回目以降には 2、3、… が付く。手で同じ名前にすると、その欄が赤くなる。編集印の * は oto区間に出て、ここにも oto.ini にも入らない" />
+                        ToolTipService.ToolTip="oto.ini に書く名前。同じ名前の 2 回目以降には 2、3、… が付く。手で同じ名前にすると、その欄が赤くなる。編集印の * は oto設定に出て、ここにも oto.ini にも入らない" />
                 </Border>
                 <Border Grid.Column="7" Style="{StaticResource OtoLineStyle}">
                     <TextBlock

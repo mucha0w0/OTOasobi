@@ -606,7 +606,7 @@ public sealed partial class SpanEditor : UserControl
             return;
         }
 
-        // 同じ音素をもう一度クリックしても外さない。別の音素の波形・スペクトラム・音量で外す。
+        // 同じ音素をもう一度クリックしても外さない。別の音素の音素推定・スペクトラム・音量で外す。
         var lockWaveBoundary = WaveBoundaryLocked(point.Position.Y);
         if (ReleaseFocusAt(point.Position.Y, x))
             SetFocusOto(-1);

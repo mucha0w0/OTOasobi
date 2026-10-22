@@ -149,14 +149,14 @@ public sealed partial class MainPage : Page
             PaneHolder.Children.Remove(pane);
         Dock.Mount(
         [
-            ("file", "ファイル", FilePane),
-            ("wave", "波形", WavePane),
+            ("file", "ファイルリスト", FilePane),
+            ("wave", "音素推定", WavePane),
             ("spec", "スペクトログラム", SpecHost),
             ("loud", "音量", LoudHost),
-            ("otoBand", "oto区間", OtoBandHost),
-            ("source", "原音修正", SourcePane),
+            ("otoBand", "oto設定", OtoBandHost),
+            ("source", "エフェクター", SourcePane),
             ("oto", "oto推定設定", OtoPane),
-            ("otoParams", "原音パラメータ", OtoParams),
+            ("otoParams", "oto数値表", OtoParams),
             ("otoIni", "oto.ini生成", OtoIniPane),
             ("frq", ".frq生成", FrqPane),
             ("bank", "音源の各種設定", BankPane),

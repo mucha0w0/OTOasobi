@@ -1052,7 +1052,7 @@ public sealed partial class SpanEditor
     {
         var renamed = _aliasNames.TryGetValue(index, out var name) && !string.IsNullOrEmpty(name);
         var shown = renamed ? name! : mark.Alias;
-        // * は oto区間の編集印。書き出すエイリアスには付けない。
+        // * は oto設定の編集印。書き出すエイリアスには付けない。
         return TunedAny(index) || renamed ? shown + " *" : shown;
     }
 

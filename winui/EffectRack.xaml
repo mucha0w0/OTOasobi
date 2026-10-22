@@ -124,7 +124,7 @@
                         MinHeight="32"
                         HorizontalAlignment="Stretch"
                         HorizontalContentAlignment="Stretch"
-                        AutomationProperties.Name="原音修正の全体プリセット"
+                        AutomationProperties.Name="エフェクターの全体プリセット"
                         ToolTipService.ToolTip="エフェクトの並び順、オンオフ、各パラメータをまとめて切り替えます">
                         <Grid>
                             <Grid.ColumnDefinitions>

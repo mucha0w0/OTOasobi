@@ -16,7 +16,7 @@ sealed class NoiseRangeEventArgs : EventArgs
     public required double End { get; init; }
 }
 
-// 原音修正のカードに置く、拡大できる波形。ドラッグした範囲を無音として返す。
+// エフェクターのカードに置く、拡大できる波形。ドラッグした範囲を無音として返す。
 sealed class NoiseWaveform : UserControl
 {
     const double PlotHeight = 88;
