@@ -140,9 +140,13 @@
             <Setter Property="HorizontalAlignment" Value="Left" />
         </Style>
         <Style x:Key="FrqOctaveButtonStyle" TargetType="Button" BasedOn="{StaticResource ToolbarButtonStyle}">
-            <Setter Property="MinWidth" Value="0" />
-            <Setter Property="Padding" Value="4,6" />
-            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="Width" Value="36" />
+            <Setter Property="Height" Value="32" />
+            <Setter Property="MinWidth" Value="36" />
+            <Setter Property="MinHeight" Value="32" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="HorizontalAlignment" Value="Left" />
+            <Setter Property="VerticalAlignment" Value="Center" />
         </Style>
     </Page.Resources>
 
@@ -1406,10 +1410,11 @@
                             Padding="8,8,8,8"
                             BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
                             BorderThickness="0,0,0,1">
-                            <StackPanel Spacing="8">
+                            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                                 <Border
                                     HorizontalAlignment="Left"
                                     Padding="2"
+                                    VerticalAlignment="Center"
                                     Background="{ThemeResource ControlFillColorSecondaryBrush}"
                                     CornerRadius="8">
                                     <StackPanel Orientation="Horizontal" Spacing="2">
@@ -1442,12 +1447,11 @@
                                         </RadioButton>
                                     </StackPanel>
                                 </Border>
-                                <Grid x:Name="FrqOctaveBar" ColumnSpacing="4">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
+                                <StackPanel
+                                    x:Name="FrqOctaveBar"
+                                    Orientation="Horizontal"
+                                    Spacing="4"
+                                    VerticalAlignment="Center">
                                     <Button
                                         x:Name="FrqOctaveUpButton"
                                         AutomationProperties.Name="1オクターブ上げる"
@@ -1458,7 +1462,6 @@
                                         ToolTipService.ToolTip="選択した点を 1 オクターブ上げます。音程なしは動きません。" />
                                     <Button
                                         x:Name="FrqOctaveDownButton"
-                                        Grid.Column="1"
                                         AutomationProperties.Name="1オクターブ下げる"
                                         Click="FrqOctaveDown_Click"
                                         Content="-12"
@@ -1467,14 +1470,13 @@
                                         ToolTipService.ToolTip="選択した点を 1 オクターブ下げます。音程なしは動きません。" />
                                     <Button
                                         x:Name="FrqUnvoiceButton"
-                                        Grid.Column="2"
                                         AutomationProperties.Name="音程なし"
                                         Click="FrqUnvoice_Click"
                                         Content="-"
                                         IsEnabled="False"
                                         Style="{StaticResource FrqOctaveButtonStyle}"
                                         ToolTipService.ToolTip="選択した点を音程なしにします。" />
-                                </Grid>
+                                </StackPanel>
                             </StackPanel>
                         </Border>
                         <local:FrqPianoRoll
