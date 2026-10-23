@@ -32,6 +32,7 @@
     <Compile Include="..\..\winui\AppAppearance.cs" Link="Winui\AppAppearance.cs" />
     <Compile Include="..\..\winui\UpdatePrompt.cs" Link="Winui\UpdatePrompt.cs" />
     <Compile Include="..\..\winui\EngineInstaller.cs" Link="Winui\EngineInstaller.cs" />
+    <Compile Include="..\..\winui\FrqFile.cs" Link="Winui\FrqFile.cs" />
     <Compile Include="..\..\winui\VoicebankText.cs" Link="Winui\VoicebankText.cs" />
     <Compile Include="..\..\winui\VoicebankImage.cs" Link="Winui\VoicebankImage.cs" />
   </ItemGroup>

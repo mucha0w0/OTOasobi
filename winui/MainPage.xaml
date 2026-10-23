@@ -133,6 +133,17 @@
                 </Setter.Value>
             </Setter>
         </Style>
+        <Style x:Key="FrqToolButtonStyle" TargetType="RadioButton" BasedOn="{StaticResource SegmentButtonStyle}">
+            <Setter Property="MinWidth" Value="36" />
+            <Setter Property="MinHeight" Value="32" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="HorizontalAlignment" Value="Left" />
+        </Style>
+        <Style x:Key="FrqOctaveButtonStyle" TargetType="Button" BasedOn="{StaticResource ToolbarButtonStyle}">
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="Padding" Value="4,6" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+        </Style>
     </Page.Resources>
 
     <Grid>
@@ -209,6 +220,7 @@
                     <ToggleMenuFlyoutItem x:Name="ShowOtoParamsItem" Tag="otoParams" Text="oto数値表" Click="PaneMenu_Click" />
                     <ToggleMenuFlyoutItem x:Name="ShowOtoIniItem" Tag="otoIni" Text="oto.ini生成" Click="PaneMenu_Click" />
                     <ToggleMenuFlyoutItem x:Name="ShowFrqItem" Tag="frq" Text=".frq生成" Click="PaneMenu_Click" />
+                    <ToggleMenuFlyoutItem x:Name="ShowFrqEditItem" Tag="frqEdit" Text="frqエディター" Click="PaneMenu_Click" />
                     <ToggleMenuFlyoutItem x:Name="ShowBankItem" Tag="bank" Text="音源の各種設定" Click="PaneMenu_Click" />
                     <MenuFlyoutSeparator />
                     <MenuFlyoutSubItem x:Name="LayoutTemplateMenu" Text="配置テンプレート" />
@@ -1384,6 +1396,92 @@
                                 </Border>
                             </StackPanel>
                         </ScrollViewer>
+                    </Grid>
+                    <Grid x:Name="FrqEditPane">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <Border
+                            Padding="8,8,8,8"
+                            BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                            BorderThickness="0,0,0,1">
+                            <StackPanel Spacing="8">
+                                <Border
+                                    HorizontalAlignment="Left"
+                                    Padding="2"
+                                    Background="{ThemeResource ControlFillColorSecondaryBrush}"
+                                    CornerRadius="8">
+                                    <StackPanel Orientation="Horizontal" Spacing="2">
+                                        <RadioButton
+                                            x:Name="FrqToolSelect"
+                                            AutomationProperties.Name="範囲選択"
+                                            Checked="FrqTool_Checked"
+                                            GroupName="FrqTool"
+                                            IsChecked="True"
+                                            Style="{StaticResource FrqToolButtonStyle}"
+                                            ToolTipService.ToolTip="ドラッグした矩形の中の点を選びます。">
+                                            <Viewbox Width="16" Height="16">
+                                                <Path
+                                                    Data="M3,1 L3,13 L6.2,9.8 L9.3,14.6 L11.2,13.6 L8.1,8.8 L12.4,8.5 Z"
+                                                    Fill="{ThemeResource TextFillColorPrimaryBrush}" />
+                                            </Viewbox>
+                                        </RadioButton>
+                                        <RadioButton
+                                            x:Name="FrqToolPen"
+                                            AutomationProperties.Name="ペン"
+                                            Checked="FrqTool_Checked"
+                                            GroupName="FrqTool"
+                                            Style="{StaticResource FrqToolButtonStyle}"
+                                            ToolTipService.ToolTip="ドラッグで、通った点の高さを書き換えます。下の段では音程なしになります。">
+                                            <Viewbox Width="16" Height="16">
+                                                <Path
+                                                    Data="M11.5,1.2 L14.6,4.3 L6.1,12.8 L2.4,13.8 L3.4,10.1 Z"
+                                                    Fill="{ThemeResource TextFillColorPrimaryBrush}" />
+                                            </Viewbox>
+                                        </RadioButton>
+                                    </StackPanel>
+                                </Border>
+                                <Grid x:Name="FrqOctaveBar" ColumnSpacing="4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Button
+                                        x:Name="FrqOctaveUpButton"
+                                        AutomationProperties.Name="1オクターブ上げる"
+                                        Click="FrqOctaveUp_Click"
+                                        Content="＋12"
+                                        IsEnabled="False"
+                                        Style="{StaticResource FrqOctaveButtonStyle}"
+                                        ToolTipService.ToolTip="選択した点を 1 オクターブ上げます。音程なしは動きません。" />
+                                    <Button
+                                        x:Name="FrqOctaveDownButton"
+                                        Grid.Column="1"
+                                        AutomationProperties.Name="1オクターブ下げる"
+                                        Click="FrqOctaveDown_Click"
+                                        Content="-12"
+                                        IsEnabled="False"
+                                        Style="{StaticResource FrqOctaveButtonStyle}"
+                                        ToolTipService.ToolTip="選択した点を 1 オクターブ下げます。音程なしは動きません。" />
+                                    <Button
+                                        x:Name="FrqUnvoiceButton"
+                                        Grid.Column="2"
+                                        AutomationProperties.Name="音程なし"
+                                        Click="FrqUnvoice_Click"
+                                        Content="-"
+                                        IsEnabled="False"
+                                        Style="{StaticResource FrqOctaveButtonStyle}"
+                                        ToolTipService.ToolTip="選択した点を音程なしにします。" />
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+                        <local:FrqPianoRoll
+                            x:Name="FrqRoll"
+                            Grid.Row="1"
+                            AutomationProperties.Name="frqエディター"
+                            AutomationProperties.HelpText="カーソルでドラッグすると、矩形の中の点を選びます。ペンでドラッグすると、通った点の高さを書き換えます。下の段は音程なしです。ホイールで音程、Shift＋ホイールで時間、Ctrl＋ホイールで拡大します。" />
                     </Grid>
                 </Grid>
             </Grid>

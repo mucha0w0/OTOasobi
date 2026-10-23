@@ -130,6 +130,10 @@ WinUI のコマンド領域は **左が Primary、右が Close**。Accent（プ�
 - エフェクターの波形（`NoiseWaveform`）は、面と線をそのパネルのテーマブラシから取る。
 - コードでブラシを取るときは `AppearanceTheme.Brush` で、要素の `ActualTheme` の辞書を見る。`Application.Current.Resources` はアプリ全体のテーマなので、ここからは取らない。
 
+## frqエディター
+
+ピアノロール（`FrqPianoRoll`）の地、格子、目盛りは明暗に合わせます。鍵盤は白い鍵と黒い鍵のままです。点の色は意味で固定し、明暗で濃さだけ変えます。ふだんは青緑、選択中は琥珀色、音程なしは下の段の灰色です。範囲の矩形はアクセント色です。上部のカーソルとペンは、セグメントのトレイにアイコンだけで置きます。＋12、-12、- は範囲選択のときだけ出します。
+
 ## アクセシビリティとヘルプ
 
 - インタラクティブ要素に **`AutomationProperties.Name`**。複雑な操作（波形）は **`HelpText`**（例: `EditorHelp` リソース文字列）。
@@ -160,4 +164,5 @@ WinUI のコマンド領域は **左が Primary、右が Close**。Accent（プ�
 | 編集画面の分割 | `winui/EditorDock.cs`, `winui/EditorLayout.cs` |
 | エフェクト UI | `winui/EffectRack.xaml` |
 | 波形・色・インタラクション | `winui/SpanEditor.cs` |
+| frqエディター | `winui/FrqPianoRoll.cs`, `winui/FrqFile.cs` |
 | ウィンドウサイズ・ドロップ | `winui/MainWindow.xaml.cs` |

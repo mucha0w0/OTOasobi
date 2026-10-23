@@ -54,7 +54,7 @@ static class EditorLayout
 {
     public const double MinPane = 160;
 
-    public static readonly string[] PaneIds = ["file", "wave", "spec", "loud", "otoBand", "source", "oto", "otoParams", "otoIni", "frq", "bank"];
+    public static readonly string[] PaneIds = ["file", "wave", "spec", "loud", "otoBand", "source", "oto", "otoParams", "otoIni", "frq", "frqEdit", "bank"];
 
     // 1540px 幅でファイル約 280、oto推定設定約 320。グラフの高さ比は、以前の 1 枚キャンバスの帯に合わせる。
     public static LayoutNode CreateDefault() =>

@@ -107,6 +107,8 @@ public sealed partial class MainPage : Page
         _configReady = true;
         OnConfigChanged();
         MountDock();
+        FrqRoll.Edited += FrqRoll_Edited;
+        FrqRoll.SelectionChanged += (_, _) => UpdateFrqSelection();
         WireOtoTable();
         AddHandler(PointerWheelChangedEvent, new PointerEventHandler(OnPageWheel), true);
         BindRecentFolders();
@@ -125,6 +127,7 @@ public sealed partial class MainPage : Page
             {
                 FlushBank();
                 FlushSession();
+                FlushFrq();
             }
             catch (Exception)
             {
@@ -138,6 +141,7 @@ public sealed partial class MainPage : Page
                 {
                     FlushBank();
                     FlushSession();
+                    FlushFrq();
                 }
                 catch (Exception)
                 {
@@ -153,7 +157,7 @@ public sealed partial class MainPage : Page
         LoudHost.Children.Add(Editor.LoudSurface);
         OtoBandHost.Children.Add(Editor.OtoSurface);
         // ページが読み込まれる前は Parent が空のままなので、ここから外してからドックへ入れる。
-        foreach (var pane in new UIElement[] { FilePane, WavePane, SpecHost, LoudHost, OtoBandHost, SourcePane, OtoPane, OtoParams, OtoIniPane, FrqPane, BankPane })
+        foreach (var pane in new UIElement[] { FilePane, WavePane, SpecHost, LoudHost, OtoBandHost, SourcePane, OtoPane, OtoParams, OtoIniPane, FrqPane, FrqEditPane, BankPane })
             PaneHolder.Children.Remove(pane);
         Dock.Mount(
         [
@@ -167,12 +171,14 @@ public sealed partial class MainPage : Page
             ("otoParams", "oto数値表", OtoParams),
             ("otoIni", "oto.ini生成", OtoIniPane),
             ("frq", ".frq生成", FrqPane),
+            ("frqEdit", "frqエディター", FrqEditPane),
             ("bank", "音源の各種設定", BankPane),
         ]);
         Dock.PaneResizing += (_, dragging) =>
         {
             Editor.SetColumnDrag(dragging);
             Effects.SetColumnDrag(dragging);
+            FrqRoll.SetColumnDrag(dragging);
         };
         Dock.LayoutChanged += (_, _) =>
         {
@@ -206,6 +212,7 @@ public sealed partial class MainPage : Page
         ShowOtoParamsItem.IsChecked = Dock.Contains("otoParams");
         ShowOtoIniItem.IsChecked = Dock.Contains("otoIni");
         ShowFrqItem.IsChecked = Dock.Contains("frq");
+        ShowFrqEditItem.IsChecked = Dock.Contains("frqEdit");
         ShowBankItem.IsChecked = Dock.Contains("bank");
         _paneMenuWrite = false;
     }
@@ -860,10 +867,15 @@ public sealed partial class MainPage : Page
             _revealFile = null;
         UpdateCommands();
         if (FileList.SelectedItem is not WavFile file)
+        {
+            ShowFrqFor(null);
             return;
+        }
+
         // パネル移動の配置で同じファイルの選択がもう一度来ると、波形を消して読み直してしまう。
         if (ReferenceEquals(file, _shownFile) && Editor.HasContent)
             return;
+        ShowFrqFor(file);
         _ = LoadPreviewAsync(file);
     }
 
@@ -1679,6 +1691,8 @@ public sealed partial class MainPage : Page
         ReanalyzeSelectedMenuItem.IsEnabled = ready && FileList.SelectedItem is WavFile;
         ApplyEffectsButton.IsEnabled = editing;
         WriteFrqButton.IsEnabled = editing;
+        FrqRoll.IsEnabled = editing;
+        UpdateFrqSelection();
         var bankReady = idle && hasFolder;
         BankPickIconButton.IsEnabled = bankReady;
         BankPickPortraitButton.IsEnabled = bankReady;

@@ -24,6 +24,7 @@
 | `MainPage.OtoTable.cs` | oto の表 |
 | `MainPage.Cvvc.cs` | CVVC |
 | `MainPage.Frq.cs` | `.frq` 生成 |
+| `MainPage.FrqEdit.cs` | frqエディター |
 | `MainPage.Bank.cs` | 音源の各種設定 |
 | `MainPage.LayoutTemplates.cs` | 配置テンプレート |
 
@@ -32,7 +33,7 @@
 編集画面のパネルはタブにも別ウィンドウにもしません。`EditorDock` の葉です。配置の分割はドックが行うので、パネル側で画面を割りません。
 
 1. `EditorLayout.PaneIds` に短い id を足す。ここに無い id は `Show` が無視します。保存済みの `editor-layout.json` に新しい id が無くても、そのファイルは無効になりません。単にそのパネルが出ないだけです。
-2. 初期画面に出すかは `CreateDefault()` だけが決めます。頼まれない限りここへは入れません。初期で閉じているのは、エフェクター `source`、oto数値表 `otoParams`、`.frq生成` `frq`、音源の各種設定 `bank` です。
+2. 初期画面に出すかは `CreateDefault()` だけが決めます。頼まれない限りここへは入れません。初期で閉じているのは、エフェクター `source`、oto数値表 `otoParams`、`.frq生成` `frq`、frqエディター `frqEdit`、音源の各種設定 `bank` です。
 3. `MainPage.xaml` の `PaneHolder`（`Visibility="Collapsed"` の置き場）に、中身の `Grid` を足す。起動時に `MountDock` がここから外してドックへ入れます。
 4. 表示メニューに `ToggleMenuFlyoutItem` を足す。`Tag` は id、`Click` は `PaneMenu_Click`、`Text` はパネルタイトルと同じ日本語です。初期で開くものだけ `IsChecked="True"` にします。
 5. `MountDock` の2か所を足す。`PaneHolder` から外す配列と、`Dock.Mount` の `(id, タイトル, 要素)` です。`SyncPaneMenu` に `IsChecked = Dock.Contains(id)` を足します。
@@ -48,6 +49,15 @@
 - 長い本文は `ScrollViewer` に入れます。
 
 `InfoNote` は `winui/InfoNote.xaml` です。見出しに説明を付ける既存の使い方は、oto調整の「オーバーラップ」です。
+
+## frqエディター
+
+id は `frqEdit`。初期配置には入れません。読み書きは `FrqFile`、点の移動と範囲は `FrqPitch`、画面は `FrqPianoRoll`、ファイルとの接続は `MainPage.FrqEdit.cs` です。
+
+- 選択中の WAV の隣の `.frq`（FREQ0003）を読み、ピアノロールに点で出します。高さ 0 は下の段の音程なしです。サンプルレートは WAV のヘッダから取り、目盛りを秒にします。
+- カーソルは矩形選択です。選択中だけ ＋12、-12、- を出します。＋12 と -12 は 1 オクターブ（周波数を 2 倍または半分）で、高さ 0 と、C-1 から G9 の外へ出る結果は変えません。- は高さ 0 です。
+- ペンはドラッグしたフレームの高さを、ポインタの音程に書き換えます。離すとファイルへ書き、振幅と hop はそのまま、平均は有声の平均を書き直します。
+- ファイルを変える前に、書きかけを書き出します。生成を始めると、ペンの途中は捨てます。生成が終わると、ディスクの `.frq` を読み直します。
 
 ## 音源の各種設定
 

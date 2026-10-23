@@ -85,6 +85,7 @@ public sealed partial class MainPage
                 UpdateCommands();
                 HideStatus();
                 RefreshFrqSummary();
+                ShowFrqFor(FileList.SelectedItem as WavFile, reload: true);
             }
         }
     }
