@@ -71,6 +71,10 @@
 
 サイドパネルフッターの主要ボタンは **HorizontalAlignment Stretch**。アイコン付き CTA は `SymbolIcon` + テキストを **Horizontal** `StackPanel`、`Spacing 8`。
 
+### ボタンの面
+
+文字やアイコンを載せる面は、後ろが透けない不透明さにする。`ControlFill` と `CardBackground` は半透明なので、描画面の上では文字やアイコンが読みにくくなる。面は `SolidBackgroundFillColorBase` から `Quarternary`、境界は `SurfaceStrokeColorDefaultBrush`。ホバー、押下、無効も、同じ不透明な面の明暗で表す。
+
 ### スライダー行
 
 - 1 行目: 左にラベル（通常 `TextBlock`）、右に現在値（`CaptionTextBlockStyle` + `TextFillColorSecondaryBrush`、右寄せ）。
@@ -132,7 +136,7 @@ WinUI のコマンド領域は **左が Primary、右が Close**。Accent（プ�
 
 ## frqエディター
 
-ピアノロール（`FrqPianoRoll`）の地、格子、目盛りは明暗に合わせます。鍵盤は白い鍵と黒い鍵のままです。点の色は意味で固定し、明暗で濃さだけ変えます。ふだんは青緑、選択中は琥珀色、音程なしは下の段の灰色です。範囲の矩形はアクセント色です。カーソル、ペン、＋12、-12、- は帯を持たず、ピアノロールの左上に重ねます。＋12、-12、- はカーソルとペンと同じ 36×32 で、範囲選択のときだけ出します。目盛りの単位は右端です。
+ピアノロール（`FrqPianoRoll`）の地、格子、目盛りは明暗に合わせます。鍵盤は白い鍵と黒い鍵のままです。点の色は意味で固定し、明暗で濃さだけ変えます。ふだんは青緑、選択中は琥珀色、音程なしは下の段の灰色です。範囲の矩形はアクセント色です。カーソル、ペン、＋12、-12、- は帯を持たず、鍵盤の右に重ねます。面は不透明です。＋12、-12、- はカーソルとペンと同じ 36×32 で、範囲選択のときだけ出します。目盛りの単位は右端です。
 
 ## アクセシビリティとヘルプ
 
@@ -154,6 +158,7 @@ WinUI のコマンド領域は **左が Primary、右が Close**。Accent（プ�
 4. 横幅が溢れる文字列は **Ellipsis**、全文が必要なら **ToolTip** または **IsTextSelectionEnabled**（パス表示）。
 5. スタイルは `MainPage.xaml` / `EffectRack.xaml` の既存 `Style` を **BasedOn** で再利用し、同じ `MinHeight 32` のタッチターゲットを維持する。
 6. 確認モーダルは **肯定を Primary（左・Accent・`DefaultButton`）**、**否定を Close（右・通常ボタン）**。ボタン列は入れ替えない。
+7. 文字やアイコンのあるボタンは、後ろが透けない不透明な面にする。描画面の上では `ControlFill` や `CardBackground` を使わない。
 
 ## 参照ファイル
 

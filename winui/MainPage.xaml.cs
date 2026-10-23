@@ -107,6 +107,7 @@ public sealed partial class MainPage : Page
         _configReady = true;
         OnConfigChanged();
         MountDock();
+        FrqToolBar.Margin = new Thickness(FrqPitch.KeyWidth + 8, 8, 0, 0);
         FrqRoll.Edited += FrqRoll_Edited;
         FrqRoll.SelectionChanged += (_, _) => UpdateFrqSelection();
         WireOtoTable();

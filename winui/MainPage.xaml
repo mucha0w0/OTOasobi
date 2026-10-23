@@ -139,7 +139,7 @@
             <Setter Property="Padding" Value="0" />
             <Setter Property="HorizontalAlignment" Value="Left" />
         </Style>
-        <Style x:Key="FrqOctaveButtonStyle" TargetType="Button" BasedOn="{StaticResource ToolbarButtonStyle}">
+        <Style x:Key="FrqOctaveButtonStyle" TargetType="Button">
             <Setter Property="Width" Value="36" />
             <Setter Property="Height" Value="32" />
             <Setter Property="MinWidth" Value="36" />
@@ -147,6 +147,68 @@
             <Setter Property="Padding" Value="0" />
             <Setter Property="HorizontalAlignment" Value="Left" />
             <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Background" Value="{ThemeResource SolidBackgroundFillColorTertiaryBrush}" />
+            <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
+            <Setter Property="BorderBrush" Value="{ThemeResource SurfaceStrokeColorDefaultBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="5" />
+            <Setter Property="UseSystemFocusVisuals" Value="False" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Grid>
+                            <Border
+                                x:Name="Face"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="{TemplateBinding CornerRadius}" />
+                            <ContentPresenter
+                                x:Name="Label"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Content="{TemplateBinding Content}"
+                                FontFamily="{TemplateBinding FontFamily}"
+                                FontSize="{TemplateBinding FontSize}"
+                                FontWeight="{TemplateBinding FontWeight}"
+                                Foreground="{TemplateBinding Foreground}"
+                                IsHitTestVisible="False" />
+                            <VisualStateManager.VisualStateGroups>
+                                <VisualStateGroup x:Name="CommonStates">
+                                    <VisualState x:Name="Normal" />
+                                    <VisualState x:Name="PointerOver">
+                                        <VisualState.Setters>
+                                            <Setter Target="Face.Background" Value="{ThemeResource SolidBackgroundFillColorQuarternaryBrush}" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="Pressed">
+                                        <VisualState.Setters>
+                                            <Setter Target="Face.Background" Value="{ThemeResource SolidBackgroundFillColorSecondaryBrush}" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="Disabled">
+                                        <VisualState.Setters>
+                                            <Setter Target="Face.Background" Value="{ThemeResource SolidBackgroundFillColorBaseBrush}" />
+                                            <Setter Target="Label.Foreground" Value="{ThemeResource TextFillColorDisabledBrush}" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                </VisualStateGroup>
+                                <VisualStateGroup x:Name="FocusStates">
+                                    <VisualState x:Name="Focused">
+                                        <VisualState.Setters>
+                                            <Setter Target="Face.BorderBrush" Value="{ThemeResource AccentFillColorDefaultBrush}" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="Unfocused" />
+                                    <VisualState x:Name="PointerFocused" />
+                                </VisualStateGroup>
+                            </VisualStateManager.VisualStateGroups>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
     </Page.Resources>
 
@@ -1406,17 +1468,16 @@
                             x:Name="FrqRoll"
                             AutomationProperties.Name="frqエディター"
                             AutomationProperties.HelpText="カーソルでドラッグすると、矩形の中の点を選びます。ペンでドラッグすると、通った点の高さを書き換えます。下の段は音程なしです。ホイールで音程、Shift＋ホイールで時間、Ctrl＋ホイールで拡大します。" />
-                        <StackPanel
+                        <Border
+                            x:Name="FrqToolBar"
                             HorizontalAlignment="Left"
                             VerticalAlignment="Top"
-                            Orientation="Horizontal"
-                            Spacing="8"
-                            Margin="8">
-                            <Border
-                                Padding="2"
-                                VerticalAlignment="Center"
-                                Background="{ThemeResource ControlFillColorSecondaryBrush}"
-                                CornerRadius="8">
+                            Padding="2"
+                            Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
+                            BorderBrush="{ThemeResource SurfaceStrokeColorDefaultBrush}"
+                            BorderThickness="1"
+                            CornerRadius="8">
+                            <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
                                 <StackPanel Orientation="Horizontal" Spacing="2">
                                     <RadioButton
                                         x:Name="FrqToolSelect"
@@ -1445,13 +1506,12 @@
                                                 Fill="{ThemeResource TextFillColorPrimaryBrush}" />
                                         </Viewbox>
                                     </RadioButton>
-                                </StackPanel>
-                            </Border>
-                            <StackPanel
-                                x:Name="FrqOctaveBar"
-                                Orientation="Horizontal"
-                                Spacing="4"
-                                VerticalAlignment="Center">
+                                    </StackPanel>
+                                <StackPanel
+                                    x:Name="FrqOctaveBar"
+                                    Orientation="Horizontal"
+                                    Spacing="4"
+                                    VerticalAlignment="Center">
                                 <Button
                                     x:Name="FrqOctaveUpButton"
                                     AutomationProperties.Name="1オクターブ上げる"
@@ -1476,8 +1536,9 @@
                                     IsEnabled="False"
                                     Style="{StaticResource FrqOctaveButtonStyle}"
                                     ToolTipService.ToolTip="選択した点を音程なしにします。" />
+                                </StackPanel>
                             </StackPanel>
-                        </StackPanel>
+                        </Border>
                     </Grid>
                 </Grid>
             </Grid>
