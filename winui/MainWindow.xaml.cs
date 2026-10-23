@@ -25,6 +25,7 @@ public sealed partial class MainWindow : Window
         }
 
         AppWindow.Resize(new SizeInt32(1540, 840));
+        AppearanceTheme.ApplyTo(this);
 
         RootFrame.Navigate(typeof(MainPage));
         if (RootFrame.Content is MainPage page)

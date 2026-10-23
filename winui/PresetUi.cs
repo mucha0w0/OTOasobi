@@ -20,8 +20,15 @@ static class PresetUi
             TextWrapping = TextWrapping.Wrap,
             Visibility = Visibility.Collapsed,
         };
-        if (Application.Current.Resources.TryGetValue("SystemFillColorCriticalBrush", out var brush) && brush is Brush paint)
-            error.Foreground = paint;
+        void Paint()
+        {
+            if (AppearanceTheme.Brush(AppearanceTheme.Resolve(error), "SystemFillColorCriticalBrush") is Brush paint)
+                error.Foreground = paint;
+        }
+
+        error.Loaded += (_, _) => Paint();
+        error.ActualThemeChanged += (_, _) => Paint();
+        Paint();
         return error;
     }
 

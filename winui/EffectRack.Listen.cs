@@ -338,8 +338,7 @@ public sealed partial class EffectRack
 
         block.Text = text;
         block.Visibility = string.IsNullOrEmpty(text) ? Visibility.Collapsed : Visibility.Visible;
-        var key = error ? "SystemFillColorCriticalBrush" : "TextFillColorSecondaryBrush";
-        if (Application.Current.Resources.TryGetValue(key, out var brush) && brush is Brush paint)
+        if (AppearanceTheme.Brush(AppearanceTheme.Resolve(this), "SystemFillColorCriticalBrush") is Brush paint)
             block.Foreground = paint;
     }
 

@@ -42,6 +42,8 @@ public sealed partial class SpanEditor : UserControl
     readonly InputCursor _cursorEw = InputSystemCursor.Create(InputSystemCursorShape.SizeWestEast);
     readonly InputCursor _cursorHand = InputSystemCursor.Create(InputSystemCursorShape.Hand);
 
+    static readonly SolidColorBrush CanvasBrush = BrushOf(255, 22, 22, 22);
+    static readonly SolidColorBrush GateBrush = BrushOf(168, 0, 0, 0);
     static readonly SolidColorBrush WaveBrush = BrushOf(170, 230, 230, 230);
     static readonly SolidColorBrush WaveLineBrush = BrushOf(255, 236, 236, 236);
     static readonly SolidColorBrush SampleBrush = BrushOf(255, 255, 255, 255);
@@ -165,11 +167,52 @@ public sealed partial class SpanEditor : UserControl
             _loudOtoLines[point] = MakeOverlayOtoLine(point);
         }
 
-        Background = BrushOf(255, 22, 22, 22);
+        Background = CanvasBrush;
         ManipulationMode = ManipulationModes.None;
         IsTabStop = false;
         BindBands();
+        ActualThemeChanged += (_, _) => ApplyPlotColors(AppearanceTheme.Resolve(this) == ElementTheme.Light);
+        Loaded += (_, _) => ApplyPlotColors(AppearanceTheme.Resolve(this) == ElementTheme.Light);
+        ApplyPlotColors(AppearanceTheme.Resolve(this) == ElementTheme.Light);
     }
+
+    static void ApplyPlotColors(bool light)
+    {
+        if (light)
+        {
+            Paint(CanvasBrush, 255, 244, 244, 245);
+            Paint(GateBrush, 242, 255, 255, 255);
+            Paint(WaveBrush, 200, 55, 55, 62);
+            Paint(WaveLineBrush, 255, 32, 32, 36);
+            Paint(SampleBrush, 255, 24, 24, 27);
+            Paint(ZeroBrush, 70, 0, 0, 0);
+            Paint(LineBrush, 230, 17, 24, 39);
+            Paint(TickBrush, 255, 75, 85, 99);
+            Paint(TextBrush, 255, 31, 41, 55);
+            Paint(LoudBrush, 255, 15, 118, 110);
+            Paint(LoudBackBrush, 255, 255, 255, 255);
+            Paint(OtoChipBrush, 230, 255, 255, 255);
+            Paint(OtoPointBrushes[0], 255, 55, 65, 81);
+            return;
+        }
+
+        Paint(CanvasBrush, 255, 22, 22, 22);
+        Paint(GateBrush, 168, 0, 0, 0);
+        Paint(WaveBrush, 170, 230, 230, 230);
+        Paint(WaveLineBrush, 255, 236, 236, 236);
+        Paint(SampleBrush, 255, 255, 255, 255);
+        Paint(ZeroBrush, 80, 255, 255, 255);
+        Paint(LineBrush, 230, 255, 255, 255);
+        Paint(TickBrush, 255, 209, 213, 219);
+        Paint(TextBrush, 255, 249, 250, 251);
+        Paint(LoudBrush, 255, 153, 246, 228);
+        Paint(LoudBackBrush, 255, 14, 14, 14);
+        Paint(OtoChipBrush, 190, 14, 14, 14);
+        Paint(OtoPointBrushes[0], 255, 236, 236, 236);
+    }
+
+    static void Paint(SolidColorBrush brush, byte a, byte r, byte g, byte b)
+        => brush.Color = Color.FromArgb(a, r, g, b);
 
     void OnKeyDown(object sender, KeyRoutedEventArgs e)
     {
@@ -877,7 +920,7 @@ public sealed partial class SpanEditor : UserControl
         card.Children.Add(button);
         return new Border
         {
-            Background = BrushOf(168, 0, 0, 0),
+            Background = GateBrush,
             Padding = new Thickness(16, 8, 16, 8),
             HorizontalAlignment = HorizontalAlignment.Stretch,
             VerticalAlignment = VerticalAlignment.Top,

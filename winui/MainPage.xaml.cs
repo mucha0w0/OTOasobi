@@ -111,7 +111,13 @@ public sealed partial class MainPage : Page
         AddHandler(PointerWheelChangedEvent, new PointerEventHandler(OnPageWheel), true);
         BindRecentFolders();
         Loaded += (_, _) => AttachMenuToTitleBar();
+        WireAppearance();
+    }
+
+    void WireAppearance()
+    {
         AppAppearance.Changed += RefreshAppearanceColors;
+        ActualThemeChanged += (_, _) => RefreshAppearanceColors();
         Unloaded += (_, _) =>
         {
             AppAppearance.Changed -= RefreshAppearanceColors;
@@ -497,8 +503,7 @@ public sealed partial class MainPage : Page
         return _secondsFrameBrush;
     }
 
-    static Brush? ThemeBrush(string key) =>
-        Application.Current.Resources.TryGetValue(key, out var value) ? value as Brush : null;
+    Brush? ThemeBrush(string key) => AppearanceTheme.Brush(AppearanceTheme.Resolve(this), key);
 
     void RefreshAppearanceColors()
     {

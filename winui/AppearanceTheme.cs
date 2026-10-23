@@ -16,8 +16,10 @@ static class AppearanceTheme
 
     public static void ApplyTo(Window window)
     {
+        var theme = ToElement(AppAppearance.Theme);
         if (window.Content is FrameworkElement root)
-            root.RequestedTheme = ToElement(AppAppearance.Theme);
+            root.RequestedTheme = theme;
+        ApplyCaption(window, theme);
     }
 
     public static void ApplyThemes()
@@ -35,6 +37,7 @@ static class AppearanceTheme
             Paint(AccentPalette.Create(accent));
         else
             Restore();
+        FixDisabledInk();
     }
 
     public static void UseTheme(AppThemeChoice theme)
@@ -92,32 +95,17 @@ static class AppearanceTheme
 
     static void PaintDictionary(ResourceDictionary dictionary, bool light, AccentPalette.Shades shades)
     {
-        var fill = light ? shades.Dark1 : shades.Light2;
-        var ink = AccentPalette.PrefersDarkText(fill) ? new RgbColor(0, 0, 0) : new RgbColor(255, 255, 255);
-        var selectedInk = AccentPalette.PrefersDarkText(shades.Base) ? new RgbColor(0, 0, 0) : new RgbColor(255, 255, 255);
-        if (light)
-        {
-            SetBrush(dictionary, "AccentFillColorDefaultBrush", shades.Dark1, keepAlpha: false);
-            SetBrush(dictionary, "AccentFillColorSecondaryBrush", shades.Dark1, keepAlpha: false);
-            SetBrush(dictionary, "AccentFillColorTertiaryBrush", shades.Dark1, keepAlpha: false);
-            SetBrush(dictionary, "AccentTextFillColorPrimaryBrush", shades.Dark2, keepAlpha: false);
-            SetBrush(dictionary, "AccentTextFillColorSecondaryBrush", shades.Dark3, keepAlpha: false);
-            SetBrush(dictionary, "AccentTextFillColorTertiaryBrush", shades.Dark1, keepAlpha: false);
-        }
-        else
-        {
-            SetBrush(dictionary, "AccentFillColorDefaultBrush", shades.Light2, keepAlpha: false);
-            SetBrush(dictionary, "AccentFillColorSecondaryBrush", shades.Light2, keepAlpha: false);
-            SetBrush(dictionary, "AccentFillColorTertiaryBrush", shades.Light2, keepAlpha: false);
-            SetBrush(dictionary, "AccentTextFillColorPrimaryBrush", shades.Light3, keepAlpha: false);
-            SetBrush(dictionary, "AccentTextFillColorSecondaryBrush", shades.Light3, keepAlpha: false);
-            SetBrush(dictionary, "AccentTextFillColorTertiaryBrush", shades.Light2, keepAlpha: false);
-        }
-
-        SetBrush(dictionary, "AccentFillColorSelectedTextBackgroundBrush", shades.Base, keepAlpha: false);
-        SetBrush(dictionary, "TextOnAccentFillColorPrimaryBrush", ink, keepAlpha: true);
-        SetBrush(dictionary, "TextOnAccentFillColorSecondaryBrush", ink, keepAlpha: true);
-        SetBrush(dictionary, "TextOnAccentFillColorSelectedTextBrush", selectedInk, keepAlpha: true);
+        var paint = AccentPalette.ForSurface(shades.Base, light);
+        SetBrush(dictionary, "AccentFillColorDefaultBrush", paint.Fill, keepAlpha: false);
+        SetBrush(dictionary, "AccentFillColorSecondaryBrush", paint.Fill, keepAlpha: false);
+        SetBrush(dictionary, "AccentFillColorTertiaryBrush", paint.Fill, keepAlpha: false);
+        SetBrush(dictionary, "AccentTextFillColorPrimaryBrush", paint.AccentText, keepAlpha: false);
+        SetBrush(dictionary, "AccentTextFillColorSecondaryBrush", paint.AccentText, keepAlpha: false);
+        SetBrush(dictionary, "AccentTextFillColorTertiaryBrush", paint.AccentText, keepAlpha: false);
+        SetBrush(dictionary, "AccentFillColorSelectedTextBackgroundBrush", paint.Fill, keepAlpha: false);
+        SetBrush(dictionary, "TextOnAccentFillColorPrimaryBrush", paint.Ink, keepAlpha: true);
+        SetBrush(dictionary, "TextOnAccentFillColorSecondaryBrush", paint.Ink, keepAlpha: true);
+        SetBrush(dictionary, "TextOnAccentFillColorSelectedTextBrush", paint.Ink, keepAlpha: true);
     }
 
     static void SetBrush(ResourceDictionary dictionary, string key, RgbColor rgb, bool keepAlpha)
@@ -161,6 +149,167 @@ static class AppearanceTheme
 
         Overridden.Clear();
         SavedColor.Clear();
+    }
+
+    static readonly Dictionary<ResourceDictionary, SolidColorBrush> DisabledInks = [];
+
+    // 無効なアクセントボタンは、色そのものを前景にしているので白地で消える。辞書ごとに別のブラシを置く。
+    static void FixDisabledInk()
+    {
+        if (Application.Current == null)
+            return;
+        VisitThemes(Application.Current.Resources, ApplyDisabledInk, []);
+    }
+
+    static void ApplyDisabledInk(ResourceDictionary dictionary, bool light)
+    {
+        if (!dictionary.ContainsKey("AccentButtonForegroundDisabled"))
+            return;
+        var color = light ? Color.FromArgb(0x9E, 0, 0, 0) : Color.FromArgb(0xC5, 255, 255, 255);
+        if (!DisabledInks.TryGetValue(dictionary, out var ink))
+        {
+            ink = new SolidColorBrush(color);
+            try
+            {
+                dictionary["AccentButtonForegroundDisabled"] = ink;
+            }
+            catch (Exception)
+            {
+                return;
+            }
+
+            DisabledInks[dictionary] = ink;
+        }
+        else
+        {
+            ink.Color = color;
+        }
+
+        try
+        {
+            if (dictionary.ContainsKey("TextOnAccentFillColorDisabled"))
+                dictionary["TextOnAccentFillColorDisabled"] = color;
+        }
+        catch (Exception)
+        {
+            // 色キーを持たない辞書は、上のブラシだけで足りる。
+        }
+
+        if (dictionary.TryGetValue("TextOnAccentFillColorDisabledBrush", out var value) && value is SolidColorBrush brush)
+            Override(brush, color, restoreExact: true);
+    }
+
+    public static ElementTheme Resolve(FrameworkElement element)
+    {
+        if (element.ActualTheme is ElementTheme.Light or ElementTheme.Dark)
+            return element.ActualTheme;
+        return Application.Current?.RequestedTheme == ApplicationTheme.Light
+            ? ElementTheme.Light
+            : ElementTheme.Dark;
+    }
+
+    public static Brush? Brush(ElementTheme theme, string key)
+    {
+        if (Application.Current == null)
+            return null;
+        var names = theme == ElementTheme.Light ? new[] { "Light" } : new[] { "Dark", "Default" };
+        foreach (var name in names)
+        {
+            var found = FindBrush(Application.Current.Resources, name, key, []);
+            if (found != null)
+                return found;
+        }
+
+        return null;
+    }
+
+    static Brush? FindBrush(ResourceDictionary dictionary, string themeName, string key, HashSet<ResourceDictionary> seen)
+    {
+        if (!seen.Add(dictionary))
+            return null;
+        foreach (var pair in dictionary.ThemeDictionaries)
+        {
+            if (pair.Value is not ResourceDictionary child)
+                continue;
+            var name = ThemeKey(pair.Key);
+            if (name == themeName)
+            {
+                if (child.TryGetValue(key, out var value) && value is Brush brush)
+                    return brush;
+            }
+
+            if (name is not ("Light" or "Dark" or "Default" or "HighContrast"))
+            {
+                var nested = FindBrush(child, themeName, key, seen);
+                if (nested != null)
+                    return nested;
+            }
+            else if (name == themeName)
+            {
+                var nested = FindBrush(child, themeName, key, seen);
+                if (nested != null)
+                    return nested;
+            }
+        }
+
+        foreach (var merged in dictionary.MergedDictionaries)
+        {
+            var nested = FindBrush(merged, themeName, key, seen);
+            if (nested != null)
+                return nested;
+        }
+
+        return null;
+    }
+
+    static void VisitThemes(ResourceDictionary dictionary, Action<ResourceDictionary, bool> visit, HashSet<ResourceDictionary> seen)
+    {
+        if (!seen.Add(dictionary))
+            return;
+        foreach (var pair in dictionary.ThemeDictionaries)
+        {
+            if (pair.Value is not ResourceDictionary child)
+                continue;
+            var name = ThemeKey(pair.Key);
+            if (name is "Light" or "Default")
+                visit(child, name == "Light");
+            if (name != "HighContrast")
+                VisitThemes(child, visit, seen);
+        }
+
+        foreach (var merged in dictionary.MergedDictionaries)
+            VisitThemes(merged, visit, seen);
+    }
+
+    static void ApplyCaption(Window window, ElementTheme theme)
+    {
+        var bar = window.AppWindow.TitleBar;
+        if (theme == ElementTheme.Default)
+        {
+            bar.ButtonForegroundColor = null;
+            bar.ButtonHoverForegroundColor = null;
+            bar.ButtonPressedForegroundColor = null;
+            bar.ButtonInactiveForegroundColor = null;
+            bar.ButtonBackgroundColor = null;
+            bar.ButtonHoverBackgroundColor = null;
+            bar.ButtonPressedBackgroundColor = null;
+            bar.ButtonInactiveBackgroundColor = null;
+            return;
+        }
+
+        var light = theme == ElementTheme.Light;
+        var foreground = light ? Color.FromArgb(255, 32, 32, 32) : Color.FromArgb(255, 255, 255, 255);
+        var inactive = light ? Color.FromArgb(255, 140, 140, 140) : Color.FromArgb(255, 160, 160, 160);
+        var hover = light ? Color.FromArgb(28, 0, 0, 0) : Color.FromArgb(32, 255, 255, 255);
+        var pressed = light ? Color.FromArgb(18, 0, 0, 0) : Color.FromArgb(20, 255, 255, 255);
+        bar.ButtonForegroundColor = foreground;
+        bar.ButtonHoverForegroundColor = foreground;
+        bar.ButtonPressedForegroundColor = foreground;
+        bar.ButtonInactiveForegroundColor = inactive;
+        bar.ButtonBackgroundColor = Microsoft.UI.Colors.Transparent;
+        bar.ButtonHoverBackgroundColor = hover;
+        bar.ButtonPressedBackgroundColor = pressed;
+        bar.ButtonInactiveBackgroundColor = Microsoft.UI.Colors.Transparent;
     }
 
     static string? ThemeKey(object key) => key switch

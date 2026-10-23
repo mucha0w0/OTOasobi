@@ -28,7 +28,6 @@ sealed class NoiseWaveform : UserControl
     {
         Height = PlotHeight,
         CornerRadius = new CornerRadius(4),
-        Background = Brush("ControlFillColorSecondaryBrush") ?? new SolidColorBrush(Windows.UI.Color.FromArgb(0, 0, 0, 0)),
     };
     readonly Canvas _canvas = new() { Height = PlotHeight };
     readonly WavePath _wave = new() { StrokeThickness = 1, IsHitTestVisible = false };
@@ -81,6 +80,9 @@ sealed class NoiseWaveform : UserControl
         _bar.ValueChanged += Bar_Changed;
         Content = grid;
         _columnDragRoot = grid;
+        ActualThemeChanged += (_, _) => ApplyTheme();
+        Loaded += (_, _) => ApplyTheme();
+        ApplyTheme();
         SizeChanged += (_, e) =>
         {
             if (_columnDrag)
@@ -366,13 +368,10 @@ sealed class NoiseWaveform : UserControl
         }
 
         _wave.Data = new PathGeometry { Figures = { figure } };
-        _wave.Fill = Brush("TextFillColorPrimaryBrush");
-        _wave.Stroke = _wave.Fill;
-        _zero.Fill = Brush("TextFillColorSecondaryBrush");
+        ApplyTheme();
         Canvas.SetLeft(_zero, 0);
         Canvas.SetTop(_zero, mid);
         _zero.Width = width;
-        _shade.Fill = Brush("AccentFillColorDefaultBrush");
         PlaceShade(width);
         SyncBar();
     }
@@ -452,6 +451,18 @@ sealed class NoiseWaveform : UserControl
 
     double RangeEnd() => Math.Max(_rangeStart ?? 0, _rangeEnd ?? 0);
 
-    static Brush? Brush(string key) =>
-        Application.Current?.Resources.TryGetValue(key, out var value) == true ? value as Brush : null;
+    void ApplyTheme()
+    {
+        var theme = AppearanceTheme.Resolve(this);
+        _frame.Background = AppearanceTheme.Brush(theme, "ControlFillColorSecondaryBrush") ?? _frame.Background;
+        var ink = AppearanceTheme.Brush(theme, "TextFillColorPrimaryBrush");
+        if (ink != null)
+        {
+            _wave.Fill = ink;
+            _wave.Stroke = ink;
+        }
+
+        _zero.Fill = AppearanceTheme.Brush(theme, "TextFillColorSecondaryBrush") ?? _zero.Fill;
+        _shade.Fill = AppearanceTheme.Brush(theme, "AccentFillColorDefaultBrush") ?? _shade.Fill;
+    }
 }

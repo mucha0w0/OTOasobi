@@ -43,6 +43,23 @@ public class AppearanceTests
     }
 
     [Fact]
+    public void ButtonInkStaysReadableOnEitherSurface()
+    {
+        var mauve = AccentPalette.ForSurface(new RgbColor(0xBA, 0x92, 0xB9), lightSurface: true);
+        Assert.Equal(new RgbColor(255, 255, 255), mauve.Ink);
+        Assert.False(AccentPalette.PrefersDarkText(mauve.Fill));
+        Assert.True(AccentPalette.Luminance(mauve.AccentText) < AccentPalette.Luminance(new RgbColor(0xBA, 0x92, 0xB9)));
+
+        var blue = AccentPalette.ForSurface(new RgbColor(0, 60, 120), lightSurface: false);
+        Assert.Equal(new RgbColor(0, 0, 0), blue.Ink);
+        Assert.True(AccentPalette.PrefersDarkText(blue.Fill));
+        Assert.True(AccentPalette.Luminance(blue.AccentText) > 0.4);
+
+        var windows = AccentPalette.ForSurface(new RgbColor(0, 120, 212), lightSurface: true);
+        Assert.False(AccentPalette.PrefersDarkText(windows.Fill));
+    }
+
+    [Fact]
     public void RoundTripsTheAppearanceFile()
     {
         var directory = Path.Combine(Path.GetTempPath(), "oto-appearance-" + Guid.NewGuid().ToString("N"));

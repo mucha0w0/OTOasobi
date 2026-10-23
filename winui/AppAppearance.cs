@@ -79,6 +79,42 @@ static class AccentPalette
     // この明るさより上なら、アクセントの上の文字は黒の方が読める。
     public static bool PrefersDarkText(RgbColor fill) => Luminance(fill) > 0.179;
 
+    // 明るい面のボタンは白文字が読める濃さ、暗い面のボタンは黒文字が読める明るさにする。
+    public readonly record struct SurfacePaint(RgbColor Fill, RgbColor Ink, RgbColor AccentText);
+
+    public static SurfacePaint ForSurface(RgbColor color, bool lightSurface)
+    {
+        var luminance = Luminance(color);
+        if (lightSurface)
+        {
+            var fill = luminance <= 0.16 ? color : AdjustLuminance(color, 0.16);
+            var text = luminance <= 0.20 ? color : AdjustLuminance(color, 0.16);
+            return new SurfacePaint(fill, new RgbColor(255, 255, 255), text);
+        }
+
+        var lightFill = luminance is >= 0.38 and <= 0.70 ? color : AdjustLuminance(color, luminance > 0.70 ? 0.62 : 0.50);
+        var lightText = luminance is >= 0.48 and <= 0.82 ? color : AdjustLuminance(color, luminance > 0.82 ? 0.70 : 0.60);
+        return new SurfacePaint(lightFill, new RgbColor(0, 0, 0), lightText);
+    }
+
+    static RgbColor AdjustLuminance(RgbColor color, double target)
+    {
+        var (hue, saturation, _) = ToHsl(color);
+        var adjusted = Math.Clamp(saturation * (target < Luminance(color) ? 1.15 : 0.92), 0, 1);
+        var lo = 0d;
+        var hi = 0.95;
+        for (var i = 0; i < 24; i++)
+        {
+            var mid = (lo + hi) / 2;
+            if (Luminance(FromHsl(hue, adjusted, mid)) < target)
+                lo = mid;
+            else
+                hi = mid;
+        }
+
+        return FromHsl(hue, adjusted, hi);
+    }
+
     public static double Luminance(RgbColor color)
     {
         static double Channel(byte value)

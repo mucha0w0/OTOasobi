@@ -37,6 +37,7 @@ public sealed partial class EffectRack : UserControl
     Border? _marked;
     Brush? _markedBrush;
     Thickness _markedThickness;
+    bool _noiseMessageError;
     bool _ready;
     bool _dirty;
     bool _applying;
@@ -54,6 +55,8 @@ public sealed partial class EffectRack : UserControl
     public EffectRack()
     {
         InitializeComponent();
+        ActualThemeChanged += (_, _) => RefreshThemeBrushes();
+        Loaded += (_, _) => RefreshThemeBrushes();
         NoiseWaveHost.Child = _wave;
         _wave.RangeChanging += Wave_Changing;
         _wave.RangeChosen += Wave_Chosen;
@@ -794,9 +797,19 @@ public sealed partial class EffectRack : UserControl
 
     void PaintNoiseMessage(bool error)
     {
+        _noiseMessageError = error;
         var key = error ? "SystemFillColorCriticalBrush" : "TextFillColorSecondaryBrush";
-        if (Application.Current.Resources.TryGetValue(key, out var brush) && brush is Brush paint)
+        if (AppearanceTheme.Brush(AppearanceTheme.Resolve(this), key) is Brush paint)
             NoiseMessage.Foreground = paint;
+    }
+
+    void RefreshThemeBrushes()
+    {
+        PaintNoiseMessage(_noiseMessageError);
+        if (DryStatus.Visibility == Visibility.Visible)
+            ShowListenStatus(processed: false, DryStatus.Text, error: true);
+        if (WetStatus.Visibility == Visibility.Visible)
+            ShowListenStatus(processed: true, WetStatus.Text, error: true);
     }
 
     void HpSlope_Checked(object sender, RoutedEventArgs e)
@@ -1014,7 +1027,7 @@ public sealed partial class EffectRack : UserControl
         _marked = border;
         _markedBrush = border.BorderBrush;
         _markedThickness = border.BorderThickness;
-        border.BorderBrush = Application.Current.Resources["AccentFillColorDefaultBrush"] as Brush ?? border.BorderBrush;
+        border.BorderBrush = AppearanceTheme.Brush(AppearanceTheme.Resolve(this), "AccentFillColorDefaultBrush") ?? border.BorderBrush;
     }
 
     void RestoreMark()

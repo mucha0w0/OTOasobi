@@ -164,7 +164,7 @@ public sealed partial class SpanEditor
             Kind = kind;
             Plot = new CursorCanvas
             {
-                Background = BrushOf(255, 22, 22, 22),
+                Background = CanvasBrush,
                 ManipulationMode = ManipulationModes.None,
                 Clip = _clip,
             };
@@ -183,7 +183,7 @@ public sealed partial class SpanEditor
             _root.Children.Add(Notice);
             _root.Children.Add(ChildrenOverlay);
             Content = _root;
-            Background = BrushOf(255, 22, 22, 22);
+            Background = CanvasBrush;
             IsTabStop = true;
             ManipulationMode = ManipulationModes.None;
             SizeChanged += (_, e) =>

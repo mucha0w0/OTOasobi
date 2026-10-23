@@ -318,6 +318,7 @@ public sealed partial class OtoParamTable : UserControl
         _fileFill = new SolidColorBrush(Color.FromArgb(48, accent.R, accent.G, accent.B));
         _phonemeFill = new SolidColorBrush(Color.FromArgb(150, accent.R, accent.G, accent.B));
         AppAppearance.Changed += RefreshAccent;
+        ActualThemeChanged += (_, _) => RefreshAccent();
         Unloaded += (_, _) => AppAppearance.Changed -= RefreshAccent;
         Rows.ItemsSource = _rows;
         Loaded += (_, _) =>
@@ -498,10 +499,10 @@ public sealed partial class OtoParamTable : UserControl
         return _rows.FirstOrDefault(item => item.FileName.Equals(_viewFile, StringComparison.OrdinalIgnoreCase));
     }
 
-    static Color AccentColor()
+    Color AccentColor()
     {
-        if (Application.Current?.Resources.TryGetValue("SystemAccentColor", out var value) == true && value is Color color)
-            return color;
+        if (AppearanceTheme.Brush(AppearanceTheme.Resolve(this), "AccentFillColorDefaultBrush") is SolidColorBrush brush)
+            return brush.Color;
         return Color.FromArgb(255, 15, 157, 142);
     }
 

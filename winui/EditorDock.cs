@@ -58,15 +58,14 @@ public sealed class EditorDock : Panel
         };
         if (Application.Current.Resources.TryGetValue("BodyTextBlockStyle", out var body) && body is Style bodyStyle)
             _empty.Style = bodyStyle;
-        if (Application.Current.Resources.TryGetValue("TextFillColorSecondaryBrush", out var secondary) && secondary is Brush secondaryBrush)
-            _empty.Foreground = secondaryBrush;
+        _empty.Foreground = ThemeBrush(this, "TextFillColorSecondaryBrush", Color.FromArgb(255, 90, 90, 90));
 
         _highlight = new Border
         {
             IsHitTestVisible = false,
             Opacity = 0.28,
             Visibility = Visibility.Collapsed,
-            Background = ThemeBrush("AccentFillColorDefaultBrush", Color.FromArgb(255, 15, 157, 142)),
+            Background = ThemeBrush(this, "AccentFillColorDefaultBrush", Color.FromArgb(255, 15, 157, 142)),
         };
         _ghostText = new TextBlock
         {
@@ -80,8 +79,8 @@ public sealed class EditorDock : Panel
             IsHitTestVisible = false,
             Visibility = Visibility.Collapsed,
             BorderThickness = new Thickness(1),
-            BorderBrush = ThemeBrush("AccentFillColorDefaultBrush", Color.FromArgb(255, 15, 157, 142)),
-            Background = ThemeBrush("LayerFillColorDefaultBrush", Color.FromArgb(230, 32, 32, 32)),
+            BorderBrush = ThemeBrush(this, "AccentFillColorDefaultBrush", Color.FromArgb(255, 15, 157, 142)),
+            Background = ThemeBrush(this, "LayerFillColorDefaultBrush", Color.FromArgb(230, 32, 32, 32)),
             Child = _ghostText,
         };
         foreach (var edge in new[] { DockEdge.Left, DockEdge.Right, DockEdge.Top, DockEdge.Bottom })
@@ -93,8 +92,8 @@ public sealed class EditorDock : Panel
                 IsHitTestVisible = false,
                 Visibility = Visibility.Collapsed,
                 BorderThickness = new Thickness(1),
-                BorderBrush = ThemeBrush("DividerStrokeColorDefaultBrush", Color.FromArgb(255, 120, 120, 120)),
-                Background = ThemeBrush("CardBackgroundFillColorDefaultBrush", Color.FromArgb(255, 32, 32, 32)),
+                BorderBrush = ThemeBrush(this, "DividerStrokeColorDefaultBrush", Color.FromArgb(255, 120, 120, 120)),
+                Background = ThemeBrush(this, "CardBackgroundFillColorDefaultBrush", Color.FromArgb(255, 32, 32, 32)),
                 Child = new TextBlock
                 {
                     Text = EdgeLabel(edge),
@@ -123,6 +122,36 @@ public sealed class EditorDock : Panel
         PointerReleased += OnDockReleased;
         PointerCaptureLost += OnDockCaptureLost;
         PointerCanceled += OnDockReleased;
+        ActualThemeChanged += (_, _) => ApplyChrome();
+        Loaded += (_, _) => ApplyChrome();
+    }
+
+    void ApplyChrome()
+    {
+        _empty.Foreground = ThemeBrush(this, "TextFillColorSecondaryBrush", Color.FromArgb(255, 90, 90, 90));
+        _highlight.Background = ThemeBrush(this, "AccentFillColorDefaultBrush", Color.FromArgb(255, 15, 157, 142));
+        _ghost.BorderBrush = ThemeBrush(this, "AccentFillColorDefaultBrush", Color.FromArgb(255, 15, 157, 142));
+        _ghost.Background = ThemeBrush(this, "LayerFillColorDefaultBrush", Color.FromArgb(230, 32, 32, 32));
+        var armsOpen = false;
+        foreach (var arm in _arms.Values)
+        {
+            if (arm.Visibility == Visibility.Visible)
+                armsOpen = true;
+        }
+
+        if (!armsOpen)
+        {
+            foreach (var arm in _arms.Values)
+            {
+                arm.BorderBrush = ThemeBrush(this, "DividerStrokeColorDefaultBrush", Color.FromArgb(255, 120, 120, 120));
+                arm.Background = ThemeBrush(this, "CardBackgroundFillColorDefaultBrush", Color.FromArgb(255, 32, 32, 32));
+            }
+        }
+
+        foreach (var grip in _grips)
+            PaintGrip(grip, ReferenceEquals(grip, _resize?.Grip));
+        foreach (var pane in _panes.Values)
+            pane.ApplyChrome();
     }
 
     public LayoutNode? Root => _root;
@@ -422,8 +451,8 @@ public sealed class EditorDock : Panel
     {
         var mark = grip.Mark;
         mark.Background = hot
-            ? ThemeBrush("AccentFillColorDefaultBrush", Color.FromArgb(255, 15, 157, 142))
-            : ThemeBrush("DividerStrokeColorDefaultBrush", Color.FromArgb(255, 90, 90, 90));
+            ? ThemeBrush(grip, "AccentFillColorDefaultBrush", Color.FromArgb(255, 15, 157, 142))
+            : ThemeBrush(grip, "DividerStrokeColorDefaultBrush", Color.FromArgb(255, 90, 90, 90));
         if (mark.Width is > 0 and < 8)
             mark.Width = hot ? 2 : 1;
         if (mark.Height is > 0 and < 8)
@@ -727,8 +756,8 @@ public sealed class EditorDock : Panel
             Canvas.SetLeft(pair.Value, arm.X);
             Canvas.SetTop(pair.Value, arm.Y);
             pair.Value.BorderBrush = pair.Key == hot
-                ? ThemeBrush("AccentFillColorDefaultBrush", Color.FromArgb(255, 15, 157, 142))
-                : ThemeBrush("DividerStrokeColorDefaultBrush", Color.FromArgb(255, 120, 120, 120));
+                ? ThemeBrush(this, "AccentFillColorDefaultBrush", Color.FromArgb(255, 15, 157, 142))
+                : ThemeBrush(this, "DividerStrokeColorDefaultBrush", Color.FromArgb(255, 120, 120, 120));
         }
     }
 
@@ -823,12 +852,8 @@ public sealed class EditorDock : Panel
         }
     }
 
-    static Brush ThemeBrush(string key, Color fallback)
-    {
-        if (Application.Current?.Resources.TryGetValue(key, out var value) == true && value is Brush brush)
-            return brush;
-        return new SolidColorBrush(fallback);
-    }
+    static Brush ThemeBrush(FrameworkElement element, string key, Color fallback)
+        => AppearanceTheme.Brush(AppearanceTheme.Resolve(element), key) ?? new SolidColorBrush(fallback);
 
     sealed class DockRegion
     {
@@ -855,7 +880,7 @@ public sealed class EditorDock : Panel
                 IsHitTestVisible = false,
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center,
-                Background = ThemeBrush("DividerStrokeColorDefaultBrush", Color.FromArgb(255, 90, 90, 90)),
+                Background = ThemeBrush(this, "DividerStrokeColorDefaultBrush", Color.FromArgb(255, 90, 90, 90)),
             };
             Children.Add(Mark);
         }
@@ -925,19 +950,30 @@ public sealed class EditorDock : Panel
             Grid.SetColumn(CloseButton, 1);
             bar.Children.Add(label);
             bar.Children.Add(CloseButton);
-            var header = new Border
+            HeaderBar = new Border
             {
-                BorderBrush = ThemeBrush("DividerStrokeColorDefaultBrush", Color.FromArgb(255, 80, 80, 80)),
+                BorderBrush = ThemeBrush(this, "DividerStrokeColorDefaultBrush", Color.FromArgb(255, 80, 80, 80)),
                 BorderThickness = new Thickness(0, 0, 0, 1),
-                Background = ThemeBrush("LayerFillColorDefaultBrush", Color.FromArgb(255, 32, 32, 32)),
+                Background = ThemeBrush(this, "LayerFillColorDefaultBrush", Color.FromArgb(255, 32, 32, 32)),
                 Child = bar,
             };
+            var header = HeaderBar;
             header.PointerPressed += (_, e) => TitlePressed?.Invoke(this, e);
             Children.Add(header);
             Body = new Grid();
             Grid.SetRow(Body, 1);
             Children.Add(Body);
             AutomationProperties.SetName(this, title);
+            ActualThemeChanged += (_, _) => ApplyChrome();
+            Loaded += (_, _) => ApplyChrome();
+        }
+
+        public Border HeaderBar { get; }
+
+        public void ApplyChrome()
+        {
+            HeaderBar.BorderBrush = ThemeBrush(this, "DividerStrokeColorDefaultBrush", Color.FromArgb(255, 80, 80, 80));
+            HeaderBar.Background = ThemeBrush(this, "LayerFillColorDefaultBrush", Color.FromArgb(255, 32, 32, 32));
         }
 
         public string Id { get; }

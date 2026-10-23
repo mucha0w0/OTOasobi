@@ -78,7 +78,11 @@ id は `bank`。ロジックは `VoicebankText` と `VoicebankImage`、画面は
 - 足すときは `SettingsWindow.Sections` で `SettingsSection` を返す。第1引数が左の見出し、第2引数が右の画面。並びの先頭が、開いたときに選ばれる。
 - 初期サイズは 960×640、最小は 720×480。メインウィンドウの中央に出す。
 
-「表示」は `DisplaySettings` です。テーマはライト、ダーク、端末に合わせる。アクセントカラーは端末に合わせるか、カラーピッカーで指定します。保存先は `%LocalAppData%\Otoasobi\appearance.json` で、読み書きは `AppAppearanceStore`、起動時の適用は `AppearanceTheme` です。明暗は各ウィンドウの `RequestedTheme`。アクセントは既存のアクセント用ブラシの色だけを差し替え、ブラシのインスタンスは替えません。端末の色へ戻すときは、差し替えた色を外します。
+「表示」は `DisplaySettings` です。テーマはライト、ダーク、端末に合わせる。アクセントカラーは端末に合わせるか、カラーピッカーで指定します。保存先は `%LocalAppData%\Otoasobi\appearance.json` で、読み書きは `AppAppearanceStore`、起動時の適用は `AppearanceTheme` です。明暗を明示したときは、`App` のコンストラクタで `InitializeComponent` より前に `Application.RequestedTheme` を合わせます。ここで合わせないと、テーマ辞書の文字色が端末の明暗のまま残り、明るい面に白い文字が出ます。各ウィンドウの `RequestedTheme` も合わせ、`MainWindow` はページを作る前に適用します。アクセントは既存のアクセント用ブラシの色だけを差し替え、ブラシのインスタンスは替えません。端末の色へ戻すときは、差し替えた色を外します。
+
+アクセントボタンの地は、明るい面では白文字が読める濃さ、暗い面では黒文字が読める明るさにします。文字色は明るい面で白、暗い面で黒です。無効時の文字は、薄い地に白が乗らないよう、明るい面では薄い黒、暗い面では薄い白にします。タイトルバーのボタンは、明暗を明示したときだけ色を指定し、端末に合わせるときは指定を外します。
+
+波形、スペクトログラム、音量、oto の描画面は明暗に合わせます。区間の種類の色は固定です。コードから色を取るときは `AppearanceTheme.Brush` で、その要素の `ActualTheme` の辞書を見ます。`Application.Current.Resources` はアプリのテーマなので、画面の明暗とは一致しません。テーマが変わったときは `ActualThemeChanged` で塗り直します。
 
 ## 確認
 

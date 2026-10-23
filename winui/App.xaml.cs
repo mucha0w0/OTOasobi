@@ -8,6 +8,11 @@ public partial class App : Application
 
     public App()
     {
+        AppAppearance.Load();
+        if (AppAppearance.Theme == AppThemeChoice.Light)
+            RequestedTheme = ApplicationTheme.Light;
+        else if (AppAppearance.Theme == AppThemeChoice.Dark)
+            RequestedTheme = ApplicationTheme.Dark;
         InitializeComponent();
     }
 
