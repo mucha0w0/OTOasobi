@@ -95,7 +95,25 @@ static class AppearanceTheme
 
     static void PaintDictionary(ResourceDictionary dictionary, bool light, AccentPalette.Shades shades)
     {
-        var paint = AccentPalette.ForSurface(shades.Base, light);
+        if (!light)
+        {
+            var fill = shades.Light2;
+            var ink = AccentPalette.PrefersDarkText(fill) ? new RgbColor(0, 0, 0) : new RgbColor(255, 255, 255);
+            var selectedInk = AccentPalette.PrefersDarkText(shades.Base) ? new RgbColor(0, 0, 0) : new RgbColor(255, 255, 255);
+            SetBrush(dictionary, "AccentFillColorDefaultBrush", shades.Light2, keepAlpha: false);
+            SetBrush(dictionary, "AccentFillColorSecondaryBrush", shades.Light2, keepAlpha: false);
+            SetBrush(dictionary, "AccentFillColorTertiaryBrush", shades.Light2, keepAlpha: false);
+            SetBrush(dictionary, "AccentTextFillColorPrimaryBrush", shades.Light3, keepAlpha: false);
+            SetBrush(dictionary, "AccentTextFillColorSecondaryBrush", shades.Light3, keepAlpha: false);
+            SetBrush(dictionary, "AccentTextFillColorTertiaryBrush", shades.Light2, keepAlpha: false);
+            SetBrush(dictionary, "AccentFillColorSelectedTextBackgroundBrush", shades.Base, keepAlpha: false);
+            SetBrush(dictionary, "TextOnAccentFillColorPrimaryBrush", ink, keepAlpha: true);
+            SetBrush(dictionary, "TextOnAccentFillColorSecondaryBrush", ink, keepAlpha: true);
+            SetBrush(dictionary, "TextOnAccentFillColorSelectedTextBrush", selectedInk, keepAlpha: true);
+            return;
+        }
+
+        var paint = AccentPalette.ForSurface(shades.Base, lightSurface: true);
         SetBrush(dictionary, "AccentFillColorDefaultBrush", paint.Fill, keepAlpha: false);
         SetBrush(dictionary, "AccentFillColorSecondaryBrush", paint.Fill, keepAlpha: false);
         SetBrush(dictionary, "AccentFillColorTertiaryBrush", paint.Fill, keepAlpha: false);
@@ -163,9 +181,9 @@ static class AppearanceTheme
 
     static void ApplyDisabledInk(ResourceDictionary dictionary, bool light)
     {
-        if (!dictionary.ContainsKey("AccentButtonForegroundDisabled"))
+        if (!light || !dictionary.ContainsKey("AccentButtonForegroundDisabled"))
             return;
-        var color = light ? Color.FromArgb(0x9E, 0, 0, 0) : Color.FromArgb(0xC5, 255, 255, 255);
+        var color = Color.FromArgb(0x9E, 0, 0, 0);
         if (!DisabledInks.TryGetValue(dictionary, out var ink))
         {
             ink = new SolidColorBrush(color);
@@ -284,7 +302,7 @@ static class AppearanceTheme
     static void ApplyCaption(Window window, ElementTheme theme)
     {
         var bar = window.AppWindow.TitleBar;
-        if (theme == ElementTheme.Default)
+        if (theme != ElementTheme.Light)
         {
             bar.ButtonForegroundColor = null;
             bar.ButtonHoverForegroundColor = null;
@@ -297,11 +315,10 @@ static class AppearanceTheme
             return;
         }
 
-        var light = theme == ElementTheme.Light;
-        var foreground = light ? Color.FromArgb(255, 32, 32, 32) : Color.FromArgb(255, 255, 255, 255);
-        var inactive = light ? Color.FromArgb(255, 140, 140, 140) : Color.FromArgb(255, 160, 160, 160);
-        var hover = light ? Color.FromArgb(28, 0, 0, 0) : Color.FromArgb(32, 255, 255, 255);
-        var pressed = light ? Color.FromArgb(18, 0, 0, 0) : Color.FromArgb(20, 255, 255, 255);
+        var foreground = Color.FromArgb(255, 32, 32, 32);
+        var inactive = Color.FromArgb(255, 140, 140, 140);
+        var hover = Color.FromArgb(28, 0, 0, 0);
+        var pressed = Color.FromArgb(18, 0, 0, 0);
         bar.ButtonForegroundColor = foreground;
         bar.ButtonHoverForegroundColor = foreground;
         bar.ButtonPressedForegroundColor = foreground;
