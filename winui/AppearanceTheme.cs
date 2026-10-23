@@ -1,13 +1,14 @@
+using System.Diagnostics;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
 using Windows.UI;
-using Windows.UI.ViewManagement;
 
 namespace Otoasobi;
 
-// 明暗はウィンドウの RequestedTheme。アプリの RequestedTheme は起動時にしか合わせられない。
-// 起動後に明暗を変えたときは、画面が参照しているブラシへ、選んだ明暗の色を書き戻す。
-// アクセントは、そのブラシの色だけを差し替える。新しいインスタンスに取り替えると、StaticResource 側が古いまま残る。
+// 文字と地の色は、起動時の Application.RequestedTheme が選んだ辞書に従う。
+// ウィンドウの RequestedTheme はそれと同じ明暗にする。ずらすと、暗い地に暗い文字が残る。
+// 明暗を変えたときは、保存してから起動し直す。アクセントは、使っている辞書のブラシの色だけを差し替える。
 static class AppearanceTheme
 {
     const string BaseAccentKey = "SystemAccentColor";
@@ -18,32 +19,20 @@ static class AppearanceTheme
 
     public static void ApplyTo(Window window)
     {
-        var theme = ToElement(AppAppearance.Theme);
+        var theme = MatchingElementTheme();
         if (window.Content is FrameworkElement root)
             root.RequestedTheme = theme;
         ApplyCaption(window, theme);
-    }
-
-    public static void ApplyThemes()
-    {
-        if (App.MainWindow is Window main)
-            ApplyTo(main);
-        SettingsWindow.ApplyThemeIfOpen();
     }
 
     public static void ApplyAccent()
     {
         if (Application.Current == null)
             return;
-        EnsureSnapshots();
         if (AppAppearance.Accent is RgbColor accent)
             Paint(AccentPalette.Create(accent));
         else
-        {
             Restore();
-            RetintActive();
-        }
-
         FixDisabledInk();
     }
 
@@ -52,8 +41,11 @@ static class AppearanceTheme
         if (AppAppearance.Theme == theme)
             return;
         AppAppearance.SaveTheme(theme);
-        ApplyThemes();
-        ApplyAccent();
+        var queue = DispatcherQueue.GetForCurrentThread();
+        if (queue == null)
+            Relaunch();
+        else
+            queue.TryEnqueue(Relaunch);
     }
 
     public static void UseAccent(RgbColor? accent)
@@ -65,17 +57,55 @@ static class AppearanceTheme
         AppAppearance.RaiseChanged();
     }
 
-    static ElementTheme ToElement(AppThemeChoice theme) => theme switch
+    // Default を代入すると、端末がライトでもダークになる。リソースと同じ明暗を明示する。
+    static ElementTheme MatchingElementTheme()
     {
-        AppThemeChoice.Light => ElementTheme.Light,
-        AppThemeChoice.Dark => ElementTheme.Dark,
-        _ => ElementTheme.Default,
-    };
+        if (AppAppearance.Theme == AppThemeChoice.Light)
+            return ElementTheme.Light;
+        if (AppAppearance.Theme == AppThemeChoice.Dark)
+            return ElementTheme.Dark;
+        return Application.Current?.RequestedTheme == ApplicationTheme.Light
+            ? ElementTheme.Light
+            : ElementTheme.Dark;
+    }
+
+    static bool _relaunching;
+
+    static void Relaunch()
+    {
+        if (_relaunching)
+            return;
+        _relaunching = true;
+        if (App.MainWindow is MainWindow window)
+            window.FlushContent();
+        MainPage.ShutdownAnalysis();
+        SettingsWindow.CloseIfOpen();
+        var path = Environment.ProcessPath;
+        if (string.IsNullOrEmpty(path))
+        {
+            _relaunching = false;
+            return;
+        }
+        try
+        {
+            Process.Start(new ProcessStartInfo(path)
+            {
+                UseShellExecute = true,
+                WorkingDirectory = Path.GetDirectoryName(path) ?? "",
+            });
+        }
+        catch (Exception)
+        {
+            _relaunching = false;
+            return;
+        }
+
+        Application.Current.Exit();
+    }
 
     static void Paint(AccentPalette.Shades shades)
     {
         Restore();
-        RetintActive();
         SetBase(shades.Base);
         var seen = new HashSet<ResourceDictionary>();
         Walk(Application.Current.Resources, null, shades, seen);
@@ -102,11 +132,8 @@ static class AppearanceTheme
             Walk(merged, theme, shades, seen);
     }
 
-    static void PaintDictionary(ResourceDictionary dictionary, bool dictIsLight, AccentPalette.Shades shades)
+    static void PaintDictionary(ResourceDictionary dictionary, bool light, AccentPalette.Shades shades)
     {
-        var light = dictIsLight;
-        if (WantsLight() != ActiveIsLight && OwnsActive(dictionary))
-            light = WantsLight();
         if (!light)
         {
             var fill = shades.Light2;
@@ -142,7 +169,7 @@ static class AppearanceTheme
     {
         if (!dictionary.TryGetValue(key, out var value) || value is not SolidColorBrush brush)
             return;
-        if (lightFormula != WantsLight()
+        if (lightFormula != ActiveIsLight
             && Application.Current.Resources.TryGetValue(key, out var active)
             && ReferenceEquals(active, brush))
             return;
@@ -185,166 +212,29 @@ static class AppearanceTheme
         SavedColor.Clear();
     }
 
-    static Dictionary<string, Color>? _lightColors;
-    static Dictionary<string, Color>? _darkColors;
-    static bool _awayFromStartup;
-    static readonly Dictionary<ResourceDictionary, object> DisabledOriginal = [];
-    static readonly Dictionary<ResourceDictionary, object> DisabledColorOriginal = [];
     static readonly Dictionary<ResourceDictionary, SolidColorBrush> DisabledInks = [];
 
     static bool ActiveIsLight => Application.Current?.RequestedTheme == ApplicationTheme.Light;
 
-    static bool WantsLight() => AppAppearance.Theme switch
-    {
-        AppThemeChoice.Light => true,
-        AppThemeChoice.Dark => false,
-        _ => new UISettings().GetColorValue(UIColorType.Background).R > 128,
-    };
-
-    static bool OwnsActive(ResourceDictionary dictionary)
-    {
-        if (!dictionary.TryGetValue("TextFillColorPrimaryBrush", out var local))
-            return false;
-        return Application.Current.Resources.TryGetValue("TextFillColorPrimaryBrush", out var active)
-            && ReferenceEquals(local, active);
-    }
-
-    static void EnsureSnapshots()
-    {
-        if (_lightColors != null || Application.Current == null)
-            return;
-        _lightColors = [];
-        _darkColors = [];
-        CaptureThemes(Application.Current.Resources, []);
-    }
-
-    static void CaptureThemes(ResourceDictionary dictionary, HashSet<ResourceDictionary> seen)
-    {
-        if (!seen.Add(dictionary))
-            return;
-        foreach (var pair in dictionary.ThemeDictionaries)
-        {
-            if (pair.Value is not ResourceDictionary child)
-                continue;
-            var name = ThemeKey(pair.Key);
-            if (name == "Light")
-                ReadBrushes(child, _lightColors!);
-            else if (name is "Default" or "Dark")
-                ReadBrushes(child, _darkColors!);
-            if (name != "HighContrast")
-                CaptureThemes(child, seen);
-        }
-
-        foreach (var merged in dictionary.MergedDictionaries)
-            CaptureThemes(merged, seen);
-    }
-
-    static void ReadBrushes(ResourceDictionary dictionary, Dictionary<string, Color> target)
-    {
-        try
-        {
-            foreach (var entry in dictionary)
-            {
-                if (entry.Key is string key && entry.Value is SolidColorBrush brush && !target.ContainsKey(key))
-                    target[key] = brush.Color;
-            }
-        }
-        catch (Exception)
-        {
-            // 列挙できない辞書は、起動時の色のままにする。
-        }
-    }
-
-    // 画面の文字や地は、起動時のテーマ辞書のブラシを掴んだままになる。選んだ明暗の色をそこへ写す。
-    static void RetintActive()
-    {
-        if (Application.Current == null || _lightColors == null || _darkColors == null)
-            return;
-        var away = WantsLight() != ActiveIsLight;
-        if (!away && !_awayFromStartup)
-            return;
-        var source = WantsLight() ? _lightColors : _darkColors;
-        var resources = Application.Current.Resources;
-        foreach (var (key, color) in source)
-        {
-            if (resources.TryGetValue(key, out var value) && value is SolidColorBrush brush && brush.Color != color)
-            {
-                try
-                {
-                    brush.Color = color;
-                }
-                catch (Exception)
-                {
-                    // 凍結されたブラシは、その項目だけ元の色のままにする。
-                }
-            }
-        }
-
-        _awayFromStartup = away;
-    }
-
-    // 無効なアクセントボタンは、色そのものを前景にしているので白地で消える。辞書ごとに別のブラシを置く。
+    // 無効なアクセントボタンは、色そのものを前景にしているので白地で消える。明るい辞書だけ、辞書ごとに別のブラシを置く。
     static void FixDisabledInk()
     {
         if (Application.Current == null)
             return;
-        VisitThemes(Application.Current.Resources, (dictionary, _) => ApplyDisabledInk(dictionary), []);
+        VisitThemes(Application.Current.Resources, ApplyDisabledInk, []);
     }
 
-    static void ApplyDisabledInk(ResourceDictionary dictionary)
+    static void ApplyDisabledInk(ResourceDictionary dictionary, bool light)
     {
-        const string key = "AccentButtonForegroundDisabled";
-        const string colorKey = "TextOnAccentFillColorDisabled";
-        if (!WantsLight())
-        {
-            if (DisabledOriginal.TryGetValue(dictionary, out var original))
-            {
-                try
-                {
-                    dictionary[key] = original;
-                }
-                catch (Exception)
-                {
-                    // 元の項目を戻せない辞書は、次の明暗の切り替えで再度置く。
-                }
-            }
-
-            if (DisabledColorOriginal.TryGetValue(dictionary, out var savedColor))
-            {
-                try
-                {
-                    dictionary[colorKey] = savedColor;
-                }
-                catch (Exception)
-                {
-                    // 色キーを持たない辞書は、ブラシの戻しだけで足りる。
-                }
-            }
-
-            return;
-        }
-
-        if (!dictionary.ContainsKey(key))
+        if (!light || !dictionary.ContainsKey("AccentButtonForegroundDisabled"))
             return;
         var color = Color.FromArgb(0x9E, 0, 0, 0);
-        if (!DisabledOriginal.ContainsKey(dictionary))
-        {
-            try
-            {
-                DisabledOriginal[dictionary] = dictionary[key];
-            }
-            catch (Exception)
-            {
-                return;
-            }
-        }
-
         if (!DisabledInks.TryGetValue(dictionary, out var ink))
         {
             ink = new SolidColorBrush(color);
             try
             {
-                dictionary[key] = ink;
+                dictionary["AccentButtonForegroundDisabled"] = ink;
             }
             catch (Exception)
             {
@@ -360,12 +250,8 @@ static class AppearanceTheme
 
         try
         {
-            if (dictionary.ContainsKey(colorKey))
-            {
-                if (!DisabledColorOriginal.ContainsKey(dictionary))
-                    DisabledColorOriginal[dictionary] = dictionary[colorKey];
-                dictionary[colorKey] = color;
-            }
+            if (dictionary.ContainsKey("TextOnAccentFillColorDisabled"))
+                dictionary["TextOnAccentFillColorDisabled"] = color;
         }
         catch (Exception)
         {

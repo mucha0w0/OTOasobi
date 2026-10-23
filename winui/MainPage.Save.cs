@@ -722,6 +722,18 @@ public sealed partial class MainPage
         _sessionTimer.Start();
     }
 
+    internal void FlushNow()
+    {
+        try
+        {
+            FlushBank();
+            FlushSession(force: true);
+        }
+        catch (Exception)
+        {
+        }
+    }
+
     void FlushSession(bool force = false)
     {
         _sessionTimer?.Stop();

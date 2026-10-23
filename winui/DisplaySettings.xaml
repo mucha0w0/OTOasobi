@@ -18,7 +18,7 @@
             <StackPanel Spacing="10">
                 <local:InfoNote
                     Title="テーマ"
-                    Text="ライト、ダーク、または Windows の設定に合わせます。" />
+                    Text="ライト、ダーク、または Windows の設定に合わせます。切り替えると、アプリを起動し直して反映します。" />
                 <StackPanel Spacing="8">
                     <RadioButton
                         x:Name="ThemeLight"

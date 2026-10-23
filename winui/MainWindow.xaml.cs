@@ -35,6 +35,12 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    public void FlushContent()
+    {
+        if (RootFrame.Content is MainPage page)
+            page.FlushNow();
+    }
+
     public void BeginUpdateCheck()
     {
         if (RootFrame.Content is MainPage page)

@@ -34,12 +34,6 @@ public sealed partial class SettingsWindow : Window
 
     public static void CloseIfOpen() => _open?.Close();
 
-    internal static void ApplyThemeIfOpen()
-    {
-        if (_open != null)
-            AppearanceTheme.ApplyTo(_open);
-    }
-
     public SettingsWindow()
     {
         InitializeComponent();
