@@ -118,7 +118,7 @@ public sealed class FrqPianoRoll : UserControl
         };
         if (Application.Current?.Resources.TryGetValue("CaptionTextBlockStyle", out var caption) == true && caption is Style captionStyle)
             _message.Style = captionStyle;
-        _corner = new TextBlock { FontSize = 11, IsHitTestVisible = false, Foreground = _keyInk };
+        _corner = new TextBlock { FontSize = 11, IsHitTestVisible = false, Foreground = _tickInk };
         _unvoiced = new TextBlock
         {
             Text = "なし",
@@ -134,7 +134,6 @@ public sealed class FrqPianoRoll : UserControl
         };
         _labels.Children.Add(_corner);
         _labels.Children.Add(_unvoiced);
-        Canvas.SetLeft(_corner, 16);
         Canvas.SetTop(_corner, 2);
         _host.Children.Add(_image);
         _host.Children.Add(_labels);
@@ -926,6 +925,7 @@ public sealed class FrqPianoRoll : UserControl
             $"{_scrollX:0.##}|{_scrollY:0.##}|{_ppf:0.##}|{width:0}|{_host.ActualHeight:0}|{_laneTop:0}|{_rate}|{_file?.Hop}|{_tickMarks.Count}|{_tickInk.Color.R}");
         Canvas.SetTop(_unvoiced, _laneTop);
         _corner.Text = _rate > 0 && _file is { Hop: > 0 } ? "秒" : "点";
+        Canvas.SetLeft(_corner, Math.Max(FrqPitch.KeyWidth, width - 22));
         if (key == _labelKey && _labelsReady)
             return;
         _labelKey = key;
@@ -954,7 +954,7 @@ public sealed class FrqPianoRoll : UserControl
         var tickUsed = 0;
         foreach (var tick in _tickMarks)
         {
-            if (tick.X < FrqPitch.KeyWidth || tick.X > width - 8)
+            if (tick.X < FrqPitch.KeyWidth || tick.X > width - 36)
                 continue;
             var block = Tick(tickUsed++);
             block.Text = tick.Text;
@@ -1055,7 +1055,7 @@ public sealed class FrqPianoRoll : UserControl
             block.Foreground = _keyInk;
         foreach (var block in _ticks)
             block.Foreground = _tickInk;
-        _corner.Foreground = _keyInk;
+        _corner.Foreground = _tickInk;
         _unvoiced.Foreground = _keyInk;
     }
 
