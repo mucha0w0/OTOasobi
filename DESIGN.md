@@ -10,7 +10,7 @@
 
 ## シェルとウィンドウ
 
-- **WinUI 3** + `XamlControlsResources`（`App.xaml`）。色は **Fluent テーマリソース**（`ThemeResource`）に任せる。環境設定のアクセントカラーだけ、アクセント用ブラシの色を差し替える。明暗は各ウィンドウの `RequestedTheme`。
+- **WinUI 3** + `XamlControlsResources`（`App.xaml`）。色は **Fluent テーマリソース**（`ThemeResource`）に任せる。環境設定のアクセントカラーだけ、アクセント用ブラシの色を差し替える。明暗は各ウィンドウの `RequestedTheme`。起動した明暗と違うテーマでは、画面が掴んでいるブラシへその明暗の色を書き戻す。
 - **Mica**（`MicaBackdrop`）と **透過背景**（`Grid` / `Page` / `Frame` は `Transparent`）で、OS のウィンドウクロームと一体化する。
 - **カスタム TitleBar**（`ExtendsContentIntoTitleBar`）。アイコンは `Assets/AppIcon.ico`。
 - 編集作業を想定したサイズ感:
