@@ -114,8 +114,25 @@ static class RecNames
     static bool IsSmallVowel(char ch) => ch is 'ぁ' or 'ぃ' or 'ぅ' or 'ぇ' or 'ぉ' or 'ァ' or 'ィ' or 'ゥ' or 'ェ' or 'ォ';
 }
 
+public sealed class RecListChoice
+{
+    public RecListChoice(string label, string? path, bool browse = false)
+    {
+        Label = label;
+        Path = path;
+        Browse = browse;
+    }
+
+    public string Label { get; }
+
+    public string? Path { get; }
+
+    public bool Browse { get; }
+}
+
 sealed class RecFolderFile
 {
+    // null は未設定。空文字は「選択しない」。
     public string? List { get; set; }
 
     public string? Guide { get; set; }
@@ -127,9 +144,100 @@ static class RecFolderStore
 {
     public static string FileName { get; } = "OTOasibi_録音.json";
 
+    public static bool ListIsCleared(string? list) =>
+        list != null && list.Trim().Length == 0;
+
     public static RecFolderFile Load(string folder) =>
         JsonFiles.Read<RecFolderFile>(Path.Combine(folder, FileName)) ?? new RecFolderFile();
 
     public static void Save(string folder, RecFolderFile file) =>
         JsonFiles.Write(Path.Combine(folder, FileName), file);
+}
+
+// 一度選んだ録音リスト。音源フォルダではなく、この PC に残す。
+static class RecListHistory
+{
+    public const int MaxCount = 20;
+
+    public static string FilePath { get; } = Path.Combine(AppPaths.DataRoot, "recording-lists.json");
+
+    public static IReadOnlyList<string> Load() => Merge(null, JsonFiles.Read<List<string>>(FilePath));
+
+    public static void Remember(string path)
+    {
+        var next = Merge(path, Load());
+        if (next.Count == 0)
+            return;
+        try
+        {
+            JsonFiles.Write(FilePath, next);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+        }
+    }
+
+    public static IReadOnlyList<string> Merge(string? added, IEnumerable<string>? existing)
+    {
+        var next = new List<string>();
+        if (TryNormalize(added, out var path))
+            next.Add(path);
+        if (existing == null)
+            return next;
+        foreach (var raw in existing)
+        {
+            if (!TryNormalize(raw, out var full))
+                continue;
+            var known = false;
+            foreach (var item in next)
+            {
+                if (!string.Equals(item, full, StringComparison.OrdinalIgnoreCase))
+                    continue;
+                known = true;
+                break;
+            }
+
+            if (known)
+                continue;
+            next.Add(full);
+            if (next.Count == MaxCount)
+                break;
+        }
+
+        return next;
+    }
+
+    public static string Caption(string path, IReadOnlyList<string> paths)
+    {
+        var name = Path.GetFileName(path);
+        if (name.Length == 0)
+            return path;
+        var same = 0;
+        foreach (var other in paths)
+        {
+            if (string.Equals(Path.GetFileName(other), name, StringComparison.OrdinalIgnoreCase))
+                same++;
+        }
+
+        if (same <= 1)
+            return name;
+        var parent = Path.GetFileName(Path.GetDirectoryName(path) ?? "");
+        return parent.Length == 0 ? path : $"{name} ({parent})";
+    }
+
+    static bool TryNormalize(string? raw, out string path)
+    {
+        path = "";
+        if (string.IsNullOrWhiteSpace(raw))
+            return false;
+        try
+        {
+            path = Path.GetFullPath(raw.Trim());
+            return path.Length > 0 && path.Length <= 1024;
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return false;
+        }
+    }
 }

@@ -18,6 +18,7 @@ public sealed partial class MainPage
     Microsoft.UI.Dispatching.DispatcherQueueTimer? _recMeterTimer;
     Brush? _recAccentBrush;
     string? _recListPath;
+    bool _recListNone;
     string? _recGuide;
     string? _recTakeFolder;
     string? _recTakeName;
@@ -139,12 +140,16 @@ public sealed partial class MainPage
         _recGuide = null;
         _recPrefix = false;
         _recListPath = null;
+        _recListNone = false;
         if (_folder != null)
         {
             var stored = RecFolderStore.Load(_folder);
             _recPrefix = stored.PrefixPitch;
             _recGuide = string.IsNullOrWhiteSpace(stored.Guide) ? null : stored.Guide;
-            if (!string.IsNullOrWhiteSpace(stored.List))
+            _recListNone = RecFolderStore.ListIsCleared(stored.List);
+            if (_recListNone)
+                _recListPath = null;
+            else if (!string.IsNullOrWhiteSpace(stored.List))
             {
                 _recListPath = Path.IsPathRooted(stored.List)
                     ? stored.List
@@ -158,7 +163,10 @@ public sealed partial class MainPage
             }
 
             if (_recListPath != null && File.Exists(_recListPath))
-                ReadRecList(_recListPath);
+            {
+                if (!TryReadRecList(_recListPath))
+                    _recListPath = null;
+            }
             else
                 _recListPath = null;
         }
@@ -174,19 +182,20 @@ public sealed partial class MainPage
         UpdateRecCaptions();
     }
 
-    void ReadRecList(string path)
+    bool TryReadRecList(string path)
     {
         try
         {
             _recLines = RecList.Parse(File.ReadAllBytes(path)).ToList();
             _recIndex = _recLines.Count == 0 ? -1 : 0;
             _recListPath = path;
+            _recListNone = false;
+            return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            _recLines = [];
-            _recIndex = -1;
             ShowNotice("録音リストを読めませんでした", ex.Message);
+            return false;
         }
     }
 
@@ -305,10 +314,9 @@ public sealed partial class MainPage
 
     void UpdateRecCaptions()
     {
-        if (RecListPath == null)
+        FillRecListMenu();
+        if (RecGuidePath == null)
             return;
-        RecListPath.Text = _recListPath == null ? "リストはまだありません" : Path.GetFileName(_recListPath);
-        ToolTipService.SetToolTip(RecListPath, _recListPath);
         if (string.IsNullOrEmpty(_recGuide))
             RecGuidePath.Text = "ガイド音源は未設定です";
         else if (!Directory.Exists(_recGuide))
@@ -335,7 +343,7 @@ public sealed partial class MainPage
         RecNextButton.IsEnabled = browsing && _recIndex >= 0 && _recIndex < _recLines.Count - 1;
         RecMissingButton.IsEnabled = browsing && _recLines.Count > 0;
         RecDeviceBox.IsEnabled = browsing;
-        RecOpenListButton.IsEnabled = idle;
+        RecListBox.IsEnabled = idle;
         RecGuideFolderButton.IsEnabled = idle;
         RecClearGuideButton.IsEnabled = idle && !string.IsNullOrEmpty(_recGuide);
     }
@@ -444,7 +452,26 @@ public sealed partial class MainPage
         UpdateRecButtons();
     }
 
-    void RecOpenList_Click(object sender, RoutedEventArgs e) => _ = RecOpenListAsync();
+    void RecListBox_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (_recApplying || RecListBox.SelectedItem is not RecListChoice choice)
+            return;
+        if (choice.Browse)
+        {
+            _ = RecOpenListAsync();
+            return;
+        }
+
+        if (choice.Path == null)
+        {
+            ClearRecList();
+            return;
+        }
+
+        if (SameRecList(choice.Path))
+            return;
+        UseRecList(choice.Path);
+    }
 
     void RecGuideFolder_Click(object sender, RoutedEventArgs e) => _ = RecPickGuideAsync();
 
@@ -468,20 +495,109 @@ public sealed partial class MainPage
 
     void RecRecord_Click(object sender, RoutedEventArgs e) => _ = RecRecordAsync();
 
+    void ClearRecList()
+    {
+        _recLines = [];
+        _recIndex = -1;
+        _recListPath = null;
+        _recListNone = true;
+        SaveRecFolder();
+        RefreshRecDisk();
+        UpdateRecCaptions();
+    }
+
+    void UseRecList(string path)
+    {
+        if (!TryReadRecList(path))
+        {
+            FillRecListMenu();
+            return;
+        }
+
+        RecListHistory.Remember(path);
+        SaveRecFolder();
+        RefreshRecDisk();
+        UpdateRecCaptions();
+    }
+
+    bool SameRecList(string path)
+    {
+        if (string.IsNullOrEmpty(_recListPath))
+            return false;
+        try
+        {
+            return string.Equals(Path.GetFullPath(_recListPath), Path.GetFullPath(path), StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return false;
+        }
+    }
+
+    void FillRecListMenu()
+    {
+        if (RecListBox == null)
+            return;
+        var paths = RecListHistory.Load().ToList();
+        if (!string.IsNullOrEmpty(_recListPath))
+        {
+            try
+            {
+                var full = Path.GetFullPath(_recListPath);
+                var known = false;
+                foreach (var item in paths)
+                {
+                    if (!string.Equals(item, full, StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    known = true;
+                    break;
+                }
+
+                if (!known)
+                    paths.Insert(0, full);
+            }
+            catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+            {
+            }
+        }
+
+        _recApplying = true;
+        RecListBox.Items.Clear();
+        RecListBox.Items.Add(new RecListChoice("選択しない", null));
+        RecListBox.Items.Add(new RecListChoice("ファイルから選ぶ", null, browse: true));
+        RecListChoice selected = (RecListChoice)RecListBox.Items[0];
+        foreach (var path in paths)
+        {
+            var choice = new RecListChoice(RecListHistory.Caption(path, paths), path);
+            RecListBox.Items.Add(choice);
+            if (SameRecList(path))
+                selected = choice;
+        }
+
+        RecListBox.SelectedItem = selected;
+        ToolTipService.SetToolTip(RecListBox, _recListPath);
+        _recApplying = false;
+    }
+
     async Task RecOpenListAsync()
     {
         if (_folder == null || App.MainWindow == null)
+        {
+            FillRecListMenu();
             return;
+        }
+
         var picker = new FileOpenPicker();
         InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(App.MainWindow));
         picker.FileTypeFilter.Add(".txt");
         var file = await picker.PickSingleFileAsync();
         if (file == null || _folder == null)
+        {
+            FillRecListMenu();
             return;
-        ReadRecList(file.Path);
-        SaveRecFolder();
-        RefreshRecDisk();
-        UpdateRecCaptions();
+        }
+
+        UseRecList(file.Path);
     }
 
     async Task RecPickGuideAsync()
@@ -801,7 +917,9 @@ public sealed partial class MainPage
         if (_folder == null)
             return;
         string? list = null;
-        if (!string.IsNullOrEmpty(_recListPath))
+        if (_recListNone)
+            list = "";
+        else if (!string.IsNullOrEmpty(_recListPath))
         {
             var root = Path.GetFullPath(_folder).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
             var full = Path.GetFullPath(_recListPath);

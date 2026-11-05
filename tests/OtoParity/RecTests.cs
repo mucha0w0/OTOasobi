@@ -76,6 +76,50 @@ public class RecTests
     }
 
     [Fact]
+    public void ClearedListIsAnEmptyString()
+    {
+        Assert.True(RecFolderStore.ListIsCleared(""));
+        Assert.True(RecFolderStore.ListIsCleared("  "));
+        Assert.False(RecFolderStore.ListIsCleared(null));
+        Assert.False(RecFolderStore.ListIsCleared("録音リスト.txt"));
+    }
+
+    [Fact]
+    public void RecentListsKeepTheNewestAndDropDuplicates()
+    {
+        var older = RecListHistory.Merge(@"C:\voice\あ.txt", null);
+        var newer = RecListHistory.Merge(@"D:\lists\い.txt", older);
+        Assert.Equal(2, newer.Count);
+        Assert.EndsWith("い.txt", newer[0]);
+        Assert.EndsWith("あ.txt", newer[1]);
+        var again = RecListHistory.Merge(@"C:\voice\あ.txt", newer);
+        Assert.Equal(2, again.Count);
+        Assert.EndsWith("あ.txt", again[0]);
+        Assert.EndsWith("い.txt", again[1]);
+        Assert.Empty(RecListHistory.Merge("  ", ["", "   "]));
+    }
+
+    [Fact]
+    public void RecentListsStopAtTwenty()
+    {
+        IReadOnlyList<string> current = [];
+        foreach (var index in Enumerable.Range(0, 25))
+            current = RecListHistory.Merge($@"C:\lists\list{index}.txt", current);
+        Assert.Equal(RecListHistory.MaxCount, current.Count);
+        Assert.EndsWith("list24.txt", current[0]);
+        Assert.EndsWith("list5.txt", current[19]);
+    }
+
+    [Fact]
+    public void SameFileNameShowsTheFolder()
+    {
+        var paths = new[] { @"C:\a\リスト.txt", @"C:\b\リスト.txt", @"C:\a\別.txt" };
+        Assert.Equal("リスト.txt (a)", RecListHistory.Caption(paths[0], paths));
+        Assert.Equal("リスト.txt (b)", RecListHistory.Caption(paths[1], paths));
+        Assert.Equal("別.txt", RecListHistory.Caption(paths[2], paths));
+    }
+
+    [Fact]
     public void RecordingLayoutIsSeparateFromTheDefault()
     {
         var recording = EditorLayout.CreateRecording();

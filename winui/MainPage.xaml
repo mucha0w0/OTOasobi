@@ -1550,7 +1550,7 @@
                         <StackPanel Padding="12,12,12,8" Spacing="8">
                             <local:InfoNote
                                 Title="録音リスト"
-                                Text="1 行が 1 テイクです。空行と # で始まる行は読み飛ばし、タブの右側はコメントです。文字コードは CP932 と UTF-8 に対応します。フォルダに録音リスト.txt があれば、それを開きます。" />
+                                Text="1 行が 1 テイクです。空行と # で始まる行は読み飛ばし、タブの右側はコメントです。文字コードは CP932 と UTF-8 に対応します。フォルダに録音リスト.txt があれば、それを開きます。一度選んだリストは、次からこのメニューに出ます。" />
                             <TextBlock
                                 x:Name="RecProgress"
                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
@@ -1601,33 +1601,22 @@
                                 OffContent="ファイル名に音程を付けない"
                                 OnContent="ファイル名に音程を付ける"
                                 Toggled="RecPrefix_Toggled" />
-                            <Grid ColumnSpacing="8">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <Button
-                                    x:Name="RecOpenListButton"
-                                    HorizontalAlignment="Stretch"
-                                    AutomationProperties.Name="録音リストを開く"
-                                    Click="RecOpenList_Click"
-                                    Content="リストを開く"
-                                    Style="{StaticResource ToolbarButtonStyle}" />
-                                <Button
-                                    x:Name="RecGuideFolderButton"
-                                    Grid.Column="1"
-                                    HorizontalAlignment="Stretch"
-                                    AutomationProperties.Name="ガイド音源のフォルダを選ぶ"
-                                    Click="RecGuideFolder_Click"
-                                    Content="ガイド音源"
-                                    Style="{StaticResource ToolbarButtonStyle}" />
-                            </Grid>
-                            <TextBlock
-                                x:Name="RecListPath"
-                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                Style="{StaticResource CaptionTextBlockStyle}"
-                                Text="リストはまだありません"
-                                TextTrimming="CharacterEllipsis" />
+                            <ComboBox
+                                x:Name="RecListBox"
+                                MinWidth="0"
+                                HorizontalAlignment="Stretch"
+                                AutomationProperties.Name="録音リスト"
+                                DisplayMemberPath="Label"
+                                MaxDropDownHeight="320"
+                                PlaceholderText="選択しない"
+                                SelectionChanged="RecListBox_Changed" />
+                            <Button
+                                x:Name="RecGuideFolderButton"
+                                HorizontalAlignment="Stretch"
+                                AutomationProperties.Name="ガイド音源のフォルダを選ぶ"
+                                Click="RecGuideFolder_Click"
+                                Content="ガイド音源"
+                                Style="{StaticResource ToolbarButtonStyle}" />
                             <Grid ColumnSpacing="8">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
@@ -1678,7 +1667,7 @@
                             HorizontalAlignment="Center"
                             VerticalAlignment="Center"
                             Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                            Text="録音リストを開くと、ここに行が出ます。"
+                            Text="リストを選ぶと、ここに行が出ます。"
                             TextWrapping="Wrap" />
                     </Grid>
                     <Grid x:Name="RecPane">
