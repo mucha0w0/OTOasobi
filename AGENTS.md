@@ -83,6 +83,7 @@ id は `bank`。ロジックは `VoicebankText` と `VoicebankImage`、画面は
 アプリ全体の設定は、編集画面のパネルにしない。別ウィンドウ `SettingsWindow`（`winui/SettingsWindow.xaml`）です。
 
 - タイトルバーの「編集」→「環境設定」。`MainPage.OpenSettings_Click` が `SettingsWindow.Show` を呼ぶ。開いているときは前面へ出すだけで、ウィンドウは増やさない。
+- メインウィンドウの所有者にする（`GWLP_HWNDPARENT`。`SetParent` ではない）。メニューを閉じたときのフォーカス復帰や、メイン側の再描画で前面を取られても背面に回らない。タスクバーのボタンは `WS_EX_APPWINDOW` で残す。表示の直後と、その後の低優先度でもう一度前面にする。
 - メインウィンドウを閉じると、`App` が `CloseIfOpen` する。
 - 左は `NavigationView` の見出し。右は、選んだ見出しと同じ文言と、その中身。中身の置き場は `SectionHost`。長い中身はウィンドウ側の `ScrollViewer` がスクロールする。
 - 足すときは `SettingsWindow.Sections` で `SettingsSection` を返す。第1引数が左の見出し、第2引数が右の画面。並びの先頭が、開いたときに選ばれる。
