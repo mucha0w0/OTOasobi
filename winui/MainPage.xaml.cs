@@ -79,6 +79,7 @@ public sealed partial class MainPage : Page
         Editor.OtoTuned += OnOtoTuned;
         Editor.AnalyzeRequested += (_, _) => _ = StartAnalysisAsync();
         Editor.ViewportChanged += (_, _) => ScheduleViewport();
+        Editor.FileStep += (_, steps) => StepFile(steps);
         BuildOverlapSliders();
         BuildCvvcSliders();
         OffsetSlider.ValueChanged += (_, _) => OnConfigChanged();
@@ -549,6 +550,18 @@ public sealed partial class MainPage : Page
             return;
         if (Editor.ZoomFromPointer(e))
             e.Handled = true;
+    }
+
+    void StepFile(int steps)
+    {
+        if (_busy || steps == 0 || FileList.Items.Count == 0)
+            return;
+        var next = Math.Clamp(FileList.SelectedIndex + steps, 0, FileList.Items.Count - 1);
+        if (next == FileList.SelectedIndex)
+            return;
+        FileList.SelectedIndex = next;
+        if (FileList.SelectedItem != null)
+            FileList.ScrollIntoView(FileList.SelectedItem);
     }
 
     public static void ShutdownAnalysis()

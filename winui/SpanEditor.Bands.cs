@@ -44,7 +44,7 @@ public sealed partial class SpanEditor
             delta = point.Properties.MouseWheelDelta;
             if (delta == 0)
                 delta = e.GetCurrentPoint(this).Properties.MouseWheelDelta;
-            return ZoomAt(point.Position.X, delta, e, ShiftHeld(e));
+            return ApplyWheel(point.Position.X, delta, e);
         }
 
         return false;
@@ -117,7 +117,7 @@ public sealed partial class SpanEditor
         if (!UseBand(sender))
             return;
         var point = e.GetCurrentPoint(_plot);
-        if (ZoomAt(point.Position.X, point.Properties.MouseWheelDelta, e, ShiftHeld(e)))
+        if (ApplyWheel(point.Position.X, point.Properties.MouseWheelDelta, e))
             e.Handled = true;
     }
 

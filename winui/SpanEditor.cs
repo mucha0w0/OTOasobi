@@ -132,6 +132,7 @@ public sealed partial class SpanEditor : UserControl
     List<(double Start, double End)> _origin = [];
     bool _changed;
     object? _zoomToken;
+    int _wheelAccum;
     Pointer? _pointer;
     bool _labelsLocked;
     readonly Border _labelGate;
@@ -266,10 +267,32 @@ public sealed partial class SpanEditor : UserControl
         if (_file == null || delta == 0 || _drag != DragKind.None || _plot.Width < 2)
             return false;
         _zoomToken = token;
+        _wheelAccum = 0;
         if (horizontal)
             ScrollByWheel(delta);
         else
             ZoomBy(delta > 0 ? 0.8 : 1.25, x);
+        return true;
+    }
+
+    // 修飾なしは前後のファイル。Shift は時間の横移動。Ctrl はポインタ位置を基準に拡大する。
+    bool ApplyWheel(double x, int delta, PointerRoutedEventArgs e)
+    {
+        if (ReferenceEquals(e, _zoomToken))
+            return true;
+        if (_file == null || delta == 0 || _drag != DragKind.None)
+            return false;
+        if (ShiftHeld(e))
+            return ZoomAt(x, delta, e, horizontal: true);
+        if (CtrlHeld(e))
+            return ZoomAt(x, delta, e, horizontal: false);
+
+        _zoomToken = e;
+        _wheelAccum += delta;
+        var notches = _wheelAccum / 120;
+        _wheelAccum -= notches * 120;
+        if (notches != 0)
+            FileStep?.Invoke(this, -notches);
         return true;
     }
 
@@ -285,6 +308,15 @@ public sealed partial class SpanEditor : UserControl
             || IsKeyDown(Windows.System.VirtualKey.RightShift);
     }
 
+    static bool CtrlHeld(PointerRoutedEventArgs e)
+    {
+        if (e.KeyModifiers.HasFlag(Windows.System.VirtualKeyModifiers.Control))
+            return true;
+        return IsKeyDown(Windows.System.VirtualKey.Control)
+            || IsKeyDown(Windows.System.VirtualKey.LeftControl)
+            || IsKeyDown(Windows.System.VirtualKey.RightControl);
+    }
+
     static bool IsKeyDown(Windows.System.VirtualKey key)
     {
         var state = InputKeyboardSource.GetKeyStateForCurrentThread(key);
@@ -296,6 +328,9 @@ public sealed partial class SpanEditor : UserControl
     internal event EventHandler<OtoAdjustedEntry>? OtoTuned;
 
     public event EventHandler? ViewportChanged;
+
+    // 正はファイルリストの次、負は前。ホイールを上へ回すと前のファイルへ移る。
+    public event EventHandler<int>? FileStep;
 
     public bool HasContent => _file != null;
 
