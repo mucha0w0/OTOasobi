@@ -112,7 +112,6 @@ public sealed partial class MainPage : Page
         FrqRoll.Edited += FrqRoll_Edited;
         FrqRoll.SelectionChanged += (_, _) => UpdateFrqSelection();
         WireOtoTable();
-        AddHandler(PointerWheelChangedEvent, new PointerEventHandler(OnPageWheel), true);
         BindRecentFolders();
         Loaded += (_, _) => AttachMenuToTitleBar();
         WireAppearance();
@@ -542,14 +541,6 @@ public sealed partial class MainPage : Page
             return Math.Max(0, intent - steps);
         var before = Math.Round(intent - 0.001 * steps, 3, MidpointRounding.AwayFromZero);
         return Math.Max(before, -ConsonantOverlap.MaxBeforeSeconds);
-    }
-
-    void OnPageWheel(object sender, PointerRoutedEventArgs e)
-    {
-        if (EditorView.Visibility != Visibility.Visible)
-            return;
-        if (Editor.ZoomFromPointer(e))
-            e.Handled = true;
     }
 
     void StepFile(int steps)

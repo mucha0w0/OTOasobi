@@ -26,30 +26,6 @@ public sealed partial class SpanEditor
 
     public UIElement OtoSurface => _otoView;
 
-    public bool ZoomFromPointer(PointerRoutedEventArgs e)
-    {
-        if (_file == null)
-            return false;
-        var delta = 0;
-        foreach (var band in AllBands)
-        {
-            if (band.ActualWidth < 2 || band.ActualHeight < 2)
-                continue;
-            var point = e.GetCurrentPoint(band);
-            if (point.Position.X < 0 || point.Position.Y < 0
-                || point.Position.X > band.ActualWidth
-                || point.Position.Y > band.ActualHeight)
-                continue;
-            UseBand(band);
-            delta = point.Properties.MouseWheelDelta;
-            if (delta == 0)
-                delta = e.GetCurrentPoint(this).Properties.MouseWheelDelta;
-            return ApplyWheel(point.Position.X, delta, e);
-        }
-
-        return false;
-    }
-
     BandView[] AllBands => [_waveView, _specView, _loudView, _otoView];
 
     void BindBands()
