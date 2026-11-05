@@ -35,6 +35,8 @@
     <Compile Include="..\..\winui\FrqFile.cs" Link="Winui\FrqFile.cs" />
     <Compile Include="..\..\winui\VoicebankText.cs" Link="Winui\VoicebankText.cs" />
     <Compile Include="..\..\winui\VoicebankImage.cs" Link="Winui\VoicebankImage.cs" />
+    <Compile Include="..\..\winui\RecList.cs" Link="Winui\RecList.cs" />
+    <Compile Include="..\..\winui\RecTone.cs" Link="Winui\RecTone.cs" />
   </ItemGroup>
 
 </Project>

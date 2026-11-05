@@ -288,6 +288,8 @@
                     <ToggleMenuFlyoutItem x:Name="ShowFrqItem" Tag="frq" Text=".frq生成" Click="PaneMenu_Click" />
                     <ToggleMenuFlyoutItem x:Name="ShowFrqEditItem" Tag="frqEdit" Text="frqエディター" Click="PaneMenu_Click" />
                     <ToggleMenuFlyoutItem x:Name="ShowBankItem" Tag="bank" Text="音源の各種設定" Click="PaneMenu_Click" />
+                    <ToggleMenuFlyoutItem x:Name="ShowRecListItem" Tag="recList" Text="録音リスト" Click="PaneMenu_Click" />
+                    <ToggleMenuFlyoutItem x:Name="ShowRecItem" Tag="rec" Text="録音" Click="PaneMenu_Click" />
                     <MenuFlyoutSeparator />
                     <MenuFlyoutSubItem x:Name="LayoutTemplateMenu" Text="配置テンプレート" />
                     <MenuFlyoutItem Text="いまの配置をテンプレートとして保存" Click="SaveLayoutTemplate_Click" />
@@ -1537,6 +1539,401 @@
                                     Style="{StaticResource FrqOctaveButtonStyle}"
                                     ToolTipService.ToolTip="選択した点を音程なしにします。" />
                                 </StackPanel>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                    <Grid x:Name="RecListPane">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <StackPanel Padding="12,12,12,8" Spacing="8">
+                            <local:InfoNote
+                                Title="録音リスト"
+                                Text="1 行が 1 テイクです。空行と # で始まる行は読み飛ばし、タブの右側はコメントです。文字コードは CP932 と UTF-8 に対応します。フォルダに録音リスト.txt があれば、それを開きます。" />
+                            <TextBlock
+                                x:Name="RecProgress"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Text="0 / 0" />
+                            <Border
+                                Padding="3"
+                                Background="{ThemeResource ControlFillColorSecondaryBrush}"
+                                CornerRadius="8">
+                                <Grid ColumnSpacing="2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <RadioButton
+                                        x:Name="RecFilterAll"
+                                        AutomationProperties.Name="すべての行"
+                                        Checked="RecFilter_Checked"
+                                        Content="すべて"
+                                        GroupName="RecFilter"
+                                        IsChecked="True"
+                                        Style="{StaticResource SegmentButtonStyle}"
+                                        Tag="all" />
+                                    <RadioButton
+                                        x:Name="RecFilterTodo"
+                                        Grid.Column="1"
+                                        AutomationProperties.Name="未録音の行"
+                                        Checked="RecFilter_Checked"
+                                        Content="未録音"
+                                        GroupName="RecFilter"
+                                        Style="{StaticResource SegmentButtonStyle}"
+                                        Tag="todo" />
+                                    <RadioButton
+                                        x:Name="RecFilterDone"
+                                        Grid.Column="2"
+                                        AutomationProperties.Name="録音済みの行"
+                                        Checked="RecFilter_Checked"
+                                        Content="録音済み"
+                                        GroupName="RecFilter"
+                                        Style="{StaticResource SegmentButtonStyle}"
+                                        Tag="done" />
+                                </Grid>
+                            </Border>
+                            <ToggleSwitch
+                                x:Name="RecPrefixSwitch"
+                                AutomationProperties.Name="ファイル名に音程を付ける"
+                                OffContent="ファイル名に音程を付けない"
+                                OnContent="ファイル名に音程を付ける"
+                                Toggled="RecPrefix_Toggled" />
+                            <Grid ColumnSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Button
+                                    x:Name="RecOpenListButton"
+                                    HorizontalAlignment="Stretch"
+                                    AutomationProperties.Name="録音リストを開く"
+                                    Click="RecOpenList_Click"
+                                    Content="リストを開く"
+                                    Style="{StaticResource ToolbarButtonStyle}" />
+                                <Button
+                                    x:Name="RecGuideFolderButton"
+                                    Grid.Column="1"
+                                    HorizontalAlignment="Stretch"
+                                    AutomationProperties.Name="ガイド音源のフォルダを選ぶ"
+                                    Click="RecGuideFolder_Click"
+                                    Content="ガイド音源"
+                                    Style="{StaticResource ToolbarButtonStyle}" />
+                            </Grid>
+                            <TextBlock
+                                x:Name="RecListPath"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Text="リストはまだありません"
+                                TextTrimming="CharacterEllipsis" />
+                            <Grid ColumnSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock
+                                    x:Name="RecGuidePath"
+                                    VerticalAlignment="Center"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Style="{StaticResource CaptionTextBlockStyle}"
+                                    Text="ガイド音源は未設定です"
+                                    TextTrimming="CharacterEllipsis" />
+                                <Button
+                                    x:Name="RecClearGuideButton"
+                                    Grid.Column="1"
+                                    AutomationProperties.Name="ガイド音源を外す"
+                                    Click="RecClearGuide_Click"
+                                    Content="外す"
+                                    IsEnabled="False"
+                                    Style="{StaticResource ToolbarButtonStyle}" />
+                            </Grid>
+                        </StackPanel>
+                        <ListView
+                            x:Name="RecListView"
+                            Grid.Row="1"
+                            AutomationProperties.Name="録音リスト"
+                            SelectionChanged="RecList_SelectionChanged"
+                            SelectionMode="Single">
+                            <ListView.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Padding="0,4" Spacing="2">
+                                        <TextBlock
+                                            Text="{Binding Title}"
+                                            TextTrimming="CharacterEllipsis" />
+                                        <TextBlock
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            Style="{StaticResource CaptionTextBlockStyle}"
+                                            Text="{Binding Detail}"
+                                            TextTrimming="CharacterEllipsis" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                        </ListView>
+                        <TextBlock
+                            x:Name="RecListEmpty"
+                            Grid.Row="1"
+                            Margin="12"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Text="録音リストを開くと、ここに行が出ます。"
+                            TextWrapping="Wrap" />
+                    </Grid>
+                    <Grid x:Name="RecPane">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <StackPanel Padding="12,12,12,8" Spacing="8">
+                            <TextBlock
+                                x:Name="RecSingText"
+                                FontSize="36"
+                                Text="録音リストを開いてください"
+                                TextWrapping="Wrap" />
+                            <TextBlock
+                                x:Name="RecCommentText"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                TextWrapping="Wrap"
+                                Visibility="Collapsed" />
+                            <TextBlock
+                                x:Name="RecNextText"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                TextWrapping="Wrap" />
+                            <Grid ColumnSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock
+                                    x:Name="RecFileText"
+                                    VerticalAlignment="Center"
+                                    Style="{StaticResource CaptionTextBlockStyle}"
+                                    TextTrimming="CharacterEllipsis" />
+                                <TextBlock
+                                    x:Name="RecStatusText"
+                                    Grid.Column="1"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Style="{StaticResource CaptionTextBlockStyle}" />
+                            </Grid>
+                            <TextBlock
+                                x:Name="RecPrefixNote"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Text="ファイル名の頭に音程が付きます。この名前は、いまの解析では読めません。"
+                                TextWrapping="Wrap"
+                                Visibility="Collapsed" />
+                            <Grid ColumnSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <Grid
+                                    x:Name="RecMeterTrack"
+                                    Height="10"
+                                    VerticalAlignment="Center"
+                                    Background="{ThemeResource ControlFillColorDefaultBrush}"
+                                    CornerRadius="5"
+                                    SizeChanged="RecMeter_SizeChanged">
+                                    <Border
+                                        x:Name="RecMeterZone"
+                                        HorizontalAlignment="Left"
+                                        Background="{ThemeResource AccentFillColorTertiaryBrush}"
+                                        CornerRadius="5"
+                                        Opacity="0.45" />
+                                    <Border
+                                        x:Name="RecMeterFill"
+                                        Width="0"
+                                        HorizontalAlignment="Left"
+                                        Background="{ThemeResource AccentFillColorDefaultBrush}"
+                                        CornerRadius="5" />
+                                </Grid>
+                                <TextBlock
+                                    x:Name="RecLevelText"
+                                    Grid.Column="1"
+                                    MinWidth="52"
+                                    VerticalAlignment="Center"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Style="{StaticResource CaptionTextBlockStyle}"
+                                    TextAlignment="Right"
+                                    ToolTipService.ToolTip="右端が 0 dB です。薄い帯は -12 dB から -6 dB です。" />
+                            </Grid>
+                        </StackPanel>
+                        <ScrollViewer
+                            Grid.Row="1"
+                            HorizontalScrollBarVisibility="Disabled"
+                            VerticalScrollBarVisibility="Auto">
+                            <StackPanel Padding="12,0,12,12" Spacing="10">
+                                <Border Style="{StaticResource PanelCardStyle}">
+                                    <StackPanel Spacing="8">
+                                        <local:InfoNote
+                                            Title="ガイド"
+                                            Text="ガイド音は、音程を合わせる基準音です。ガイド音源は、同じファイル名の WAV がある別フォルダで、発音と長さを聴くためのものです。録音中に鳴らすと、スピーカーの音をマイクが拾うことがあります。" />
+                                        <TextBlock Text="音程" />
+                                        <ComboBox
+                                            x:Name="RecNoteBox"
+                                            HorizontalAlignment="Stretch"
+                                            AutomationProperties.Name="ガイドの音程"
+                                            SelectionChanged="RecNote_Changed" />
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock VerticalAlignment="Center" Text="ガイドの大きさ" />
+                                            <TextBlock
+                                                x:Name="RecVolumeValue"
+                                                Grid.Column="1"
+                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                Style="{StaticResource CaptionTextBlockStyle}"
+                                                Text="70%" />
+                                        </Grid>
+                                        <Slider
+                                            x:Name="RecVolumeSlider"
+                                            AutomationProperties.Name="ガイドの大きさ"
+                                            Maximum="100"
+                                            Minimum="0"
+                                            StepFrequency="1"
+                                            Value="70"
+                                            ValueChanged="RecVolume_Changed" />
+                                        <ToggleSwitch
+                                            x:Name="RecCountInSwitch"
+                                            AutomationProperties.Name="カウント"
+                                            OffContent="カウントなし"
+                                            OnContent="1 小節カウントする"
+                                            Toggled="RecCountIn_Toggled" />
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="120" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock VerticalAlignment="Center" Text="テンポ" />
+                                            <NumberBox
+                                                x:Name="RecBpmBox"
+                                                Grid.Column="1"
+                                                AutomationProperties.Name="カウントのテンポ"
+                                                LargeChange="10"
+                                                Maximum="240"
+                                                Minimum="40"
+                                                SmallChange="1"
+                                                SpinButtonPlacementMode="Inline"
+                                                Value="120"
+                                                ValueChanged="RecBpm_Changed" />
+                                        </Grid>
+                                        <ToggleSwitch
+                                            x:Name="RecGuideWhileSwitch"
+                                            AutomationProperties.Name="録音中もガイドを鳴らす"
+                                            OffContent="録音前だけ鳴らす"
+                                            OnContent="録音中も鳴らす"
+                                            Toggled="RecGuideWhile_Toggled" />
+                                    </StackPanel>
+                                </Border>
+                                <Border Style="{StaticResource PanelCardStyle}">
+                                    <StackPanel Spacing="8">
+                                        <local:InfoNote
+                                            Title="マイク"
+                                            Text="保存は 44.1 kHz、16 bit、モノラルです。先頭の無音は切りません。入力デバイスは、この PC に覚えます。" />
+                                        <ComboBox
+                                            x:Name="RecDeviceBox"
+                                            HorizontalAlignment="Stretch"
+                                            AutomationProperties.Name="入力デバイス"
+                                            DisplayMemberPath="Label"
+                                            SelectionChanged="RecDevice_Changed" />
+                                        <TextBlock
+                                            x:Name="RecDeviceError"
+                                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                            TextWrapping="Wrap"
+                                            Visibility="Collapsed" />
+                                        <ToggleSwitch
+                                            x:Name="RecAutoSwitch"
+                                            AutomationProperties.Name="停止したら次の未録音へ進む"
+                                            OffContent="停止しても行に残る"
+                                            OnContent="停止したら次の未録音へ進む"
+                                            Toggled="RecAuto_Toggled" />
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </ScrollViewer>
+                        <Border
+                            Grid.Row="2"
+                            Padding="12,10,12,12"
+                            BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                            BorderThickness="0,1,0,0">
+                            <StackPanel Spacing="8">
+                                <Grid ColumnSpacing="8" RowSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                    <Button
+                                        x:Name="RecGuideButton"
+                                        HorizontalAlignment="Stretch"
+                                        AutomationProperties.Name="ガイドを聴く"
+                                        Click="RecGuide_Click"
+                                        Content="ガイドを聴く"
+                                        IsEnabled="False"
+                                        Style="{StaticResource ToolbarButtonStyle}"
+                                        ToolTipService.ToolTip="ガイド音源があればそれを、無ければガイド音を再生します（F11）" />
+                                    <Button
+                                        x:Name="RecPlayButton"
+                                        Grid.Column="1"
+                                        HorizontalAlignment="Stretch"
+                                        AutomationProperties.Name="テイクを聴く"
+                                        Click="RecPlay_Click"
+                                        Content="テイクを聴く"
+                                        IsEnabled="False"
+                                        Style="{StaticResource ToolbarButtonStyle}"
+                                        ToolTipService.ToolTip="保存した WAV を再生します（F10）" />
+                                    <Button
+                                        x:Name="RecPrevButton"
+                                        Grid.Column="2"
+                                        HorizontalAlignment="Stretch"
+                                        AutomationProperties.Name="前の行"
+                                        Click="RecPrev_Click"
+                                        Content="前へ"
+                                        IsEnabled="False"
+                                        Style="{StaticResource ToolbarButtonStyle}"
+                                        ToolTipService.ToolTip="前の行へ移ります（F7）" />
+                                    <Button
+                                        x:Name="RecMissingButton"
+                                        Grid.Row="1"
+                                        HorizontalAlignment="Stretch"
+                                        AutomationProperties.Name="次の未録音"
+                                        Click="RecMissing_Click"
+                                        Content="次の未録音"
+                                        IsEnabled="False"
+                                        Style="{StaticResource ToolbarButtonStyle}"
+                                        ToolTipService.ToolTip="次の未録音の行へ移ります（F6）" />
+                                    <Button
+                                        x:Name="RecNextButton"
+                                        Grid.Row="1"
+                                        Grid.Column="1"
+                                        Grid.ColumnSpan="2"
+                                        HorizontalAlignment="Stretch"
+                                        AutomationProperties.Name="次の行"
+                                        Click="RecNext_Click"
+                                        Content="次へ"
+                                        IsEnabled="False"
+                                        Style="{StaticResource ToolbarButtonStyle}"
+                                        ToolTipService.ToolTip="次の行へ移ります（F8）" />
+                                </Grid>
+                                <Button
+                                    x:Name="RecRecordButton"
+                                    HorizontalAlignment="Stretch"
+                                    AutomationProperties.Name="録音"
+                                    Click="RecRecord_Click"
+                                    IsEnabled="False"
+                                    Style="{StaticResource ToolbarAccentButtonStyle}"
+                                    ToolTipService.ToolTip="録音を開始または停止します（F9）">
+                                    <TextBlock x:Name="RecRecordLabel" Text="録音" />
+                                </Button>
                             </StackPanel>
                         </Border>
                     </Grid>

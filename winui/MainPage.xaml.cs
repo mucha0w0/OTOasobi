@@ -115,6 +115,7 @@ public sealed partial class MainPage : Page
         BindRecentFolders();
         Loaded += (_, _) => AttachMenuToTitleBar();
         WireAppearance();
+        WireRec();
     }
 
     void WireAppearance()
@@ -129,6 +130,8 @@ public sealed partial class MainPage : Page
                 FlushBank();
                 FlushSession();
                 FlushFrq();
+                RecCommitTake(false);
+                CancelRecWait();
             }
             catch (Exception)
             {
@@ -143,6 +146,8 @@ public sealed partial class MainPage : Page
                     FlushBank();
                     FlushSession();
                     FlushFrq();
+                    RecCommitTake(false);
+                    CancelRecWait();
                 }
                 catch (Exception)
                 {
@@ -158,7 +163,7 @@ public sealed partial class MainPage : Page
         LoudHost.Children.Add(Editor.LoudSurface);
         OtoBandHost.Children.Add(Editor.OtoSurface);
         // ページが読み込まれる前は Parent が空のままなので、ここから外してからドックへ入れる。
-        foreach (var pane in new UIElement[] { FilePane, WavePane, SpecHost, LoudHost, OtoBandHost, SourcePane, OtoPane, OtoParams, OtoIniPane, FrqPane, FrqEditPane, BankPane })
+        foreach (var pane in new UIElement[] { FilePane, WavePane, SpecHost, LoudHost, OtoBandHost, SourcePane, OtoPane, OtoParams, OtoIniPane, FrqPane, FrqEditPane, BankPane, RecListPane, RecPane })
             PaneHolder.Children.Remove(pane);
         Dock.Mount(
         [
@@ -174,6 +179,8 @@ public sealed partial class MainPage : Page
             ("frq", ".frq生成", FrqPane),
             ("frqEdit", "frqエディター", FrqEditPane),
             ("bank", "音源の各種設定", BankPane),
+            ("recList", "録音リスト", RecListPane),
+            ("rec", "録音", RecPane),
         ]);
         Dock.PaneResizing += (_, dragging) =>
         {
@@ -181,15 +188,16 @@ public sealed partial class MainPage : Page
             Effects.SetColumnDrag(dragging);
             FrqRoll.SetColumnDrag(dragging);
         };
-        Dock.LayoutChanged += (_, _) =>
-        {
-            SyncPaneMenu();
-            if (!_applyingLayoutTemplate)
-                _appliedLayoutTemplate = null;
-            SyncLayoutTemplateMenu();
-            if (_layoutReady)
-                EditorLayoutStore.Save(Dock.Root, Dock.KeepRatios);
-        };
+            Dock.LayoutChanged += (_, _) =>
+            {
+                SyncPaneMenu();
+                if (!_applyingLayoutTemplate)
+                    _appliedLayoutTemplate = null;
+                SyncLayoutTemplateMenu();
+                if (_layoutReady)
+                    EditorLayoutStore.Save(Dock.Root, Dock.KeepRatios);
+                RecSyncMonitor();
+            };
         LoadLayoutTemplates();
         if (!EditorLayoutStore.TryLoad(out var layout, out var keepRatios))
             layout = EditorLayout.CreateDefault();
@@ -215,6 +223,8 @@ public sealed partial class MainPage : Page
         ShowFrqItem.IsChecked = Dock.Contains("frq");
         ShowFrqEditItem.IsChecked = Dock.Contains("frqEdit");
         ShowBankItem.IsChecked = Dock.Contains("bank");
+        ShowRecListItem.IsChecked = Dock.Contains("recList");
+        ShowRecItem.IsChecked = Dock.Contains("rec");
         _paneMenuWrite = false;
     }
 
@@ -599,7 +609,10 @@ public sealed partial class MainPage : Page
 
         if (names.Count == 0)
         {
-            ShowError("フォルダ内にWAVファイルがありません。");
+            RecentFolders.Remember(folder);
+            BindRecentFolders();
+            ShowUnanalyzed(folder, names);
+            ShowNotice("WAVはまだありません", "表示の「録音」で、録音リストに沿って録れます。配置テンプレートの「録音」で、録音用の並びになります。");
             return;
         }
 
@@ -886,6 +899,8 @@ public sealed partial class MainPage : Page
 
     async Task RunAsync(string folderPath, bool force)
     {
+        RecCommitTake(false);
+        CancelRecWait();
         _busy = true;
         _wrote = false;
         AdoptFolder(folderPath);
@@ -1678,12 +1693,18 @@ public sealed partial class MainPage : Page
         ErrorView.Visibility = view == "error" ? Visibility.Visible : Visibility.Collapsed;
         BusyRing.IsActive = view == "busy";
         UpdateCommands();
+        if (view == "editor")
+            RecSyncMonitor();
+        else if (!_recTaking && !_recWaiting)
+            _recCapture?.Stop();
     }
 
     void UpdateCommands()
     {
         var idle = !_busy;
-        var editing = idle && EditorView.Visibility == Visibility.Visible && _files.Count > 0;
+        var visible = idle && EditorView.Visibility == Visibility.Visible;
+        var hasFiles = _files.Count > 0;
+        var editing = visible && hasFiles;
         var ready = editing && _analyzed;
         var hasFolder = _folder != null;
         OpenMenuItem.IsEnabled = idle;
@@ -1692,7 +1713,9 @@ public sealed partial class MainPage : Page
         WriteMenuItem.IsEnabled = ready;
         WriteButton.IsEnabled = ready;
         ReanalyzeMenuItem.Text = _analyzed ? "再解析" : "解析";
-        ReanalyzeMenuItem.IsEnabled = editing;
+        ReanalyzeMenuItem.IsEnabled = _analyzed
+            ? editing
+            : visible && hasFolder && (hasFiles || _recWavNames.Count > 0);
         ReanalyzeSelectedMenuItem.IsEnabled = ready && FileList.SelectedItem is WavFile;
         ApplyEffectsButton.IsEnabled = editing;
         WriteFrqButton.IsEnabled = editing;
@@ -1701,6 +1724,7 @@ public sealed partial class MainPage : Page
         var bankReady = idle && hasFolder;
         BankPickIconButton.IsEnabled = bankReady;
         BankPickPortraitButton.IsEnabled = bankReady;
+        UpdateRecButtons();
     }
 
     void UpdateFileStatus(string name, double done, string label)

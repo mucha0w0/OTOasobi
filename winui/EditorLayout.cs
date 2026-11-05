@@ -54,7 +54,7 @@ static class EditorLayout
 {
     public const double MinPane = 160;
 
-    public static readonly string[] PaneIds = ["file", "wave", "spec", "loud", "otoBand", "source", "oto", "otoParams", "otoIni", "frq", "frqEdit", "bank"];
+    public static readonly string[] PaneIds = ["file", "wave", "spec", "loud", "otoBand", "source", "oto", "otoParams", "otoIni", "frq", "frqEdit", "bank", "recList", "rec"];
 
     // 1540px 幅でファイル約 280、oto推定設定約 320。グラフの高さ比は、以前の 1 枚キャンバスの帯に合わせる。
     public static LayoutNode CreateDefault() =>
@@ -71,6 +71,16 @@ static class EditorLayout
                 V(0.78,
                     Leaf("oto"),
                     Leaf("otoIni"))));
+
+    // 録音の作業配置。初期配置には入れない。左が台本、右上がブース、下がファイルと波形。
+    public static LayoutNode CreateRecording() =>
+        H(0.32,
+            Leaf("recList"),
+            V(0.64,
+                Leaf("rec"),
+                H(0.36,
+                    Leaf("file"),
+                    Leaf("wave"))));
 
     public static LayoutNode? Clone(LayoutNode? node)
     {
@@ -669,6 +679,7 @@ static class EditorLayoutStore
 sealed class LayoutTemplate
 {
     public const string BuiltInName = "初期配置";
+    public const string RecordingName = "録音";
 
     public string Name { get; set; } = "";
 
@@ -685,6 +696,15 @@ sealed class LayoutTemplate
             Name = BuiltInName,
             BuiltIn = true,
             Root = EditorLayout.CreateDefault(),
+            KeepRatios = false,
+        };
+
+    public static LayoutTemplate CreateRecording() =>
+        new()
+        {
+            Name = RecordingName,
+            BuiltIn = true,
+            Root = EditorLayout.CreateRecording(),
             KeepRatios = false,
         };
 
@@ -715,7 +735,7 @@ static class LayoutTemplateStore
             var name = (template.Name ?? "").Trim();
             if (name.Length == 0 || name.Length > 40 || name.Any(char.IsControl))
                 continue;
-            if (name == LayoutTemplate.BuiltInName || !seen.Add(name))
+            if (name is LayoutTemplate.BuiltInName or LayoutTemplate.RecordingName || !seen.Add(name))
                 continue;
             if (!EditorLayout.IsValid(template.Root))
                 continue;

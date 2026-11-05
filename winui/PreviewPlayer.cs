@@ -29,7 +29,15 @@ sealed class PreviewPlayer : IDisposable
 
     public event EventHandler<string>? Failed;
 
-    public async Task<bool> PlayAsync(byte[] wav)
+    public double Volume
+    {
+        get => _player.Volume;
+        set => _player.Volume = Math.Clamp(value, 0, 1);
+    }
+
+    public Task<bool> PlayAsync(byte[] wav) => PlayAsync(wav, loop: false);
+
+    public async Task<bool> PlayAsync(byte[] wav, bool loop)
     {
         if (_disposed)
             return false;
@@ -53,6 +61,7 @@ sealed class PreviewPlayer : IDisposable
         _stream = stream;
         _source = source;
         _live = true;
+        _player.IsLoopingEnabled = loop;
         _player.Source = source;
         _player.Play();
         return token == _token && !_disposed;
@@ -64,6 +73,7 @@ sealed class PreviewPlayer : IDisposable
             return;
         _token++;
         _live = false;
+        _player.IsLoopingEnabled = false;
         _player.Pause();
         _player.Source = null;
         ReleaseSource();

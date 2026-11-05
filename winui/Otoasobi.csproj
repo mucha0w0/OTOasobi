@@ -17,6 +17,7 @@
     <EnableWinAppRunSupport>false</EnableWinAppRunSupport>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Version>0.1.0-beta.1</Version>
     <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
   </PropertyGroup>

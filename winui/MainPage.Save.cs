@@ -317,9 +317,12 @@ public sealed partial class MainPage
 
         FlushBank();
         FlushSession();
+        RecCommitTake(false);
+        CancelRecWait();
         _folder = folder;
         LoadFolderSettings();
         LoadBank();
+        LoadRecFolder();
     }
 
     void LoadFolderSettings()

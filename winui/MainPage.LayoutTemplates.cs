@@ -5,6 +5,7 @@ namespace Otoasobi;
 public sealed partial class MainPage
 {
     readonly LayoutTemplate _builtInLayout = LayoutTemplate.CreateBuiltIn();
+    readonly LayoutTemplate _recordingLayout = LayoutTemplate.CreateRecording();
     readonly List<LayoutTemplate> _layoutTemplates = [];
     LayoutTemplate? _appliedLayoutTemplate;
     bool _applyingLayoutTemplate;
@@ -23,7 +24,9 @@ public sealed partial class MainPage
                 return template;
         }
 
-        return _builtInLayout.Matches(root, keepRatios) ? _builtInLayout : null;
+        return _builtInLayout.Matches(root, keepRatios) ? _builtInLayout
+            : _recordingLayout.Matches(root, keepRatios) ? _recordingLayout
+            : null;
     }
 
     void ApplyLayoutTemplate(LayoutTemplate template)
@@ -56,12 +59,14 @@ public sealed partial class MainPage
 
     bool LayoutTemplateMenuMatches()
     {
-        var expected = 1 + (_layoutTemplates.Count == 0 ? 0 : 1) + _layoutTemplates.Count;
+        var expected = 2 + (_layoutTemplates.Count == 0 ? 0 : 1) + _layoutTemplates.Count;
         if (LayoutTemplateMenu.Items.Count != expected)
             return false;
         if (LayoutTemplateMenu.Items[0] is not RadioMenuFlyoutItem builtIn || !ReferenceEquals(builtIn.Tag, _builtInLayout))
             return false;
-        var index = 1;
+        if (LayoutTemplateMenu.Items[1] is not RadioMenuFlyoutItem recording || !ReferenceEquals(recording.Tag, _recordingLayout))
+            return false;
+        var index = 2;
         if (_layoutTemplates.Count > 0)
         {
             if (LayoutTemplateMenu.Items[index] is not MenuFlyoutSeparator)
@@ -92,6 +97,7 @@ public sealed partial class MainPage
     {
         LayoutTemplateMenu.Items.Clear();
         LayoutTemplateMenu.Items.Add(LayoutTemplateItem(_builtInLayout));
+        LayoutTemplateMenu.Items.Add(LayoutTemplateItem(_recordingLayout));
         if (_layoutTemplates.Count > 0)
             LayoutTemplateMenu.Items.Add(new MenuFlyoutSeparator());
         foreach (var template in _layoutTemplates)
@@ -198,6 +204,6 @@ public sealed partial class MainPage
     static string? LayoutTemplateNameError(string raw) =>
         PresetUi.ReservedNameError(
             raw,
-            name => name == LayoutTemplate.BuiltInName,
-            "初期配置という名前は使えません。");
+            name => name is LayoutTemplate.BuiltInName or LayoutTemplate.RecordingName,
+            "初期配置と録音という名前は使えません。");
 }
