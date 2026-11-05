@@ -33,6 +33,8 @@ public sealed partial class MainPage
     bool _recTaking;
     float _recMeter;
     DateTime _recClipUntil;
+    string? _recInputError;
+    string? _recOutputError;
     TaskCompletionSource<bool>? _recWait;
 
     void WireRec()
@@ -41,7 +43,11 @@ public sealed partial class MainPage
         _recCapture = new RecCapture();
         var queue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
         if (queue != null)
+        {
             _recPlayer = new PreviewPlayer(queue);
+            _recPlayer.SetOutput(_recSettings.OutputDeviceId);
+            _recPlayer.Failed += (_, message) => ShowNotice("再生できませんでした", message);
+        }
         _recAccentBrush = RecMeterFill.Background;
         _recApplying = true;
         foreach (var note in RecTone.Notes)
@@ -64,15 +70,29 @@ public sealed partial class MainPage
         }
 
         PreviewKeyDown += Rec_PreviewKeyDown;
+        RecAppSettings.DevicesChanged += OnRecDevicesChanged;
         Unloaded += (_, _) =>
         {
+            RecAppSettings.DevicesChanged -= OnRecDevicesChanged;
             RecCommitTake(false);
             _recMeterTimer?.Stop();
             _recPlayer?.Dispose();
             _recCapture?.Dispose();
             _recCapture = null;
         };
-        _ = LoadRecDevicesAsync();
+        _ = ApplyRecOutputAsync();
+        RecSyncMonitor();
+    }
+
+    void OnRecDevicesChanged(object? sender, EventArgs e)
+    {
+        var fresh = RecAppSettings.Load();
+        _recSettings.DeviceId = fresh.DeviceId;
+        _recSettings.OutputDeviceId = fresh.OutputDeviceId;
+        _recPlayer?.SetOutput(_recSettings.OutputDeviceId);
+        _ = ApplyRecOutputAsync();
+        if (!_recTaking && !_recWaiting)
+            _ = EnsureCaptureAsync();
     }
 
     void RecSyncMonitor()
@@ -92,45 +112,42 @@ public sealed partial class MainPage
         try
         {
             await _recCapture.StartAsync(_recSettings.DeviceId);
-            RecDeviceError.Text = "";
-            RecDeviceError.Visibility = Visibility.Collapsed;
+            _recInputError = null;
         }
         catch (Exception ex)
         {
-            RecDeviceError.Text = ex.Message;
-            RecDeviceError.Visibility = Visibility.Visible;
+            _recInputError = ex.Message;
         }
 
+        ShowRecDeviceError();
         UpdateRecButtons();
     }
 
-    async Task LoadRecDevicesAsync()
+    async Task ApplyRecOutputAsync()
     {
+        if (_recPlayer == null)
+            return;
         try
         {
-            var devices = await RecCapture.DevicesAsync();
-            _recApplying = true;
-            RecDeviceBox.Items.Clear();
-            RecDeviceBox.Items.Add(new RecDeviceChoice("", "規定のデバイス"));
-            foreach (var device in devices)
-                RecDeviceBox.Items.Add(device);
-            RecDeviceChoice? selected = null;
-            foreach (var item in RecDeviceBox.Items)
-            {
-                if (item is RecDeviceChoice choice && choice.Id == (_recSettings.DeviceId ?? ""))
-                    selected = choice;
-            }
-
-            RecDeviceBox.SelectedItem = selected ?? RecDeviceBox.Items.FirstOrDefault();
-            _recApplying = false;
+            await _recPlayer.ApplyOutputAsync();
+            _recOutputError = null;
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            RecDeviceError.Text = ex.Message;
-            RecDeviceError.Visibility = Visibility.Visible;
+            _recOutputError = "出力デバイスを開けませんでした。";
         }
 
-        RecSyncMonitor();
+        ShowRecDeviceError();
+    }
+
+    void ShowRecDeviceError()
+    {
+        if (RecDeviceError == null)
+            return;
+        RecDeviceError.Text = _recInputError ?? "";
+        RecDeviceError.Visibility = string.IsNullOrEmpty(_recInputError) ? Visibility.Collapsed : Visibility.Visible;
+        var message = string.Join(" ", new[] { _recInputError, _recOutputError }.Where(text => !string.IsNullOrEmpty(text)));
+        RecAppSettings.ReportCapture(message.Length == 0 ? null : message);
     }
 
     void LoadRecFolder()
@@ -336,7 +353,6 @@ public sealed partial class MainPage
         RecPrevButton.IsEnabled = browsing && _recIndex > 0;
         RecNextButton.IsEnabled = browsing && _recIndex >= 0 && _recIndex < _recLines.Count - 1;
         RecMissingButton.IsEnabled = browsing && _recLines.Count > 0;
-        RecDeviceBox.IsEnabled = browsing;
         RecListBox.IsEnabled = idle;
         RecGuideBox.IsEnabled = idle;
     }
@@ -417,16 +433,6 @@ public sealed partial class MainPage
             return;
         _recSettings.AutoAdvance = RecAutoSwitch.IsOn;
         _recSettings.Save();
-    }
-
-    void RecDevice_Changed(object sender, SelectionChangedEventArgs e)
-    {
-        if (_recApplying || RecDeviceBox.SelectedItem is not RecDeviceChoice choice)
-            return;
-        _recSettings.DeviceId = string.IsNullOrEmpty(choice.Id) ? null : choice.Id;
-        _recSettings.Save();
-        if (!_recTaking && !_recWaiting)
-            _ = EnsureCaptureAsync();
     }
 
     void RecList_SelectionChanged(object sender, SelectionChangedEventArgs e)

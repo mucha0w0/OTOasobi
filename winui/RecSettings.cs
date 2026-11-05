@@ -1,8 +1,14 @@
 namespace Otoasobi;
 
-// マイクとガイド音はマシンの設定。音源フォルダには置かない。
+// マイク、再生先、ガイド音はマシンの設定。音源フォルダには置かない。
 sealed class RecAppSettings
 {
+    public static event EventHandler? DevicesChanged;
+
+    public static event EventHandler<string?>? CaptureStateChanged;
+
+    public static string? CaptureMessage { get; private set; }
+
     public string Note { get; set; } = "C4";
 
     public double GuideVolume { get; set; } = 0.7;
@@ -17,6 +23,8 @@ sealed class RecAppSettings
 
     public string? DeviceId { get; set; }
 
+    public string? OutputDeviceId { get; set; }
+
     public static string FilePath { get; } = Path.Combine(AppPaths.DataRoot, "recording.json");
 
     public static RecAppSettings Load()
@@ -26,9 +34,28 @@ sealed class RecAppSettings
             settings.Note = "C4";
         settings.GuideVolume = Math.Clamp(settings.GuideVolume, 0, 1);
         settings.Bpm = Math.Clamp(settings.Bpm, 40, 240);
-        settings.DeviceId = string.IsNullOrWhiteSpace(settings.DeviceId) ? null : settings.DeviceId;
+        settings.DeviceId = BlankToNull(settings.DeviceId);
+        settings.OutputDeviceId = BlankToNull(settings.OutputDeviceId);
         return settings;
     }
+
+    public static void SaveDevices(string? inputId, string? outputId)
+    {
+        var settings = Load();
+        settings.DeviceId = BlankToNull(inputId);
+        settings.OutputDeviceId = BlankToNull(outputId);
+        settings.Save();
+        DevicesChanged?.Invoke(null, EventArgs.Empty);
+    }
+
+    public static void ReportCapture(string? message)
+    {
+        CaptureMessage = string.IsNullOrWhiteSpace(message) ? null : message;
+        CaptureStateChanged?.Invoke(null, CaptureMessage);
+    }
+
+    static string? BlankToNull(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value;
 
     public void Save()
     {

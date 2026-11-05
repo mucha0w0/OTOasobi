@@ -38,9 +38,15 @@ sealed class RecCapture : IDisposable
         }
     }
 
-    public static async Task<IReadOnlyList<RecDeviceChoice>> DevicesAsync()
+    public static Task<IReadOnlyList<RecDeviceChoice>> DevicesAsync() =>
+        ListDevicesAsync(MediaDevice.GetAudioCaptureSelector());
+
+    public static Task<IReadOnlyList<RecDeviceChoice>> PlaybackDevicesAsync() =>
+        ListDevicesAsync(MediaDevice.GetAudioRenderSelector());
+
+    static async Task<IReadOnlyList<RecDeviceChoice>> ListDevicesAsync(string selector)
     {
-        var list = await DeviceInformation.FindAllAsync(MediaDevice.GetAudioCaptureSelector());
+        var list = await DeviceInformation.FindAllAsync(selector);
         var devices = new List<RecDeviceChoice>();
         foreach (var device in list)
             devices.Add(new RecDeviceChoice(device.Id, device.Name));

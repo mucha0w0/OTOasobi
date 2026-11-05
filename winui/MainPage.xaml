@@ -1721,6 +1721,11 @@
                                     TextAlignment="Right"
                                     ToolTipService.ToolTip="右端が 0 dB です。薄い帯は -12 dB から -6 dB です。" />
                             </Grid>
+                            <TextBlock
+                                x:Name="RecDeviceError"
+                                Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                TextWrapping="Wrap"
+                                Visibility="Collapsed" />
                         </StackPanel>
                         <ScrollViewer
                             Grid.Row="1"
@@ -1802,28 +1807,12 @@
                                     </StackPanel>
                                 </Border>
                                 <Border Style="{StaticResource PanelCardStyle}">
-                                    <StackPanel Spacing="8">
-                                        <local:InfoNote
-                                            Title="マイク"
-                                            Text="保存は 44.1 kHz、16 bit、モノラルです。先頭の無音は切りません。入力デバイスは、この PC に覚えます。" />
-                                        <ComboBox
-                                            x:Name="RecDeviceBox"
-                                            HorizontalAlignment="Stretch"
-                                            AutomationProperties.Name="入力デバイス"
-                                            DisplayMemberPath="Label"
-                                            SelectionChanged="RecDevice_Changed" />
-                                        <TextBlock
-                                            x:Name="RecDeviceError"
-                                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                            TextWrapping="Wrap"
-                                            Visibility="Collapsed" />
-                                        <ToggleSwitch
-                                            x:Name="RecAutoSwitch"
-                                            AutomationProperties.Name="停止したら次の未録音へ進む"
-                                            OffContent="停止しても行に残る"
-                                            OnContent="停止したら次の未録音へ進む"
-                                            Toggled="RecAuto_Toggled" />
-                                    </StackPanel>
+                                    <ToggleSwitch
+                                        x:Name="RecAutoSwitch"
+                                        AutomationProperties.Name="停止したら次の未録音へ進む"
+                                        OffContent="停止しても行に残る"
+                                        OnContent="停止したら次の未録音へ進む"
+                                        Toggled="RecAuto_Toggled" />
                                 </Border>
                             </StackPanel>
                         </ScrollViewer>

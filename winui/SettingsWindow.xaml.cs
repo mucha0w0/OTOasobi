@@ -195,6 +195,7 @@ public sealed partial class SettingsWindow : Window
     static IEnumerable<SettingsSection> Sections()
     {
         yield return new SettingsSection("表示", new DisplaySettings());
+        yield return new SettingsSection("録音", new RecordingSettings());
     }
 
     sealed class SettingsSection(string title, UIElement content)

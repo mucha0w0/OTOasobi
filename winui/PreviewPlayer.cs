@@ -1,4 +1,5 @@
 using Microsoft.UI.Dispatching;
+using Windows.Devices.Enumeration;
 using Windows.Media.Core;
 using Windows.Media.Playback;
 using Windows.Storage.Streams;
@@ -13,6 +14,8 @@ sealed class PreviewPlayer : IDisposable
     MediaSource? _source;
     InMemoryRandomAccessStream? _stream;
     int _token;
+    string? _outputId;
+    string? _appliedOutputId;
     bool _live;
     bool _disposed;
 
@@ -35,12 +38,46 @@ sealed class PreviewPlayer : IDisposable
         set => _player.Volume = Math.Clamp(value, 0, 1);
     }
 
+    public void SetOutput(string? deviceId) =>
+        _outputId = string.IsNullOrWhiteSpace(deviceId) ? null : deviceId;
+
+    public async Task ApplyOutputAsync()
+    {
+        if (_disposed)
+            return;
+        var id = _outputId;
+        if (_appliedOutputId == id && (id == null || _player.AudioDevice != null))
+            return;
+        if (id == null)
+        {
+            _player.AudioDevice = null;
+            _appliedOutputId = null;
+            return;
+        }
+
+        var device = await DeviceInformation.CreateFromIdAsync(id);
+        if (_disposed || _outputId != id)
+            return;
+        _player.AudioDevice = device;
+        _appliedOutputId = id;
+    }
+
     public Task<bool> PlayAsync(byte[] wav) => PlayAsync(wav, loop: false);
 
     public async Task<bool> PlayAsync(byte[] wav, bool loop)
     {
         if (_disposed)
             return false;
+        try
+        {
+            await ApplyOutputAsync();
+        }
+        catch (Exception)
+        {
+            Failed?.Invoke(this, "出力デバイスを開けませんでした。");
+            return false;
+        }
+
         var token = ++_token;
         _live = false;
         ReleaseSource();
