@@ -154,6 +154,29 @@ static class RecFolderStore
         JsonFiles.Write(Path.Combine(folder, FileName), file);
 }
 
+// 一度選んだガイド音源フォルダ。音源フォルダではなく、この PC に残す。
+static class RecGuideHistory
+{
+    public static string FilePath { get; } = Path.Combine(AppPaths.DataRoot, "recording-guides.json");
+
+    public static IReadOnlyList<string> Load() =>
+        RecListHistory.Merge(null, JsonFiles.Read<List<string>>(FilePath));
+
+    public static void Remember(string path)
+    {
+        var next = RecListHistory.Merge(path, Load());
+        if (next.Count == 0)
+            return;
+        try
+        {
+            JsonFiles.Write(FilePath, next);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+        }
+    }
+}
+
 // 一度選んだ録音リスト。音源フォルダではなく、この PC に残す。
 static class RecListHistory
 {

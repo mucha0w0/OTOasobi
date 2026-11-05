@@ -1610,34 +1610,6 @@
                                 MaxDropDownHeight="320"
                                 PlaceholderText="選択しない"
                                 SelectionChanged="RecListBox_Changed" />
-                            <Button
-                                x:Name="RecGuideFolderButton"
-                                HorizontalAlignment="Stretch"
-                                AutomationProperties.Name="ガイド音源のフォルダを選ぶ"
-                                Click="RecGuideFolder_Click"
-                                Content="ガイド音源"
-                                Style="{StaticResource ToolbarButtonStyle}" />
-                            <Grid ColumnSpacing="8">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <TextBlock
-                                    x:Name="RecGuidePath"
-                                    VerticalAlignment="Center"
-                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                    Style="{StaticResource CaptionTextBlockStyle}"
-                                    Text="ガイド音源は未設定です"
-                                    TextTrimming="CharacterEllipsis" />
-                                <Button
-                                    x:Name="RecClearGuideButton"
-                                    Grid.Column="1"
-                                    AutomationProperties.Name="ガイド音源を外す"
-                                    Click="RecClearGuide_Click"
-                                    Content="外す"
-                                    IsEnabled="False"
-                                    Style="{StaticResource ToolbarButtonStyle}" />
-                            </Grid>
                         </StackPanel>
                         <ListView
                             x:Name="RecListView"
@@ -1760,6 +1732,16 @@
                                         <local:InfoNote
                                             Title="ガイド"
                                             Text="ガイド音は、音程を合わせる基準音です。ガイド音源は、同じファイル名の WAV がある別フォルダで、発音と長さを聴くためのものです。録音中に鳴らすと、スピーカーの音をマイクが拾うことがあります。" />
+                                        <TextBlock Text="ガイド音源" />
+                                        <ComboBox
+                                            x:Name="RecGuideBox"
+                                            MinWidth="0"
+                                            HorizontalAlignment="Stretch"
+                                            AutomationProperties.Name="ガイド音源"
+                                            DisplayMemberPath="Label"
+                                            MaxDropDownHeight="320"
+                                            PlaceholderText="選択しない"
+                                            SelectionChanged="RecGuideBox_Changed" />
                                         <TextBlock Text="音程" />
                                         <ComboBox
                                             x:Name="RecNoteBox"

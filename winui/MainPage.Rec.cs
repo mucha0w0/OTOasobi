@@ -146,6 +146,8 @@ public sealed partial class MainPage
             var stored = RecFolderStore.Load(_folder);
             _recPrefix = stored.PrefixPitch;
             _recGuide = string.IsNullOrWhiteSpace(stored.Guide) ? null : stored.Guide;
+            if (!string.IsNullOrEmpty(_recGuide))
+                RecGuideHistory.Remember(_recGuide);
             _recListNone = RecFolderStore.ListIsCleared(stored.List);
             if (_recListNone)
                 _recListPath = null;
@@ -315,15 +317,7 @@ public sealed partial class MainPage
     void UpdateRecCaptions()
     {
         FillRecListMenu();
-        if (RecGuidePath == null)
-            return;
-        if (string.IsNullOrEmpty(_recGuide))
-            RecGuidePath.Text = "ガイド音源は未設定です";
-        else if (!Directory.Exists(_recGuide))
-            RecGuidePath.Text = "ガイド音源のフォルダが見つかりません";
-        else
-            RecGuidePath.Text = _recGuide;
-        ToolTipService.SetToolTip(RecGuidePath, _recGuide);
+        FillRecGuideMenu();
     }
 
     void UpdateRecButtons()
@@ -344,8 +338,7 @@ public sealed partial class MainPage
         RecMissingButton.IsEnabled = browsing && _recLines.Count > 0;
         RecDeviceBox.IsEnabled = browsing;
         RecListBox.IsEnabled = idle;
-        RecGuideFolderButton.IsEnabled = idle;
-        RecClearGuideButton.IsEnabled = idle && !string.IsNullOrEmpty(_recGuide);
+        RecGuideBox.IsEnabled = idle;
     }
 
     RecLine? CurrentLine() =>
@@ -468,19 +461,30 @@ public sealed partial class MainPage
             return;
         }
 
-        if (SameRecList(choice.Path))
+        if (SameRecPath(_recListPath, choice.Path))
             return;
         UseRecList(choice.Path);
     }
 
-    void RecGuideFolder_Click(object sender, RoutedEventArgs e) => _ = RecPickGuideAsync();
-
-    void RecClearGuide_Click(object sender, RoutedEventArgs e)
+    void RecGuideBox_Changed(object sender, SelectionChangedEventArgs e)
     {
-        _recGuide = null;
-        SaveRecFolder();
-        UpdateRecCaptions();
-        UpdateRecButtons();
+        if (_recApplying || RecGuideBox.SelectedItem is not RecListChoice choice)
+            return;
+        if (choice.Browse)
+        {
+            _ = RecPickGuideAsync();
+            return;
+        }
+
+        if (choice.Path == null)
+        {
+            ClearRecGuide();
+            return;
+        }
+
+        if (SameRecPath(_recGuide, choice.Path))
+            return;
+        UseRecGuide(choice.Path);
     }
 
     void RecGuide_Click(object sender, RoutedEventArgs e) => _ = PlayGuideAsync(loop: false);
@@ -520,13 +524,13 @@ public sealed partial class MainPage
         UpdateRecCaptions();
     }
 
-    bool SameRecList(string path)
+    bool SameRecPath(string? left, string right)
     {
-        if (string.IsNullOrEmpty(_recListPath))
+        if (string.IsNullOrEmpty(left))
             return false;
         try
         {
-            return string.Equals(Path.GetFullPath(_recListPath), Path.GetFullPath(path), StringComparison.OrdinalIgnoreCase);
+            return string.Equals(Path.GetFullPath(left), Path.GetFullPath(right), StringComparison.OrdinalIgnoreCase);
         }
         catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
         {
@@ -534,16 +538,22 @@ public sealed partial class MainPage
         }
     }
 
-    void FillRecListMenu()
+    void FillRecListMenu() =>
+        FillRecChoiceMenu(RecListBox, _recListPath, RecListHistory.Load(), "ファイルから選ぶ");
+
+    void FillRecGuideMenu() =>
+        FillRecChoiceMenu(RecGuideBox, _recGuide, RecGuideHistory.Load(), "フォルダから選ぶ");
+
+    void FillRecChoiceMenu(ComboBox? box, string? current, IReadOnlyList<string> history, string browse)
     {
-        if (RecListBox == null)
+        if (box == null)
             return;
-        var paths = RecListHistory.Load().ToList();
-        if (!string.IsNullOrEmpty(_recListPath))
+        var paths = history.ToList();
+        if (!string.IsNullOrEmpty(current))
         {
             try
             {
-                var full = Path.GetFullPath(_recListPath);
+                var full = Path.GetFullPath(current);
                 var known = false;
                 foreach (var item in paths)
                 {
@@ -562,21 +572,45 @@ public sealed partial class MainPage
         }
 
         _recApplying = true;
-        RecListBox.Items.Clear();
-        RecListBox.Items.Add(new RecListChoice("選択しない", null));
-        RecListBox.Items.Add(new RecListChoice("ファイルから選ぶ", null, browse: true));
-        RecListChoice selected = (RecListChoice)RecListBox.Items[0];
+        box.Items.Clear();
+        box.Items.Add(new RecListChoice("選択しない", null));
+        box.Items.Add(new RecListChoice(browse, null, browse: true));
+        var selected = (RecListChoice)box.Items[0];
         foreach (var path in paths)
         {
             var choice = new RecListChoice(RecListHistory.Caption(path, paths), path);
-            RecListBox.Items.Add(choice);
-            if (SameRecList(path))
+            box.Items.Add(choice);
+            if (SameRecPath(current, path))
                 selected = choice;
         }
 
-        RecListBox.SelectedItem = selected;
-        ToolTipService.SetToolTip(RecListBox, _recListPath);
+        box.SelectedItem = selected;
+        ToolTipService.SetToolTip(box, current);
         _recApplying = false;
+    }
+
+    void ClearRecGuide()
+    {
+        _recGuide = null;
+        SaveRecFolder();
+        UpdateRecCaptions();
+        UpdateRecButtons();
+    }
+
+    void UseRecGuide(string path)
+    {
+        if (_folder != null && SameRecPath(path, _folder))
+        {
+            ShowNotice("ガイド音源は別のフォルダです", "録音先と同じフォルダは選べません。");
+            FillRecGuideMenu();
+            return;
+        }
+
+        _recGuide = path;
+        RecGuideHistory.Remember(path);
+        SaveRecFolder();
+        UpdateRecCaptions();
+        UpdateRecButtons();
     }
 
     async Task RecOpenListAsync()
@@ -603,20 +637,19 @@ public sealed partial class MainPage
     async Task RecPickGuideAsync()
     {
         if (_folder == null || App.MainWindow == null)
-            return;
-        var path = await WavPicker.PickAsync(WindowNative.GetWindowHandle(App.MainWindow));
-        if (path == null || _folder == null)
-            return;
-        if (string.Equals(Path.GetFullPath(path), Path.GetFullPath(_folder), StringComparison.OrdinalIgnoreCase))
         {
-            ShowNotice("ガイド音源は別のフォルダです", "録音先と同じフォルダは選べません。");
+            FillRecGuideMenu();
             return;
         }
 
-        _recGuide = path;
-        SaveRecFolder();
-        UpdateRecCaptions();
-        UpdateRecButtons();
+        var path = await WavPicker.PickAsync(WindowNative.GetWindowHandle(App.MainWindow));
+        if (path == null || _folder == null)
+        {
+            FillRecGuideMenu();
+            return;
+        }
+
+        UseRecGuide(path);
     }
 
     void StepRec(int delta)
