@@ -372,15 +372,11 @@ public sealed partial class MainPage
         var browsing = idle && !_recTaking && !_recWaiting;
         RecGuideButton.IsEnabled = browsing && line != null;
         var canHear = browsing && line != null && wav.Length > 0 && _recWavNames.Contains(wav);
-        RecPlayButton.IsEnabled = canHear;
-        if (MicPlayButton != null)
-        {
-            MicPlayButton.IsEnabled = canHear || _micPlaying;
-            MicPlayButton.Visibility = canHear || _micPlaying ? Visibility.Visible : Visibility.Collapsed;
-            MicPlayIcon.Symbol = _micPlaying ? Symbol.Stop : Symbol.Play;
-            ToolTipService.SetToolTip(MicPlayButton, _micPlaying ? "停止" : "テイクを聴く");
-            MicListenSwitch.IsEnabled = idle && (_recCapture?.Running ?? false);
-        }
+        var hearLabel = _micPlaying ? "停止" : "テイクを聴く";
+        RecPlayButton.IsEnabled = canHear || _micPlaying;
+        RecPlayButton.Content = hearLabel;
+        ToolTipService.SetToolTip(RecPlayButton, _micPlaying ? "停止" : "保存した WAV を再生します（F10）");
+        MicListenSwitch.IsEnabled = idle && (_recCapture?.Running ?? false);
         RecPrevButton.IsEnabled = browsing && _recIndex > 0;
         RecNextButton.IsEnabled = browsing && _recIndex >= 0 && _recIndex < _recLines.Count - 1;
         RecMissingButton.IsEnabled = browsing && _recLines.Count > 0;
@@ -591,7 +587,7 @@ public sealed partial class MainPage
 
     void RecGuide_Click(object sender, RoutedEventArgs e) => _ = PlayGuideAsync(loop: false);
 
-    void RecPlay_Click(object sender, RoutedEventArgs e) => _ = PlayTakeAsync();
+    void RecPlay_Click(object sender, RoutedEventArgs e) => _ = PlayMicTakeAsync();
 
     void RecPrev_Click(object sender, RoutedEventArgs e) => StepRec(-1);
 
@@ -1031,27 +1027,6 @@ public sealed partial class MainPage
         return path;
     }
 
-    async Task PlayTakeAsync()
-    {
-        var line = CurrentLine();
-        if (line == null || _folder == null || _recPlayer == null || _recTaking)
-            return;
-        var path = Path.Combine(_folder, RecNames.WavName(line.Sing));
-        if (!File.Exists(path))
-            return;
-        _guideListening = false;
-        try
-        {
-            var wav = await File.ReadAllBytesAsync(path);
-            _recPlayer.Volume = 1;
-            await _recPlayer.PlayAsync(wav);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            ShowNotice("テイクを再生できませんでした", ex.Message);
-        }
-    }
-
     async Task<bool> PlayAndWaitAsync(byte[] wav)
     {
         if (_recPlayer == null)
@@ -1154,7 +1129,7 @@ public sealed partial class MainPage
         {
             case VirtualKey.F10:
                 e.Handled = true;
-                _ = PlayTakeAsync();
+                _ = PlayMicTakeAsync();
                 break;
             case VirtualKey.F11:
                 e.Handled = true;

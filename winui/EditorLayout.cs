@@ -72,7 +72,7 @@ static class EditorLayout
                     Leaf("oto"),
                     Leaf("otoIni"))));
 
-    // 録音の作業配置。初期配置には入れない。左がリスト。中央上が読み上げと録音、右がガイド。下にマイク、ファイル、音素推定。
+    // 録音の作業配置。初期配置には入れない。左がリスト。中央上が読み上げと録音コントローラ、右がガイド。下にマイク、ファイル、音素推定。
     public static LayoutNode CreateRecording() =>
         H(0.22,
             Leaf("recList"),

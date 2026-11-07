@@ -240,8 +240,6 @@ public sealed partial class MainPage
         _ = ApplyMicListenAsync();
     }
 
-    void MicPlay_Click(object sender, RoutedEventArgs e) => _ = PlayMicTakeAsync();
-
     async Task PlayMicTakeAsync()
     {
         if (_micPlaying)
@@ -283,7 +281,7 @@ public sealed partial class MainPage
         _micPlaying = false;
         _micPlayer?.Stop();
         _micTrace?.SetPlayhead(null);
-        if (was || MicPlayButton?.IsEnabled == true)
+        if (was || RecPlayButton?.IsEnabled == true)
             UpdateRecButtons();
     }
 }

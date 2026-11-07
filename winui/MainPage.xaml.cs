@@ -181,7 +181,7 @@ public sealed partial class MainPage : Page
             ("bank", "音源の各種設定", BankPane),
             ("recList", "録音リスト", RecListPane),
             ("recScript", "録音スクリプト", RecScriptPane),
-            ("rec", "録音", RecPane),
+            ("rec", "録音コントローラ", RecPane),
             ("guide", "ガイドBGM設定", GuidePane),
             ("mic", "マイクモニター", MicPane),
         ]);
@@ -619,7 +619,7 @@ public sealed partial class MainPage : Page
             RecentFolders.Remember(folder);
             BindRecentFolders();
             ShowUnanalyzed(folder, names);
-            ShowNotice("WAVはまだありません", "表示の「録音」で、録音リストに沿って録れます。配置テンプレートの「録音」で、録音用の並びになります。");
+            ShowNotice("WAVはまだありません", "表示の「録音コントローラ」で、録音リストに沿って録れます。配置テンプレートの「録音」で、録音用の並びになります。");
             return;
         }
 
