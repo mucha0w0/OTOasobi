@@ -128,7 +128,7 @@
 
 配布版は [Releases](https://github.com/mucha0w0/OTOasobi/releases) の `OtoasobiSetup.exe` です。Windows 64 ビット用です。いまの版は開発中のベータです。
 
-`OtoasobiSetup.exe` を実行すると、`%LocalAppData%\Otoasobi` に入ります。署名はまだ無いので、初回は SmartScreen が出ます。「詳細情報」から実行します。
+`OtoasobiSetup.exe` を実行すると、`%LocalAppData%\Otoasobi` に入ります。署名はまだ無いので、初回は SmartScreen が出ます。「詳細情報」から実行します。画面は WebView2 で表示します。ランタイムが無いときは、起動時に案内を出します。WinAppSDK の自己完結には、このランタイムは入りません。
 
 初回起動では、高精度エンジン（torch、Praat、音声モデル）をダウンロードするか聞きます。サイズはダイアログに出ます。進めると `%LocalAppData%\Otoasobi\engine` と `models` に入ります。断ったとき、またはダウンロードに失敗したときは、音響エンジンで動きます。あとからファイルメニューの「更新を確認」でも準備できます。
 
@@ -138,7 +138,7 @@
 
 ## リリース
 
-`winui/Otoasobi.csproj` の `Version` と、タグの `v` を除いた番号を同じにします。タグを push すると、GitHub Actions がリリースを作ります。
+`prototype/host/Otoasobi.Probe.csproj` の `Version` と、タグの `v` を除いた番号を同じにします。タグを push すると、GitHub Actions がページをビルドしてから `Otoasobi.exe` を作ります。
 
 ```powershell
 git tag v0.1.0-beta.1
@@ -284,8 +284,9 @@ dotnet run --project winui
 
 | パス | 役割 |
 | --- | --- |
-| `winui/` | OTOasobi の画面（WinUI 3） |
-| `prototype/` | 移行を判断するための試作。WinUI のホストに React を表示する。配置は `probe-layout.json`。音素ラベル、.frq、録音リスト、音源設定、エフェクターまでページから操作できる。製品の画面は確認が終わるまで残す |
+| `prototype/host` | 配布する `Otoasobi.exe`。React を WebView2 に表示し、計算は `winui/` の C# を呼ぶ |
+| `prototype/ui` | 配布する画面。開発中は `npm run dev` と環境変数 `OTOASOBI_PROBE_URL` |
+| `winui/` | 計算と、公開しない旧画面。リリースの対象ではない |
 | `.github/workflows/release.yml` | タグ `v*` で Setup と高精度エンジンをリリースする |
 | `scripts/stage_release.ps1` | 音響用 Python、エンジン zip、`engine.json` を作る |
 | `otoasobi/worker.py` | 画面から呼ばれる解析プロセス |

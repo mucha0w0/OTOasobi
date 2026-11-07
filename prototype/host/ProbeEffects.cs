@@ -67,7 +67,16 @@ sealed class ProbeEffects
         _compressor.ReductionDb = Number(body, "compressorReduction", CompressorEffect.DefaultReductionDb);
         _normalize.Enabled = Flag(body, "normalizeEnabled");
         _normalize.TargetDb = Number(body, "normalizeTarget", NormalizeEffect.DefaultDb);
-        _chain.SetOrder([_noise, _highPass, _equalizer, _compressor, _normalize]);
+        Pin();
+        Save();
+    }
+
+    public void Move(int from, int to)
+    {
+        if (from <= 0 || to < 1)
+            return;
+        _chain.Move(from, to);
+        Pin();
         Save();
     }
 
@@ -123,7 +132,23 @@ sealed class ProbeEffects
             normalizeEnabled = _normalize.Enabled,
             normalizeTarget = _normalize.TargetDb,
             noiseNote = NoiseNote(),
+            order = _chain.Effects.Select(KindOf).ToArray(),
         };
+    }
+
+    static string KindOf(AudioEffect effect) => effect.Kind;
+
+    StoredEffect StoredOf(AudioEffect effect)
+    {
+        if (ReferenceEquals(effect, _noise))
+            return new StoredEffect { Kind = _noise.Kind, Enabled = _noise.Enabled, Reduction = _noise.ReductionDb, Preset = "標準" };
+        if (ReferenceEquals(effect, _highPass))
+            return new StoredEffect { Kind = _highPass.Kind, Enabled = _highPass.Enabled, Frequency = _highPass.Frequency, Slope = _highPass.Slope, Preset = "標準" };
+        if (ReferenceEquals(effect, _equalizer))
+            return new StoredEffect { Kind = _equalizer.Kind, Enabled = _equalizer.Enabled, Gains = _equalizer.CopyGains(), Preset = "フラット" };
+        if (ReferenceEquals(effect, _compressor))
+            return new StoredEffect { Kind = _compressor.Kind, Enabled = _compressor.Enabled, Ratio = _compressor.Ratio, Reduction = _compressor.ReductionDb, Preset = "標準" };
+        return new StoredEffect { Kind = _normalize.Kind, Enabled = _normalize.Enabled, Target = _normalize.TargetDb, Preset = "標準" };
     }
 
     string? NoiseNote()
@@ -212,21 +237,51 @@ sealed class ProbeEffects
             }
         }
 
-        _chain.SetOrder([_noise, _highPass, _equalizer, _compressor, _normalize]);
+        var tail = new List<AudioEffect>();
+        foreach (var entry in effects)
+        {
+            var effect = EffectFor(entry.Kind);
+            if (effect == null || ReferenceEquals(effect, _noise) || tail.Contains(effect))
+                continue;
+            tail.Add(effect);
+        }
+
+        foreach (var effect in new AudioEffect[] { _highPass, _equalizer, _compressor, _normalize })
+        {
+            if (!tail.Contains(effect))
+                tail.Add(effect);
+        }
+
+        _chain.SetOrder(new[] { _noise }.Concat(tail));
     }
+
+    void Pin()
+    {
+        var tail = _chain.Effects.Where(effect => !ReferenceEquals(effect, _noise)).ToList();
+        foreach (var effect in new AudioEffect[] { _highPass, _equalizer, _compressor, _normalize })
+        {
+            if (!tail.Contains(effect))
+                tail.Add(effect);
+        }
+
+        _chain.SetOrder(new[] { _noise }.Concat(tail));
+    }
+
+    AudioEffect? EffectFor(string? kind) => kind switch
+    {
+        NoiseSuppressorEffect.KindId => _noise,
+        HighPassEffect.KindId => _highPass,
+        EqualizerEffect.KindId => _equalizer,
+        CompressorEffect.KindId => _compressor,
+        NormalizeEffect.KindId => _normalize,
+        _ => null,
+    };
 
     void Save()
     {
         EffectChainStore.Save(new StoredChain
         {
-            Effects =
-            [
-                new StoredEffect { Kind = NoiseSuppressorEffect.KindId, Enabled = _noise.Enabled, Reduction = _noise.ReductionDb, Preset = "標準" },
-                new StoredEffect { Kind = HighPassEffect.KindId, Enabled = _highPass.Enabled, Frequency = _highPass.Frequency, Slope = _highPass.Slope, Preset = "標準" },
-                new StoredEffect { Kind = EqualizerEffect.KindId, Enabled = _equalizer.Enabled, Gains = _equalizer.CopyGains(), Preset = "フラット" },
-                new StoredEffect { Kind = CompressorEffect.KindId, Enabled = _compressor.Enabled, Ratio = _compressor.Ratio, Reduction = _compressor.ReductionDb, Preset = "標準" },
-                new StoredEffect { Kind = NormalizeEffect.KindId, Enabled = _normalize.Enabled, Target = _normalize.TargetDb, Preset = "標準" },
-            ],
+            Effects = _chain.Effects.Select(StoredOf).ToList(),
         });
     }
 

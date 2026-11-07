@@ -19,6 +19,11 @@ type Props = {
   onClose: () => void
   onToggle: (id: string) => void
   onReset: () => void
+  onRecording: () => void
+  templates: string[]
+  onTemplate: (name: string) => void
+  onSaveTemplate: () => void
+  onCheckUpdate: () => void
 }
 
 export function MenuBar({
@@ -37,6 +42,11 @@ export function MenuBar({
   onClose,
   onToggle,
   onReset,
+  onRecording,
+  templates,
+  onTemplate,
+  onSaveTemplate,
+  onCheckUpdate,
 }: Props) {
   const [open, setOpen] = useState<string | null>(null)
   const barRef = useRef<HTMLElement>(null)
@@ -57,6 +67,7 @@ export function MenuBar({
         <Item disabled={!canEdit} onClick={onSaveSettings}>設定を保存</Item>
         <Item disabled={!canEdit} onClick={onLoadSettings}>設定を読み込む</Item>
         <Item disabled={!canWrite} onClick={onWrite}>oto.iniを生成</Item>
+        <Item onClick={onCheckUpdate}>更新を確認</Item>
         <Item onClick={onClose}>終了</Item>
       </Menu>
       <Menu title="編集" open={open} setOpen={setOpen}>
@@ -72,7 +83,12 @@ export function MenuBar({
             {paneTitles[id]}
           </Item>
         ))}
-        <Item onClick={onReset}>配置を初期状態に戻す</Item>
+        <Item onClick={onReset}>初期配置</Item>
+        <Item onClick={onRecording}>録音</Item>
+        {templates.map((name) => (
+          <Item key={name} onClick={() => onTemplate(name)}>{name}</Item>
+        ))}
+        <Item onClick={onSaveTemplate}>この配置をテンプレートとして保存</Item>
       </Menu>
     </nav>
   )

@@ -14,7 +14,7 @@ import { OtoTable } from "./OtoTable"
 import { OtoIni, OtoSettings } from "./OtoPanels"
 import { requestsPreviewAfter, type BankEvent, type DeviceInfo, type EffectsEvent, type FrqViewEvent, type HostEvent, type OtoMark, type OtoState, type PageCommand, type PreviewEvent, type RecListEvent, type SavedEvent } from "./protocol"
 import { RecListPanel, RecScriptPanel } from "./RecPanels"
-import { GuidePanel, MicPanel, RecPanel } from "./SidePanels"
+import { GuidePanel, MicPanel, RecPanel, type GuideFileState } from "./SidePanels"
 import type { PhoneSpan } from "./spans"
 import { buttonColors, resolveTheme, type ThemeChoice } from "./theme"
 import type { Range } from "./viewport"
@@ -89,7 +89,16 @@ export function App() {
   const [overwriteWav, setOverwriteWav] = useState<string | null>(null)
   const [bank, setBank] = useState<BankEvent | null>(null)
   const [effects, setEffects] = useState<EffectsEvent | null>(null)
+  const [guideFile, setGuideFile] = useState<GuideFileState>({ manual: true, path: "", label: "", recent: [] })
+  const [takeWave, setTakeWave] = useState<{ name: string; lo: number[]; hi: number[]; duration: number } | null>(null)
+  const [takePlay, setTakePlay] = useState({ playing: false, position: 0, duration: 0 })
+  const [recentFolders, setRecentFolders] = useState<{ path: string; name: string }[]>([])
+  const [templates, setTemplates] = useState<string[]>([])
+  const [updatePrompt, setUpdatePrompt] = useState<{ phase: string; title: string; body: string } | null>(null)
   const layoutTouched = useRef(false)
+  const acceptLayout = useRef(false)
+  const keepRatios = useRef(false)
+  const accentCustom = useRef(false)
   const recTouched = useRef(false)
   const recListRef = useRef<RecListEvent | null>(null)
   const recIndexRef = useRef<number | null>(null)
@@ -269,6 +278,33 @@ export function App() {
       case "guide":
         setGuidePlaying(event.playing)
         break
+      case "guideFile":
+        setGuideFile({ manual: event.manual, path: event.path, label: event.label, recent: event.recent })
+        break
+      case "take":
+        setTakePlay({ playing: event.playing, position: event.position, duration: event.duration })
+        break
+      case "takeWave":
+        setTakeWave(event)
+        break
+      case "recent":
+        setRecentFolders(event.folders)
+        break
+      case "templates":
+        setTemplates(event.names)
+        break
+      case "appearance":
+        setTheme(event.theme)
+        if (event.accent) {
+          accentCustom.current = true
+          setAccent(event.accent)
+        } else {
+          accentCustom.current = false
+        }
+        break
+      case "update":
+        setUpdatePrompt({ phase: event.phase, title: event.title, body: event.body })
+        break
       case "saved":
         setSaved(event)
         setNotice(`${event.path} を書きました。入力 ${event.inputRate} Hz、ヘッダ ${event.headerRate} Hz / ${event.bits} bit / ${event.channels} ch。`)
@@ -330,17 +366,45 @@ export function App() {
         setAdvance(event.advance)
         break
       case "layout":
-        if (!layoutTouched.current)
-          setLayout(event.root)
+        if (acceptLayout.current)
+          acceptLayout.current = false
+        else if (layoutTouched.current)
+          break
+        keepRatios.current = event.keepRatios
+        setLayout(event.root ?? createDefault())
         break
     }
   }
   applyRef.current = applyHost
 
-  function commitLayout(next: LayoutNode | null) {
+  function commitLayout(next: LayoutNode | null, keep = keepRatios.current) {
     layoutTouched.current = true
+    keepRatios.current = keep
     setLayout(next)
-    sendRef.current({ type: "layout", root: next })
+    sendRef.current({ type: "layout", root: next, keepRatios: keep })
+  }
+
+  function applyTemplate(name: string) {
+    acceptLayout.current = true
+    sendRef.current({ type: "template", op: "apply", name })
+  }
+
+  function saveTemplate() {
+    const name = window.prompt("配置テンプレートの名前")
+    if (!name)
+      return
+    sendRef.current({ type: "template", op: "save", name: name.trim() })
+  }
+
+  function chooseTheme(choice: ThemeChoice) {
+    setTheme(choice)
+    sendRef.current({ type: "appearance", theme: choice, accent: accentCustom.current ? accent : null })
+  }
+
+  function chooseAccent(value: string) {
+    accentCustom.current = true
+    setAccent(value)
+    sendRef.current({ type: "appearance", theme, accent: value })
   }
 
   function togglePane(id: string) {
@@ -446,6 +510,12 @@ export function App() {
   }
 
   const recLine = recIndex == null ? null : recList?.lines[recIndex] ?? null
+  useEffect(() => {
+    if (recLine?.recorded)
+      sendRef.current({ type: "take", op: "wave", name: recLine.wav })
+    else
+      setTakeWave(null)
+  }, [recLine?.recorded, recLine?.wav])
   const recNext = recLine && recIndex != null ? recList?.lines[recIndex + 1]?.sing ?? "" : ""
   const recOutside = !recLine && (recList?.outside.some((name) => sameName(name, fileName)) ?? false) ? fileName : ""
   const recStatus = recLine?.error ?? (recLine ? (recLine.recorded ? "録音済み" : "未録音") : recOutside ? "リスト外" : "")
@@ -471,7 +541,12 @@ export function App() {
         onSettings={() => setSettings(true)}
         onClose={() => sendRef.current({ type: "close" })}
         onToggle={togglePane}
-        onReset={() => commitLayout(createDefault())}
+        onReset={() => applyTemplate("初期配置")}
+        onRecording={() => applyTemplate("録音")}
+        templates={templates}
+        onTemplate={applyTemplate}
+        onSaveTemplate={saveTemplate}
+        onCheckUpdate={() => sendRef.current({ type: "update", op: "check" })}
       />
       {status && (
         <div className="border-b border-[var(--line)] bg-[var(--panel)] px-4 py-2 text-sm">{status}</div>
@@ -493,7 +568,7 @@ export function App() {
               else
                 setLayout(next)
             }}
-            onRatio={(path, ratio) => commitLayout(layout ? setRatio(layout, path, ratio) : layout)}
+            onRatio={(path, ratio) => commitLayout(layout ? setRatio(layout, path, ratio) : layout, true)}
             onResizing={(holding) => {
               for (const band of bands.current)
                 band.holdLayout(holding)
@@ -520,6 +595,7 @@ export function App() {
                     register={register}
                     onRange={onRange}
                     onFileStep={stepFile}
+                    onTune={id === "otoBand" ? (index, point, time) => sendRef.current({ type: "oto", op: "tune", file: fileNameRef.current, index, point, time }) : undefined}
                   />
                 )
               if (id === "rec")
@@ -541,6 +617,7 @@ export function App() {
               if (id === "guide")
                 return (
                   <GuidePanel
+                    guide={guideFile}
                     note={note}
                     semitones={semitones}
                     speed={speed}
@@ -587,7 +664,7 @@ export function App() {
               if (id === "frqEdit")
                 return <FrqEditor view={frqView} send={(command) => sendRef.current(command)} />
               if (id === "otoParams")
-                return <OtoTable marks={oto?.marks ?? []} />
+                return <OtoTable rows={oto?.rows?.length ? oto.rows : oto?.marks ?? []} send={(command) => sendRef.current(command)} />
               if (id === "mic")
                 return (
                   <MicPanel
@@ -595,6 +672,11 @@ export function App() {
                     appearance={appearance}
                     monitor={monitor}
                     setMonitor={setMonitor}
+                    recorded={Boolean(recLine?.recorded)}
+                    takeName={recLine?.wav ?? ""}
+                    wave={takeWave && recLine && takeWave.name === recLine.wav ? takeWave : null}
+                    playing={takePlay.playing}
+                    position={takePlay.position}
                     send={(command) => sendRef.current(command)}
                   />
                 )
@@ -620,6 +702,21 @@ export function App() {
           <button type="button" className="accent-button mt-2 min-w-52" onClick={() => sendRef.current({ type: "openFolder" })}>
             既存のフォルダを選ぶ
           </button>
+          {recentFolders.length > 0 && (
+            <div className="mt-4 w-full max-w-md text-left text-sm">
+              <p className="mb-1 text-[var(--muted)]">最近使ったフォルダ</p>
+              {recentFolders.map((item) => (
+                <button
+                  key={item.path}
+                  type="button"
+                  className="block w-full truncate rounded px-2 py-1 text-left hover:bg-[var(--line)]"
+                  onClick={() => sendRef.current({ type: "openRecent", path: item.path })}
+                >
+                  {item.name}
+                </button>
+              ))}
+            </div>
+          )}
           {!connected && <p className="text-sm text-[var(--muted)]">ホストに接続していません</p>}
         </main>
       )}
@@ -768,14 +865,18 @@ export function App() {
             <fieldset className="mt-4 flex gap-3 text-sm">
               {(["light", "dark", "system"] as const).map((choice) => (
                 <label key={choice} className="flex items-center gap-1">
-                  <input type="radio" name="theme" checked={theme === choice} onChange={() => setTheme(choice)} />
+                  <input type="radio" name="theme" checked={theme === choice} onChange={() => chooseTheme(choice)} />
                   {choice === "light" ? "ライト" : choice === "dark" ? "ダーク" : "端末に合わせる"}
                 </label>
               ))}
             </fieldset>
             <label className="mt-4 flex items-center gap-2 text-sm">
               アクセント
-              <input type="color" value={accent} onChange={(event) => setAccent(event.target.value)} />
+              <input type="color" value={accent} onChange={(event) => chooseAccent(event.target.value)} />
+              <button type="button" className="ghost-button" onClick={() => {
+                accentCustom.current = false
+                sendRef.current({ type: "appearance", theme, accent: null })
+              }}>端末に合わせる</button>
             </label>
             <label className="mt-4 grid gap-1 text-sm">
               入力
@@ -798,6 +899,26 @@ export function App() {
               </select>
             </label>
             <button type="button" className="accent-button mt-5 w-full" onClick={() => setSettings(false)}>閉じる</button>
+          </div>
+        </div>
+      )}
+      {updatePrompt && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-6">
+          <div className="w-full max-w-md rounded-lg border border-[var(--line)] bg-[var(--panel)] p-4">
+            <h2 className="text-base font-semibold">{updatePrompt.title}</h2>
+            <p className="mt-2 whitespace-pre-wrap text-sm">{updatePrompt.body}</p>
+            <div className="mt-4 flex gap-2">
+              <button type="button" className="ghost-button flex-1" onClick={() => setUpdatePrompt(null)}>閉じる</button>
+              {updatePrompt.phase === "prompt" && (
+                <button
+                  type="button"
+                  className="accent-button flex-1"
+                  onClick={() => sendRef.current({ type: "update", op: "apply" })}
+                >
+                  更新する
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}

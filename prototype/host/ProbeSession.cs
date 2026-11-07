@@ -19,6 +19,7 @@ sealed class ProbeSession : IDisposable
     readonly DispatcherQueue _queue;
     readonly RecCapture _capture = new();
     readonly PreviewPlayer _player;
+    readonly PreviewPlayer _take;
     readonly DispatcherQueueTimer _timer;
     ProbePreview? _python;
     AnalysisClient? _analysis;
@@ -27,6 +28,7 @@ sealed class ProbeSession : IDisposable
     readonly ProbeRec _rec = new();
     readonly ProbeBank _bank = new();
     readonly ProbeEffects _effects = new();
+    readonly ProbeUpdate _update = new();
     bool _applying;
     readonly DispatcherQueueTimer _otoSave;
     int _analyzeGen;
@@ -44,6 +46,8 @@ sealed class ProbeSession : IDisposable
     bool _counting;
     string? _recordStem;
     DateTime _recordStarted;
+    bool _takePlaying;
+    double _takeDuration;
 
     public ProbeSession(MainWindow window, WebView2 view, Action<string> showMissing)
     {
@@ -54,6 +58,13 @@ sealed class ProbeSession : IDisposable
         _player = new PreviewPlayer(_queue);
         _player.Failed += (_, message) => Post(new { type = "failed", message });
         _player.Ended += (_, _) => Post(new { type = "guide", playing = false });
+        _take = new PreviewPlayer(_queue);
+        _take.Failed += (_, message) => Post(new { type = "failed", message });
+        _take.Ended += (_, _) =>
+        {
+            _takePlaying = false;
+            Post(new { type = "take", playing = false, position = 0, duration = _takeDuration });
+        };
         _timer = _queue.CreateTimer();
         _timer.Interval = TimeSpan.FromMilliseconds(100);
         _timer.IsRepeating = true;
@@ -89,9 +100,18 @@ sealed class ProbeSession : IDisposable
         _view.CoreWebView2.Settings.IsStatusBarEnabled = false;
         _view.CoreWebView2.WebMessageReceived += OnMessage;
         var url = Environment.GetEnvironmentVariable("OTOASOBI_PROBE_URL");
-        if (string.IsNullOrWhiteSpace(url))
-            url = "http://localhost:5173";
-        _view.Source = new Uri(url);
+        if (!string.IsNullOrWhiteSpace(url))
+        {
+            _view.Source = new Uri(url);
+            return;
+        }
+
+        var ui = Path.Combine(AppContext.BaseDirectory, "ui");
+        _view.CoreWebView2.SetVirtualHostNameToFolderMapping(
+            "otoasobi.assets",
+            ui,
+            CoreWebView2HostResourceAccessKind.Deny);
+        _view.Source = new Uri("https://otoasobi.assets/index.html");
     }
 
     public void Dispose()
@@ -104,6 +124,7 @@ sealed class ProbeSession : IDisposable
             WriteTake();
         _capture.Dispose();
         _player.Dispose();
+        _take.Dispose();
         _otoSave.Stop();
         _oto.FlushSession();
         _python?.Dispose();
@@ -160,6 +181,12 @@ sealed class ProbeSession : IDisposable
                     _player.Stop();
                     Post(new { type = "guide", playing = false });
                     break;
+                case "guideFile":
+                    HandleGuideFile(root);
+                    break;
+                case "take":
+                    _ = HandleTakeAsync(root);
+                    break;
                 case "record":
                     _ = BeginRecordAsync(root);
                     break;
@@ -195,6 +222,18 @@ sealed class ProbeSession : IDisposable
                     break;
                 case "layout":
                     SaveLayout(root);
+                    break;
+                case "openRecent":
+                    _ = OpenRecentAsync(Text(root, "path"));
+                    break;
+                case "template":
+                    ApplyTemplate(Text(root, "op"), Text(root, "name"));
+                    break;
+                case "appearance":
+                    SaveAppearance(root);
+                    break;
+                case "update":
+                    _ = HandleUpdateAsync(Text(root, "op"));
                     break;
                 case "oto":
                     HandleOto(root);
@@ -234,6 +273,9 @@ sealed class ProbeSession : IDisposable
         PostCapture();
         PostRecSettings();
         Post(_effects.Snapshot());
+        PostRecent();
+        PostTemplates();
+        PostAppearance();
     }
 
     async Task OpenWavAsync()
@@ -271,6 +313,8 @@ sealed class ProbeSession : IDisposable
             PostFrqCount();
             Post(_frq.View(_wavPath));
             BeginAnalyze(false);
+            RecentFolders.Remember(_folder);
+            PostRecent();
         }
     }
 
@@ -291,10 +335,45 @@ sealed class ProbeSession : IDisposable
 
         if (string.IsNullOrEmpty(folder) || _disposed)
             return;
-        _folder = folder;
         try
         {
-            if (!string.IsNullOrEmpty(_wavPath))
+            AdoptFolder(folder);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Post(new { type = "failed", message = ex.Message });
+        }
+    }
+
+    async Task OpenRecentAsync(string? path)
+    {
+        if (_disposed)
+            return;
+        if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path))
+        {
+            if (!string.IsNullOrWhiteSpace(path))
+                RecentFolders.Forget(path);
+            PostRecent();
+            Post(new { type = "failed", message = "フォルダを開けませんでした。" });
+            return;
+        }
+
+        try
+        {
+            AdoptFolder(path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Post(new { type = "failed", message = ex.Message });
+        }
+
+        await Task.CompletedTask;
+    }
+
+    void AdoptFolder(string folder)
+    {
+        _folder = folder;
+        if (!string.IsNullOrEmpty(_wavPath))
             {
                 var current = Path.GetFileName(_wavPath);
                 var still = WavNames(folder).Any(name => string.Equals(name, current, StringComparison.OrdinalIgnoreCase));
@@ -313,11 +392,8 @@ sealed class ProbeSession : IDisposable
             PostRec();
             PostFrqCount();
             BeginAnalyze(false);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            Post(new { type = "failed", message = ex.Message });
-        }
+            RecentFolders.Remember(folder);
+            PostRecent();
     }
 
     void SelectFile(string? name)
@@ -495,10 +571,77 @@ sealed class ProbeSession : IDisposable
         PostCapture();
     }
 
+    void HandleGuideFile(JsonElement root)
+    {
+        if (root.TryGetProperty("pick", out var pick) && pick.ValueKind == JsonValueKind.True)
+        {
+            _ = PickGuideAsync();
+            return;
+        }
+
+        if (root.TryGetProperty("manual", out var manual))
+        {
+            _rec.SetManual(manual.ValueKind == JsonValueKind.True);
+            PostGuide();
+            return;
+        }
+
+        var path = Text(root, "path");
+        if (string.IsNullOrEmpty(path))
+        {
+            _rec.ClearGuide();
+            PostGuide();
+            return;
+        }
+
+        var error = _rec.UseGuide(path);
+        if (error != null && error.StartsWith("missing-text:", StringComparison.Ordinal))
+            Post(new { type = "notice", message = "同じ名前の txt がありません。" + error["missing-text:".Length..] });
+        else if (error != null)
+            Post(new { type = "failed", message = error });
+        PostGuide();
+    }
+
+    async Task PickGuideAsync()
+    {
+        if (_disposed)
+            return;
+        var picker = new FileOpenPicker();
+        InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(_window));
+        picker.FileTypeFilter.Add(".wav");
+        Windows.Storage.StorageFile? file;
+        try
+        {
+            file = await picker.PickSingleFileAsync();
+        }
+        catch (Exception ex)
+        {
+            Post(new { type = "failed", message = ex.Message });
+            return;
+        }
+
+        if (file == null || _disposed)
+            return;
+        var error = _rec.UseGuide(file.Path);
+        if (error != null && error.StartsWith("missing-text:", StringComparison.Ordinal))
+            Post(new { type = "notice", message = "同じ名前の txt がありません。" + error["missing-text:".Length..] });
+        else if (error != null)
+            Post(new { type = "failed", message = error });
+        PostGuide();
+    }
+
+    void PostGuide() => Post(_rec.GuideSnapshot());
+
     async Task GuideAsync(string note, int semitones, double speed, double volume)
     {
         if (_disposed)
             return;
+        if (!_rec.Manual)
+        {
+            await PlayGuideFileAsync(semitones, speed, volume);
+            return;
+        }
+
         if (!RecTone.TryHertz(note, out var hz))
         {
             Post(new { type = "failed", message = "音名を読めませんでした。" });
@@ -511,6 +654,139 @@ sealed class ProbeSession : IDisposable
         _player.Volume = volume;
         var played = await _player.PlayAsync(wav, loop: true);
         Post(new { type = "guide", playing = played });
+    }
+
+    async Task PlayGuideFileAsync(int semitones, double speed, double volume)
+    {
+        var path = _rec.GuidePath;
+        if (string.IsNullOrEmpty(path) || !File.Exists(path))
+        {
+            Post(new { type = "failed", message = "ガイドのファイルを選んでください。WAV を選ぶと、同じ名前の txt が対になります。" });
+            Post(new { type = "guide", playing = false });
+            return;
+        }
+
+        try
+        {
+            if (new FileInfo(path).Length > 32 * 1024 * 1024)
+            {
+                Post(new { type = "failed", message = "ガイドが大きすぎます。" });
+                return;
+            }
+
+            byte[] wav;
+            if (Math.Abs(speed - 1) < 0.001 && semitones == 0)
+                wav = await File.ReadAllBytesAsync(path);
+            else
+            {
+                var audio = await Task.Run(() => WavAudio.Read(path));
+                var shaped = await Task.Run(() => RecTone.ShapeGuide(audio.Samples, audio.Channels, audio.SampleRate, speed == 0 ? 1 : speed, semitones));
+                wav = PreviewWav.Encode(shaped, audio.Channels, audio.SampleRate);
+            }
+
+            _player.Volume = volume;
+            var played = await _player.PlayAsync(wav, loop: false);
+            Post(new { type = "guide", playing = played });
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
+        {
+            Post(new { type = "failed", message = ex.Message });
+            Post(new { type = "guide", playing = false });
+        }
+    }
+
+    async Task HandleTakeAsync(JsonElement root)
+    {
+        var op = Text(root, "op");
+        if (op == "stop")
+        {
+            _takePlaying = false;
+            _take.Stop();
+            Post(new { type = "take", playing = false, position = 0, duration = _takeDuration });
+            return;
+        }
+
+        if (op == "wave")
+        {
+            PostTakeWave(Text(root, "name"));
+            return;
+        }
+
+        if (string.IsNullOrEmpty(_folder))
+        {
+            Post(new { type = "failed", message = "フォルダを開いてください。" });
+            return;
+        }
+
+        var name = Path.GetFileName(Text(root, "name") ?? "");
+        var path = Path.Combine(_folder, name);
+        if (name.Length == 0 || !File.Exists(path))
+        {
+            Post(new { type = "failed", message = "このファイルは存在しません。" });
+            return;
+        }
+
+        try
+        {
+            var audio = await Task.Run(() => WavAudio.Read(path));
+            var frames = audio.Channels <= 0 ? 0 : audio.Samples.Length / audio.Channels;
+            _takeDuration = audio.SampleRate <= 0 ? 0 : frames / (double)audio.SampleRate;
+            var bytes = await File.ReadAllBytesAsync(path);
+            _take.Volume = 1;
+            _takePlaying = true;
+            var played = await _take.PlayAsync(bytes, loop: false);
+            _takePlaying = played;
+            Post(new { type = "take", playing = played, position = 0, duration = _takeDuration });
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
+        {
+            _takePlaying = false;
+            Post(new { type = "failed", message = ex.Message });
+        }
+    }
+
+    void PostTakeWave(string? name)
+    {
+        if (string.IsNullOrEmpty(_folder) || string.IsNullOrEmpty(name))
+        {
+            Post(new { type = "takeWave", name = name ?? "", lo = Array.Empty<double>(), hi = Array.Empty<double>(), duration = 0 });
+            return;
+        }
+
+        var file = Path.GetFileName(name);
+        var path = Path.Combine(_folder, file);
+        if (!File.Exists(path))
+        {
+            Post(new { type = "takeWave", name = file, lo = Array.Empty<double>(), hi = Array.Empty<double>(), duration = 0 });
+            return;
+        }
+
+        try
+        {
+            var audio = WavAudio.Read(path);
+            var frames = audio.Channels <= 0 ? 0 : audio.Samples.Length / audio.Channels;
+            var mono = new float[frames];
+            if (audio.Channels <= 1)
+                mono = audio.Samples;
+            else
+            {
+                for (var i = 0; i < frames; i++)
+                {
+                    double sum = 0;
+                    for (var channel = 0; channel < audio.Channels; channel++)
+                        sum += audio.Samples[i * audio.Channels + channel];
+                    mono[i] = (float)(sum / audio.Channels);
+                }
+            }
+
+            var (lo, hi) = ProbePeaks.Columns(mono, 240);
+            var duration = audio.SampleRate <= 0 ? 0 : frames / (double)audio.SampleRate;
+            Post(new { type = "takeWave", name = file, lo, hi, duration });
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
+        {
+            Post(new { type = "failed", message = ex.Message });
+        }
     }
 
     async Task WatchMicAsync(bool on)
@@ -578,7 +854,8 @@ sealed class ProbeSession : IDisposable
             _recordStem = name.Trim();
         }
 
-        var countIn = root.TryGetProperty("countIn", out var countValue) && countValue.ValueKind == JsonValueKind.True;
+        var manualGuide = _rec.Manual;
+        var countIn = manualGuide && root.TryGetProperty("countIn", out var countValue) && countValue.ValueKind == JsonValueKind.True;
         var bpm = (int)Math.Clamp(Math.Round(Number(root, "bpm") == 0 ? 120 : Number(root, "bpm")), 40, 240);
         if (countIn)
         {
@@ -608,7 +885,7 @@ sealed class ProbeSession : IDisposable
         _recording = true;
         _recordStarted = DateTime.UtcNow;
         PostCapture();
-        if (root.TryGetProperty("guideWhile", out var guideValue) && guideValue.ValueKind == JsonValueKind.True)
+        if (manualGuide && root.TryGetProperty("guideWhile", out var guideValue) && guideValue.ValueKind == JsonValueKind.True)
         {
             var note = Text(root, "note") ?? "C4";
             _ = GuideAsync(note, (int)Math.Round(Number(root, "semitones")), Number(root, "speed") == 0 ? 1 : Number(root, "speed"), Volume(root));
@@ -736,6 +1013,22 @@ sealed class ProbeSession : IDisposable
                 break;
             case "write":
                 _ = WriteOtoAsync();
+                break;
+            case "tune":
+                if (_oto.TunePoint(Text(root, "file"), (int)Math.Round(Number(root, "index")), (int)Math.Round(Number(root, "point")), Number(root, "time")))
+                    RememberOto();
+                break;
+            case "fields":
+                if (_oto.TuneFields(Text(root, "file"), (int)Math.Round(Number(root, "index")), Text(root, "alias"), Number(root, "offset"), Number(root, "overlap"), Number(root, "preutter"), Number(root, "consonant"), Number(root, "blank")))
+                    RememberOto();
+                break;
+            case "aliasName":
+                if (_oto.TuneAlias(Text(root, "file"), (int)Math.Round(Number(root, "index")), Text(root, "alias"), Text(root, "name")))
+                    RememberOto();
+                break;
+            case "comment":
+                if (_oto.TuneComment(Text(root, "file"), (int)Math.Round(Number(root, "index")), Text(root, "alias"), Text(root, "comment")))
+                    RememberOto();
                 break;
         }
     }
@@ -895,7 +1188,7 @@ sealed class ProbeSession : IDisposable
         try
         {
             _analysis ??= new AnalysisClient();
-            var parts = modes.Select(mode => new OtoWritePart(_oto.ExportFor(mode), [])).ToList();
+            var parts = modes.Select(mode => new OtoWritePart(_oto.ExportFor(mode), _oto.Adjustments(mode))).ToList();
             var result = await _analysis.WriteAsync(_folder, _oto.Files, parts, _oto.ScopeForWrite());
             if (_disposed)
                 return;
@@ -1118,6 +1411,7 @@ sealed class ProbeSession : IDisposable
         }
 
         Post(_rec.Snapshot(names));
+        PostGuide();
     }
 
     void PostFrqCount()
@@ -1236,6 +1530,10 @@ sealed class ProbeSession : IDisposable
             case "apply":
                 _ = ApplyEffectsAsync();
                 break;
+            case "move":
+                _effects.Move((int)Math.Round(Number(root, "from")), (int)Math.Round(Number(root, "to")));
+                Post(_effects.Snapshot());
+                break;
         }
     }
 
@@ -1317,34 +1615,173 @@ sealed class ProbeSession : IDisposable
         return Math.Clamp(parsed, 0, 1);
     }
 
-    static readonly string LayoutFile = Path.Combine(AppPaths.DataRoot, "probe-layout.json");
+    bool _keepRatios;
 
     void SaveLayout(JsonElement message)
     {
         if (!message.TryGetProperty("root", out var body))
             return;
-        try
+        LayoutNode? root = null;
+        if (body.ValueKind is not JsonValueKind.Null and not JsonValueKind.Undefined)
         {
-            Directory.CreateDirectory(AppPaths.DataRoot);
-            File.WriteAllText(LayoutFile, body.GetRawText());
+            try
+            {
+                root = JsonSerializer.Deserialize<LayoutNode>(body.GetRawText(), JsonFiles.Options);
+            }
+            catch (JsonException)
+            {
+                return;
+            }
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-        }
+
+        if (root != null && !EditorLayout.IsValid(root))
+            return;
+        _keepRatios = message.TryGetProperty("keepRatios", out var keep) && keep.ValueKind == JsonValueKind.True;
+        EditorLayoutStore.Save(root, _keepRatios);
     }
 
     void PostLayout()
     {
-        if (!File.Exists(LayoutFile))
+        if (!EditorLayoutStore.TryLoad(out var root, out var keep))
             return;
+        _keepRatios = keep;
+        Post(new { type = "layout", root, keepRatios = keep });
+    }
+
+    void PostRecent()
+    {
+        var folders = new List<object>();
+        foreach (var path in RecentFolders.Load())
+        {
+            if (!Directory.Exists(path))
+            {
+                RecentFolders.Forget(path);
+                continue;
+            }
+
+            var name = Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+            folders.Add(new { path, name = name.Length == 0 ? path : name });
+        }
+
+        Post(new { type = "recent", folders });
+    }
+
+    void PostTemplates()
+    {
+        var names = LayoutTemplateStore.Load().Select(template => template.Name).ToArray();
+        Post(new { type = "templates", names });
+    }
+
+    void ApplyTemplate(string? op, string? name)
+    {
+        if (op == "save")
+        {
+            var error = SaveTemplate(name);
+            if (error != null)
+                Post(new { type = "failed", message = error });
+            PostTemplates();
+            return;
+        }
+
+        LayoutNode? root = null;
+        var keep = false;
+        if (name == LayoutTemplate.BuiltInName)
+            root = EditorLayout.CreateDefault();
+        else if (name == LayoutTemplate.RecordingName)
+            root = EditorLayout.CreateRecording();
+        else
+        {
+            var found = LayoutTemplateStore.Load().FirstOrDefault(template => template.Name == name);
+            if (found == null)
+            {
+                Post(new { type = "failed", message = "配置テンプレートがありません。" });
+                return;
+            }
+
+            root = EditorLayout.Clone(found.Root);
+            keep = found.KeepRatios;
+        }
+
+        _keepRatios = keep;
+        EditorLayoutStore.Save(root, keep);
+        Post(new { type = "layout", root, keepRatios = keep });
+    }
+
+    string? SaveTemplate(string? name)
+    {
+        var trimmed = (name ?? "").Trim();
+        if (trimmed.Length == 0)
+            return "名前を入力してください。";
+        if (trimmed.Length > 40)
+            return "名前は40文字までです。";
+        if (trimmed is LayoutTemplate.BuiltInName or LayoutTemplate.RecordingName)
+            return "その名前は使えません。";
+        if (!EditorLayoutStore.TryLoad(out var root, out var keep))
+        {
+            root = null;
+            keep = _keepRatios;
+        }
+
+        var list = LayoutTemplateStore.Load().Where(template => template.Name != trimmed).ToList();
+        list.Add(new LayoutTemplate { Name = trimmed, Root = root, KeepRatios = keep });
         try
         {
-            using var saved = JsonDocument.Parse(File.ReadAllText(LayoutFile));
-            Post(new { type = "layout", root = saved.RootElement.Clone() });
+            LayoutTemplateStore.Save(list);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
+            return ex.Message;
         }
+
+        return null;
+    }
+
+    void PostAppearance()
+    {
+        AppAppearance.Load();
+        Post(new
+        {
+            type = "appearance",
+            theme = AppAppearance.Theme switch
+            {
+                AppThemeChoice.Light => "light",
+                AppThemeChoice.Dark => "dark",
+                _ => "system",
+            },
+            accent = AppAppearance.Accent?.ToHex(),
+        });
+    }
+
+    void SaveAppearance(JsonElement root)
+    {
+        var theme = Text(root, "theme") switch
+        {
+            "light" => AppThemeChoice.Light,
+            "dark" => AppThemeChoice.Dark,
+            _ => AppThemeChoice.System,
+        };
+        AppAppearance.SaveTheme(theme);
+        var accent = Text(root, "accent");
+        AppAppearance.SaveAccent(RgbColor.TryParse(accent, out var color) ? color : null);
+    }
+
+    async Task HandleUpdateAsync(string? op)
+    {
+        if (op == "apply")
+            await _update.ApplyAsync(PostUpdate, StopEngines);
+        else
+            await _update.CheckAsync(PostUpdate);
+    }
+
+    void PostUpdate(string phase, string title, string body) =>
+        Post(new { type = "update", phase, title, body });
+
+    void StopEngines()
+    {
+        _python?.Dispose();
+        _python = null;
+        _analysis?.Dispose();
+        _analysis = null;
     }
 
     void PostCapture()
@@ -1364,6 +1801,8 @@ sealed class ProbeSession : IDisposable
             hi,
             listenError = _capture.ListenError,
         });
+        if (_takePlaying)
+            Post(new { type = "take", playing = true, position = _take.PositionSeconds, duration = _takeDuration });
     }
 
     void Post(object payload)

@@ -1,6 +1,7 @@
 import { useEffect, useRef, type RefObject } from "react"
 import { shouldReplaceBitmap } from "./bitmap"
 import { drawPeaks } from "./drawPeaks"
+import { hitOtoPoint } from "./otoHit"
 import { timeAt, type OtoMark, type PreviewEvent } from "./protocol"
 import { spanBoundaries, spanCaption, spanFill, type PhoneSpan } from "./spans"
 import { imagePlacement, panRange, zoomRange, type Range } from "./viewport"
@@ -30,13 +31,17 @@ type Props = {
   register: (handle: BandHandle) => () => void
   onRange: (range: Range, commit: boolean) => void
   onFileStep: (direction: number) => void
+  onTune?: (index: number, point: number, time: number) => void
 }
 
-export function GraphBand({ kind, picture, model, appearance, register, onRange, onFileStep }: Props) {
+export function GraphBand({ kind, picture, model, appearance, register, onRange, onFileStep, onTune }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const imageRef = useRef<HTMLImageElement | null>(null)
   const holdRef = useRef(false)
   const dragRef = useRef<{ x: number; range: Range } | null>(null)
+  const tuneRef = useRef<{ index: number; point: number; time: number } | null>(null)
+  const onTuneRef = useRef(onTune)
+  onTuneRef.current = onTune
   const wheelRef = useRef(0)
   const onRangeRef = useRef(onRange)
   const onFileStepRef = useRef(onFileStep)
@@ -174,7 +179,7 @@ export function GraphBand({ kind, picture, model, appearance, register, onRange,
     if (kind === "wave" || kind === "spec" || kind === "loud")
       drawBoundaries(ctx, placed, source, spans, height, kind === "wave")
     if (kind === "oto")
-      drawMarks(ctx, placed, source, current.marks, height)
+      drawMarks(ctx, placed, source, tunedMarks(current.marks, tuneRef.current), height)
   }
 
   return (
@@ -185,14 +190,39 @@ export function GraphBand({ kind, picture, model, appearance, register, onRange,
       onContextMenu={(event) => event.preventDefault()}
       onPointerDown={(event) => {
         const current = model.current
-        if (!current.picture || event.button !== 2)
+        if (!current.picture)
+          return
+        if (event.button === 0 && kind === "oto") {
+          const rect = event.currentTarget.getBoundingClientRect()
+          const hit = hitOtoPoint(current.marks, event.clientX - rect.left, rect.width, current.range.t0, current.range.t1)
+          const mark = hit == null ? null : current.marks[hit.index]
+          if (!hit || !mark)
+            return
+          const times = [mark.offset, mark.overlap, mark.preutter, mark.consonant, mark.blank]
+          tuneRef.current = { index: mark.index, point: hit.point, time: times[hit.point] ?? 0 }
+          event.currentTarget.setPointerCapture(event.pointerId)
+          return
+        }
+        if (event.button !== 2)
           return
         dragRef.current = { x: event.clientX, range: current.range }
         event.currentTarget.setPointerCapture(event.pointerId)
       }}
       onPointerMove={(event) => {
-        const drag = dragRef.current
+        const tune = tuneRef.current
         const current = model.current
+        if (tune && current.picture) {
+          const rect = event.currentTarget.getBoundingClientRect()
+          tuneRef.current = { ...tune, time: timeAt(event.clientX - rect.left, rect.width, current.range.t0, current.range.t1) }
+          draw()
+          return
+        }
+        if (kind === "oto" && current.picture) {
+          const rect = event.currentTarget.getBoundingClientRect()
+          const hit = hitOtoPoint(current.marks, event.clientX - rect.left, rect.width, current.range.t0, current.range.t1)
+          event.currentTarget.style.cursor = hit ? "ew-resize" : "default"
+        }
+        const drag = dragRef.current
         if (!drag || !current.picture)
           return
         const width = event.currentTarget.clientWidth
@@ -201,6 +231,13 @@ export function GraphBand({ kind, picture, model, appearance, register, onRange,
         onRangeRef.current(panRange(drag.range, fraction * (span / Math.max(span, 1e-12)), current.picture.duration), false)
       }}
       onPointerUp={() => {
+        const tune = tuneRef.current
+        if (tune) {
+          tuneRef.current = null
+          onTuneRef.current?.(tune.index, tune.point, tune.time)
+          draw()
+          return
+        }
         if (!dragRef.current)
           return
         dragRef.current = null
@@ -208,6 +245,16 @@ export function GraphBand({ kind, picture, model, appearance, register, onRange,
       }}
     />
   )
+}
+
+function tunedMarks(marks: OtoMark[], tune: { index: number; point: number; time: number } | null) {
+  if (!tune)
+    return marks
+  const keys = ["offset", "overlap", "preutter", "consonant", "blank"] as const
+  const key = keys[tune.point]
+  if (!key)
+    return marks
+  return marks.map((mark) => mark.index === tune.index ? { ...mark, [key]: tune.time } : mark)
 }
 
 function drawNote(ctx: CanvasRenderingContext2D, width: number, height: number, note: string) {

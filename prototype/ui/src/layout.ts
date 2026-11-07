@@ -38,6 +38,18 @@ export function createDefault(): LayoutNode {
   )
 }
 
+export function createRecording(): LayoutNode {
+  return h(
+    0.22,
+    leaf("recList"),
+    v(
+      0.52,
+      h(0.58, v(0.58, leaf("recScript"), leaf("rec")), leaf("guide")),
+      v(0.5, leaf("mic"), h(0.36, leaf("file"), leaf("wave"))),
+    ),
+  )
+}
+
 export function parseLayout(value: unknown): LayoutNode | null {
   const seen = new Set<string>()
   const node = readNode(value, seen)

@@ -9,8 +9,8 @@
 
 ## 置き場所
 
-- `winui/` — WinUI 3。名前空間は `Otoasobi`。画面は `MainPage` ひとつで、別 Page へは遷移しません。状態は `IdleView` / `BusyView` / `EditorView` / `ErrorView` の Visibility です。
-- `prototype/` — 移行判断用の試作です。製品には組み込みません。製品の画面は、試作の確認が終わるまで置き換えません。`prototype/host` が WinUI の別ウィンドウで、`prototype/ui` の React を WebView2 に表示します。ページは `npm run dev`、ホストは `dotnet run --project prototype/host` です。アドレスは環境変数 `OTOASOBI_PROBE_URL`（既定 `http://localhost:5173`）です。初期配置は製品の `EditorLayout.CreateDefault` に合わせる。見出しは 4px 以上動かしてからドラッグし、上下左右の印か端の帯で離したときだけ `Move` する。閉じるは表示メニューと同じ `Hide` です。配置の保存先は `%LocalAppData%\Otoasobi\probe-layout.json` で、製品の `editor-layout.json` には書きません。拡大縮小は、ホイールのあいだ今の画像を引き伸ばし、止めたあとにスペクトログラムを一度だけ取り直す。ドラッグのあいだも取り直しません。マイクは録音コントローラかマイクモニターが見えているときだけ開く。`preview` には音量の配列を足してよい。`capture` と `saved` の形は変えない。oto推定設定と oto.ini生成は、ページが操作を送り、ホストが既存のプリセット、スライダー、oto.ini の書き出しで計算します。解析結果の区間は oto設定の面に線で出します。音素推定とスペクトログラムには区間のラベル、音量には境界の線を出します。解析中は進み具合を出し、選択した WAV だけの再解析もできます。`.frq生成` と frqエディター、録音リスト、録音スクリプト、oto数値表もページから操作し、計算とファイルの書き出しはホストの既存コードが行います。録音リストで選んだ行は、使える文字のときだけ音源フォルダへ `音素.wav` として保存します。ボタンや分割の上では、マウスカーソルを変えます。音源の各種設定は、ページが文字を送り、ホストが `character.txt`、`readme.txt`、`character.yaml`、`icon.bmp`、立ち絵を既存の書き出しで保存します。エフェクターは、ページがオンと数値を送り、ホストが既存のエフェクト列を `original` の音声へ適用してから解析し直します。並びはノイズサプレッサー、ハイパス、イコライザー、コンプレッサー、ノーマライズです。
+- `winui/` — 計算と、公開しない旧画面です。名前空間は `Otoasobi`。新しい画面は足しません。`MainPage` は残してあり、別 Page へは遷移しません。状態は `IdleView` / `BusyView` / `EditorView` / `ErrorView` の Visibility です。
+- `prototype/` — 配布する画面です。`prototype/host` が `Otoasobi.exe` になり、`prototype/ui` の React を WebView2 に表示します。開発中は `prototype/ui` で `npm run dev` し、`dotnet run --project prototype/host` します。`launchSettings.json` が `OTOASOBI_PROBE_URL` を `http://localhost:5173` にします。発行した exe にはこの環境変数が無いので、同梱した `ui` フォルダを仮想ホストで開きます。初期配置は `EditorLayout.CreateDefault` に合わせる。見出しは 4px 以上動かしてからドラッグし、上下左右の印か端の帯で離したときだけ `Move` する。閉じるは表示メニューと同じ `Hide` です。配置の保存先は `%LocalAppData%\Otoasobi\editor-layout.json` です。拡大縮小は、ホイールのあいだ今の画像を引き伸ばし、止めたあとにスペクトログラムを一度だけ取り直す。ドラッグのあいだも取り直しません。マイクは録音コントローラかマイクモニターが見えているときだけ開く。`preview` には音量の配列を足してよい。`capture` と `saved` の形は変えない。oto推定設定と oto.ini生成は、ページが操作を送り、ホストが既存のプリセット、スライダー、oto.ini の書き出しで計算します。解析結果の区間は oto設定の面に線で出します。音素推定とスペクトログラムには区間のラベル、音量には境界の線を出します。解析中は進み具合を出し、選択した WAV だけの再解析もできます。`.frq生成` と frqエディター、録音リスト、録音スクリプト、oto数値表もページから操作し、計算とファイルの書き出しはホストの既存コードが行います。録音リストで選んだ行は、使える文字のときだけ音源フォルダへ `音素.wav` として保存します。ボタンや分割の上では、マウスカーソルを変えます。音源の各種設定は、ページが文字を送り、ホストが `character.txt`、`readme.txt`、`character.yaml`、`icon.bmp`、立ち絵を既存の書き出しで保存します。エフェクターは、ページがオンと数値を送り、ホストが既存のエフェクト列を `original` の音声へ適用してから解析し直します。ノイズサプレッサーは先頭に固定し、残りの 4 枚は並べ替えられます。既定の並びはハイパス、イコライザー、コンプレッサー、ノーマライズです。
 - `otoasobi/` — 解析の Python。画面は `AnalysisClient` が `python -m otoasobi.worker` を起動し、UTF-8 の JSON 行で話します。WAV 一覧と 1 ファイルの解析結果 `AnalyzedFile` は `wavs.py` です。
 - `tests/OtoParity/` — xUnit。WinUI のロジック用 `.cs` をプロジェクト参照ではなく `Compile Include` で直にコンパイルします。新しい純粋ロジックをテストするときは、この csproj にもリンクを足します。`MainPage` と XAML はテストに入りません。
 - `tests/test_*.py` — Python 側のテストです。
@@ -121,8 +121,12 @@ id は `recList`、`recScript`、`rec`、`guide`、`mic`。初期配置には入
 ## 確認
 
 ```text
-dotnet build winui/Otoasobi.csproj
+npx tsc --noEmit
+npx vitest run
 dotnet test tests/OtoParity/OtoParity.csproj
+dotnet build prototype/host/Otoasobi.Probe.csproj
 ```
+
+ページの確認は `prototype/ui` で行います。`winui/Otoasobi.csproj` は旧画面で、リリースには入れません。
 
 オトアソビが起動していると、`Otoasobi.exe` のコピーでビルドが失敗します。そのときはコンパイル結果と、起動中のプロセスを分けて見ます。画面へ反映するには、起動中のアプリを終了してから開き直します。

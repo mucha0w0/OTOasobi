@@ -24,7 +24,7 @@ jobs:
         id: version
         shell: bash
         run: |
-          version=$(grep -oE '<Version>[^<]+' winui/Otoasobi.csproj | head -1 | sed 's/<Version>//')
+          version=$(grep -oE '<Version>[^<]+' prototype/host/Otoasobi.Probe.csproj | head -1 | sed 's/<Version>//')
           tag="${GITHUB_REF_NAME#v}"
           if [ "$version" != "$tag" ]; then
             echo "csproj Version $version とタグ $GITHUB_REF_NAME が一致しません。"
@@ -32,10 +32,24 @@ jobs:
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: prototype/ui/package-lock.json
+
+      - name: Build page
+        working-directory: prototype/ui
+        shell: pwsh
+        run: |
+          npm ci
+          npm run build
+
       - name: Publish
         shell: pwsh
         run: >
-          dotnet publish winui/Otoasobi.csproj -c Release -r win-x64 --self-contained true -o publish
+          dotnet publish prototype/host/Otoasobi.Probe.csproj -c Release -r win-x64 --self-contained true -o publish
           -p:Platform=x64 -p:WindowsAppSDKSelfContained=true -p:DebugType=none -p:DebugSymbols=false
 
       - name: Restore engine cache

@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "Otoasobi": {
+      "commandName": "Project",
+      "environmentVariables": {
+        "OTOASOBI_PROBE_URL": "http://localhost:5173"
+      }
+    }
+  }
+}

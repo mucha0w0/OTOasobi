@@ -49,6 +49,15 @@ export function EffectsPanel({
             {form.presets.filter((name) => name !== "カスタム").map((name) => <option key={name}>{name}</option>)}
           </select>
         </label>
+        {orderOf(form).map((kind, index, order) => (
+          <div key={kind}>
+            {kind !== "noise-suppressor" && (
+              <div className="mb-1 flex justify-end gap-2">
+                <button type="button" className="ghost-button" disabled={index <= 1} onClick={() => send({ type: "effects", op: "move", from: index, to: index - 1 })}>上へ</button>
+                <button type="button" className="ghost-button" disabled={index >= order.length - 1} onClick={() => send({ type: "effects", op: "move", from: index, to: index + 1 })}>下へ</button>
+              </div>
+            )}
+            {kind === "noise-suppressor" && (
         <Card title="ノイズサプレッサー" on={form.noiseEnabled} setOn={(noiseEnabled) => push({ ...form, noiseEnabled })}>
           <Slider label="抑える量" min={0} max={16} step={0.5} value={form.noiseReduction} suffix=" dB" onChange={(noiseReduction) => push({ ...form, noiseReduction })} />
           <label className="mt-2 grid gap-1">
@@ -70,6 +79,8 @@ export function EffectsPanel({
           </div>
           <p className="mt-1 text-[var(--muted)]">{form.noiseReady ? "無音の範囲を使います。" : "オンにするときは、無音の範囲を選んでください。"}</p>
         </Card>
+            )}
+            {kind === "highpass" && (
         <Card title="ハイパス" on={form.highpassEnabled} setOn={(highpassEnabled) => push({ ...form, highpassEnabled })}>
           <Slider label="周波数" min={20} max={200} step={1} value={form.highpassHz} suffix=" Hz" onChange={(highpassHz) => push({ ...form, highpassHz })} />
           <label className="mt-2 flex gap-3">
@@ -77,6 +88,8 @@ export function EffectsPanel({
             <span><input type="radio" checked={form.highpassSlope === 24} onChange={() => push({ ...form, highpassSlope: 24 })} /> 24 dB/oct</span>
           </label>
         </Card>
+            )}
+            {kind === "equalizer" && (
         <Card title="イコライザー" on={form.eqEnabled} setOn={(eqEnabled) => push({ ...form, eqEnabled })}>
           {bands.map((hz, index) => (
             <Slider
@@ -97,13 +110,20 @@ export function EffectsPanel({
             />
           ))}
         </Card>
+            )}
+            {kind === "compressor" && (
         <Card title="コンプレッサー" on={form.compressorEnabled} setOn={(compressorEnabled) => push({ ...form, compressorEnabled })}>
           <Slider label="比" min={2} max={3} step={0.1} value={form.compressorRatio} suffix="" onChange={(compressorRatio) => push({ ...form, compressorRatio })} />
           <Slider label="下げ幅" min={0} max={6} step={0.1} value={form.compressorReduction} suffix=" dB" onChange={(compressorReduction) => push({ ...form, compressorReduction })} />
         </Card>
+            )}
+            {kind === "normalize" && (
         <Card title="ノーマライズ" on={form.normalizeEnabled} setOn={(normalizeEnabled) => push({ ...form, normalizeEnabled })}>
           <Slider label="目標" min={-12} max={0} step={0.1} value={form.normalizeTarget} suffix=" dB" onChange={(normalizeTarget) => push({ ...form, normalizeTarget })} />
         </Card>
+            )}
+          </div>
+        ))}
       </div>
       <div className="border-t border-[var(--line)] p-3">
         {blocked && <p className="mb-2">無音の範囲を選んでください。{blocked}</p>}
@@ -131,6 +151,12 @@ export function EffectsPanel({
       )}
     </div>
   )
+}
+
+function orderOf(form: EffectsEvent) {
+  const fallback = ["noise-suppressor", "highpass", "equalizer", "compressor", "normalize"]
+  const known = form.order.filter((kind) => fallback.includes(kind))
+  return known.length === fallback.length ? known : fallback
 }
 
 function noiseFiles(form: EffectsEvent) {

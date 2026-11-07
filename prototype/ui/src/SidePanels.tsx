@@ -67,7 +67,15 @@ export function RecPanel({
   )
 }
 
+export type GuideFileState = {
+  manual: boolean
+  path: string
+  label: string
+  recent: { path: string; label: string }[]
+}
+
 export function GuidePanel({
+  guide,
   note,
   semitones,
   speed,
@@ -85,6 +93,7 @@ export function GuidePanel({
   setGuideWhile,
   send,
 }: {
+  guide: GuideFileState
   note: string
   semitones: number
   speed: number
@@ -105,62 +114,110 @@ export function GuidePanel({
   return (
     <div className="flex h-full flex-col text-sm">
       <div className="flex flex-1 flex-col gap-3 overflow-auto p-3">
-      <p className="font-semibold">自分で設定する</p>
-      <label className="grid gap-1">
-        音程
-        <select className="field" value={note} onChange={(event) => setNote(event.target.value)}>
-          {notes.map((item) => (
-            <option key={item}>{item}</option>
-          ))}
-        </select>
-      </label>
-      <label className="grid gap-1">
-        音程のずらし {semitones} 半音
-        <input type="range" min={-12} max={12} step={1} value={semitones} onChange={(event) => setSemitones(Number(event.target.value))} />
-      </label>
-      <label className="grid gap-1">
-        速さ {Math.round(speed * 100)}%
-        <input type="range" min={0.5} max={2} step={0.05} value={speed} onChange={(event) => setSpeed(Number(event.target.value))} />
-      </label>
-      <label className="grid gap-1">
-        ガイドの大きさ {Math.round(volume * 100)}%
-        <input type="range" min={0} max={1} step={0.01} value={volume} onChange={(event) => setVolume(Number(event.target.value))} />
-      </label>
-      <label className="flex gap-2">
-        <input type="checkbox" checked={countIn} onChange={(event) => setCountIn(event.target.checked)} />
-        カウント
-      </label>
-      <label className="grid gap-1">
-        テンポ {bpm}
-        <input type="range" min={40} max={240} step={1} value={bpm} onChange={(event) => setBpm(Number(event.target.value))} />
-      </label>
-      <label className="flex gap-2">
-        <input type="checkbox" checked={guideWhile} onChange={(event) => setGuideWhile(event.target.checked)} />
-        録音中のガイド
-      </label>
+        <label className="flex gap-2">
+          <input type="radio" checked={!guide.manual} onChange={() => send({ type: "guideFile", manual: false })} />
+          ファイルを選ぶ
+        </label>
+        <label className="flex gap-2">
+          <input type="radio" checked={guide.manual} onChange={() => send({ type: "guideFile", manual: true })} />
+          自分で設定する
+        </label>
+        <label className="grid gap-1">
+          ガイドの大きさ {Math.round(volume * 100)}%
+          <input type="range" min={0} max={1} step={0.01} value={volume} onChange={(event) => setVolume(Number(event.target.value))} />
+        </label>
+        {guide.manual ? (
+          <>
+            <label className="grid gap-1">
+              音程
+              <select className="field" value={note} onChange={(event) => setNote(event.target.value)}>
+                {notes.map((item) => (
+                  <option key={item}>{item}</option>
+                ))}
+              </select>
+            </label>
+            <label className="flex gap-2">
+              <input type="checkbox" checked={countIn} onChange={(event) => setCountIn(event.target.checked)} />
+              カウント
+            </label>
+            <label className="grid gap-1">
+              テンポ {bpm}
+              <input type="range" min={40} max={240} step={1} value={bpm} onChange={(event) => setBpm(Number(event.target.value))} />
+            </label>
+            <label className="flex gap-2">
+              <input type="checkbox" checked={guideWhile} onChange={(event) => setGuideWhile(event.target.checked)} />
+              録音中のガイド
+            </label>
+          </>
+        ) : (
+          <>
+            <label className="grid gap-1">
+              ファイル
+              <select
+                className="field"
+                value={guide.path}
+                onChange={(event) => send({ type: "guideFile", path: event.target.value })}
+              >
+                <option value="">選択しない</option>
+                {guide.recent.map((item) => (
+                  <option key={item.path} value={item.path}>{item.label}</option>
+                ))}
+                {guide.path && !guide.recent.some((item) => item.path === guide.path) && (
+                  <option value={guide.path}>{guide.label || guide.path}</option>
+                )}
+              </select>
+            </label>
+            <button type="button" className="ghost-button" onClick={() => send({ type: "guideFile", pick: true })}>ファイルから選ぶ</button>
+            <label className="grid gap-1">
+              再生速度 {Math.round(speed * 100)}%
+              <input type="range" min={0.5} max={2} step={0.05} value={speed} onChange={(event) => setSpeed(Number(event.target.value))} />
+            </label>
+            <label className="grid gap-1">
+              音程 {semitones} 半音
+              <input type="range" min={-12} max={12} step={1} value={semitones} onChange={(event) => setSemitones(Number(event.target.value))} />
+            </label>
+          </>
+        )}
       </div>
       <div className="border-t border-[var(--line)] p-3">
-      <button
-        type="button"
-        className="accent-button w-full"
-        onClick={() => send(playing ? { type: "guideStop" } : { type: "guide", note, semitones, speed, volume })}
-      >
-        {playing ? "ガイドを停止" : "ガイドを聴く"}
-      </button>
+        <button
+          type="button"
+          className="accent-button w-full"
+          onClick={() => send(playing ? { type: "guideStop" } : { type: "guide", note, semitones, speed, volume })}
+        >
+          {playing ? "停止" : "ガイドを聴く"}
+        </button>
       </div>
     </div>
   )
 }
 
-export function MicPanel({ bus, appearance, monitor, setMonitor, send }: {
+export function MicPanel({
+  bus,
+  appearance,
+  monitor,
+  setMonitor,
+  recorded,
+  takeName,
+  wave,
+  playing,
+  position,
+  send,
+}: {
   bus: LiveBus
   appearance: string
   monitor: boolean
   setMonitor: (on: boolean) => void
+  recorded: boolean
+  takeName: string
+  wave: { lo: number[]; hi: number[]; duration: number } | null
+  playing: boolean
+  position: number
   send: (command: PageCommand) => void
 }) {
   const capture = useCapture(bus)
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const shown = recorded ? wave : null
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -182,29 +239,47 @@ export function MicPanel({ bus, appearance, monitor, setMonitor, send }: {
       return
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0)
     ctx.clearRect(0, 0, width, height)
-    if (capture)
-      drawPeaks(ctx, width, height, capture.lo, capture.hi, getCss("--wave"))
-  }, [capture, appearance])
+    const peaks = shown ?? capture
+    if (peaks)
+      drawPeaks(ctx, width, height, peaks.lo, peaks.hi, getCss("--wave"))
+    if (shown && shown.duration > 0 && playing) {
+      const x = Math.min(width, Math.max(0, width * position / shown.duration))
+      ctx.fillStyle = getCss("--accent")
+      ctx.fillRect(x, 0, 2, height)
+    }
+  }, [capture, appearance, shown, playing, position])
 
   return (
-    <div className="flex h-full flex-col gap-3 p-3 text-sm">
-      <label className="flex items-center gap-2">
-        <input
-          type="checkbox"
-          checked={monitor}
-          onChange={(event) => {
-            setMonitor(event.target.checked)
-            send({ type: "monitor", on: event.target.checked })
-          }}
-        />
-        入力を聴く
-      </label>
-      {capture?.listenError && <p>{capture.listenError}</p>}
-      <div className="min-h-16 flex-1 rounded border border-[var(--line)] bg-[var(--canvas)]">
-        <canvas ref={canvasRef} className="h-full w-full" />
+    <div className="flex h-full flex-col text-sm">
+      <div className="flex min-h-0 flex-1 flex-col gap-3 p-3">
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={monitor}
+            onChange={(event) => {
+              setMonitor(event.target.checked)
+              send({ type: "monitor", on: event.target.checked })
+            }}
+          />
+          入力を聴く
+        </label>
+        {capture?.listenError && <p>{capture.listenError}</p>}
+        <div className="relative min-h-16 flex-1 rounded border border-[var(--line)] bg-[var(--canvas)]">
+          <canvas ref={canvasRef} className="h-full w-full" />
+        </div>
+        <div className="h-2 overflow-hidden rounded bg-[var(--line)]">
+          <div className="h-full bg-[var(--accent)]" style={{ width: `${Math.min(1, capture?.peak ?? 0) * 100}%` }} />
+        </div>
       </div>
-      <div className="h-2 overflow-hidden rounded bg-[var(--line)]">
-        <div className="h-full bg-[var(--accent)]" style={{ width: `${Math.min(1, capture?.peak ?? 0) * 100}%` }} />
+      <div className="border-t border-[var(--line)] p-3">
+        <button
+          type="button"
+          className="accent-button w-full"
+          disabled={!recorded || takeName.length === 0}
+          onClick={() => send(playing ? { type: "take", op: "stop" } : { type: "take", op: "play", name: takeName })}
+        >
+          {playing ? "停止" : "テイクを聴く"}
+        </button>
       </div>
     </div>
   )

@@ -29,6 +29,7 @@ sealed class ProbeOto
     bool _aliasCvvc;
     string _scope = "all";
     bool _busy;
+    readonly OtoAdjustBook _adjust = new();
     string? _loudPath;
     double[]? _loudness;
 
@@ -337,7 +338,6 @@ sealed class ProbeOto
 
     public object Snapshot(string? fileName)
     {
-        var marks = Marks(fileName);
         return new
         {
             type = "oto",
@@ -376,17 +376,187 @@ sealed class ProbeOto
             vcBlank = Shown(_cvvc.VcBlank, DefaultVcBlank),
             kinds = ConsonantOverlap.Kinds.Select(kind => new { group = kind.Group, key = kind.Key, caption = kind.Caption }).ToArray(),
             spans = SpansOf(fileName),
-            marks = marks.Select(mark => new
-            {
-                alias = mark.Alias,
-                offset = mark.Offset,
-                overlap = mark.Overlap,
-                preutter = mark.Preutter,
-                consonant = mark.Consonant,
-                blank = mark.Blank,
-            }).ToArray(),
+            marks = CollectRows()
+                .Where(row => string.Equals(row.File, fileName, StringComparison.OrdinalIgnoreCase))
+                .Select(row => row.View)
+                .ToArray(),
+            rows = Rows(),
         };
     }
+
+    public List<OtoAdjustedEntry> Adjustments(string mode) =>
+        _adjust.For(mode).Select(entry => entry.Copy()).ToList();
+
+    public bool TunePoint(string? fileName, int index, int point, double time)
+    {
+        var file = FindFile(fileName);
+        if (file == null || point < 0 || point >= OtoTune.PointCount)
+            return false;
+        var auto = AutoMarks(file);
+        if (index < 0 || index >= auto.Count)
+            return false;
+        var duration = Math.Max(file.Duration, 0);
+        var existing = Match(_adjust.For(_mode), file.Name, index, auto[index].Alias);
+        var points = existing?.Points() ?? new double?[OtoTune.PointCount];
+        var current = OtoTune.Apply(auto[index], points, duration);
+        var stack = new bool[OtoTune.PointCount];
+        stack[point] = true;
+        var next = (double?[])points.Clone();
+        next[point] = OtoTune.ClampGroup(current, stack, time, duration);
+        return StorePlaced(file, index, auto[index], OtoTune.Apply(auto[index], next, duration));
+    }
+
+    public bool TuneFields(string? fileName, int index, string? alias, double offset, double overlap, double preutter, double consonant, double blank)
+    {
+        var file = FindFile(fileName);
+        if (file == null)
+            return false;
+        var auto = AutoMarks(file);
+        if (index < 0 || index >= auto.Count || !string.Equals(auto[index].Alias, alias, StringComparison.Ordinal))
+            return false;
+        var desired = OtoIni.FromFields(auto[index], offset, overlap, preutter, consonant, blank);
+        var placed = OtoTune.Place(
+            auto[index],
+            desired.Offset,
+            desired.Overlap,
+            desired.Preutter,
+            desired.Consonant,
+            desired.Blank,
+            [true, true, true, true, true],
+            Math.Max(file.Duration, 0));
+        return StorePlaced(file, index, auto[index], placed);
+    }
+
+    public bool TuneAlias(string? fileName, int index, string? alias, string? name)
+    {
+        var file = FindFile(fileName);
+        if (file == null)
+            return false;
+        var rows = CollectRows();
+        var row = rows.FirstOrDefault(item =>
+            item.File.Equals(file.Name, StringComparison.OrdinalIgnoreCase)
+            && item.Index == index
+            && item.AutoAlias == alias);
+        if (row == null)
+            return false;
+        var cleaned = OtoIni.CleanAlias(name);
+        if (cleaned == null && !string.IsNullOrWhiteSpace(name))
+            return false;
+        var aliases = rows.Select(item => item.AutoAlias).ToArray();
+        var names = rows.Select(item => item.Name).ToArray();
+        var at = rows.IndexOf(row);
+        names[at] = null;
+        var natural = OtoIni.ResolveAliases(aliases, names)[at];
+        var stored = cleaned != null && string.Equals(cleaned, natural, StringComparison.Ordinal) ? null : cleaned;
+        _adjust.RememberName(_mode, row.File, row.Index, row.AutoAlias, stored);
+        return true;
+    }
+
+    public bool TuneComment(string? fileName, int index, string? alias, string? comment)
+    {
+        var file = FindFile(fileName);
+        if (file == null)
+            return false;
+        var auto = AutoMarks(file);
+        if (index < 0 || index >= auto.Count || !string.Equals(auto[index].Alias, alias, StringComparison.Ordinal))
+            return false;
+        _adjust.RememberComment(_mode, file.Name, index, auto[index].Alias, OtoIni.CleanComment(comment));
+        return true;
+    }
+
+    bool StorePlaced(WavFile file, int index, OtoMark auto, OtoMark placed)
+    {
+        var stored = new OtoAdjustedEntry
+        {
+            File = file.Name,
+            Index = index,
+            Alias = auto.Alias,
+        };
+        for (var point = 0; point < OtoTune.PointCount; point++)
+        {
+            var at = OtoTune.RoundSeconds(placed.At(point));
+            stored.SetPoint(point, Math.Abs(at - auto.At(point)) <= OtoTune.MagnetSeconds ? null : at);
+        }
+
+        _adjust.Remember(_mode, stored);
+        return true;
+    }
+
+    object[] Rows() => CollectRows().Select(row => (object)row.View).ToArray();
+
+    List<ShownRow> CollectRows()
+    {
+        var rows = new List<ShownRow>();
+        foreach (var file in _files)
+        {
+            var auto = AutoMarks(file);
+            for (var i = 0; i < auto.Count; i++)
+                rows.Add(Shown(file, i, auto[i]));
+        }
+
+        return rows;
+    }
+
+    ShownRow Shown(WavFile file, int index, OtoMark auto)
+    {
+        var entry = Match(_adjust.For(_mode), file.Name, index, auto.Alias);
+        var points = entry?.Points();
+        var shown = OtoTune.Apply(auto, points, Math.Max(file.Duration, 0));
+        var tuned = new bool[OtoTune.PointCount];
+        if (points != null)
+        {
+            for (var point = 0; point < tuned.Length; point++)
+                tuned[point] = points[point] != null;
+        }
+
+        var any = tuned.Any(flag => flag);
+        var custom = string.IsNullOrEmpty(entry?.Name) ? null : entry!.Name;
+        var comment = entry?.Comment ?? "";
+        var label = custom ?? auto.Alias;
+        if (any || custom != null)
+            label += " *";
+        return new ShownRow(file.Name, index, auto.Alias, custom, new
+        {
+            file = file.Name,
+            index,
+            alias = label,
+            autoAlias = auto.Alias,
+            name = custom ?? "",
+            comment,
+            tuned,
+            offset = shown.Offset,
+            overlap = shown.Overlap,
+            preutter = shown.Preutter,
+            consonant = shown.Consonant,
+            blank = shown.Blank,
+        });
+    }
+
+    WavFile? FindFile(string? fileName) =>
+        string.IsNullOrEmpty(fileName)
+            ? null
+            : _files.FirstOrDefault(item => string.Equals(item.Name, fileName, StringComparison.OrdinalIgnoreCase));
+
+    List<OtoMark> AutoMarks(WavFile file)
+    {
+        var marks = new List<OtoMark>();
+        if (!string.IsNullOrEmpty(_folder))
+            OtoMarks.Fill(file, ExportFor(_mode), marks, Loudness(Path.Combine(_folder, file.Name)));
+        return marks;
+    }
+
+    static OtoAdjustedEntry? Match(List<OtoAdjustedEntry> list, string file, int index, string alias)
+    {
+        foreach (var entry in list)
+        {
+            if (entry.Index == index && entry.File.Equals(file, StringComparison.OrdinalIgnoreCase) && entry.Alias == alias)
+                return entry;
+        }
+
+        return null;
+    }
+
+    sealed record ShownRow(string File, int Index, string AutoAlias, string? Name, object View);
 
     object[] SpansOf(string? fileName)
     {
@@ -467,6 +637,19 @@ sealed class ProbeOto
         _aliasMonoWanted = aliases.Contains("mono");
         _aliasRenzoku = aliases.Contains("renzoku");
         _aliasCvvc = aliases.Contains("cvvc");
+        LoadAdjust(file.Adjustments);
+    }
+
+    void LoadAdjust(OtoAdjustBook? book)
+    {
+        _adjust.Mono.Clear();
+        _adjust.Renzoku.Clear();
+        _adjust.Cvvc.Clear();
+        if (book == null)
+            return;
+        _adjust.Mono.AddRange(book.Mono.Select(entry => entry.Copy()));
+        _adjust.Renzoku.AddRange(book.Renzoku.Select(entry => entry.Copy()));
+        _adjust.Cvvc.AddRange(book.Cvvc.Select(entry => entry.Copy()));
     }
 
     OtoSaveFile Capture(bool libraries)
@@ -495,6 +678,7 @@ sealed class ProbeOto
                 Blank = Math.Round(_renzoku.Blank, 3),
                 Overlap = _renzoku.Overlap,
             },
+            Adjustments = _adjust.IsEmpty ? null : _adjust.Copy(),
             Cvvc = new CvvcSliderState
             {
                 Consonant = Math.Round(_cvvc.Consonant, 3),
@@ -543,6 +727,13 @@ sealed class ProbeOto
         if (file == null || string.IsNullOrEmpty(_folder))
             return marks;
         OtoMarks.Fill(file, ExportFor(_mode), marks, Loudness(Path.Combine(_folder, file.Name)));
+        var duration = Math.Max(file.Duration, 0);
+        for (var i = 0; i < marks.Count; i++)
+        {
+            var entry = Match(_adjust.For(_mode), file.Name, i, marks[i].Alias);
+            marks[i] = OtoTune.Apply(marks[i], entry?.Points(), duration);
+        }
+
         return marks;
     }
 

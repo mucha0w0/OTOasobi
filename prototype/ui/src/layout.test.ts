@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { commitMove, contains, createDefault, hidePane, movePane, parseLayout, showPane, type LayoutNode } from "./layout"
+import { commitMove, contains, createDefault, createRecording, hidePane, movePane, parseLayout, showPane, type LayoutNode } from "./layout"
 
 describe("初期配置", () => {
   const root = createDefault()
@@ -18,6 +18,15 @@ describe("初期配置", () => {
     const shown = showPane(hidden, "mic", { oto: { width: 400, height: 200 } })
     expect(contains(shown, "mic")).toBe(true)
     expect(contains(shown, "file")).toBe(true)
+  })
+})
+
+describe("録音の配置", () => {
+  it("製品の録音テンプレートと同じパネルを開く", () => {
+    const root = createRecording()
+    for (const id of ["recList", "recScript", "rec", "guide", "mic", "file", "wave"])
+      expect(contains(root, id)).toBe(true)
+    expect(contains(root, "spec")).toBe(false)
   })
 })
 

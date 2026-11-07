@@ -4,7 +4,9 @@
     <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
     <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
     <RootNamespace>Otoasobi.Probe</RootNamespace>
-    <ApplicationTitle>オトアソビ試作</ApplicationTitle>
+    <AssemblyName>Otoasobi</AssemblyName>
+    <ApplicationTitle>オトアソビ — OTOasobi</ApplicationTitle>
+    <Version>0.1.0-beta.1</Version>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <Platforms>x86;x64;ARM64</Platforms>
     <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">win-$([System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString().ToLowerInvariant())</RuntimeIdentifier>
@@ -22,6 +24,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2705" />
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.5.1" />
+    <PackageReference Include="Velopack" Version="1.2.161" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools.WinApp" Version="0.7.0" />
   </ItemGroup>
 
@@ -38,6 +41,7 @@
     <Compile Include="..\..\winui\OtoExport.cs" Link="Winui\OtoExport.cs" />
     <Compile Include="..\..\winui\OtoSave.cs" Link="Winui\OtoSave.cs" />
     <Compile Include="..\..\winui\OtoMarks.cs" Link="Winui\OtoMarks.cs" />
+    <Compile Include="..\..\winui\OtoTune.cs" Link="Winui\OtoTune.cs" />
     <Compile Include="..\..\winui\OtoIni.cs" Link="Winui\OtoIni.cs" />
     <Compile Include="..\..\winui\ConsonantOverlap.cs" Link="Winui\ConsonantOverlap.cs" />
     <Compile Include="..\..\winui\OtoPreset.cs" Link="Winui\OtoPreset.cs" />
@@ -48,6 +52,12 @@
     <Compile Include="..\..\winui\FileLoudness.cs" Link="Winui\FileLoudness.cs" />
     <Compile Include="..\..\winui\AudioEffect.cs" Link="Winui\AudioEffect.cs" />
     <Compile Include="..\..\winui\EffectRackPreset.cs" Link="Winui\EffectRackPreset.cs" />
+    <Compile Include="..\..\winui\EditorLayout.cs" Link="Winui\EditorLayout.cs" />
+    <Compile Include="..\..\winui\RecentFolders.cs" Link="Winui\RecentFolders.cs" />
+    <Compile Include="..\..\winui\AppAppearance.cs" Link="Winui\AppAppearance.cs" />
+    <Compile Include="..\..\winui\UpdatePrompt.cs" Link="Winui\UpdatePrompt.cs" />
+    <Compile Include="..\..\winui\EngineInstaller.cs" Link="Winui\EngineInstaller.cs" />
+    <Content Include="..\ui\dist\**" Link="ui\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\ui\dist')" />
     <Compile Include="..\..\winui\EqPreset.cs" Link="Winui\EqPreset.cs" />
     <Compile Include="..\..\winui\NormalizePreset.cs" Link="Winui\NormalizePreset.cs" />
     <Compile Include="..\..\winui\HighPassPreset.cs" Link="Winui\HighPassPreset.cs" />

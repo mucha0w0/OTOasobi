@@ -3,7 +3,7 @@
     x:Class="Otoasobi.Probe.MainWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    Title="オトアソビ試作">
+    Title="オトアソビ — OTOasobi">
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="40" />
@@ -14,7 +14,7 @@
                 x:Name="CaptionText"
                 VerticalAlignment="Center"
                 FontSize="13"
-                Text="オトアソビ試作" />
+                Text="オトアソビ" />
         </Grid>
         <WebView2 x:Name="View" Grid.Row="1" />
         <TextBlock

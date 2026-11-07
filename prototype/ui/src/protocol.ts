@@ -27,10 +27,17 @@ export type PageCommand =
   | { type: "effects"; op: "preset"; name: string }
   | { type: "effects"; op: "noise"; file: string; start: number; end: number }
   | { type: "effects"; op: "apply" }
+  | { type: "effects"; op: "move"; from: number; to: number }
   | { type: "watchMic"; on: boolean }
   | { type: "close" }
   | { type: "caption"; theme: "light" | "dark" }
-  | { type: "layout"; root: LayoutNode | null }
+  | { type: "layout"; root: LayoutNode | null; keepRatios?: boolean }
+  | { type: "guideFile"; manual?: boolean; path?: string; pick?: boolean }
+  | { type: "take"; op: "play" | "stop" | "wave"; name?: string }
+  | { type: "openRecent"; path: string }
+  | { type: "template"; op: "apply" | "save"; name: string }
+  | { type: "appearance"; theme: "light" | "dark" | "system"; accent: string | null }
+  | { type: "update"; op: "check" | "apply" }
   | { type: "oto"; op: "mode"; mode: string }
   | { type: "oto"; op: "slider"; group: string; key: string; value: number }
   | { type: "oto"; op: "preset"; target: string; name: string }
@@ -40,6 +47,10 @@ export type PageCommand =
   | { type: "oto"; op: "analyze"; force: boolean }
   | { type: "oto"; op: "analyzeFile" }
   | { type: "oto"; op: "write" }
+  | { type: "oto"; op: "tune"; file: string; index: number; point: number; time: number }
+  | { type: "oto"; op: "fields"; file: string; index: number; alias: string; offset: number; overlap: number; preutter: number; consonant: number; blank: number }
+  | { type: "oto"; op: "aliasName"; file: string; index: number; alias: string; name: string }
+  | { type: "oto"; op: "comment"; file: string; index: number; alias: string; comment: string }
   | { type: "saveSettings"; name: string; replace: boolean }
   | { type: "loadSettings"; name: string }
 
@@ -96,11 +107,18 @@ export type HostEvent =
   | PreviewEvent
   | CaptureEvent
   | { type: "guide"; playing: boolean }
+  | { type: "guideFile"; manual: boolean; path: string; label: string; recent: { path: string; label: string }[] }
+  | { type: "take"; playing: boolean; position: number; duration: number }
+  | { type: "takeWave"; name: string; lo: number[]; hi: number[]; duration: number }
+  | { type: "recent"; folders: { path: string; name: string }[] }
+  | { type: "templates"; names: string[] }
+  | { type: "appearance"; theme: "light" | "dark" | "system"; accent: string | null }
+  | { type: "update"; phase: "prompt" | "current" | "unavailable" | "progress" | "done" | "failed"; title: string; body: string }
   | SavedEvent
   | { type: "failed"; message: string }
   | { type: "notice"; message: string }
   | { type: "otoExists"; name: string }
-  | { type: "layout"; root: LayoutNode | null }
+  | { type: "layout"; root: LayoutNode | null; keepRatios: boolean }
   | OtoState
 
 export type FrqViewEvent = {
@@ -191,6 +209,7 @@ export type EffectsEvent = {
   normalizeEnabled: boolean
   normalizeTarget: number
   noiseNote: string | null
+  order: string[]
 }
 
 export type OtoMark = {
@@ -200,6 +219,12 @@ export type OtoMark = {
   preutter: number
   consonant: number
   blank: number
+  file: string
+  index: number
+  autoAlias: string
+  name: string
+  comment: string
+  tuned: boolean[]
 }
 
 export type OtoKind = { group: string; key: string; caption: string }
@@ -241,6 +266,7 @@ export type OtoState = {
   vcBlank: Record<string, number>
   kinds: OtoKind[]
   marks: OtoMark[]
+  rows: OtoMark[]
   spans: PhoneSpan[]
 }
 
@@ -384,11 +410,58 @@ export function parseHostEvent(value: unknown): HostEvent | null {
     case "oto":
       return parseOto(value)
     case "layout": {
+      const keepRatios = value.keepRatios === true
       if (value.root === null)
-        return { type: "layout", root: null }
+        return { type: "layout", root: null, keepRatios }
       const root = parseLayout(value.root)
-      return root ? { type: "layout", root } : null
+      return root ? { type: "layout", root, keepRatios } : null
     }
+    case "guideFile":
+      return {
+        type: "guideFile",
+        manual: value.manual !== false,
+        path: typeof value.path === "string" ? value.path : "",
+        label: typeof value.label === "string" ? value.label : "",
+        recent: Array.isArray(value.recent)
+          ? value.recent.flatMap((item) => isRecord(item) && typeof item.path === "string"
+            ? [{ path: item.path, label: typeof item.label === "string" ? item.label : item.path }]
+            : [])
+          : [],
+      }
+    case "take":
+      return { type: "take", playing: value.playing === true, position: numberOr(value.position, 0), duration: numberOr(value.duration, 0) }
+    case "takeWave":
+      return {
+        type: "takeWave",
+        name: typeof value.name === "string" ? value.name : "",
+        lo: Array.isArray(value.lo) ? value.lo.filter((item): item is number => typeof item === "number") : [],
+        hi: Array.isArray(value.hi) ? value.hi.filter((item): item is number => typeof item === "number") : [],
+        duration: numberOr(value.duration, 0),
+      }
+    case "recent":
+      return {
+        type: "recent",
+        folders: Array.isArray(value.folders)
+          ? value.folders.flatMap((item) => isRecord(item) && typeof item.path === "string"
+            ? [{ path: item.path, name: typeof item.name === "string" ? item.name : item.path }]
+            : [])
+          : [],
+      }
+    case "templates":
+      return { type: "templates", names: strings(value.names) }
+    case "appearance":
+      return {
+        type: "appearance",
+        theme: value.theme === "light" || value.theme === "dark" ? value.theme : "system",
+        accent: typeof value.accent === "string" ? value.accent : null,
+      }
+    case "update":
+      return {
+        type: "update",
+        phase: value.phase === "prompt" || value.phase === "current" || value.phase === "unavailable" || value.phase === "progress" || value.phase === "done" ? value.phase : "failed",
+        title: typeof value.title === "string" ? value.title : "",
+        body: typeof value.body === "string" ? value.body : "",
+      }
     default:
       return null
   }
@@ -447,22 +520,34 @@ function parseOto(value: Record<string, unknown>): OtoState | null {
           return [{ group: item.group, key: item.key, caption: item.caption }]
         })
       : [],
-    marks: Array.isArray(value.marks)
-      ? value.marks.flatMap((item) => {
-          if (!isRecord(item) || typeof item.alias !== "string")
-            return []
-          return [{
-            alias: item.alias,
-            offset: numberOr(item.offset, 0),
-            overlap: numberOr(item.overlap, 0),
-            preutter: numberOr(item.preutter, 0),
-            consonant: numberOr(item.consonant, 0),
-            blank: numberOr(item.blank, 0),
-          }]
-        })
-      : [],
+    marks: parseMarks(value.marks),
+    rows: parseMarks(value.rows),
     spans: parseSpans(value.spans),
   }
+}
+
+function parseMarks(value: unknown): OtoMark[] {
+  if (!Array.isArray(value))
+    return []
+  return value.flatMap((item) => {
+    if (!isRecord(item) || typeof item.alias !== "string")
+      return []
+    const tuned = Array.isArray(item.tuned) ? item.tuned.map((flag) => flag === true) : [false, false, false, false, false]
+    return [{
+      alias: item.alias,
+      offset: numberOr(item.offset, 0),
+      overlap: numberOr(item.overlap, 0),
+      preutter: numberOr(item.preutter, 0),
+      consonant: numberOr(item.consonant, 0),
+      blank: numberOr(item.blank, 0),
+      file: typeof item.file === "string" ? item.file : "",
+      index: numberOr(item.index, 0),
+      autoAlias: typeof item.autoAlias === "string" ? item.autoAlias : item.alias,
+      name: typeof item.name === "string" ? item.name : "",
+      comment: typeof item.comment === "string" ? item.comment : "",
+      tuned,
+    }]
+  })
 }
 
 function parseBank(value: Record<string, unknown>): BankEvent | null {
@@ -542,6 +627,7 @@ function parseEffects(value: Record<string, unknown>): EffectsEvent | null {
     normalizeEnabled: value.normalizeEnabled === true,
     normalizeTarget: numberOr(value.normalizeTarget, -1),
     noiseNote: typeof value.noiseNote === "string" ? value.noiseNote : null,
+    order: strings(value.order),
   }
 }
 
