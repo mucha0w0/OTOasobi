@@ -26,6 +26,7 @@ sealed class ProbeSession : IDisposable
     string? _inputId;
     string? _outputId;
     bool _monitor;
+    bool _watch;
     bool _recording;
     bool _ready;
     bool _disposed;
@@ -146,6 +147,12 @@ sealed class ProbeSession : IDisposable
                 case "recordStop":
                     StopRecord();
                     break;
+                case "watchMic":
+                    _ = WatchMicAsync(root.TryGetProperty("on", out var watchValue) && watchValue.ValueKind == JsonValueKind.True);
+                    break;
+                case "close":
+                    _window.Close();
+                    break;
                 case "caption":
                     _window.PaintCaption(Text(root, "theme") == "dark");
                     break;
@@ -174,9 +181,6 @@ sealed class ProbeSession : IDisposable
             Post(new { type = "failed", message = ex.Message });
         }
 
-        await RestartCaptureAsync();
-        if (!_timer.IsRunning)
-            _timer.Start();
         PostCapture();
     }
 
@@ -354,6 +358,7 @@ sealed class ProbeSession : IDisposable
                 waveT0 = picture.WaveT0,
                 waveT1 = picture.WaveT1,
                 sampleRate = picture.SampleRate,
+                loudness = picture.Loudness,
             });
         }
         catch (Exception ex) when (ex is IOException or FileNotFoundException or JsonException)
@@ -381,7 +386,8 @@ sealed class ProbeSession : IDisposable
             Post(new { type = "failed", message = "出力デバイスを開けませんでした。" });
         }
 
-        await RestartCaptureAsync();
+        if (_watch)
+            await RestartCaptureAsync();
         PostCapture();
     }
 
@@ -390,6 +396,8 @@ sealed class ProbeSession : IDisposable
         if (_disposed)
             return;
         _monitor = on;
+        if (!_watch)
+            return;
         if (!_capture.Running)
             await RestartCaptureAsync();
         try
@@ -420,6 +428,27 @@ sealed class ProbeSession : IDisposable
         _player.Volume = 0.5;
         var played = await _player.PlayAsync(wav, loop: true);
         Post(new { type = "guide", playing = played });
+    }
+
+    async Task WatchMicAsync(bool on)
+    {
+        if (_disposed)
+            return;
+        _watch = on;
+        if (!on)
+        {
+            if (_recording)
+                StopRecord();
+            _timer.Stop();
+            _capture.Stop();
+            PostCapture();
+            return;
+        }
+
+        if (!_timer.IsRunning)
+            _timer.Start();
+        await RestartCaptureAsync();
+        PostCapture();
     }
 
     async Task RestartCaptureAsync()

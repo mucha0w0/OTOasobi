@@ -12,6 +12,8 @@ export type PageCommand =
   | { type: "guideStop" }
   | { type: "record" }
   | { type: "recordStop" }
+  | { type: "watchMic"; on: boolean }
+  | { type: "close" }
   | { type: "caption"; theme: "light" | "dark" }
 
 export type DeviceInfo = { id: string; label: string }
@@ -27,6 +29,7 @@ export type PreviewEvent = {
   waveT0: number
   waveT1: number
   sampleRate: number
+  loudness: number[]
 }
 
 export type CaptureEvent = {
@@ -62,7 +65,7 @@ export type HostEvent =
   | { type: "failed"; message: string }
 
 export function requestsPreview(gesture: PreviewGesture): boolean {
-  return gesture === "pan" || gesture === "zoom"
+  return gesture === "pan"
 }
 
 export function requestsPreviewAfter(gesture: PreviewGesture): boolean {
@@ -124,6 +127,9 @@ export function parseHostEvent(value: unknown): HostEvent | null {
         waveT0: numberOr(value.waveT0, 0),
         waveT1: numberOr(value.waveT1, 0),
         sampleRate: numberOr(value.sampleRate, 0),
+        loudness: Array.isArray(value.loudness)
+          ? value.loudness.filter((item): item is number => typeof item === "number")
+          : [],
       }
     case "capture":
       if (!Array.isArray(value.lo) || !Array.isArray(value.hi))

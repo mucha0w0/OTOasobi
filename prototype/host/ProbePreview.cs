@@ -124,7 +124,8 @@ sealed class ProbePreview : IDisposable
             Number(root, "wave_t0"),
             Number(root, "wave_t1"),
             sampleRate,
-            Number(root, "duration"));
+            Number(root, "duration"),
+            ReadDoubles(root, "loudness"));
     }
 
     static double Number(JsonElement root, string name) =>
@@ -252,4 +253,5 @@ sealed record PreviewPicture(
     double WaveT0,
     double WaveT1,
     int SampleRate,
-    double Duration);
+    double Duration,
+    double[] Loudness);

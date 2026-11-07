@@ -8,12 +8,12 @@ describe("プレビューを頼む操作", () => {
     expect(requestsPreviewAfter("boundary")).toBe(false)
   })
 
-  it("パンと拡大では頼む", () => {
+  it("パンは離したときに頼む", () => {
     expect(requestsPreview("pan")).toBe(true)
-    expect(requestsPreview("zoom")).toBe(true)
+    expect(requestsPreview("zoom")).toBe(false)
   })
 
-  it("リサイズは離したあとだけ頼む", () => {
+  it("拡大縮小は止めたあと、リサイズは離したあとに頼む", () => {
     expect(requestsPreviewAfter("resize")).toBe(true)
     expect(requestsPreviewAfter("pan")).toBe(true)
     expect(requestsPreviewAfter("zoom")).toBe(true)
@@ -60,7 +60,7 @@ describe("ホストのメッセージ", () => {
       waveT1: 2,
       sampleRate: 44100,
     })
-    expect(preview).toMatchObject({ type: "preview", png: "abc", sampleRate: 44100 })
+    expect(preview).toMatchObject({ type: "preview", png: "abc", sampleRate: 44100, loudness: [] })
     expect(preview && "names" in preview).toBe(false)
 
     expect(parseHostEvent({
