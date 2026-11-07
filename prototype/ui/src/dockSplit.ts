@@ -1,7 +1,7 @@
 export type TitleEdge = "left" | "right" | "top"
 
-const slopX = 12
-const slopY = 16
+const slopX = 4
+const slopY = 4
 
 /** 見出しの、分割に接する側。ここはパネル移動ではなくリサイズにする。 */
 export function pickTitleResize(

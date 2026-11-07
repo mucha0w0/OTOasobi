@@ -13,8 +13,13 @@ describe("見出しの端", () => {
   })
 
   it("左右の分割に近い側はリサイズ", () => {
-    expect(pickTitleResize(4, 24, 200, open)).toBe("left")
-    expect(pickTitleResize(190, 24, 200, open)).toBe("right")
+    expect(pickTitleResize(2, 24, 200, open)).toBe("left")
+    expect(pickTitleResize(198, 24, 200, open)).toBe("right")
+  })
+
+  it("端から少し離れると移動", () => {
+    expect(pickTitleResize(8, 24, 200, open)).toBeNull()
+    expect(pickTitleResize(40, 8, 200, open)).toBeNull()
   })
 
   it("その向きに分割が無ければ移動", () => {
