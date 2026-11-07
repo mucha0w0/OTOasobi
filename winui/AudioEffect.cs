@@ -119,10 +119,7 @@ sealed class StoredChain
 
 static class EffectChainStore
 {
-    public static string FilePath { get; } = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "Otoasobi",
-        "effects.json");
+    public static string FilePath { get; } = NamedList.DataFile("effects.json");
 
     public static StoredChain? Load()
     {

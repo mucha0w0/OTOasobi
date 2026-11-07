@@ -646,10 +646,7 @@ static class EditorLayout
 
 static class EditorLayoutStore
 {
-    public static string FilePath { get; } = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "Otoasobi",
-        "editor-layout.json");
+    public static string FilePath { get; } = NamedList.DataFile("editor-layout.json");
 
     public static bool TryLoad(out LayoutNode? root, out bool keepRatios)
     {
@@ -678,7 +675,7 @@ static class EditorLayoutStore
 }
 
 // 表示中のパネルと分割位置。初期配置は常にあり、それ以外は LocalAppData に残す。
-sealed class LayoutTemplate
+sealed class LayoutTemplate : INamedPreset
 {
     public const string BuiltInName = "初期配置";
     public const string RecordingName = "録音";

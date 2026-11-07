@@ -17,10 +17,7 @@ static class RecentFolders
 {
     const int MaxCount = 10;
 
-    public static string FilePath { get; } = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "Otoasobi",
-        "recent-folders.json");
+    public static string FilePath { get; } = NamedList.DataFile("recent-folders.json");
 
     public static IReadOnlyList<string> Load()
     {

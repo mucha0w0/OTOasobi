@@ -447,10 +447,7 @@ static class NoiseCaptureStore
 {
     const int MaxCaptures = 30;
 
-    public static string FilePath { get; } = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "Otoasobi",
-        "noise-captures.json");
+    public static string FilePath { get; } = NamedList.DataFile("noise-captures.json");
 
     public static NoiseCapture? Find(string folder)
     {

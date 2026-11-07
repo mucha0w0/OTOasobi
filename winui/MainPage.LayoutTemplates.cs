@@ -136,29 +136,25 @@ public sealed partial class MainPage
 
     async Task SaveLayoutTemplateAsync()
     {
-        var name = await PresetUi.AskNameAsync(
+        var target = await PresetUi.AcceptSaveAsync(
             XamlRoot,
             "配置テンプレートを保存",
             "いまのパネルの表示と位置につける名前を入力してください。",
-            _appliedLayoutTemplate is { BuiltIn: false } current ? current.Name : null,
+            _appliedLayoutTemplate,
+            _layoutTemplates,
             LayoutTemplateNameError,
+            name => $"「{name}」は既にあります。いまの配置で置き換えます。",
+            name => new LayoutTemplate { Name = name },
+            template =>
+            {
+                template.Root = EditorLayout.Clone(Dock.Root);
+                template.KeepRatios = Dock.KeepRatios;
+            },
+            "配置テンプレートを上書きしますか？",
             "テンプレート名");
-        if (name == null)
+        if (target == null)
             return;
 
-        var existing = _layoutTemplates.FirstOrDefault(template => template.Name == name);
-        if (existing != null && !ReferenceEquals(existing, _appliedLayoutTemplate)
-            && !await PresetUi.ConfirmOverwriteAsync(
-                XamlRoot,
-                "配置テンプレートを上書きしますか？",
-                $"「{name}」は既にあります。いまの配置で置き換えます。"))
-            return;
-
-        var target = existing ?? new LayoutTemplate { Name = name };
-        target.Root = EditorLayout.Clone(Dock.Root);
-        target.KeepRatios = Dock.KeepRatios;
-        if (existing == null)
-            _layoutTemplates.Add(target);
         _appliedLayoutTemplate = target;
         SyncLayoutTemplateMenu();
         try

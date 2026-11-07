@@ -4,12 +4,6 @@ using Microsoft.UI.Xaml.Media;
 
 namespace Otoasobi;
 
-interface INamedPreset
-{
-    string Name { get; }
-    bool BuiltIn { get; }
-}
-
 // プリセット名、保存ダイアログ、フライアウトの選択と変更マーク。
 static class PresetUi
 {
@@ -132,20 +126,23 @@ static class PresetUi
         Func<string, string?> validate,
         Func<string, string> overwrite,
         Func<string, T> create,
-        Action<T> copy) where T : class, INamedPreset
+        Action<T> copy,
+        string overwriteTitle = "プリセットを上書きしますか？",
+        string placeholder = "プリセット名") where T : class, INamedPreset
     {
         var name = await AskNameAsync(
             root,
             title,
             prompt,
             selected is { BuiltIn: false } ? selected.Name : null,
-            validate);
+            validate,
+            placeholder);
         if (name == null)
             return null;
 
         var existing = presets.FirstOrDefault(preset => preset.Name == name);
         if (existing != null && !ReferenceEquals(existing, selected)
-            && !await ConfirmOverwriteAsync(root, "プリセットを上書きしますか？", overwrite(name)))
+            && !await ConfirmOverwriteAsync(root, overwriteTitle, overwrite(name)))
             return null;
 
         var target = existing ?? create(name);

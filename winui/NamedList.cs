@@ -1,5 +1,11 @@
 namespace Otoasobi;
 
+interface INamedPreset
+{
+    string Name { get; }
+    bool BuiltIn { get; }
+}
+
 // プリセットと配置テンプレートの名前。空、40文字超、予約名、重複を捨てる。
 // 制御文字と null 要素を捨てるかは呼び出し側が決める。数値の検査も呼び出し側。
 // keep が null を返した名前も使用済みにする。空のエフェクト列や無効な配置は、同じ名前の次の要素を拾わない。
