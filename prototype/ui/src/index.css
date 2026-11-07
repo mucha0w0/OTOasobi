@@ -80,12 +80,54 @@ html.dragging * {
   cursor: grabbing !important;
 }
 
+.split-x,
+.split-y {
+  position: relative;
+  z-index: 2;
+  flex-shrink: 0;
+  touch-action: none;
+  background: transparent;
+}
+
 .split-x {
+  width: 15px;
+  margin-right: -7px;
+  margin-left: -7px;
   cursor: col-resize;
 }
 
 .split-y {
+  height: 15px;
+  margin-top: -7px;
+  margin-bottom: -7px;
   cursor: row-resize;
+}
+
+.split-line {
+  position: absolute;
+  pointer-events: none;
+  background: var(--line);
+}
+
+.split-x > .split-line {
+  top: 0;
+  bottom: 0;
+  left: 7px;
+  width: 1px;
+}
+
+.split-y > .split-line {
+  right: 0;
+  left: 0;
+  top: 7px;
+  height: 1px;
+}
+
+.split-x:hover > .split-line,
+.split-y:hover > .split-line,
+.split-x.is-hot > .split-line,
+.split-y.is-hot > .split-line {
+  background: var(--accent);
 }
 
 html.resizing-x,

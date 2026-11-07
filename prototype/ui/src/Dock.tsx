@@ -1,5 +1,6 @@
 import { useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react"
 import { armBox, hitDrop, type DropAim, type HitLeaf, type HitRegion, type ScreenBox } from "./dockHit"
+import { pickTitleResize, type TitleEdge } from "./dockSplit"
 import { commitMove, hidePane, idsOf, paneTitles, type LayoutNode, type PaneBox } from "./layout"
 
 type Props = {
@@ -83,7 +84,7 @@ export function Dock({ layout, boxes, onChange, onRatio, onResizing, render }: P
 
   const origin = rootRef.current?.getBoundingClientRect()
   return (
-    <div ref={rootRef} className="relative h-full min-h-0 bg-[var(--bg)]">
+    <div ref={rootRef} data-dock-root="" className="relative h-full min-h-0 bg-[var(--bg)]">
       {layout && (
         <Node
           node={layout}
@@ -162,7 +163,6 @@ function readHits(root: HTMLElement): [HitLeaf[], HitRegion[]] {
 }
 
 function Node({ node, path, boxes, onRatio, onResizing, render, onTitleDown, onClose }: NodeProps) {
-  const frameRef = useRef<HTMLDivElement>(null)
   const ids = idsOf(node).join(",")
   if ("id" in node) {
     const title = paneTitles[node.id] ?? node.id
@@ -180,8 +180,22 @@ function Node({ node, path, boxes, onRatio, onResizing, render, onTitleDown, onC
         }}
       >
         <div
-          className="drag-handle flex h-8 shrink-0 items-center border-b border-[var(--line)] select-none"
-          onPointerDown={(event) => onTitleDown(event, node.id)}
+          className="drag-handle relative z-10 flex h-8 shrink-0 items-center border-b border-[var(--line)] select-none"
+          onPointerMove={(event) => hoverTitle(event.currentTarget, event.clientX, event.clientY, event.target)}
+          onPointerLeave={(event) => {
+            clearSplitHot(event.currentTarget)
+            event.currentTarget.style.cursor = ""
+          }}
+          onPointerDown={(event) => {
+            if (event.button !== 0)
+              return
+            const split = titleSplit(event.currentTarget, event.clientX, event.clientY, event.target)
+            if (!split)
+              return onTitleDown(event, node.id)
+            clearSplitHot(event.currentTarget)
+            event.currentTarget.style.cursor = ""
+            beginResize(event, split, onRatio, onResizing)
+          }}
         >
           <span className="min-w-0 flex-1 truncate px-2 text-xs text-[var(--muted)]">{title}</span>
           <button
@@ -203,7 +217,6 @@ function Node({ node, path, boxes, onRatio, onResizing, render, onTitleDown, onC
   const horizontal = node.axis === "h"
   return (
     <div
-      ref={frameRef}
       data-dock-node=""
       data-ids={ids}
       className={`flex h-full min-h-0 min-w-0 ${horizontal ? "" : "flex-col"}`}
@@ -215,9 +228,16 @@ function Node({ node, path, boxes, onRatio, onResizing, render, onTitleDown, onC
         <Node key={path.join(".") + ".0"} node={node.first} path={[...path, 0]} boxes={boxes} onRatio={onRatio} onResizing={onResizing} render={render} onTitleDown={onTitleDown} onClose={onClose} />
       </div>
       <div
-        className={horizontal ? "split-x w-2 shrink-0 bg-[var(--line)]" : "split-y h-2 shrink-0 bg-[var(--line)]"}
-        onPointerDown={(event) => startDrag(event, frameRef.current, horizontal, node.ratio, path, onRatio, onResizing)}
-      />
+        role="separator"
+        aria-orientation={horizontal ? "vertical" : "horizontal"}
+        aria-label="パネルの境界"
+        data-axis={node.axis}
+        data-path={path.join(".")}
+        className={horizontal ? "split-x" : "split-y"}
+        onPointerDown={(event) => beginResize(event, event.currentTarget, onRatio, onResizing)}
+      >
+        <span className="split-line" />
+      </div>
       <div className="min-h-0 min-w-0 flex-1">
         <Node key={path.join(".") + ".1"} node={node.second} path={[...path, 1]} boxes={boxes} onRatio={onRatio} onResizing={onResizing} render={render} onTitleDown={onTitleDown} onClose={onClose} />
       </div>
@@ -225,21 +245,30 @@ function Node({ node, path, boxes, onRatio, onResizing, render, onTitleDown, onC
   )
 }
 
-function startDrag(
+function beginResize(
   event: ReactPointerEvent<HTMLDivElement>,
-  frame: HTMLDivElement | null,
-  horizontal: boolean,
-  ratio: number,
-  path: number[],
+  split: HTMLElement,
   onRatio: (path: number[], ratio: number) => void,
   onResizing: (holding: boolean) => void,
 ) {
+  if (event.button !== 0)
+    return
+  const frame = split.parentElement as HTMLDivElement | null
   if (!frame)
     return
+  event.preventDefault()
+  event.stopPropagation()
+  const horizontal = split.classList.contains("split-x")
+  const path = (split.dataset.path ?? "").split(".").filter(Boolean).map(Number)
   const bounds = frame.getBoundingClientRect()
-  const first = event.currentTarget.previousElementSibling as HTMLElement | null
+  const first = split.previousElementSibling as HTMLElement | null
+  const parsed = Number.parseFloat(horizontal ? first?.style.width ?? "" : first?.style.height ?? "")
+  let ratio = Number.isFinite(parsed) ? parsed / 100 : 0.5
   onResizing(true)
   document.documentElement.classList.add(horizontal ? "resizing-x" : "resizing-y")
+  const line = split.querySelector(".split-line") as HTMLElement | null
+  if (line)
+    line.style.background = "var(--accent)"
   const move = (ev: PointerEvent) => {
     const total = horizontal ? bounds.width : bounds.height
     const origin = horizontal ? bounds.left : bounds.top
@@ -254,10 +283,69 @@ function startDrag(
     window.removeEventListener("pointermove", move)
     window.removeEventListener("pointerup", up)
     document.documentElement.classList.remove("resizing-x", "resizing-y")
+    if (line)
+      line.style.background = ""
     onResizing(false)
     onRatio(path, ratio)
   }
   window.addEventListener("pointermove", move)
   window.addEventListener("pointerup", up)
-  event.currentTarget.setPointerCapture(event.pointerId)
+  const cap = event.currentTarget === split ? split : event.currentTarget
+  cap.setPointerCapture(event.pointerId)
+}
+
+function hoverTitle(title: HTMLDivElement, clientX: number, clientY: number, target: EventTarget | null) {
+  if (target instanceof Element && target.closest("button")) {
+    clearSplitHot(title)
+    title.style.cursor = ""
+    return
+  }
+  const split = titleSplit(title, clientX, clientY, target)
+  clearSplitHot(title)
+  if (!split) {
+    title.style.cursor = ""
+    return
+  }
+  split.classList.add("is-hot")
+  title.style.cursor = split.classList.contains("split-x") ? "col-resize" : "row-resize"
+}
+
+function titleSplit(title: HTMLDivElement, clientX: number, clientY: number, target: EventTarget | null) {
+  if (target instanceof Element && target.closest("button"))
+    return null
+  const pane = title.parentElement
+  if (!pane)
+    return null
+  const rect = pane.getBoundingClientRect()
+  const edge = pickTitleResize(clientX - rect.left, clientY - rect.top, rect.width, {
+    left: adjacentSplit(pane, "left") != null,
+    right: adjacentSplit(pane, "right") != null,
+    top: adjacentSplit(pane, "top") != null,
+  })
+  return edge ? adjacentSplit(pane, edge) : null
+}
+
+function adjacentSplit(pane: HTMLElement, edge: TitleEdge) {
+  let wrapper = pane.parentElement
+  while (wrapper) {
+    const frame = wrapper.parentElement
+    if (!frame?.hasAttribute("data-dock-node") || frame.hasAttribute("data-pane"))
+      return null
+    const split = frame.children[1] as HTMLElement | undefined
+    const axis = split?.dataset.axis
+    if (split && (axis === "h" || axis === "v")) {
+      const inFirst = wrapper === frame.children[0]
+      const inSecond = wrapper === frame.children[2]
+      if (axis === "h" && ((inFirst && edge === "right") || (inSecond && edge === "left")))
+        return split
+      if (axis === "v" && inSecond && edge === "top")
+        return split
+    }
+    wrapper = frame.parentElement
+  }
+  return null
+}
+
+function clearSplitHot(from: HTMLElement) {
+  from.closest("[data-dock-root]")?.querySelectorAll(".is-hot").forEach((element) => element.classList.remove("is-hot"))
 }
