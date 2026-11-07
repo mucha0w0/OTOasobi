@@ -9,7 +9,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from otoasobi.analyze import AnalyzedFile, list_wavs
+from otoasobi.wavs import AnalyzedFile, list_wavs
 from otoasobi.segment import Span
 
 CACHE_NAME = "OTOasibi_cache.json"

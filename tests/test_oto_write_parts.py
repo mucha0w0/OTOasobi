@@ -12,7 +12,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from otoasobi.analyze import AnalyzedFile, export_folder
+from otoasobi.analyze import export_folder
+from otoasobi.wavs import AnalyzedFile
 from otoasobi.oto import OtoSettings, merge_existing_aliases, mono_oto_lines, renzoku_oto_lines
 from otoasobi.segment import Span
 

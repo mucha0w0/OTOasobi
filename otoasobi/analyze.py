@@ -27,6 +27,7 @@ from otoasobi.oto import (
 from otoasobi.parser import Token, parse_stem, stem_from_path
 from otoasobi.phones import VOWEL_ONSET_LABELS
 from otoasobi.segment import Span, segment_tokens
+from otoasobi.wavs import AnalyzedFile, list_wavs
 
 
 @dataclass
@@ -160,12 +161,6 @@ BATCH_TXT_NAME = "OTOasibi_out.txt"
 BATCH_LOG_NAME = "OTOasibi_log.txt"
 
 
-def list_wavs(folder: str | Path) -> list[Path]:
-    folder = Path(folder)
-    wavs = [path for path in folder.iterdir() if path.is_file() and path.suffix.lower() == ".wav"]
-    return sorted(wavs, key=lambda path: path.name.casefold())
-
-
 def _format_batch(entries: list[tuple[str, list[Span]]], to_text: Callable[[list[Span]], str]) -> str:
     blocks = []
     for name, spans in entries:
@@ -180,14 +175,6 @@ def format_batch_txt(entries: list[tuple[str, list[Span]]]) -> str:
 
 def format_batch_log(entries: list[tuple[str, list[Span]]]) -> str:
     return _format_batch(entries, spans_to_txt)
-
-
-@dataclass
-class AnalyzedFile:
-    name: str
-    duration: float
-    spans: list[Span]
-    engine: str = "acoustic"
 
 
 def skipped_notice(skipped: list[str]) -> str:

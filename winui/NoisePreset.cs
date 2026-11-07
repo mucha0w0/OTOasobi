@@ -38,33 +38,23 @@ sealed class NoisePreset : INamedPreset
 
 static class NoisePresetStore
 {
-    public static string FilePath { get; } = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "Otoasobi",
-        "noise-presets.json");
+    public static string FilePath { get; } = NamedList.DataFile("noise-presets.json");
 
     public static IReadOnlyList<NoisePreset> Load() =>
         JsonFiles.ReadList<NoisePreset>(FilePath, Normalize);
 
-    public static List<NoisePreset> Normalize(IEnumerable<NoisePreset>? list)
-    {
-        var seen = new HashSet<string>();
-        var result = new List<NoisePreset>();
-        if (list == null)
-            return result;
-        foreach (var preset in list)
-        {
-            var name = preset.Name.Trim();
-            if (name.Length == 0 || name.Length > 40 || NoisePreset.IsReservedName(name) || !seen.Add(name))
-                continue;
-            preset.Name = name;
-            preset.BuiltIn = false;
-            preset.Reduction = NoiseSuppressorEffect.ClampReduction(preset.Reduction);
-            result.Add(preset);
-        }
-
-        return result;
-    }
+    public static List<NoisePreset> Normalize(IEnumerable<NoisePreset>? list) =>
+        NamedList.Collect(
+            list,
+            preset => preset.Name,
+            NoisePreset.IsReservedName,
+            (preset, name) =>
+            {
+                preset.Name = name;
+                preset.BuiltIn = false;
+                preset.Reduction = NoiseSuppressorEffect.ClampReduction(preset.Reduction);
+                return preset;
+            });
 
     public static void Save(IEnumerable<NoisePreset> presets) =>
         JsonFiles.Write(FilePath, presets.Where(preset => !preset.BuiltIn));

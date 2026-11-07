@@ -10,7 +10,7 @@
 ## 置き場所
 
 - `winui/` — WinUI 3。名前空間は `Otoasobi`。画面は `MainPage` ひとつで、別 Page へは遷移しません。状態は `IdleView` / `BusyView` / `EditorView` / `ErrorView` の Visibility です。
-- `otoasobi/` — 解析の Python。画面は `AnalysisClient` が `python -m otoasobi.worker` を起動し、UTF-8 の JSON 行で話します。
+- `otoasobi/` — 解析の Python。画面は `AnalysisClient` が `python -m otoasobi.worker` を起動し、UTF-8 の JSON 行で話します。WAV 一覧と 1 ファイルの解析結果 `AnalyzedFile` は `wavs.py` です。
 - `tests/OtoParity/` — xUnit。WinUI のロジック用 `.cs` をプロジェクト参照ではなく `Compile Include` で直にコンパイルします。新しい純粋ロジックをテストするときは、この csproj にもリンクを足します。`MainPage` と XAML はテストに入りません。
 - `tests/test_*.py` — Python 側のテストです。
 - アプリデータは `%LocalAppData%\Otoasobi`。パネル配置は `editor-layout.json` です。

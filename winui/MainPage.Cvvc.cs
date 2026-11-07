@@ -293,27 +293,19 @@ public sealed partial class MainPage
 
     async Task SaveCvvcPresetAsync()
     {
-        var name = await PresetUi.AskNameAsync(
+        var target = await PresetUi.AcceptSaveAsync(
             XamlRoot,
             "現在の設定を保存",
             "この設定につける名前を入力してください。",
-            _selectedCvvc is { BuiltIn: false } ? _selectedCvvc.Name : null,
-            PresetNameError);
-        if (name == null)
+            _selectedCvvc,
+            _cvvcPresets,
+            PresetNameError,
+            name => $"「{name}」は既にあります。いまの設定で置き換えます。",
+            name => new CvvcPreset { Name = name },
+            CopyCvvcInto);
+        if (target == null)
             return;
 
-        var existing = _cvvcPresets.FirstOrDefault(preset => preset.Name == name);
-        if (existing != null && !ReferenceEquals(existing, _selectedCvvc)
-            && !await PresetUi.ConfirmOverwriteAsync(
-                XamlRoot,
-                "プリセットを上書きしますか？",
-                $"「{name}」は既にあります。いまの設定で置き換えます。"))
-            return;
-
-        var target = existing ?? new CvvcPreset { Name = name };
-        CopyCvvcInto(target);
-        if (existing == null)
-            _cvvcPresets.Add(target);
         RebuildCvvcPresetMenu();
         SelectCvvcPreset(target);
         try

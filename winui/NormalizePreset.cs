@@ -38,33 +38,23 @@ sealed class NormalizePreset : INamedPreset
 
 static class NormalizePresetStore
 {
-    public static string FilePath { get; } = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "Otoasobi",
-        "normalize-presets.json");
+    public static string FilePath { get; } = NamedList.DataFile("normalize-presets.json");
 
     public static IReadOnlyList<NormalizePreset> Load() =>
         JsonFiles.ReadList<NormalizePreset>(FilePath, Normalize);
 
-    public static List<NormalizePreset> Normalize(IEnumerable<NormalizePreset>? list)
-    {
-        var seen = new HashSet<string>();
-        var result = new List<NormalizePreset>();
-        if (list == null)
-            return result;
-        foreach (var preset in list)
-        {
-            var name = preset.Name.Trim();
-            if (name.Length == 0 || name.Length > 40 || NormalizePreset.IsReservedName(name) || !seen.Add(name))
-                continue;
-            preset.Name = name;
-            preset.BuiltIn = false;
-            preset.Target = NormalizeEffect.Clamp(preset.Target);
-            result.Add(preset);
-        }
-
-        return result;
-    }
+    public static List<NormalizePreset> Normalize(IEnumerable<NormalizePreset>? list) =>
+        NamedList.Collect(
+            list,
+            preset => preset.Name,
+            NormalizePreset.IsReservedName,
+            (preset, name) =>
+            {
+                preset.Name = name;
+                preset.BuiltIn = false;
+                preset.Target = NormalizeEffect.Clamp(preset.Target);
+                return preset;
+            });
 
     public static void Save(IEnumerable<NormalizePreset> presets) =>
         JsonFiles.Write(FilePath, presets.Where(preset => !preset.BuiltIn));

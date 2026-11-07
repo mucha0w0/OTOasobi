@@ -53,13 +53,13 @@ from pathlib import Path
 os.environ.setdefault("TQDM_DISABLE", "1")
 
 from otoasobi.analyze import (
-    AnalyzedFile,
     analyze_folder_files,
     analyze_wav,
     export_folder,
     load_wav,
     skipped_notice,
 )
+from otoasobi.wavs import AnalyzedFile
 from otoasobi.cache import file_from_mapping, file_to_mapping, read_cache, save_cache
 from otoasobi.frq import write_folder_frq
 from otoasobi.oto import adjustments_from, oto_settings_from

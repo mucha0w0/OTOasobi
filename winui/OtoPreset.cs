@@ -19,38 +19,28 @@ sealed class OtoPreset : INamedPreset
 
 static class OtoPresetStore
 {
-    public static string FilePath { get; } = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "Otoasobi",
-        "presets.json");
+    public static string FilePath { get; } = NamedList.DataFile("presets.json");
 
     public static IReadOnlyList<OtoPreset> Load() =>
         JsonFiles.ReadList<OtoPreset>(FilePath, Normalize);
 
-    public static List<OtoPreset> Normalize(IEnumerable<OtoPreset>? list)
-    {
-        var seen = new HashSet<string>();
-        var result = new List<OtoPreset>();
-        if (list == null)
-            return result;
-        foreach (var preset in list)
-        {
-            var name = preset.Name.Trim();
-            if (name.Length == 0 || name.Length > 40 || name == OtoPreset.BuiltInName || !seen.Add(name))
-                continue;
-            preset.Name = name;
-            preset.BuiltIn = false;
-            preset.Offset = Clamp(preset.Offset, -0.1, 0.1, 0, 3);
-            preset.Consonant = Clamp(preset.Consonant, 0, 0.2, 0.2, 3);
-            preset.Blank = Clamp(preset.Blank, -0.1, 0.1, 0, 3);
-            preset.Overlap ??= [];
-            foreach (var key in preset.Overlap.Keys.ToList())
-                preset.Overlap[key] = ConsonantOverlap.Stored(preset.Overlap[key]);
-            result.Add(preset);
-        }
-
-        return result;
-    }
+    public static List<OtoPreset> Normalize(IEnumerable<OtoPreset>? list) =>
+        NamedList.Collect(
+            list,
+            preset => preset.Name,
+            name => name == OtoPreset.BuiltInName,
+            (preset, name) =>
+            {
+                preset.Name = name;
+                preset.BuiltIn = false;
+                preset.Offset = Clamp(preset.Offset, -0.1, 0.1, 0, 3);
+                preset.Consonant = Clamp(preset.Consonant, 0, 0.2, 0.2, 3);
+                preset.Blank = Clamp(preset.Blank, -0.1, 0.1, 0, 3);
+                preset.Overlap ??= [];
+                foreach (var key in preset.Overlap.Keys.ToList())
+                    preset.Overlap[key] = ConsonantOverlap.Stored(preset.Overlap[key]);
+                return preset;
+            });
 
     public static void Save(IEnumerable<OtoPreset> presets) =>
         JsonFiles.Write(FilePath, presets.Where(preset => !preset.BuiltIn));

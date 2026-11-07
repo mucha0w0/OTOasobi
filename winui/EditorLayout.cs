@@ -716,42 +716,30 @@ sealed class LayoutTemplate
 
 static class LayoutTemplateStore
 {
-    public static string FilePath { get; } = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "Otoasobi",
-        "layout-templates.json");
+    public static string FilePath { get; } = NamedList.DataFile("layout-templates.json");
 
     public static IReadOnlyList<LayoutTemplate> Load() =>
         JsonFiles.ReadList<LayoutTemplate>(FilePath, Normalize);
 
-    public static List<LayoutTemplate> Normalize(IEnumerable<LayoutTemplate>? list)
-    {
-        var seen = new HashSet<string>();
-        var result = new List<LayoutTemplate>();
-        if (list == null)
-            return result;
-        foreach (var template in list)
-        {
-            if (template == null)
-                continue;
-            var name = (template.Name ?? "").Trim();
-            if (name.Length == 0 || name.Length > 40 || name.Any(char.IsControl))
-                continue;
-            if (name is LayoutTemplate.BuiltInName or LayoutTemplate.RecordingName || !seen.Add(name))
-                continue;
-            if (!EditorLayout.IsValid(template.Root))
-                continue;
-            result.Add(new LayoutTemplate
+    public static List<LayoutTemplate> Normalize(IEnumerable<LayoutTemplate>? list) =>
+        NamedList.Collect(
+            list,
+            template => template.Name ?? "",
+            name => name is LayoutTemplate.BuiltInName or LayoutTemplate.RecordingName,
+            (template, name) =>
             {
-                Name = name,
-                BuiltIn = false,
-                Root = EditorLayout.Clone(template.Root),
-                KeepRatios = template.KeepRatios,
-            });
-        }
-
-        return result;
-    }
+                if (!EditorLayout.IsValid(template.Root))
+                    return null;
+                return new LayoutTemplate
+                {
+                    Name = name,
+                    BuiltIn = false,
+                    Root = EditorLayout.Clone(template.Root),
+                    KeepRatios = template.KeepRatios,
+                };
+            },
+            skipNull: true,
+            rejectControl: true);
 
     public static void Save(IEnumerable<LayoutTemplate> templates) =>
         JsonFiles.Write(FilePath, templates.Where(template => !template.BuiltIn));

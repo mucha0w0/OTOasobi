@@ -123,6 +123,38 @@ static class PresetUi
         return await confirm.ShowAsync() == ContentDialogResult.Primary;
     }
 
+    public static async Task<T?> AcceptSaveAsync<T>(
+        XamlRoot? root,
+        string title,
+        string prompt,
+        T? selected,
+        IList<T> presets,
+        Func<string, string?> validate,
+        Func<string, string> overwrite,
+        Func<string, T> create,
+        Action<T> copy) where T : class, INamedPreset
+    {
+        var name = await AskNameAsync(
+            root,
+            title,
+            prompt,
+            selected is { BuiltIn: false } ? selected.Name : null,
+            validate);
+        if (name == null)
+            return null;
+
+        var existing = presets.FirstOrDefault(preset => preset.Name == name);
+        if (existing != null && !ReferenceEquals(existing, selected)
+            && !await ConfirmOverwriteAsync(root, "プリセットを上書きしますか？", overwrite(name)))
+            return null;
+
+        var target = existing ?? create(name);
+        copy(target);
+        if (existing == null)
+            presets.Add(target);
+        return target;
+    }
+
     public static void Fill<T>(
         MenuFlyout flyout,
         string group,

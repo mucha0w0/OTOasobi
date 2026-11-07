@@ -196,35 +196,23 @@ static class StoredEffectSequence
 
 static class EffectRackPresetStore
 {
-    public static string FilePath { get; } = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "Otoasobi",
-        "effect-rack-presets.json");
+    public static string FilePath { get; } = NamedList.DataFile("effect-rack-presets.json");
 
     public static IReadOnlyList<EffectRackPreset> Load() =>
         JsonFiles.ReadList<EffectRackPreset>(FilePath, Normalize);
 
-    public static List<EffectRackPreset> Normalize(IEnumerable<EffectRackPreset>? list)
-    {
-        var seen = new HashSet<string>();
-        var result = new List<EffectRackPreset>();
-        if (list == null)
-            return result;
-        foreach (var preset in list)
-        {
-            var name = preset.Name.Trim();
-            if (name.Length == 0 || name.Length > 40 || EffectRackPreset.IsReservedName(name) || !seen.Add(name))
-                continue;
-            preset.Name = name;
-            preset.BuiltIn = false;
-            preset.Effects = CleanEffects(preset.Effects);
-            if (preset.Effects.Count == 0)
-                continue;
-            result.Add(preset);
-        }
-
-        return result;
-    }
+    public static List<EffectRackPreset> Normalize(IEnumerable<EffectRackPreset>? list) =>
+        NamedList.Collect(
+            list,
+            preset => preset.Name,
+            EffectRackPreset.IsReservedName,
+            (preset, name) =>
+            {
+                preset.Name = name;
+                preset.BuiltIn = false;
+                preset.Effects = CleanEffects(preset.Effects);
+                return preset.Effects.Count == 0 ? null : preset;
+            });
 
     public static List<StoredEffect> NormalizeEffects(IEnumerable<StoredEffect>? effects)
     {

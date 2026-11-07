@@ -36,33 +36,23 @@ sealed class EqPreset : INamedPreset
 
 static class EqPresetStore
 {
-    public static string FilePath { get; } = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "Otoasobi",
-        "eq-presets.json");
+    public static string FilePath { get; } = NamedList.DataFile("eq-presets.json");
 
     public static IReadOnlyList<EqPreset> Load() =>
         JsonFiles.ReadList<EqPreset>(FilePath, Normalize);
 
-    public static List<EqPreset> Normalize(IEnumerable<EqPreset>? list)
-    {
-        var seen = new HashSet<string>();
-        var result = new List<EqPreset>();
-        if (list == null)
-            return result;
-        foreach (var preset in list)
-        {
-            var name = preset.Name.Trim();
-            if (name.Length == 0 || name.Length > 40 || EqPreset.IsReservedName(name) || !seen.Add(name))
-                continue;
-            preset.Name = name;
-            preset.BuiltIn = false;
-            preset.Gains = Clean(preset.Gains);
-            result.Add(preset);
-        }
-
-        return result;
-    }
+    public static List<EqPreset> Normalize(IEnumerable<EqPreset>? list) =>
+        NamedList.Collect(
+            list,
+            preset => preset.Name,
+            EqPreset.IsReservedName,
+            (preset, name) =>
+            {
+                preset.Name = name;
+                preset.BuiltIn = false;
+                preset.Gains = Clean(preset.Gains);
+                return preset;
+            });
 
     public static void Save(IEnumerable<EqPreset> presets) =>
         JsonFiles.Write(FilePath, presets.Where(preset => !preset.BuiltIn));

@@ -16,7 +16,7 @@ from pathlib import Path
 import numpy as np
 import soundfile as sf
 
-from otoasobi.analyze import list_wavs
+from otoasobi.wavs import list_wavs
 
 HOP = 256
 WIN = 2048

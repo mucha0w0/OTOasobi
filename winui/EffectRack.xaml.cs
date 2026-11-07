@@ -351,44 +351,23 @@ public sealed partial class EffectRack : UserControl
         _ = SaveRackPresetAsync();
     }
 
-    async Task SaveRackPresetAsync()
-    {
-        var name = await PresetUi.AskNameAsync(
-            XamlRoot,
+    async Task SaveRackPresetAsync() =>
+        await SaveStoredPresetAsync(
             "現在のエフェクト設定を保存",
             "エフェクト全体の設定につける名前を入力してください。",
-            _rackSelected is { BuiltIn: false } ? _rackSelected.Name : null,
-            raw => PresetUi.ReservedNameError(raw, EffectRackPreset.IsReservedName));
-        if (name == null)
-            return;
-
-        var existing = _rackPresets.FirstOrDefault(preset => preset.Name == name);
-        if (existing != null && !ReferenceEquals(existing, _rackSelected)
-            && !await PresetUi.ConfirmOverwriteAsync(
-                XamlRoot,
-                "プリセットを上書きしますか？",
-                $"「{name}」は既にあります。いまの設定で置き換えます。"))
-            return;
-
-        var snapshot = CaptureCurrentSnapshot();
-        var target = existing ?? new EffectRackPreset { Name = name };
-        target.Effects = snapshot.Select(effect => effect.Clone()).ToList();
-        if (existing == null)
-            _rackPresets.Add(target);
-        try
-        {
-            EffectRackPresetStore.Save(_rackPresets);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            await TellAsync("プリセットを保存できませんでした", ex.Message);
-            return;
-        }
-
-        RebuildRackPresetMenu();
-        _rackSelected = target;
-        UpdateRackDirty();
-    }
+            name => $"「{name}」は既にあります。いまの設定で置き換えます。",
+            _rackSelected,
+            _rackPresets,
+            raw => PresetUi.ReservedNameError(raw, EffectRackPreset.IsReservedName),
+            name => new EffectRackPreset { Name = name },
+            target => target.Effects = CaptureCurrentSnapshot().Select(effect => effect.Clone()).ToList(),
+            () => EffectRackPresetStore.Save(_rackPresets),
+            target =>
+            {
+                RebuildRackPresetMenu();
+                _rackSelected = target;
+                UpdateRackDirty();
+            });
 
     void LoadNormPresets()
     {
@@ -528,42 +507,22 @@ public sealed partial class EffectRack : UserControl
         _ = SaveNoisePresetAsync();
     }
 
-    async Task SaveNoisePresetAsync()
-    {
-        var name = await PresetUi.AskNameAsync(
-            XamlRoot,
+    async Task SaveNoisePresetAsync() =>
+        await SaveStoredPresetAsync(
             "現在の抑える量を保存",
             "この抑える量につける名前を入力してください。",
-            _noiseSelected is { BuiltIn: false } ? _noiseSelected.Name : null,
-            raw => PresetUi.ReservedNameError(raw, NoisePreset.IsReservedName));
-        if (name == null)
-            return;
-
-        var existing = _noisePresets.FirstOrDefault(preset => preset.Name == name);
-        if (existing != null && !ReferenceEquals(existing, _noiseSelected)
-            && !await PresetUi.ConfirmOverwriteAsync(
-                XamlRoot,
-                "プリセットを上書きしますか？",
-                $"「{name}」は既にあります。いまの抑える量で置き換えます。"))
-            return;
-
-        var target = existing ?? new NoisePreset { Name = name };
-        target.Reduction = _noise.ReductionDb;
-        if (existing == null)
-            _noisePresets.Add(target);
-        try
-        {
-            NoisePresetStore.Save(_noisePresets);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            await TellAsync("プリセットを保存できませんでした", ex.Message);
-            return;
-        }
-
-        RebuildNoisePresetMenu();
-        SelectNoisePreset(target);
-    }
+            name => $"「{name}」は既にあります。いまの抑える量で置き換えます。",
+            _noiseSelected,
+            _noisePresets,
+            raw => PresetUi.ReservedNameError(raw, NoisePreset.IsReservedName),
+            name => new NoisePreset { Name = name },
+            target => target.Reduction = _noise.ReductionDb,
+            () => NoisePresetStore.Save(_noisePresets),
+            target =>
+            {
+                RebuildNoisePresetMenu();
+                SelectNoisePreset(target);
+            });
 
     void FillNoiseMenu()
     {
@@ -1255,42 +1214,22 @@ public sealed partial class EffectRack : UserControl
         _ = SavePresetAsync();
     }
 
-    async Task SavePresetAsync()
-    {
-        var name = await PresetUi.AskNameAsync(
-            XamlRoot,
+    async Task SavePresetAsync() =>
+        await SaveStoredPresetAsync(
             "現在の設定を保存",
             "この設定につける名前を入力してください。",
-            _selected is { BuiltIn: false } ? _selected.Name : null,
-            raw => PresetUi.ReservedNameError(raw, EqPreset.IsReservedName));
-        if (name == null)
-            return;
-
-        var existing = _userPresets.FirstOrDefault(preset => preset.Name == name);
-        if (existing != null && !ReferenceEquals(existing, _selected)
-            && !await PresetUi.ConfirmOverwriteAsync(
-                XamlRoot,
-                "プリセットを上書きしますか？",
-                $"「{name}」は既にあります。いまの設定で置き換えます。"))
-            return;
-
-        var target = existing ?? new EqPreset { Name = name };
-        target.Gains = _eq.CopyGains();
-        if (existing == null)
-            _userPresets.Add(target);
-        try
-        {
-            EqPresetStore.Save(_userPresets);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            await TellAsync("プリセットを保存できませんでした", ex.Message);
-            return;
-        }
-
-        RebuildPresetMenu();
-        SelectPreset(target);
-    }
+            name => $"「{name}」は既にあります。いまの設定で置き換えます。",
+            _selected,
+            _userPresets,
+            raw => PresetUi.ReservedNameError(raw, EqPreset.IsReservedName),
+            name => new EqPreset { Name = name },
+            target => target.Gains = _eq.CopyGains(),
+            () => EqPresetStore.Save(_userPresets),
+            target =>
+            {
+                RebuildPresetMenu();
+                SelectPreset(target);
+            });
 
     void RebuildHpPresetMenu() =>
         PresetUi.Fill(
@@ -1336,43 +1275,26 @@ public sealed partial class EffectRack : UserControl
         _ = SaveHpPresetAsync();
     }
 
-    async Task SaveHpPresetAsync()
-    {
-        var name = await PresetUi.AskNameAsync(
-            XamlRoot,
+    async Task SaveHpPresetAsync() =>
+        await SaveStoredPresetAsync(
             "現在の設定を保存",
             "この設定につける名前を入力してください。",
-            _hpSelected is { BuiltIn: false } ? _hpSelected.Name : null,
-            raw => PresetUi.ReservedNameError(raw, HighPassPreset.IsReservedName));
-        if (name == null)
-            return;
-
-        var existing = _hpPresets.FirstOrDefault(preset => preset.Name == name);
-        if (existing != null && !ReferenceEquals(existing, _hpSelected)
-            && !await PresetUi.ConfirmOverwriteAsync(
-                XamlRoot,
-                "プリセットを上書きしますか？",
-                $"「{name}」は既にあります。いまの設定で置き換えます。"))
-            return;
-
-        var target = existing ?? new HighPassPreset { Name = name };
-        target.Frequency = _hp.Frequency;
-        target.Slope = _hp.Slope;
-        if (existing == null)
-            _hpPresets.Add(target);
-        try
-        {
-            HighPassPresetStore.Save(_hpPresets);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            await TellAsync("プリセットを保存できませんでした", ex.Message);
-            return;
-        }
-
-        RebuildHpPresetMenu();
-        SelectHpPreset(target);
-    }
+            name => $"「{name}」は既にあります。いまの設定で置き換えます。",
+            _hpSelected,
+            _hpPresets,
+            raw => PresetUi.ReservedNameError(raw, HighPassPreset.IsReservedName),
+            name => new HighPassPreset { Name = name },
+            target =>
+            {
+                target.Frequency = _hp.Frequency;
+                target.Slope = _hp.Slope;
+            },
+            () => HighPassPresetStore.Save(_hpPresets),
+            target =>
+            {
+                RebuildHpPresetMenu();
+                SelectHpPreset(target);
+            });
 
     void RebuildCompPresetMenu() =>
         PresetUi.Fill(
@@ -1424,43 +1346,26 @@ public sealed partial class EffectRack : UserControl
         _ = SaveCompPresetAsync();
     }
 
-    async Task SaveCompPresetAsync()
-    {
-        var name = await PresetUi.AskNameAsync(
-            XamlRoot,
+    async Task SaveCompPresetAsync() =>
+        await SaveStoredPresetAsync(
             "現在の設定を保存",
             "この設定につける名前を入力してください。",
-            _compSelected is { BuiltIn: false } ? _compSelected.Name : null,
-            raw => PresetUi.ReservedNameError(raw, CompressorPreset.IsReservedName));
-        if (name == null)
-            return;
-
-        var existing = _compPresets.FirstOrDefault(preset => preset.Name == name);
-        if (existing != null && !ReferenceEquals(existing, _compSelected)
-            && !await PresetUi.ConfirmOverwriteAsync(
-                XamlRoot,
-                "プリセットを上書きしますか？",
-                $"「{name}」は既にあります。いまの設定で置き換えます。"))
-            return;
-
-        var target = existing ?? new CompressorPreset { Name = name };
-        target.Ratio = _comp.Ratio;
-        target.Reduction = _comp.ReductionDb;
-        if (existing == null)
-            _compPresets.Add(target);
-        try
-        {
-            CompressorPresetStore.Save(_compPresets);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            await TellAsync("プリセットを保存できませんでした", ex.Message);
-            return;
-        }
-
-        RebuildCompPresetMenu();
-        SelectCompPreset(target);
-    }
+            name => $"「{name}」は既にあります。いまの設定で置き換えます。",
+            _compSelected,
+            _compPresets,
+            raw => PresetUi.ReservedNameError(raw, CompressorPreset.IsReservedName),
+            name => new CompressorPreset { Name = name },
+            target =>
+            {
+                target.Ratio = _comp.Ratio;
+                target.Reduction = _comp.ReductionDb;
+            },
+            () => CompressorPresetStore.Save(_compPresets),
+            target =>
+            {
+                RebuildCompPresetMenu();
+                SelectCompPreset(target);
+            });
 
     void RebuildNormPresetMenu() =>
         PresetUi.Fill(
@@ -1513,32 +1418,50 @@ public sealed partial class EffectRack : UserControl
         _ = SaveNormPresetAsync();
     }
 
-    async Task SaveNormPresetAsync()
-    {
-        var name = await PresetUi.AskNameAsync(
-            XamlRoot,
+    async Task SaveNormPresetAsync() =>
+        await SaveStoredPresetAsync(
             "現在のピークを保存",
             "このピークにつける名前を入力してください。",
-            _normSelected is { BuiltIn: false } ? _normSelected.Name : null,
-            raw => PresetUi.ReservedNameError(raw, NormalizePreset.IsReservedName));
-        if (name == null)
-            return;
+            name => $"「{name}」は既にあります。いまのピークで置き換えます。",
+            _normSelected,
+            _normPresets,
+            raw => PresetUi.ReservedNameError(raw, NormalizePreset.IsReservedName),
+            name => new NormalizePreset { Name = name },
+            target => target.Target = _norm.TargetDb,
+            () => NormalizePresetStore.Save(_normPresets),
+            target =>
+            {
+                RebuildNormPresetMenu();
+                SelectNormPreset(target);
+            });
 
-        var existing = _normPresets.FirstOrDefault(preset => preset.Name == name);
-        if (existing != null && !ReferenceEquals(existing, _normSelected)
-            && !await PresetUi.ConfirmOverwriteAsync(
-                XamlRoot,
-                "プリセットを上書きしますか？",
-                $"「{name}」は既にあります。いまのピークで置き換えます。"))
+    async Task SaveStoredPresetAsync<T>(
+        string title,
+        string prompt,
+        Func<string, string> overwrite,
+        T? selected,
+        IList<T> presets,
+        Func<string, string?> validate,
+        Func<string, T> create,
+        Action<T> copy,
+        Action save,
+        Action<T> after) where T : class, INamedPreset
+    {
+        var target = await PresetUi.AcceptSaveAsync(
+            XamlRoot,
+            title,
+            prompt,
+            selected,
+            presets,
+            validate,
+            overwrite,
+            create,
+            copy);
+        if (target == null)
             return;
-
-        var target = existing ?? new NormalizePreset { Name = name };
-        target.Target = _norm.TargetDb;
-        if (existing == null)
-            _normPresets.Add(target);
         try
         {
-            NormalizePresetStore.Save(_normPresets);
+            save();
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -1546,8 +1469,7 @@ public sealed partial class EffectRack : UserControl
             return;
         }
 
-        RebuildNormPresetMenu();
-        SelectNormPreset(target);
+        after(target);
     }
 
     async Task TellAsync(string title, string message)

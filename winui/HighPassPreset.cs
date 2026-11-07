@@ -42,34 +42,24 @@ sealed class HighPassPreset : INamedPreset
 
 static class HighPassPresetStore
 {
-    public static string FilePath { get; } = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "Otoasobi",
-        "highpass-presets.json");
+    public static string FilePath { get; } = NamedList.DataFile("highpass-presets.json");
 
     public static IReadOnlyList<HighPassPreset> Load() =>
         JsonFiles.ReadList<HighPassPreset>(FilePath, Normalize);
 
-    public static List<HighPassPreset> Normalize(IEnumerable<HighPassPreset>? list)
-    {
-        var seen = new HashSet<string>();
-        var result = new List<HighPassPreset>();
-        if (list == null)
-            return result;
-        foreach (var preset in list)
-        {
-            var name = preset.Name.Trim();
-            if (name.Length == 0 || name.Length > 40 || HighPassPreset.IsReservedName(name) || !seen.Add(name))
-                continue;
-            preset.Name = name;
-            preset.BuiltIn = false;
-            preset.Frequency = HighPassEffect.ClampHz(preset.Frequency);
-            preset.Slope = HighPassEffect.ClampSlope(preset.Slope);
-            result.Add(preset);
-        }
-
-        return result;
-    }
+    public static List<HighPassPreset> Normalize(IEnumerable<HighPassPreset>? list) =>
+        NamedList.Collect(
+            list,
+            preset => preset.Name,
+            HighPassPreset.IsReservedName,
+            (preset, name) =>
+            {
+                preset.Name = name;
+                preset.BuiltIn = false;
+                preset.Frequency = HighPassEffect.ClampHz(preset.Frequency);
+                preset.Slope = HighPassEffect.ClampSlope(preset.Slope);
+                return preset;
+            });
 
     public static void Save(IEnumerable<HighPassPreset> presets) =>
         JsonFiles.Write(FilePath, presets.Where(preset => !preset.BuiltIn));

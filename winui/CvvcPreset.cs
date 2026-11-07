@@ -22,39 +22,29 @@ sealed class CvvcPreset : INamedPreset
 
 static class CvvcPresetStore
 {
-    public static string FilePath { get; } = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "Otoasobi",
-        "cvvc-presets.json");
+    public static string FilePath { get; } = NamedList.DataFile("cvvc-presets.json");
 
     public static IReadOnlyList<CvvcPreset> Load() =>
         JsonFiles.ReadList<CvvcPreset>(FilePath, Normalize);
 
-    public static List<CvvcPreset> Normalize(IEnumerable<CvvcPreset>? list)
-    {
-        var seen = new HashSet<string>();
-        var result = new List<CvvcPreset>();
-        if (list == null)
-            return result;
-        foreach (var preset in list)
-        {
-            var name = preset.Name.Trim();
-            if (name.Length == 0 || name.Length > 40 || name == CvvcPreset.BuiltInName || !seen.Add(name))
-                continue;
-            preset.Name = name;
-            preset.BuiltIn = false;
-            preset.Consonant = Clamp(preset.Consonant, 0, 0.2, 0.2, 3);
-            preset.Blank = Clamp(preset.Blank, -0.1, 0.1, 0, 3);
-            preset.VcOffset = Clamp(preset.VcOffset, -0.1, 0.1, 0, 3);
-            preset.VcOverlap = Percent(preset.VcOverlap, 50);
-            preset.Overlap = Percents(preset.Overlap, 50);
-            preset.VcConsonant = Percents(preset.VcConsonant, 100);
-            preset.VcBlank = Percents(preset.VcBlank, 100);
-            result.Add(preset);
-        }
-
-        return result;
-    }
+    public static List<CvvcPreset> Normalize(IEnumerable<CvvcPreset>? list) =>
+        NamedList.Collect(
+            list,
+            preset => preset.Name,
+            name => name == CvvcPreset.BuiltInName,
+            (preset, name) =>
+            {
+                preset.Name = name;
+                preset.BuiltIn = false;
+                preset.Consonant = Clamp(preset.Consonant, 0, 0.2, 0.2, 3);
+                preset.Blank = Clamp(preset.Blank, -0.1, 0.1, 0, 3);
+                preset.VcOffset = Clamp(preset.VcOffset, -0.1, 0.1, 0, 3);
+                preset.VcOverlap = Percent(preset.VcOverlap, 50);
+                preset.Overlap = Percents(preset.Overlap, 50);
+                preset.VcConsonant = Percents(preset.VcConsonant, 100);
+                preset.VcBlank = Percents(preset.VcBlank, 100);
+                return preset;
+            });
 
     public static void Save(IEnumerable<CvvcPreset> presets) =>
         JsonFiles.Write(FilePath, presets.Where(preset => !preset.BuiltIn));

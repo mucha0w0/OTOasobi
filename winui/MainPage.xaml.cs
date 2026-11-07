@@ -1441,27 +1441,19 @@ public sealed partial class MainPage : Page
 
     async Task SavePresetAsync()
     {
-        var name = await PresetUi.AskNameAsync(
+        var target = await PresetUi.AcceptSaveAsync(
             XamlRoot,
             "現在の設定を保存",
             "この設定につける名前を入力してください。",
-            _selectedPreset is { BuiltIn: false } ? _selectedPreset.Name : null,
-            PresetNameError);
-        if (name == null)
+            _selectedPreset,
+            _userPresets,
+            PresetNameError,
+            name => $"「{name}」は既にあります。いまの設定で置き換えます。",
+            name => new OtoPreset { Name = name },
+            CopyCurrentInto);
+        if (target == null)
             return;
 
-        var existing = _userPresets.FirstOrDefault(preset => preset.Name == name);
-        if (existing != null && !ReferenceEquals(existing, _selectedPreset)
-            && !await PresetUi.ConfirmOverwriteAsync(
-                XamlRoot,
-                "プリセットを上書きしますか？",
-                $"「{name}」は既にあります。いまの設定で置き換えます。"))
-            return;
-
-        var target = existing ?? new OtoPreset { Name = name };
-        CopyCurrentInto(target);
-        if (existing == null)
-            _userPresets.Add(target);
         RebuildPresetMenu();
         SelectPreset(target);
         try
