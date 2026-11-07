@@ -13,6 +13,12 @@ sealed class RecAppSettings
 
     public double GuideVolume { get; set; } = 0.7;
 
+    // 1 が元の速さ。ファイルのガイドだけに効く。
+    public double GuideSpeed { get; set; } = 1;
+
+    // 半音。正が高い。ファイルのガイドだけに効く。
+    public int GuidePitch { get; set; }
+
     public bool CountIn { get; set; }
 
     public int Bpm { get; set; } = 120;
@@ -33,6 +39,8 @@ sealed class RecAppSettings
         if (!RecTone.Notes.Contains(settings.Note))
             settings.Note = "C4";
         settings.GuideVolume = Math.Clamp(settings.GuideVolume, 0, 1);
+        settings.GuideSpeed = Math.Clamp(settings.GuideSpeed, 0.5, 2);
+        settings.GuidePitch = Math.Clamp(settings.GuidePitch, -12, 12);
         settings.Bpm = Math.Clamp(settings.Bpm, 40, 240);
         settings.DeviceId = BlankToNull(settings.DeviceId);
         settings.OutputDeviceId = BlankToNull(settings.OutputDeviceId);

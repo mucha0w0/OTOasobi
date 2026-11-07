@@ -1730,97 +1730,137 @@
                         <ScrollViewer
                             HorizontalScrollBarVisibility="Disabled"
                             VerticalScrollBarVisibility="Auto">
-                            <Border Margin="12" Style="{StaticResource PanelCardStyle}">
-                                <StackPanel Spacing="8">
-                                    <local:InfoNote
-                                        Title="ガイドBGM設定"
-                                        Text="ファイルを選ぶときは WAV を選びます。同じ名前の txt が対になります。自分で設定するときは、音程とカウントでガイドを作ります。録音中に鳴らすと、スピーカーの音をマイクが拾うことがあります。" />
-                                    <RadioButton
-                                        x:Name="RecGuideFileRadio"
-                                        GroupName="RecGuideKind"
-                                        Content="ファイルを選ぶ"
-                                        Checked="RecGuideKind_Checked" />
-                                    <RadioButton
-                                        x:Name="RecGuideManualRadio"
-                                        GroupName="RecGuideKind"
-                                        Content="自分で設定する"
-                                        IsChecked="True"
-                                        Checked="RecGuideKind_Checked" />
-                                    <StackPanel
-                                        x:Name="RecGuideFilePanel"
-                                        Spacing="8"
-                                        Visibility="Collapsed">
-                                        <ComboBox
-                                            x:Name="RecGuideBox"
-                                            MinWidth="0"
-                                            HorizontalAlignment="Stretch"
-                                            AutomationProperties.Name="ガイドのファイル"
-                                            DisplayMemberPath="Label"
-                                            MaxDropDownHeight="320"
-                                            PlaceholderText="選択しない"
-                                            SelectionChanged="RecGuideBox_Changed" />
-                                    </StackPanel>
-                                    <StackPanel x:Name="RecGuideManualPanel" Spacing="8">
-                                        <TextBlock Text="音程" />
-                                        <ComboBox
-                                            x:Name="RecNoteBox"
-                                            HorizontalAlignment="Stretch"
-                                            AutomationProperties.Name="ガイドの音程"
-                                            SelectionChanged="RecNote_Changed" />
-                                        <Grid>
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="Auto" />
-                                            </Grid.ColumnDefinitions>
-                                            <TextBlock VerticalAlignment="Center" Text="ガイドの大きさ" />
-                                            <TextBlock
-                                                x:Name="RecVolumeValue"
-                                                Grid.Column="1"
-                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                Style="{StaticResource CaptionTextBlockStyle}"
-                                                Text="70%" />
-                                        </Grid>
-                                        <Slider
-                                            x:Name="RecVolumeSlider"
-                                            AutomationProperties.Name="ガイドの大きさ"
-                                            Maximum="100"
-                                            Minimum="0"
-                                            StepFrequency="1"
-                                            Value="70"
-                                            ValueChanged="RecVolume_Changed" />
-                                        <ToggleSwitch
-                                            x:Name="RecCountInSwitch"
-                                            AutomationProperties.Name="カウント"
-                                            OffContent="カウントなし"
-                                            OnContent="1 小節カウントする"
-                                            Toggled="RecCountIn_Toggled" />
-                                        <Grid>
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="120" />
-                                            </Grid.ColumnDefinitions>
-                                            <TextBlock VerticalAlignment="Center" Text="テンポ" />
-                                            <NumberBox
-                                                x:Name="RecBpmBox"
-                                                Grid.Column="1"
-                                                AutomationProperties.Name="カウントのテンポ"
-                                                LargeChange="10"
-                                                Maximum="240"
-                                                Minimum="40"
-                                                SmallChange="1"
-                                                SpinButtonPlacementMode="Inline"
-                                                Value="120"
-                                                ValueChanged="RecBpm_Changed" />
-                                        </Grid>
-                                        <ToggleSwitch
-                                            x:Name="RecGuideWhileSwitch"
-                                            AutomationProperties.Name="録音中もガイドを鳴らす"
-                                            OffContent="録音前だけ鳴らす"
-                                            OnContent="録音中も鳴らす"
-                                            Toggled="RecGuideWhile_Toggled" />
-                                    </StackPanel>
+                            <StackPanel Padding="12" Spacing="8">
+                                <RadioButton
+                                    x:Name="RecGuideFileRadio"
+                                    GroupName="RecGuideKind"
+                                    Content="ファイルを選ぶ"
+                                    Checked="RecGuideKind_Checked" />
+                                <RadioButton
+                                    x:Name="RecGuideManualRadio"
+                                    GroupName="RecGuideKind"
+                                    Content="自分で設定する"
+                                    IsChecked="True"
+                                    Checked="RecGuideKind_Checked" />
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock VerticalAlignment="Center" Text="ガイドの大きさ" />
+                                    <TextBlock
+                                        x:Name="RecVolumeValue"
+                                        Grid.Column="1"
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        Text="70%" />
+                                </Grid>
+                                <Slider
+                                    x:Name="RecVolumeSlider"
+                                    AutomationProperties.Name="ガイドの大きさ"
+                                    Maximum="100"
+                                    Minimum="0"
+                                    StepFrequency="1"
+                                    ToolTipService.ToolTip="ファイルと、自分で作るガイド音の両方に効きます"
+                                    Value="70"
+                                    ValueChanged="RecVolume_Changed" />
+                                <StackPanel
+                                    x:Name="RecGuideFilePanel"
+                                    Spacing="8"
+                                    Visibility="Collapsed">
+                                    <ComboBox
+                                        x:Name="RecGuideBox"
+                                        MinWidth="0"
+                                        HorizontalAlignment="Stretch"
+                                        AutomationProperties.Name="ガイドのファイル"
+                                        DisplayMemberPath="Label"
+                                        MaxDropDownHeight="320"
+                                        PlaceholderText="選択しない"
+                                        SelectionChanged="RecGuideBox_Changed" />
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock VerticalAlignment="Center" Text="再生速度" />
+                                        <TextBlock
+                                            x:Name="RecGuideSpeedValue"
+                                            Grid.Column="1"
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            Style="{StaticResource CaptionTextBlockStyle}"
+                                            Text="100%" />
+                                    </Grid>
+                                    <Slider
+                                        x:Name="RecGuideSpeedSlider"
+                                        AutomationProperties.Name="再生速度"
+                                        Maximum="200"
+                                        Minimum="50"
+                                        StepFrequency="1"
+                                        ToolTipService.ToolTip="100% が元の速さです。音の高さはそのままです"
+                                        Value="100"
+                                        ValueChanged="RecGuideSpeed_Changed" />
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock VerticalAlignment="Center" Text="音程" />
+                                        <TextBlock
+                                            x:Name="RecGuidePitchValue"
+                                            Grid.Column="1"
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            Style="{StaticResource CaptionTextBlockStyle}"
+                                            Text="0" />
+                                    </Grid>
+                                    <Slider
+                                        x:Name="RecGuidePitchSlider"
+                                        AutomationProperties.Name="音程"
+                                        Maximum="12"
+                                        Minimum="-12"
+                                        StepFrequency="1"
+                                        ToolTipService.ToolTip="半音です。0 が元の高さで、長さはそのままです"
+                                        Value="0"
+                                        ValueChanged="RecGuidePitch_Changed" />
                                 </StackPanel>
-                            </Border>
+                                <StackPanel x:Name="RecGuideManualPanel" Spacing="8">
+                                    <TextBlock Text="音程" />
+                                    <ComboBox
+                                        x:Name="RecNoteBox"
+                                        HorizontalAlignment="Stretch"
+                                        AutomationProperties.Name="ガイドの音程"
+                                        SelectionChanged="RecNote_Changed" />
+                                    <ToggleSwitch
+                                        x:Name="RecCountInSwitch"
+                                        AutomationProperties.Name="カウント"
+                                        OffContent="カウントなし"
+                                        OnContent="1 小節カウントする"
+                                        Toggled="RecCountIn_Toggled" />
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="120" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock VerticalAlignment="Center" Text="テンポ" />
+                                        <NumberBox
+                                            x:Name="RecBpmBox"
+                                            Grid.Column="1"
+                                            AutomationProperties.Name="カウントのテンポ"
+                                            LargeChange="10"
+                                            Maximum="240"
+                                            Minimum="40"
+                                            SmallChange="1"
+                                            SpinButtonPlacementMode="Inline"
+                                            Value="120"
+                                            ValueChanged="RecBpm_Changed" />
+                                    </Grid>
+                                    <ToggleSwitch
+                                        x:Name="RecGuideWhileSwitch"
+                                        AutomationProperties.Name="録音中もガイドを鳴らす"
+                                        OffContent="録音前だけ鳴らす"
+                                        OnContent="録音中も鳴らす"
+                                        Toggled="RecGuideWhile_Toggled" />
+                                </StackPanel>
+                            </StackPanel>
                         </ScrollViewer>
                         <Border
                             Grid.Row="1"

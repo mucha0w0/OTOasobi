@@ -114,12 +114,66 @@ static class RecTone
     {
         if (mono.Length == 0 || fromRate <= 0 || toRate <= 0 || fromRate == toRate)
             return mono;
-        var frames = Math.Max(1, (int)Math.Round(mono.Length * (double)toRate / fromRate));
+        return ResampleRatio(mono, (double)toRate / fromRate);
+    }
+
+    // ガイド BGM。速さは長さだけ、半音は高さだけを変える。
+    public static float[] ShapeGuide(float[] interleaved, int channels, int sampleRate, double speed, int semitones)
+    {
+        if (interleaved.Length == 0 || channels < 1 || sampleRate <= 0)
+            return interleaved;
+        speed = Math.Clamp(speed, 0.5, 2);
+        semitones = Math.Clamp(semitones, -12, 12);
+        if (Math.Abs(speed - 1) < 1e-4 && semitones == 0)
+            return interleaved;
+
+        var frames = interleaved.Length / channels;
+        if (frames == 0)
+            return interleaved;
+        var pitch = Math.Pow(2, semitones / 12.0);
+        var stretch = pitch / speed;
+        if (channels == 1)
+            return ShapeChannel(interleaved, pitch, stretch, sampleRate);
+
+        var perChannel = new float[channels][];
+        var length = int.MaxValue;
+        for (var channel = 0; channel < channels; channel++)
+        {
+            var samples = new float[frames];
+            for (var frame = 0; frame < frames; frame++)
+                samples[frame] = interleaved[frame * channels + channel];
+            perChannel[channel] = ShapeChannel(samples, pitch, stretch, sampleRate);
+            length = Math.Min(length, perChannel[channel].Length);
+        }
+
+        var output = new float[length * channels];
+        for (var frame = 0; frame < length; frame++)
+        {
+            for (var channel = 0; channel < channels; channel++)
+                output[frame * channels + channel] = perChannel[channel][frame];
+        }
+
+        return output;
+    }
+
+    static float[] ShapeChannel(float[] mono, double pitch, double stretch, int sampleRate)
+    {
+        var shifted = Math.Abs(pitch - 1) < 1e-4 ? mono : ResampleRatio(mono, 1 / pitch);
+        if (Math.Abs(stretch - 1) < 1e-3)
+            return shifted;
+        return TimeStretch(shifted, sampleRate, stretch);
+    }
+
+    public static float[] ResampleRatio(float[] mono, double lengthRatio)
+    {
+        if (mono.Length == 0 || lengthRatio <= 0 || Math.Abs(lengthRatio - 1) < 1e-6)
+            return mono;
+        var frames = Math.Max(1, (int)Math.Round(mono.Length * lengthRatio));
         var output = new float[frames];
         var last = mono.Length - 1;
         for (var i = 0; i < frames; i++)
         {
-            var source = i * (double)fromRate / toRate;
+            var source = i / lengthRatio;
             var index = Math.Min((int)source, last);
             var next = Math.Min(index + 1, last);
             var fraction = source - index;
@@ -127,6 +181,80 @@ static class RecTone
         }
 
         return output;
+    }
+
+    // 50% 重ねの波形合わせ。stretch が 1 より大きいと長くなる。
+    public static float[] TimeStretch(float[] input, int sampleRate, double stretch)
+    {
+        if (input.Length == 0 || sampleRate <= 0 || stretch <= 0 || Math.Abs(stretch - 1) < 1e-3)
+            return input;
+        var target = Math.Max(1, (int)Math.Round(input.Length * stretch));
+        if (input.Length < 64)
+            return ResampleRatio(input, stretch);
+
+        var win = 1024;
+        if (input.Length < win * 2)
+            win = Math.Max(64, input.Length / 4) & ~1;
+        var synthesis = win / 2;
+        var search = Math.Min(synthesis / 2, Math.Max(8, sampleRate / 1000));
+        var corrLen = Math.Min(128, synthesis);
+        var window = new float[win];
+        for (var i = 0; i < win; i++)
+            window[i] = (float)(0.5 * (1 - Math.Cos(2 * Math.PI * i / win)));
+
+        var output = new float[target + win];
+        var weight = new float[output.Length];
+        var analysis = synthesis / stretch;
+
+        void Add(int source, int dest)
+        {
+            var count = Math.Min(win, Math.Min(input.Length - source, output.Length - dest));
+            for (var i = 0; i < count; i++)
+            {
+                var gain = window[i];
+                output[dest + i] += input[source + i] * gain;
+                weight[dest + i] += gain;
+            }
+        }
+
+        Add(0, 0);
+        var outPos = synthesis;
+        double inPos = analysis;
+        var guard = 0;
+        while (outPos < target && guard++ < target)
+        {
+            var expected = (int)Math.Round(inPos);
+            var best = Math.Clamp(expected, 0, Math.Max(0, input.Length - win));
+            var from = Math.Max(0, best - search);
+            var to = Math.Min(input.Length - win, best + search);
+            if (to > from)
+            {
+                var bestCorr = double.NegativeInfinity;
+                for (var candidate = from; candidate <= to; candidate += 4)
+                {
+                    double corr = 0;
+                    var length = Math.Min(corrLen, input.Length - candidate);
+                    for (var i = 0; i < length; i++)
+                        corr += output[outPos + i] * input[candidate + i];
+                    if (corr > bestCorr)
+                    {
+                        bestCorr = corr;
+                        best = candidate;
+                    }
+                }
+            }
+
+            Add(best, outPos);
+            outPos += synthesis;
+            inPos = best + analysis;
+            if (inPos >= input.Length - win)
+                break;
+        }
+
+        var result = new float[target];
+        for (var i = 0; i < target; i++)
+            result[i] = weight[i] > 1e-6f ? output[i] / weight[i] : 0;
+        return result;
     }
 
     public static float[] ToMono44100(float[] interleaved, int channels, int sampleRate)

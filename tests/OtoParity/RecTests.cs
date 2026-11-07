@@ -72,6 +72,40 @@ public class RecTests
     }
 
     [Fact]
+    public void GuideSpeedAndPitchStayIndependent()
+    {
+        const int rate = 44100;
+        var input = new float[(int)(rate * 0.4)];
+        for (var i = 0; i < input.Length; i++)
+            input[i] = (float)Math.Sin(2 * Math.PI * 440 * i / rate);
+        var faster = RecTone.ShapeGuide(input, 1, rate, 2, 0);
+        var higher = RecTone.ShapeGuide(input, 1, rate, 1, 12);
+        var both = RecTone.ShapeGuide(input, 1, rate, 2, 12);
+
+        Assert.InRange(faster.Length, input.Length / 2 - 800, input.Length / 2 + 800);
+        Assert.InRange(higher.Length, input.Length - 1200, input.Length + 1200);
+        Assert.InRange(both.Length, input.Length / 2 - 800, input.Length / 2 + 800);
+        Assert.InRange(Fundamental(faster, rate), 400, 480);
+        Assert.InRange(Fundamental(higher, rate), 800, 960);
+        Assert.InRange(Fundamental(both, rate), 800, 960);
+        Assert.Same(input, RecTone.ShapeGuide(input, 1, rate, 1, 0));
+    }
+
+    static double Fundamental(float[] samples, int rate)
+    {
+        var start = samples.Length / 5;
+        var end = samples.Length * 4 / 5;
+        var crossings = 0;
+        for (var i = start + 1; i < end; i++)
+        {
+            if (samples[i - 1] <= 0 && samples[i] > 0)
+                crossings++;
+        }
+
+        return crossings / ((end - start) / (double)rate);
+    }
+
+    [Fact]
     public void DownmixAndResample()
     {
         var mono = RecTone.Downmix([1f, -1f, 0.5f, 0.5f], 2);

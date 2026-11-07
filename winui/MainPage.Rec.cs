@@ -22,6 +22,8 @@ public sealed partial class MainPage
     string? _recTakeName;
     int _recIndex = -1;
     int _recWaitToken;
+    int _guideShapeToken;
+    bool _guideListening;
     string _recFilter = "all";
     bool _recApplying = true;
     bool _recSuppress;
@@ -42,6 +44,7 @@ public sealed partial class MainPage
             _recPlayer = new PreviewPlayer(queue);
             _recPlayer.SetOutput(_recSettings.OutputDeviceId);
             _recPlayer.Failed += (_, message) => ShowNotice("再生できませんでした", message);
+            _recPlayer.Ended += (_, _) => _guideListening = false;
         }
         _recApplying = true;
         foreach (var note in RecTone.Notes)
@@ -49,6 +52,10 @@ public sealed partial class MainPage
         RecNoteBox.SelectedItem = _recSettings.Note;
         RecVolumeSlider.Value = _recSettings.GuideVolume * 100;
         RecVolumeValue.Text = $"{(int)Math.Round(RecVolumeSlider.Value)}%";
+        RecGuideSpeedSlider.Value = _recSettings.GuideSpeed * 100;
+        RecGuideSpeedValue.Text = $"{(int)Math.Round(RecGuideSpeedSlider.Value)}%";
+        RecGuidePitchSlider.Value = _recSettings.GuidePitch;
+        RecGuidePitchValue.Text = FormatGuidePitch((int)Math.Round(RecGuidePitchSlider.Value));
         RecCountInSwitch.IsOn = _recSettings.CountIn;
         RecBpmBox.Value = _recSettings.Bpm;
         RecGuideWhileSwitch.IsOn = _recSettings.GuideWhileRecording;
@@ -415,6 +422,51 @@ public sealed partial class MainPage
             return;
         _recSettings.GuideVolume = RecVolumeSlider.Value / 100;
         _recSettings.Save();
+    }
+
+    void RecGuideSpeed_Changed(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
+    {
+        if (RecGuideSpeedValue == null)
+            return;
+        var percent = (int)Math.Round(RecGuideSpeedSlider.Value);
+        RecGuideSpeedValue.Text = $"{percent}%";
+        if (_recApplying)
+            return;
+        _recSettings.GuideSpeed = percent / 100.0;
+        _recSettings.Save();
+        QueueGuideReshape();
+    }
+
+    void RecGuidePitch_Changed(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
+    {
+        if (RecGuidePitchValue == null)
+            return;
+        var semis = (int)Math.Round(RecGuidePitchSlider.Value);
+        RecGuidePitchValue.Text = FormatGuidePitch(semis);
+        if (_recApplying)
+            return;
+        _recSettings.GuidePitch = semis;
+        _recSettings.Save();
+        QueueGuideReshape();
+    }
+
+    static string FormatGuidePitch(int semis) =>
+        semis > 0 ? $"+{semis}" : semis.ToString();
+
+    void QueueGuideReshape()
+    {
+        if (_recGuideManual || !_guideListening)
+            return;
+        var token = ++_guideShapeToken;
+        _ = ReshapeGuideAsync(token);
+    }
+
+    async Task ReshapeGuideAsync(int token)
+    {
+        await Task.Delay(180);
+        if (token != _guideShapeToken || _recGuideManual || !_guideListening)
+            return;
+        await PlayGuideAsync(loop: false);
     }
 
     void RecCountIn_Toggled(object sender, RoutedEventArgs e)
@@ -906,6 +958,7 @@ public sealed partial class MainPage
 
     async Task PlayGuideAsync(bool loop)
     {
+        var shape = _guideShapeToken;
         var line = CurrentLine();
         if (line == null || _recPlayer == null || _recTaking && !loop)
             return;
@@ -915,8 +968,10 @@ public sealed partial class MainPage
         byte[] wav;
         if (!_recGuideManual)
         {
+            _guideListening = true;
             if (guide == null)
             {
+                _guideListening = false;
                 ShowNotice("ガイドのファイルを選んでください", "WAV を選ぶと、同じ名前の txt が対になります。");
                 return;
             }
@@ -930,23 +985,39 @@ public sealed partial class MainPage
                     return;
                 }
 
-                wav = await File.ReadAllBytesAsync(guide);
+                var speed = _recSettings.GuideSpeed;
+                var pitch = _recSettings.GuidePitch;
+                if (Math.Abs(speed - 1) < 0.001 && pitch == 0)
+                    wav = await File.ReadAllBytesAsync(guide);
+                else
+                {
+                    var audio = await Task.Run(() => WavAudio.Read(guide));
+                    var shaped = await Task.Run(() => RecTone.ShapeGuide(
+                        audio.Samples,
+                        audio.Channels,
+                        audio.SampleRate,
+                        speed,
+                        pitch));
+                    wav = PreviewWav.Encode(shaped, audio.Channels, audio.SampleRate);
+                }
             }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
             {
+                _guideListening = false;
                 ShowNotice("ガイドを読めませんでした", ex.Message);
                 return;
             }
         }
         else
         {
+            _guideListening = false;
             if (!RecTone.TryHertz(CurrentNote(), out var hz))
                 hz = 261.6255653005986;
             var seconds = loop ? 1.2 : 0.8;
             wav = PreviewWav.Encode(RecTone.Tone(hz, RecTone.TargetRate, seconds), 1, RecTone.TargetRate);
         }
 
-        if (_recPlayer == null || (loop && !_recTaking))
+        if (_recPlayer == null || (loop && !_recTaking) || shape != _guideShapeToken)
             return;
         _recPlayer.Volume = _recSettings.GuideVolume;
         await _recPlayer.PlayAsync(wav, loop);
@@ -968,6 +1039,7 @@ public sealed partial class MainPage
         var path = Path.Combine(_folder, RecNames.WavName(line.Sing));
         if (!File.Exists(path))
             return;
+        _guideListening = false;
         try
         {
             var wav = await File.ReadAllBytesAsync(path);
