@@ -8,11 +8,13 @@ type Props = {
   canEdit: boolean
   canWrite: boolean
   canAnalyze: boolean
+  canAnalyzeOne: boolean
   onOpenFolder: () => void
   onSaveSettings: () => void
   onLoadSettings: () => void
   onWrite: () => void
   onReanalyze: () => void
+  onReanalyzeOne: () => void
   onSettings: () => void
   onClose: () => void
   onToggle: (id: string) => void
@@ -24,11 +26,13 @@ export function MenuBar({
   canEdit,
   canWrite,
   canAnalyze,
+  canAnalyzeOne,
   onOpenFolder,
   onSaveSettings,
   onLoadSettings,
   onWrite,
   onReanalyze,
+  onReanalyzeOne,
   onSettings,
   onClose,
   onToggle,
@@ -60,7 +64,7 @@ export function MenuBar({
       </Menu>
       <Menu title="解析" open={open} setOpen={setOpen}>
         <Item disabled={!canAnalyze} onClick={onReanalyze}>再解析</Item>
-        <Item disabled>選択した音声だけを再解析</Item>
+        <Item disabled={!canAnalyzeOne} onClick={onReanalyzeOne}>選択した音声だけを再解析</Item>
       </Menu>
       <Menu title="表示" open={open} setOpen={setOpen}>
         {viewOrder.map((id) => (

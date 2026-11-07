@@ -23,6 +23,8 @@ sealed class ProbeSession : IDisposable
     ProbePreview? _python;
     AnalysisClient? _analysis;
     readonly ProbeOto _oto = new();
+    readonly ProbeFrq _frq = new();
+    readonly ProbeRec _rec = new();
     readonly DispatcherQueueTimer _otoSave;
     int _analyzeGen;
     string? _folder;
@@ -35,6 +37,9 @@ sealed class ProbeSession : IDisposable
     bool _ready;
     bool _disposed;
     int _previewGen;
+    int _countGen;
+    bool _counting;
+    string? _recordStem;
     DateTime _recordStarted;
 
     public ProbeSession(MainWindow window, WebView2 view, Action<string> showMissing)
@@ -146,17 +151,26 @@ sealed class ProbeSession : IDisposable
                     _ = MonitorAsync(root.TryGetProperty("on", out var onValue) && onValue.ValueKind == JsonValueKind.True);
                     break;
                 case "guide":
-                    _ = GuideAsync(Text(root, "note") ?? "A4", (int)Math.Round(Number(root, "semitones")), Number(root, "speed"));
+                    _ = GuideAsync(Text(root, "note") ?? "C4", (int)Math.Round(Number(root, "semitones")), Number(root, "speed"), Volume(root));
                     break;
                 case "guideStop":
                     _player.Stop();
                     Post(new { type = "guide", playing = false });
                     break;
                 case "record":
-                    BeginRecord();
+                    _ = BeginRecordAsync(root);
                     break;
                 case "recordStop":
                     StopRecord();
+                    break;
+                case "recSettings":
+                    SaveRecSettings(root);
+                    break;
+                case "recList":
+                    HandleRec(root);
+                    break;
+                case "frq":
+                    HandleFrq(root);
                     break;
                 case "watchMic":
                     _ = WatchMicAsync(root.TryGetProperty("on", out var watchValue) && watchValue.ValueKind == JsonValueKind.True);
@@ -206,6 +220,7 @@ sealed class ProbeSession : IDisposable
         }
 
         PostCapture();
+        PostRecSettings();
     }
 
     async Task OpenWavAsync()
@@ -236,7 +251,11 @@ sealed class ProbeSession : IDisposable
         if (!string.IsNullOrEmpty(_folder))
         {
             _oto.Open(_folder);
+            _rec.OpenFolder(_folder);
             PostOto();
+            PostRec();
+            PostFrqCount();
+            Post(_frq.View(_wavPath));
             BeginAnalyze(false);
         }
     }
@@ -274,7 +293,10 @@ sealed class ProbeSession : IDisposable
 
             Post(new { type = "files", folder = _folder, names = WavNames(_folder) });
             _oto.Open(folder);
+            _rec.OpenFolder(folder);
             PostOto();
+            PostRec();
+            PostFrqCount();
             BeginAnalyze(false);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -313,6 +335,17 @@ sealed class ProbeSession : IDisposable
         var match = names.FirstOrDefault(item => string.Equals(item, name, StringComparison.OrdinalIgnoreCase));
         if (match == null)
         {
+            if (name!.EndsWith(".wav", StringComparison.OrdinalIgnoreCase))
+            {
+                _wavPath = null;
+                _previewGen++;
+                _frq.Clear();
+                Post(new { type = "opened", name, missing = true });
+                PostOto();
+                Post(_frq.View(null));
+                return;
+            }
+
             Post(new { type = "failed", message = "このファイルは存在しません。" });
             return;
         }
@@ -321,6 +354,7 @@ sealed class ProbeSession : IDisposable
         _previewGen++;
         Post(new { type = "opened", name = match });
         PostOto();
+        Post(_frq.View(_wavPath));
     }
 
     void PostFiles()
@@ -446,7 +480,7 @@ sealed class ProbeSession : IDisposable
         PostCapture();
     }
 
-    async Task GuideAsync(string note, int semitones, double speed)
+    async Task GuideAsync(string note, int semitones, double speed, double volume)
     {
         if (_disposed)
             return;
@@ -459,7 +493,7 @@ sealed class ProbeSession : IDisposable
         var tone = RecTone.Tone(hz, RecTone.TargetRate, 2);
         var shaped = RecTone.ShapeGuide(tone, 1, RecTone.TargetRate, speed, semitones);
         var wav = PreviewWav.Encode(shaped, 1, RecTone.TargetRate);
-        _player.Volume = 0.5;
+        _player.Volume = volume;
         var played = await _player.PlayAsync(wav, loop: true);
         Post(new { type = "guide", playing = played });
     }
@@ -499,9 +533,9 @@ sealed class ProbeSession : IDisposable
         }
     }
 
-    void BeginRecord()
+    async Task BeginRecordAsync(JsonElement root)
     {
-        if (_disposed)
+        if (_disposed || _recording || _counting)
             return;
         if (!_capture.Running)
         {
@@ -509,20 +543,86 @@ sealed class ProbeSession : IDisposable
             return;
         }
 
+        var name = Text(root, "name");
+        _recordStem = null;
+        if (!string.IsNullOrWhiteSpace(name))
+        {
+            var error = RecNames.StemError(name) ?? RecNames.WavError(name + ".wav");
+            if (error != null)
+            {
+                Post(new { type = "failed", message = error });
+                return;
+            }
+
+            if (string.IsNullOrEmpty(_folder))
+            {
+                Post(new { type = "failed", message = "フォルダを開いてください。" });
+                return;
+            }
+
+            _recordStem = name.Trim();
+        }
+
+        var countIn = root.TryGetProperty("countIn", out var countValue) && countValue.ValueKind == JsonValueKind.True;
+        var bpm = (int)Math.Clamp(Math.Round(Number(root, "bpm") == 0 ? 120 : Number(root, "bpm")), 40, 240);
+        if (countIn)
+        {
+            var token = ++_countGen;
+            _counting = true;
+            Post(new { type = "recordWait", waiting = true });
+            PostStatus("カウントしています");
+            var clicks = PreviewWav.Encode(RecTone.CountIn(bpm, RecTone.TargetRate), 1, RecTone.TargetRate);
+            _player.Volume = Volume(root);
+            var played = await _player.PlayAsync(clicks, loop: false);
+            var seconds = 4 * 60.0 / bpm;
+            var started = DateTime.UtcNow;
+            while (played && token == _countGen && !_disposed && (DateTime.UtcNow - started).TotalSeconds < seconds)
+                await Task.Delay(40);
+            var cancelled = token != _countGen || _disposed || !played;
+            if (token == _countGen)
+                _counting = false;
+            Post(new { type = "recordWait", waiting = false });
+            PostStatus("");
+            if (cancelled || !_capture.Running)
+                return;
+        }
+
+        if (_disposed || _recording)
+            return;
         _capture.BeginTake();
         _recording = true;
         _recordStarted = DateTime.UtcNow;
         PostCapture();
+        if (root.TryGetProperty("guideWhile", out var guideValue) && guideValue.ValueKind == JsonValueKind.True)
+        {
+            var note = Text(root, "note") ?? "C4";
+            _ = GuideAsync(note, (int)Math.Round(Number(root, "semitones")), Number(root, "speed") == 0 ? 1 : Number(root, "speed"), Volume(root));
+        }
     }
 
     void StopRecord()
     {
+        if (_counting)
+        {
+            _countGen++;
+            _counting = false;
+            _player.Stop();
+            Post(new { type = "recordWait", waiting = false });
+            PostStatus("");
+            return;
+        }
+
         if (_disposed || !_recording)
             return;
+        _player.Stop();
+        Post(new { type = "guide", playing = false });
         var saved = WriteTake();
         PostCapture();
-        if (saved != null)
-            Post(saved);
+        if (saved == null)
+            return;
+        PostFiles();
+        PostRec();
+        Post(saved);
     }
 
     object? WriteTake()
@@ -541,9 +641,17 @@ sealed class ProbeSession : IDisposable
 
         try
         {
-            var directory = Path.Combine(AppPaths.DataRoot, "probe-takes");
-            Directory.CreateDirectory(directory);
-            var path = Path.Combine(directory, "take-" + DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture) + ".wav");
+            string path;
+            if (string.IsNullOrEmpty(_recordStem) || string.IsNullOrEmpty(_folder))
+            {
+                var directory = Path.Combine(AppPaths.DataRoot, "probe-takes");
+                Directory.CreateDirectory(directory);
+                path = Path.Combine(directory, "take-" + DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture) + ".wav");
+            }
+            else
+            {
+                path = Path.Combine(_folder, RecNames.WavName(_recordStem));
+            }
             WavAudio.Write(path, new WavAudio
             {
                 SampleRate = RecTone.TargetRate,
@@ -608,6 +716,9 @@ sealed class ProbeSession : IDisposable
             case "analyze":
                 BeginAnalyze(root.TryGetProperty("force", out var forceValue) && forceValue.ValueKind == JsonValueKind.True);
                 break;
+            case "analyzeFile":
+                BeginAnalyzeFile();
+                break;
             case "write":
                 _ = WriteOtoAsync();
                 break;
@@ -655,14 +766,39 @@ sealed class ProbeSession : IDisposable
         _ = AnalyzeAsync(gen, force);
     }
 
+    void BeginAnalyzeFile()
+    {
+        if (_disposed || string.IsNullOrEmpty(_folder) || string.IsNullOrEmpty(_wavPath))
+        {
+            Post(new { type = "failed", message = "ファイルを選んでください。" });
+            return;
+        }
+
+        if (_oto.IsBusy)
+        {
+            Post(new { type = "failed", message = "解析が終わるまで待ってください。" });
+            return;
+        }
+
+        if (_oto.IsBusy)
+            return;
+        var gen = ++_analyzeGen;
+        _ = AnalyzeFileAsync(gen, Path.GetFileName(_wavPath));
+    }
+
     async Task AnalyzeAsync(int gen, bool force)
     {
         _oto.SetBusy(true);
         PostOto();
+        PostStatus("解析しています");
         try
         {
             _analysis ??= new AnalysisClient();
-            var data = await _analysis.AnalyzeFolderAsync(_folder!, null, force);
+            var data = await _analysis.AnalyzeFolderAsync(
+                _folder!,
+                (done, total) => PostStatus($"解析しています　{done} / {total} ファイル"),
+                force,
+                (name, _, label) => PostStatus(string.IsNullOrEmpty(label) ? name : $"{name}　{label}"));
             if (gen != _analyzeGen || _disposed)
                 return;
             if (!data.Ok)
@@ -680,6 +816,45 @@ sealed class ProbeSession : IDisposable
             if (gen == _analyzeGen && !_disposed)
             {
                 _oto.SetBusy(false);
+                PostStatus("");
+                PostOto();
+            }
+        }
+    }
+
+    async Task AnalyzeFileAsync(int gen, string name)
+    {
+        _oto.SetBusy(true);
+        PostOto();
+        PostStatus($"{name} を解析しています");
+        try
+        {
+            _analysis ??= new AnalysisClient();
+            var data = await _analysis.AnalyzeFileAsync(
+                _folder!,
+                name,
+                (done, total) => PostStatus($"{name}　{done} / {total}"),
+                (_, _, label) => PostStatus(string.IsNullOrEmpty(label) ? name : $"{name}　{label}"));
+            if (gen != _analyzeGen || _disposed)
+                return;
+            if (!data.Ok)
+                Post(new { type = "failed", message = string.IsNullOrEmpty(data.Error) ? "解析できませんでした。" : data.Error });
+            else if (data.Files.Count == 0)
+                Post(new { type = "failed", message = "解析できませんでした。" });
+            else
+                _oto.MergeFile(data.Files[0]);
+        }
+        catch (Exception ex)
+        {
+            if (gen == _analyzeGen && !_disposed)
+                Post(new { type = "failed", message = ex.Message });
+        }
+        finally
+        {
+            if (gen == _analyzeGen && !_disposed)
+            {
+                _oto.SetBusy(false);
+                PostStatus("");
                 PostOto();
             }
         }
@@ -729,10 +904,235 @@ sealed class ProbeSession : IDisposable
         }
     }
 
+    void HandleFrq(JsonElement root)
+    {
+        switch (Text(root, "op"))
+        {
+            case "write":
+                _ = WriteFrqAsync(Text(root, "mode"), root.TryGetProperty("clear", out var clear) && clear.ValueKind == JsonValueKind.True);
+                break;
+            case "stroke":
+                PostFrqEdit(_frq.Stroke(Property(root, "points")));
+                break;
+            case "octave":
+                PostFrqEdit(_frq.Shift(Property(root, "frames"), (int)Math.Round(Number(root, "octaves"))));
+                break;
+            case "clear":
+                PostFrqEdit(_frq.ClearPitch(Property(root, "frames")));
+                break;
+        }
+    }
+
+    async Task WriteFrqAsync(string? mode, bool clear)
+    {
+        if (_disposed || string.IsNullOrEmpty(_folder))
+            return;
+        if (_oto.IsBusy)
+        {
+            Post(new { type = "failed", message = "解析が終わるまで待ってください。" });
+            return;
+        }
+
+        mode = mode is "missing" or "selected" ? mode : "all";
+        string? only = null;
+        if (mode == "selected")
+        {
+            if (string.IsNullOrEmpty(_wavPath))
+            {
+                Post(new { type = "failed", message = "ファイルを選んでください。" });
+                return;
+            }
+
+            only = Path.GetFileName(_wavPath);
+        }
+
+        _oto.SetBusy(true);
+        PostOto();
+        PostStatus(".frqを計算しています");
+        try
+        {
+            _analysis ??= new AnalysisClient();
+            var result = await _analysis.WriteFrqAsync(
+                _folder,
+                mode,
+                only,
+                clear ? _oto.PreutterClears() : null,
+                (done, total) => PostStatus($".frqを計算しています　{done} / {total} ファイル"),
+                (name, _, label) => PostStatus(string.IsNullOrEmpty(label) ? name : $"{name}　{label}"));
+            if (_disposed)
+                return;
+            if (!result.Ok)
+                Post(new { type = "failed", message = string.IsNullOrEmpty(result.Error) ? ".frqを生成できませんでした。" : result.Error });
+            else
+            {
+                var notice = $"{result.Written} 件の .frq を書きました。";
+                if (!string.IsNullOrWhiteSpace(result.Notice))
+                    notice += " " + result.Notice;
+                Post(new { type = "notice", message = notice });
+            }
+
+            if (!string.IsNullOrEmpty(_wavPath))
+                Post(_frq.View(_wavPath));
+        }
+        catch (Exception ex)
+        {
+            if (!_disposed)
+                Post(new { type = "failed", message = ex.Message });
+        }
+        finally
+        {
+            if (!_disposed)
+            {
+                _oto.SetBusy(false);
+                PostStatus("");
+                PostOto();
+                PostFrqCount();
+            }
+        }
+    }
+
+    void PostFrqEdit(object? view)
+    {
+        if (view == null)
+            Post(new { type = "failed", message = "このファイルの .frq はありません。" });
+        else
+            Post(view);
+    }
+
+    void HandleRec(JsonElement root)
+    {
+        if (string.IsNullOrEmpty(_folder))
+        {
+            Post(new { type = "failed", message = "フォルダを開いてください。" });
+            return;
+        }
+
+        switch (Text(root, "op"))
+        {
+            case "none":
+                _rec.ClearChoice();
+                PostRec();
+                break;
+            case "open":
+                var error = _rec.Load(Text(root, "path"), remember: true);
+                if (error != null)
+                    Post(new { type = "failed", message = error });
+                PostRec();
+                break;
+            case "pick":
+                _ = PickRecAsync();
+                break;
+        }
+    }
+
+    async Task PickRecAsync()
+    {
+        if (_disposed)
+            return;
+        var picker = new FileOpenPicker();
+        InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(_window));
+        picker.FileTypeFilter.Add(".txt");
+        Windows.Storage.StorageFile? file;
+        try
+        {
+            file = await picker.PickSingleFileAsync();
+        }
+        catch (Exception ex)
+        {
+            Post(new { type = "failed", message = ex.Message });
+            return;
+        }
+
+        if (file == null || _disposed)
+            return;
+        var error = _rec.Load(file.Path, remember: true);
+        if (error != null)
+            Post(new { type = "failed", message = error });
+        PostRec();
+    }
+
+    void SaveRecSettings(JsonElement root)
+    {
+        var settings = RecAppSettings.Load();
+        var note = Text(root, "note");
+        if (!string.IsNullOrEmpty(note) && RecTone.Notes.Contains(note))
+            settings.Note = note;
+        settings.GuidePitch = (int)Math.Clamp(Math.Round(Number(root, "semitones")), -12, 12);
+        var speed = Number(root, "speed");
+        settings.GuideSpeed = speed == 0 ? settings.GuideSpeed : Math.Clamp(speed, 0.5, 2);
+        if (root.TryGetProperty("volume", out _))
+            settings.GuideVolume = Volume(root);
+        settings.CountIn = root.TryGetProperty("countIn", out var count) && count.ValueKind == JsonValueKind.True;
+        var bpm = Number(root, "bpm");
+        if (bpm > 0)
+            settings.Bpm = (int)Math.Clamp(Math.Round(bpm), 40, 240);
+        settings.GuideWhileRecording = root.TryGetProperty("guideWhile", out var guide) && guide.ValueKind == JsonValueKind.True;
+        settings.AutoAdvance = root.TryGetProperty("advance", out var advance) && advance.ValueKind == JsonValueKind.True;
+        settings.Save();
+    }
+
+    void PostRecSettings()
+    {
+        var settings = RecAppSettings.Load();
+        Post(new
+        {
+            type = "recSettings",
+            note = settings.Note,
+            semitones = settings.GuidePitch,
+            speed = settings.GuideSpeed,
+            volume = settings.GuideVolume,
+            countIn = settings.CountIn,
+            bpm = settings.Bpm,
+            guideWhile = settings.GuideWhileRecording,
+            advance = settings.AutoAdvance,
+        });
+    }
+
+    void PostRec()
+    {
+        if (string.IsNullOrEmpty(_folder))
+            return;
+        IReadOnlyList<string> names;
+        try
+        {
+            names = WavNames(_folder);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            names = [];
+        }
+
+        Post(_rec.Snapshot(names));
+    }
+
+    void PostFrqCount()
+    {
+        if (string.IsNullOrEmpty(_folder) || !Directory.Exists(_folder))
+        {
+            Post(new { type = "frq", wavs = 0, frqs = 0, busy = false });
+            return;
+        }
+
+        var counted = ProbeFrq.Count(_folder);
+        Post(new { type = "frq", wavs = counted.Wavs, frqs = counted.Frqs, busy = false });
+    }
+
+    void PostStatus(string message) => Post(new { type = "status", message });
+
     void PostOto()
     {
         var name = string.IsNullOrEmpty(_wavPath) ? null : Path.GetFileName(_wavPath);
         Post(_oto.Snapshot(name));
+    }
+
+    static JsonElement Property(JsonElement root, string name) =>
+        root.TryGetProperty(name, out var value) ? value : default;
+
+    static double Volume(JsonElement root)
+    {
+        if (!root.TryGetProperty("volume", out var value) || !value.TryGetDouble(out var parsed))
+            return 0.7;
+        return Math.Clamp(parsed, 0, 1);
     }
 
     static readonly string LayoutFile = Path.Combine(AppPaths.DataRoot, "probe-layout.json");

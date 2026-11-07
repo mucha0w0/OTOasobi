@@ -2,6 +2,7 @@ import { useEffect, useRef, type RefObject } from "react"
 import { shouldReplaceBitmap } from "./bitmap"
 import { drawPeaks } from "./drawPeaks"
 import { timeAt, type OtoMark, type PreviewEvent } from "./protocol"
+import { spanBoundaries, spanCaption, spanFill, type PhoneSpan } from "./spans"
 import { imagePlacement, panRange, zoomRange, type Range } from "./viewport"
 
 export type BandKind = "wave" | "spec" | "loud" | "oto"
@@ -17,6 +18,8 @@ export type GraphModel = {
   picture: PreviewEvent | null
   range: Range
   marks: OtoMark[]
+  spans: PhoneSpan[]
+  note: string
 }
 
 type Props = {
@@ -153,18 +156,25 @@ export function GraphBand({ kind, picture, model, appearance, register, onRange,
     ctx.fillStyle = getCss("--canvas")
     ctx.fillRect(0, 0, width, height)
     const pictureNow = current.picture
-    if (!pictureNow)
+    if (!pictureNow) {
+      drawNote(ctx, width, height, current.note ?? "")
       return
+    }
     const source = { t0: pictureNow.waveT0, t1: pictureNow.waveT1 }
     const placed = imagePlacement(source, current.range, width)
     if (kind === "spec" && imageRef.current)
       ctx.drawImage(imageRef.current, placed.x, 0, placed.width, height)
     if (kind === "wave" || kind === "oto")
       drawPeaks(ctx, placed.width, height, pictureNow.lo, pictureNow.hi, getCss("--wave"), placed.x)
-    if (kind === "oto")
-      drawMarks(ctx, placed, source, current.marks, height)
     if (kind === "loud")
       drawLoud(ctx, placed, pictureNow.loudness, getCss("--wave"))
+    const spans = current.spans ?? []
+    if (kind === "wave" || kind === "spec")
+      drawSpans(ctx, placed, source, spans, height, kind === "wave")
+    if (kind === "wave" || kind === "spec" || kind === "loud")
+      drawBoundaries(ctx, placed, source, spans, height, kind === "wave")
+    if (kind === "oto")
+      drawMarks(ctx, placed, source, current.marks, height)
   }
 
   return (
@@ -198,6 +208,75 @@ export function GraphBand({ kind, picture, model, appearance, register, onRange,
       }}
     />
   )
+}
+
+function drawNote(ctx: CanvasRenderingContext2D, width: number, height: number, note: string) {
+  if (!note)
+    return
+  ctx.fillStyle = getCss("--muted")
+  ctx.font = "14px sans-serif"
+  ctx.textAlign = "center"
+  ctx.textBaseline = "middle"
+  ctx.fillText(note, width / 2, height / 2)
+}
+
+function drawSpans(
+  ctx: CanvasRenderingContext2D,
+  placed: { x: number; width: number },
+  source: { t0: number; t1: number },
+  spans: PhoneSpan[],
+  height: number,
+  wave: boolean,
+) {
+  const span = source.t1 - source.t0
+  if (!(span > 0) || spans.length === 0)
+    return
+  const xAtTime = (time: number) => placed.x + ((time - source.t0) / span) * placed.width
+  const dark = document.documentElement.dataset.theme === "dark"
+  ctx.font = "12px sans-serif"
+  ctx.textAlign = "center"
+  ctx.textBaseline = "top"
+  for (const item of spans) {
+    const fill = spanFill(item.label, wave)
+    if (!fill)
+      continue
+    const left = xAtTime(item.start)
+    const right = xAtTime(item.end)
+    const width = right - left
+    if (!(width > 0))
+      continue
+    ctx.fillStyle = fill
+    ctx.fillRect(left, 0, width, height)
+    if (width < 28)
+      continue
+    ctx.fillStyle = dark ? "#f9fafb" : "#1f2937"
+    ctx.fillText(spanCaption(item), (left + right) / 2, 8, Math.max(12, width - 4))
+  }
+}
+
+function drawBoundaries(
+  ctx: CanvasRenderingContext2D,
+  placed: { x: number; width: number },
+  source: { t0: number; t1: number },
+  spans: PhoneSpan[],
+  height: number,
+  wave: boolean,
+) {
+  const span = source.t1 - source.t0
+  if (!(span > 0))
+    return
+  const dark = document.documentElement.dataset.theme === "dark"
+  ctx.strokeStyle = wave
+    ? (dark ? "rgb(236, 236, 236)" : "rgb(32, 32, 36)")
+    : (dark ? "rgba(255, 255, 255, 0.9)" : "rgba(17, 24, 39, 0.9)")
+  ctx.lineWidth = 1
+  for (const time of spanBoundaries(spans)) {
+    const x = placed.x + ((time - source.t0) / span) * placed.width
+    ctx.beginPath()
+    ctx.moveTo(x, 0)
+    ctx.lineTo(x, height)
+    ctx.stroke()
+  }
 }
 
 function drawMarks(

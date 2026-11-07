@@ -1,14 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { Dock } from "./Dock"
 import { FileList } from "./FileList"
+import { FrqEditor } from "./FrqEditor"
+import { FrqPanel } from "./FrqPanel"
 import { GraphBand, type BandHandle, type BandKind, type GraphModel } from "./GraphBand"
 import { connectHost } from "./host"
 import { contains, createDefault, hidePane, setRatio, showPane, type LayoutNode, type PaneBox } from "./layout"
 import { createLiveBus, type LiveBus } from "./live"
 import { MenuBar } from "./MenuBar"
+import { OtoTable } from "./OtoTable"
 import { OtoIni, OtoSettings } from "./OtoPanels"
-import { requestsPreviewAfter, type DeviceInfo, type HostEvent, type OtoMark, type OtoState, type PageCommand, type PreviewEvent, type SavedEvent } from "./protocol"
+import { requestsPreviewAfter, type DeviceInfo, type FrqViewEvent, type HostEvent, type OtoMark, type OtoState, type PageCommand, type PreviewEvent, type RecListEvent, type SavedEvent } from "./protocol"
+import { RecListPanel, RecScriptPanel } from "./RecPanels"
 import { GuidePanel, MicPanel, RecPanel } from "./SidePanels"
+import type { PhoneSpan } from "./spans"
 import { buttonColors, resolveTheme, type ThemeChoice } from "./theme"
 import type { Range } from "./viewport"
 
@@ -27,7 +32,10 @@ export function App() {
   const pictureRef = useRef<PreviewEvent | null>(null)
   const rangeRef = useRef<Range>({ t0: 0, t1: 0 })
   const marksRef = useRef<OtoMark[]>([])
-  const modelRef = useRef<GraphModel>({ picture: null, range: rangeRef.current, marks: [] })
+  const spansRef = useRef<PhoneSpan[]>([])
+  const noteRef = useRef("")
+  const missingRef = useRef(false)
+  const modelRef = useRef<GraphModel>({ picture: null, range: rangeRef.current, marks: [], spans: [], note: "" })
   const fileNameRef = useRef("")
   const namesRef = useRef<string[]>([])
   const previewTimer = useRef<number | undefined>(undefined)
@@ -45,9 +53,14 @@ export function App() {
   const [inputId, setInputId] = useState("")
   const [outputId, setOutputId] = useState("")
   const [monitor, setMonitor] = useState(false)
-  const [note, setNote] = useState("A4")
+  const [note, setNote] = useState("C4")
   const [semitones, setSemitones] = useState(0)
   const [speed, setSpeed] = useState(1)
+  const [volume, setVolume] = useState(0.7)
+  const [countIn, setCountIn] = useState(false)
+  const [bpm, setBpm] = useState(120)
+  const [guideWhile, setGuideWhile] = useState(false)
+  const [advance, setAdvance] = useState(false)
   const [guidePlaying, setGuidePlaying] = useState(false)
   const [folder, setFolder] = useState("")
   const [names, setNames] = useState<string[]>([])
@@ -63,13 +76,30 @@ export function App() {
   const [loadOpen, setLoadOpen] = useState(false)
   const [replaceName, setReplaceName] = useState<string | null>(null)
   const [reanalyzeOpen, setReanalyzeOpen] = useState(false)
+  const [oneOpen, setOneOpen] = useState(false)
+  const [status, setStatus] = useState("")
+  const [waiting, setWaiting] = useState(false)
+  const [frqCount, setFrqCount] = useState({ wavs: 0, frqs: 0, busy: false })
+  const [frqView, setFrqView] = useState<FrqViewEvent | null>(null)
+  const [recList, setRecList] = useState<RecListEvent | null>(null)
+  const [recIndex, setRecIndex] = useState<number | null>(null)
+  const [recFilter, setRecFilter] = useState<"all" | "todo" | "done" | "extra">("all")
+  const [overwriteWav, setOverwriteWav] = useState<string | null>(null)
   const layoutTouched = useRef(false)
+  const recTouched = useRef(false)
+  const recListRef = useRef<RecListEvent | null>(null)
+  const recIndexRef = useRef<number | null>(null)
+  const advanceRef = useRef(false)
+  const recordNameRef = useRef<string | null>(null)
   const resolved = resolveTheme(theme, systemDark)
   const themeLabel = resolved === "dark" ? "ダーク" : "ライト"
   pictureRef.current = picture
   fileNameRef.current = fileName
   namesRef.current = names
-  modelRef.current = { picture, range: rangeRef.current, marks: marksRef.current }
+  recListRef.current = recList
+  recIndexRef.current = recIndex
+  advanceRef.current = advance
+  modelRef.current = { picture, range: rangeRef.current, marks: marksRef.current, spans: spansRef.current, note: noteRef.current }
 
   const register = useCallback((handle: BandHandle) => {
     bands.current.add(handle)
@@ -123,11 +153,30 @@ export function App() {
   }, [layout])
 
   useEffect(() => {
-    if (!fileName)
+    if (!fileName || missingRef.current)
       return
     const frame = window.requestAnimationFrame(() => sendPreview(rangeRef.current))
     return () => window.cancelAnimationFrame(frame)
   }, [fileName])
+
+  useEffect(() => {
+    if (!recTouched.current)
+      return
+    const timer = window.setTimeout(() => {
+      sendRef.current({
+        type: "recSettings",
+        note,
+        semitones,
+        speed,
+        volume,
+        countIn,
+        bpm,
+        guideWhile,
+        advance,
+      })
+    }, 300)
+    return () => window.clearTimeout(timer)
+  }, [advance, bpm, countIn, guideWhile, note, semitones, speed, volume])
 
   function redraw() {
     for (const band of bands.current)
@@ -135,7 +184,7 @@ export function App() {
   }
 
   function sendPreview(range: Range) {
-    if (!fileNameRef.current)
+    if (!fileNameRef.current || missingRef.current)
       return
     const spec = [...bands.current].find((band) => band.kind === "spec")
     const measured = spec?.pixelSize() ?? { columns: 800, rows: 320 }
@@ -149,7 +198,7 @@ export function App() {
 
   function onRange(range: Range, commit: boolean) {
     rangeRef.current = range
-    modelRef.current = { picture: pictureRef.current, range, marks: marksRef.current }
+    modelRef.current = { picture: pictureRef.current, range, marks: marksRef.current, spans: spansRef.current, note: noteRef.current }
     redraw()
     if (!requestsPreviewAfter(commit ? "pan" : "zoom"))
       return
@@ -179,7 +228,7 @@ export function App() {
         setOutputs(event.outputs)
         break
       case "files": {
-        const keep = event.names.some((name) => sameName(name, fileNameRef.current))
+        const keep = missingRef.current || event.names.some((name) => sameName(name, fileNameRef.current))
         setFolder(event.folder)
         setNames(event.names)
         if (!keep) {
@@ -187,20 +236,28 @@ export function App() {
           setFileName("")
           setPicture(null)
           rangeRef.current = { t0: 0, t1: 0 }
+          noteRef.current = ""
         }
         break
       }
       case "opened":
         fileNameRef.current = event.name
+        missingRef.current = event.missing === true
+        noteRef.current = event.missing ? "このファイルは存在しません" : ""
         setFileName(event.name)
         setPicture(null)
         rangeRef.current = { t0: 0, t1: 0 }
+        modelRef.current = { picture: null, range: rangeRef.current, marks: marksRef.current, spans: spansRef.current, note: noteRef.current }
         window.clearTimeout(previewTimer.current)
+        redraw()
+        syncRecIndex(event.name)
         break
       case "preview":
+        missingRef.current = false
+        noteRef.current = ""
         setPicture(event)
         rangeRef.current = { t0: event.waveT0, t1: event.waveT1 }
-        modelRef.current = { picture: event, range: rangeRef.current, marks: marksRef.current }
+        modelRef.current = { picture: event, range: rangeRef.current, marks: marksRef.current, spans: spansRef.current, note: "" }
         break
       case "capture":
         bus.show(event)
@@ -211,20 +268,56 @@ export function App() {
       case "saved":
         setSaved(event)
         setNotice(`${event.path} を書きました。入力 ${event.inputRate} Hz、ヘッダ ${event.headerRate} Hz / ${event.bits} bit / ${event.channels} ch。`)
+        advanceAfterSave()
         break
       case "failed":
       case "notice":
         setNotice(event.message)
+        break
+      case "status":
+        setStatus(event.message)
+        break
+      case "recordWait":
+        setWaiting(event.waiting)
         break
       case "otoExists":
         setReplaceName(event.name)
         break
       case "oto":
         marksRef.current = event.marks
-        modelRef.current = { ...modelRef.current, marks: event.marks }
+        spansRef.current = event.spans
+        modelRef.current = { ...modelRef.current, marks: event.marks, spans: event.spans }
         setOto(event)
         for (const band of bands.current)
           band.redraw()
+        break
+      case "frq":
+        setFrqCount({ wavs: event.wavs, frqs: event.frqs, busy: event.busy })
+        break
+      case "frqView":
+        setFrqView(event)
+        break
+      case "recList":
+        setRecList(event)
+        setRecIndex((index) => {
+          const previous = recListRef.current?.lines[index ?? -1]
+          if (!previous)
+            return index != null && index < event.lines.length ? index : null
+          const next = event.lines.findIndex((line) => sameName(line.wav, previous.wav))
+          return next >= 0 ? next : null
+        })
+        break
+      case "recSettings":
+        if (recTouched.current)
+          break
+        setNote(event.note)
+        setSemitones(event.semitones)
+        setSpeed(event.speed)
+        setVolume(event.volume)
+        setCountIn(event.countIn)
+        setBpm(event.bpm)
+        setGuideWhile(event.guideWhile)
+        setAdvance(event.advance)
         break
       case "layout":
         if (!layoutTouched.current)
@@ -244,6 +337,108 @@ export function App() {
     commitLayout(contains(layout, id) ? hidePane(layout, id) : showPane(layout, id, boxes.current))
   }
 
+  function touchRec<T>(apply: (value: T) => void) {
+    return (value: T) => {
+      recTouched.current = true
+      apply(value)
+    }
+  }
+
+  function chooseRec(index: number | null, wav: string) {
+    setRecIndex(index)
+    if (wav)
+      sendRef.current({ type: "selectFile", name: wav })
+  }
+
+  function syncRecIndex(wav: string) {
+    const lines = recListRef.current?.lines ?? []
+    const index = lines.findIndex((line) => sameName(line.wav, wav))
+    setRecIndex(index >= 0 ? index : null)
+  }
+
+  function nextUnrecorded(from: number) {
+    const lines = recListRef.current?.lines ?? []
+    for (let i = from + 1; i < lines.length; i++) {
+      const line = lines[i]
+      if (line && !line.error && !line.recorded)
+        return i
+    }
+    for (let i = 0; i < from; i++) {
+      const line = lines[i]
+      if (line && !line.error && !line.recorded)
+        return i
+    }
+    return -1
+  }
+
+  function advanceAfterSave() {
+    const name = recordNameRef.current
+    recordNameRef.current = null
+    if (!advanceRef.current || !name)
+      return
+    const lines = recListRef.current?.lines ?? []
+    const index = lines.findIndex((line) => line.sing === name)
+    const next = nextUnrecorded(index)
+    const line = lines[next]
+    if (line)
+      chooseRec(next, line.wav)
+  }
+
+  function sendRecord(name?: string) {
+    recordNameRef.current = name ?? null
+    sendRef.current({
+      type: "record",
+      name,
+      countIn,
+      bpm,
+      guideWhile,
+      volume,
+      note,
+      semitones,
+      speed,
+    })
+  }
+
+  function moveRec(direction: number) {
+    const lines = recListRef.current?.lines ?? []
+    if (lines.length === 0)
+      return
+    const current = recIndexRef.current ?? (direction > 0 ? -1 : lines.length)
+    const next = Math.min(lines.length - 1, Math.max(0, current + direction))
+    const line = lines[next]
+    if (line)
+      chooseRec(next, line.wav)
+  }
+
+  function moveMissing() {
+    const next = nextUnrecorded(recIndexRef.current ?? -1)
+    const line = recListRef.current?.lines[next]
+    if (line)
+      chooseRec(next, line.wav)
+  }
+
+  function startRecord(stop: boolean) {
+    if (stop) {
+      recordNameRef.current = null
+      sendRef.current({ type: "recordStop" })
+      return
+    }
+    const line = recIndexRef.current == null ? null : recListRef.current?.lines[recIndexRef.current] ?? null
+    if (line?.error) {
+      setNotice(line.error)
+      return
+    }
+    if (line?.recorded) {
+      setOverwriteWav(line.wav)
+      return
+    }
+    sendRecord(line?.sing)
+  }
+
+  const recLine = recIndex == null ? null : recList?.lines[recIndex] ?? null
+  const recNext = recLine && recIndex != null ? recList?.lines[recIndex + 1]?.sing ?? "" : ""
+  const recOutside = !recLine && (recList?.outside.some((name) => sameName(name, fileName)) ?? false) ? fileName : ""
+  const recStatus = recLine?.error ?? (recLine ? (recLine.recorded ? "録音済み" : "未録音") : recOutside ? "リスト外" : "")
   const appearance = `${resolved}-${accent}`
 
   return (
@@ -253,6 +448,7 @@ export function App() {
         canEdit={folder.length > 0}
         canWrite={Boolean(oto?.analyzed && !oto.busy)}
         canAnalyze={folder.length > 0 && !oto?.busy}
+        canAnalyzeOne={folder.length > 0 && fileName.length > 0 && !missingRef.current && !oto?.busy}
         onOpenFolder={() => sendRef.current({ type: "openFolder" })}
         onSaveSettings={() => {
           setSaveName("")
@@ -261,11 +457,15 @@ export function App() {
         onLoadSettings={() => setLoadOpen(true)}
         onWrite={() => sendRef.current({ type: "oto", op: "write" })}
         onReanalyze={() => setReanalyzeOpen(true)}
+        onReanalyzeOne={() => setOneOpen(true)}
         onSettings={() => setSettings(true)}
         onClose={() => sendRef.current({ type: "close" })}
         onToggle={togglePane}
         onReset={() => commitLayout(createDefault())}
       />
+      {status && (
+        <div className="border-b border-[var(--line)] bg-[var(--panel)] px-4 py-2 text-sm">{status}</div>
+      )}
       {notice && (
         <div className="flex items-center justify-between border-b border-[var(--line)] bg-[var(--panel)] px-4 py-2 text-sm">
           <span>{notice}</span>
@@ -313,20 +513,71 @@ export function App() {
                   />
                 )
               if (id === "rec")
-                return <RecPanel bus={bus} saved={saved} send={(command) => sendRef.current(command)} />
+                return (
+                  <RecPanel
+                    bus={bus}
+                    saved={saved}
+                    status={recStatus}
+                    waiting={waiting}
+                    advance={advance}
+                    setAdvance={touchRec(setAdvance)}
+                    onPrev={() => moveRec(-1)}
+                    onNext={() => moveRec(1)}
+                    onNextMissing={moveMissing}
+                    onRecord={startRecord}
+                    blocked={Boolean(recLine?.error)}
+                  />
+                )
               if (id === "guide")
                 return (
                   <GuidePanel
                     note={note}
                     semitones={semitones}
                     speed={speed}
+                    volume={volume}
+                    countIn={countIn}
+                    bpm={bpm}
+                    guideWhile={guideWhile}
                     playing={guidePlaying}
-                    setNote={setNote}
-                    setSemitones={setSemitones}
-                    setSpeed={setSpeed}
+                    setNote={touchRec(setNote)}
+                    setSemitones={touchRec(setSemitones)}
+                    setSpeed={touchRec(setSpeed)}
+                    setVolume={touchRec(setVolume)}
+                    setCountIn={touchRec(setCountIn)}
+                    setBpm={touchRec(setBpm)}
+                    setGuideWhile={touchRec(setGuideWhile)}
                     send={(command) => sendRef.current(command)}
                   />
                 )
+              if (id === "recList")
+                return (
+                  <RecListPanel
+                    list={recList}
+                    filter={recFilter}
+                    selected={recIndex}
+                    setFilter={setRecFilter}
+                    onChoose={() => sendRef.current({ type: "recList", op: "none" })}
+                    onPick={() => sendRef.current({ type: "recList", op: "pick" })}
+                    onOpen={(path) => sendRef.current({ type: "recList", op: "open", path })}
+                    onSelect={chooseRec}
+                  />
+                )
+              if (id === "recScript")
+                return <RecScriptPanel line={recLine} next={recNext} outside={recOutside} />
+              if (id === "frq")
+                return (
+                  <FrqPanel
+                    wavs={frqCount.wavs}
+                    frqs={frqCount.frqs}
+                    busy={Boolean(oto?.busy) || frqCount.busy}
+                    hasFile={fileName.length > 0 && !missingRef.current}
+                    send={(command) => sendRef.current(command)}
+                  />
+                )
+              if (id === "frqEdit")
+                return <FrqEditor view={frqView} send={(command) => sendRef.current(command)} />
+              if (id === "otoParams")
+                return <OtoTable marks={oto?.marks ?? []} />
               if (id === "mic")
                 return (
                   <MicPanel
@@ -444,6 +695,50 @@ export function App() {
                 }}
               >
                 はい
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {oneOpen && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-6">
+          <div className="w-full max-w-md rounded-lg border border-[var(--line)] bg-[var(--panel)] p-4">
+            <h2 className="text-base font-semibold">選択した音声だけを解析します</h2>
+            <p className="mt-2 text-sm">{fileName} を解析し、いまの結果へ足します。</p>
+            <div className="mt-4 flex gap-2">
+              <button type="button" className="ghost-button flex-1" onClick={() => setOneOpen(false)}>いいえ</button>
+              <button
+                type="button"
+                className="accent-button flex-1"
+                onClick={() => {
+                  sendRef.current({ type: "oto", op: "analyzeFile" })
+                  setOneOpen(false)
+                }}
+              >
+                はい
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {overwriteWav && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-6">
+          <div className="w-full max-w-md rounded-lg border border-[var(--line)] bg-[var(--panel)] p-4">
+            <h2 className="text-base font-semibold">録音を上書きしますか？</h2>
+            <p className="mt-2 text-sm">{overwriteWav} は既にあります。</p>
+            <div className="mt-4 flex gap-2">
+              <button type="button" className="ghost-button flex-1" onClick={() => setOverwriteWav(null)}>キャンセル</button>
+              <button
+                type="button"
+                className="accent-button flex-1"
+                onClick={() => {
+                  const line = recIndexRef.current == null ? null : recListRef.current?.lines[recIndexRef.current]
+                  setOverwriteWav(null)
+                  if (line)
+                    sendRecord(line.sing)
+                }}
+              >
+                上書きする
               </button>
             </div>
           </div>

@@ -61,6 +61,10 @@
     <Compile Include="..\..\winui\WavStandard.cs" Link="Winui\WavStandard.cs" />
     <Compile Include="..\..\winui\Compressor.cs" Link="Winui\Compressor.cs" />
     <Compile Include="..\..\winui\PresetUi.cs" Link="Winui\PresetUi.cs" />
+    <Compile Include="..\..\winui\FrqFile.cs" Link="Winui\FrqFile.cs" />
+    <Compile Include="..\..\winui\RecList.cs" Link="Winui\RecList.cs" />
+    <Compile Include="..\..\winui\VoicebankText.cs" Link="Winui\VoicebankText.cs" />
+    <Compile Include="..\..\winui\RecSettings.cs" Link="Winui\RecSettings.cs" />
   </ItemGroup>
 
   <ItemGroup>

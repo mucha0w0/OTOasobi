@@ -48,6 +48,7 @@ export function Dock({ layout, boxes, onChange, onRatio, onResizing, render }: P
         if (dx * dx + dy * dy < 16)
           return
         current.moving = true
+        document.documentElement.classList.add("dragging")
         onResizing(true)
         onChange(hidePane(current.origin, current.id), false)
       }
@@ -60,6 +61,7 @@ export function Dock({ layout, boxes, onChange, onRatio, onResizing, render }: P
       window.removeEventListener("pointerup", up)
       const current = dragRef.current
       dragRef.current = null
+      document.documentElement.classList.remove("dragging")
       setGhost(null)
       setAim(null)
       if (!current?.moving)
@@ -178,7 +180,7 @@ function Node({ node, path, boxes, onRatio, onResizing, render, onTitleDown, onC
         }}
       >
         <div
-          className="flex h-8 shrink-0 cursor-grab items-center border-b border-[var(--line)] select-none"
+          className="drag-handle flex h-8 shrink-0 items-center border-b border-[var(--line)] select-none"
           onPointerDown={(event) => onTitleDown(event, node.id)}
         >
           <span className="min-w-0 flex-1 truncate px-2 text-xs text-[var(--muted)]">{title}</span>
@@ -213,7 +215,7 @@ function Node({ node, path, boxes, onRatio, onResizing, render, onTitleDown, onC
         <Node key={path.join(".") + ".0"} node={node.first} path={[...path, 0]} boxes={boxes} onRatio={onRatio} onResizing={onResizing} render={render} onTitleDown={onTitleDown} onClose={onClose} />
       </div>
       <div
-        className={horizontal ? "w-1.5 shrink-0 cursor-col-resize bg-[var(--line)]" : "h-1.5 shrink-0 cursor-row-resize bg-[var(--line)]"}
+        className={horizontal ? "split-x w-2 shrink-0 bg-[var(--line)]" : "split-y h-2 shrink-0 bg-[var(--line)]"}
         onPointerDown={(event) => startDrag(event, frameRef.current, horizontal, node.ratio, path, onRatio, onResizing)}
       />
       <div className="min-h-0 min-w-0 flex-1">
@@ -237,6 +239,7 @@ function startDrag(
   const bounds = frame.getBoundingClientRect()
   const first = event.currentTarget.previousElementSibling as HTMLElement | null
   onResizing(true)
+  document.documentElement.classList.add(horizontal ? "resizing-x" : "resizing-y")
   const move = (ev: PointerEvent) => {
     const total = horizontal ? bounds.width : bounds.height
     const origin = horizontal ? bounds.left : bounds.top
@@ -250,6 +253,7 @@ function startDrag(
   const up = () => {
     window.removeEventListener("pointermove", move)
     window.removeEventListener("pointerup", up)
+    document.documentElement.classList.remove("resizing-x", "resizing-y")
     onResizing(false)
     onRatio(path, ratio)
   }

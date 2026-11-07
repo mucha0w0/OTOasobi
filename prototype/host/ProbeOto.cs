@@ -36,6 +36,8 @@ sealed class ProbeOto
 
     public bool Analyzed => _files.Count > 0;
 
+    public bool IsBusy => _busy;
+
     public void Open(string folder)
     {
         if (!string.IsNullOrEmpty(_folder) && !string.Equals(_folder, folder, StringComparison.OrdinalIgnoreCase))
@@ -81,6 +83,37 @@ sealed class ProbeOto
     {
         _files.Clear();
         _files.AddRange(files);
+    }
+
+    public void MergeFile(WavFile file)
+    {
+        var index = _files.FindIndex(item => string.Equals(item.Name, file.Name, StringComparison.OrdinalIgnoreCase));
+        if (index < 0)
+            _files.Add(file);
+        else
+            _files[index] = file;
+    }
+
+    public object[] PreutterClears()
+    {
+        var map = new Dictionary<string, List<double[]>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var file in _files)
+        {
+            foreach (var mark in Marks(file.Name))
+            {
+                if (double.IsNaN(mark.Offset) || double.IsNaN(mark.Preutter) || mark.Preutter <= mark.Offset)
+                    continue;
+                if (!map.TryGetValue(file.Name, out var ranges))
+                {
+                    ranges = [];
+                    map[file.Name] = ranges;
+                }
+
+                ranges.Add([mark.Offset, mark.Preutter]);
+            }
+        }
+
+        return map.Select(pair => new { name = pair.Key, ranges = pair.Value }).ToArray();
     }
 
     public IReadOnlyList<WavFile> Files => _files;
@@ -342,6 +375,7 @@ sealed class ProbeOto
             vcConsonant = Shown(_cvvc.VcConsonant, DefaultVcConsonant),
             vcBlank = Shown(_cvvc.VcBlank, DefaultVcBlank),
             kinds = ConsonantOverlap.Kinds.Select(kind => new { group = kind.Group, key = kind.Key, caption = kind.Caption }).ToArray(),
+            spans = SpansOf(fileName),
             marks = marks.Select(mark => new
             {
                 alias = mark.Alias,
@@ -352,6 +386,16 @@ sealed class ProbeOto
                 blank = mark.Blank,
             }).ToArray(),
         };
+    }
+
+    object[] SpansOf(string? fileName)
+    {
+        var file = string.IsNullOrEmpty(fileName)
+            ? null
+            : _files.FirstOrDefault(item => string.Equals(item.Name, fileName, StringComparison.OrdinalIgnoreCase));
+        if (file == null)
+            return [];
+        return file.Spans.Select(span => new { start = span.Start, end = span.End, label = span.Label, token = span.Token }).ToArray();
     }
 
     bool HasIni => !string.IsNullOrEmpty(_folder) && File.Exists(Path.Combine(_folder, "oto.ini"));

@@ -9,30 +9,60 @@ const notes = ["C3", "D3", "E3", "F3", "G3", "A3", "B3", "C4", "D4", "E4", "F4",
 export function RecPanel({
   bus,
   saved,
-  send,
+  status,
+  waiting,
+  advance,
+  setAdvance,
+  onPrev,
+  onNext,
+  onNextMissing,
+  onRecord,
+  blocked,
 }: {
   bus: LiveBus
   saved: SavedEvent | null
-  send: (command: PageCommand) => void
+  status: string
+  waiting: boolean
+  advance: boolean
+  setAdvance: (value: boolean) => void
+  onPrev: () => void
+  onNext: () => void
+  onNextMissing: () => void
+  onRecord: (stop: boolean) => void
+  blocked?: boolean
 }) {
   const capture = useCapture(bus)
   const recording = capture?.recording ?? false
   const inputRate = shownInputRate(capture)
   return (
-    <div className="flex h-full flex-col gap-3 overflow-auto p-3 text-sm">
-      <p className="text-[var(--muted)]">
-        入力 {inputRate == null ? "—" : `${inputRate} Hz`}
-        {recording ? " / 録音中" : ""}
-      </p>
-      <button type="button" className="accent-button" onClick={() => send(recording ? { type: "recordStop" } : { type: "record" })}>
-        {recording ? "停止" : "録音"}
-      </button>
-      {saved && (
-        <p className="leading-6">
-          入力 {saved.inputRate} Hz、ヘッダ {saved.headerRate} Hz / {saved.bits} bit / {saved.channels} ch、
-          ファイル {saved.seconds.toFixed(2)} 秒、操作 {saved.elapsed.toFixed(2)} 秒
+    <div className="flex h-full flex-col text-sm">
+      <div className="flex flex-1 flex-col gap-3 overflow-auto p-3">
+        <p className="text-[var(--muted)]">
+          {status || "行を選ぶと、未録音か録音済みかがここに出ます。"}
         </p>
-      )}
+        <p className="text-[var(--muted)]">
+          入力 {inputRate == null ? "—" : `${inputRate} Hz`}
+          {recording ? " / 録音中" : waiting ? " / カウント中" : ""}
+        </p>
+        <label className="flex gap-2">
+          <input type="checkbox" checked={advance} onChange={(event) => setAdvance(event.target.checked)} />
+          停止したあとに次の未録音へ進む
+        </label>
+        {saved && (
+          <p className="leading-6">
+            入力 {saved.inputRate} Hz、ヘッダ {saved.headerRate} Hz / {saved.bits} bit / {saved.channels} ch、
+            ファイル {saved.seconds.toFixed(2)} 秒、操作 {saved.elapsed.toFixed(2)} 秒
+          </p>
+        )}
+      </div>
+      <div className="grid grid-cols-2 gap-2 border-t border-[var(--line)] p-3">
+        <button type="button" className="ghost-button" onClick={onPrev}>前へ</button>
+        <button type="button" className="ghost-button" onClick={onNext}>次へ</button>
+        <button type="button" className="ghost-button col-span-2" onClick={onNextMissing}>次の未録音</button>
+        <button type="button" className="accent-button col-span-2" disabled={Boolean(blocked) && !recording && !waiting} onClick={() => onRecord(recording || waiting)}>
+          {recording || waiting ? "停止" : "録音"}
+        </button>
+      </div>
     </div>
   )
 }
@@ -41,25 +71,43 @@ export function GuidePanel({
   note,
   semitones,
   speed,
+  volume,
+  countIn,
+  bpm,
+  guideWhile,
   playing,
   setNote,
   setSemitones,
   setSpeed,
+  setVolume,
+  setCountIn,
+  setBpm,
+  setGuideWhile,
   send,
 }: {
   note: string
   semitones: number
   speed: number
+  volume: number
+  countIn: boolean
+  bpm: number
+  guideWhile: boolean
   playing: boolean
   setNote: (value: string) => void
   setSemitones: (value: number) => void
   setSpeed: (value: number) => void
+  setVolume: (value: number) => void
+  setCountIn: (value: boolean) => void
+  setBpm: (value: number) => void
+  setGuideWhile: (value: boolean) => void
   send: (command: PageCommand) => void
 }) {
   return (
-    <div className="flex h-full flex-col gap-3 overflow-auto p-3 text-sm">
+    <div className="flex h-full flex-col text-sm">
+      <div className="flex flex-1 flex-col gap-3 overflow-auto p-3">
+      <p className="font-semibold">自分で設定する</p>
       <label className="grid gap-1">
-        ガイドの音
+        音程
         <select className="field" value={note} onChange={(event) => setNote(event.target.value)}>
           {notes.map((item) => (
             <option key={item}>{item}</option>
@@ -67,20 +115,39 @@ export function GuidePanel({
         </select>
       </label>
       <label className="grid gap-1">
-        音程 {semitones} 半音
+        音程のずらし {semitones} 半音
         <input type="range" min={-12} max={12} step={1} value={semitones} onChange={(event) => setSemitones(Number(event.target.value))} />
       </label>
       <label className="grid gap-1">
         速さ {Math.round(speed * 100)}%
         <input type="range" min={0.5} max={2} step={0.05} value={speed} onChange={(event) => setSpeed(Number(event.target.value))} />
       </label>
+      <label className="grid gap-1">
+        ガイドの大きさ {Math.round(volume * 100)}%
+        <input type="range" min={0} max={1} step={0.01} value={volume} onChange={(event) => setVolume(Number(event.target.value))} />
+      </label>
+      <label className="flex gap-2">
+        <input type="checkbox" checked={countIn} onChange={(event) => setCountIn(event.target.checked)} />
+        カウント
+      </label>
+      <label className="grid gap-1">
+        テンポ {bpm}
+        <input type="range" min={40} max={240} step={1} value={bpm} onChange={(event) => setBpm(Number(event.target.value))} />
+      </label>
+      <label className="flex gap-2">
+        <input type="checkbox" checked={guideWhile} onChange={(event) => setGuideWhile(event.target.checked)} />
+        録音中のガイド
+      </label>
+      </div>
+      <div className="border-t border-[var(--line)] p-3">
       <button
         type="button"
-        className="accent-button"
-        onClick={() => send(playing ? { type: "guideStop" } : { type: "guide", note, semitones, speed })}
+        className="accent-button w-full"
+        onClick={() => send(playing ? { type: "guideStop" } : { type: "guide", note, semitones, speed, volume })}
       >
         {playing ? "ガイドを停止" : "ガイドを聴く"}
       </button>
+      </div>
     </div>
   )
 }

@@ -38,3 +38,70 @@ body {
   color: var(--text);
   font-family: "Segoe UI", sans-serif;
 }
+
+button:not(:disabled),
+select,
+summary,
+label:has(input[type="checkbox"]),
+label:has(input[type="radio"]) {
+  cursor: pointer;
+}
+
+button:disabled,
+select:disabled {
+  cursor: default;
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+  cursor: pointer;
+}
+
+input[type="range"] {
+  cursor: ew-resize;
+}
+
+input[type="text"],
+input[type="color"],
+textarea {
+  cursor: text;
+}
+
+.drag-handle {
+  cursor: grab;
+}
+
+.drag-handle button {
+  cursor: pointer;
+}
+
+html.dragging,
+html.dragging * {
+  cursor: grabbing !important;
+}
+
+.split-x {
+  cursor: col-resize;
+}
+
+.split-y {
+  cursor: row-resize;
+}
+
+html.resizing-x,
+html.resizing-x * {
+  cursor: col-resize !important;
+}
+
+html.resizing-y,
+html.resizing-y * {
+  cursor: row-resize !important;
+}
+
+.frq-pen {
+  cursor: crosshair;
+}
+
+.frq-select {
+  cursor: cell;
+}

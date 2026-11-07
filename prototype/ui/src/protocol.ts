@@ -1,4 +1,5 @@
 import { parseLayout, type LayoutNode } from "./layout"
+import type { PhoneSpan } from "./spans"
 
 export type PreviewGesture = "boundary" | "pan" | "zoom" | "resize"
 
@@ -10,10 +11,16 @@ export type PageCommand =
   | { type: "preview"; t0: number; t1: number; columns: number; rows: number }
   | { type: "setDevices"; inputId: string; outputId: string }
   | { type: "monitor"; on: boolean }
-  | { type: "guide"; note: string; semitones: number; speed: number }
+  | { type: "guide"; note: string; semitones: number; speed: number; volume?: number }
   | { type: "guideStop" }
-  | { type: "record" }
+  | { type: "record"; name?: string; countIn?: boolean; bpm?: number; guideWhile?: boolean; volume?: number; note?: string; semitones?: number; speed?: number }
   | { type: "recordStop" }
+  | { type: "recSettings"; note: string; semitones: number; speed: number; volume: number; countIn: boolean; bpm: number; guideWhile: boolean; advance: boolean }
+  | { type: "recList"; op: "none" | "pick" | "open"; path?: string }
+  | { type: "frq"; op: "write"; mode: "all" | "missing" | "selected"; clear: boolean }
+  | { type: "frq"; op: "stroke"; points: { frame: number; midi: number; unvoiced: boolean }[] }
+  | { type: "frq"; op: "octave"; frames: number[]; octaves: number }
+  | { type: "frq"; op: "clear"; frames: number[] }
   | { type: "watchMic"; on: boolean }
   | { type: "close" }
   | { type: "caption"; theme: "light" | "dark" }
@@ -25,6 +32,7 @@ export type PageCommand =
   | { type: "oto"; op: "alias"; which: string; on: boolean }
   | { type: "oto"; op: "scope"; scope: string }
   | { type: "oto"; op: "analyze"; force: boolean }
+  | { type: "oto"; op: "analyzeFile" }
   | { type: "oto"; op: "write" }
   | { type: "saveSettings"; name: string; replace: boolean }
   | { type: "loadSettings"; name: string }
@@ -70,7 +78,13 @@ export type SavedEvent = {
 export type HostEvent =
   | { type: "devices"; inputs: DeviceInfo[]; outputs: DeviceInfo[] }
   | { type: "files"; folder: string; names: string[] }
-  | { type: "opened"; name: string }
+  | { type: "opened"; name: string; missing?: boolean }
+  | { type: "status"; message: string }
+  | { type: "recordWait"; waiting: boolean }
+  | { type: "frq"; wavs: number; frqs: number; busy: boolean }
+  | FrqViewEvent
+  | RecListEvent
+  | RecSettingsEvent
   | PreviewEvent
   | CaptureEvent
   | { type: "guide"; playing: boolean }
@@ -80,6 +94,44 @@ export type HostEvent =
   | { type: "otoExists"; name: string }
   | { type: "layout"; root: LayoutNode | null }
   | OtoState
+
+export type FrqViewEvent = {
+  type: "frqView"
+  missing: boolean
+  name: string
+  hop: number
+  sampleRate: number
+  frequency: number[]
+  error: string | null
+}
+
+export type RecLineInfo = {
+  sing: string
+  comment: string
+  error: string | null
+  recorded: boolean
+  wav: string
+}
+
+export type RecListEvent = {
+  type: "recList"
+  path: string
+  recent: { path: string; label: string }[]
+  lines: RecLineInfo[]
+  outside: string[]
+}
+
+export type RecSettingsEvent = {
+  type: "recSettings"
+  note: string
+  semitones: number
+  speed: number
+  volume: number
+  countIn: boolean
+  bpm: number
+  guideWhile: boolean
+  advance: boolean
+}
 
 export type OtoMark = {
   alias: string
@@ -129,6 +181,7 @@ export type OtoState = {
   vcBlank: Record<string, number>
   kinds: OtoKind[]
   marks: OtoMark[]
+  spans: PhoneSpan[]
 }
 
 export function requestsPreview(gesture: PreviewGesture): boolean {
@@ -179,7 +232,39 @@ export function parseHostEvent(value: unknown): HostEvent | null {
         names: value.names.filter((item): item is string => typeof item === "string"),
       }
     case "opened":
-      return typeof value.name === "string" ? { type: "opened", name: value.name } : null
+      return typeof value.name === "string" ? { type: "opened", name: value.name, missing: value.missing === true } : null
+    case "status":
+      return typeof value.message === "string" ? { type: "status", message: value.message } : null
+    case "recordWait":
+      return { type: "recordWait", waiting: value.waiting === true }
+    case "frq":
+      return { type: "frq", wavs: numberOr(value.wavs, 0), frqs: numberOr(value.frqs, 0), busy: value.busy === true }
+    case "frqView":
+      return {
+        type: "frqView",
+        missing: value.missing === true,
+        name: typeof value.name === "string" ? value.name : "",
+        hop: numberOr(value.hop, 0),
+        sampleRate: numberOr(value.sampleRate, 0),
+        frequency: Array.isArray(value.frequency)
+          ? value.frequency.filter((item): item is number => typeof item === "number" && Number.isFinite(item))
+          : [],
+        error: typeof value.error === "string" ? value.error : null,
+      }
+    case "recList":
+      return parseRecList(value)
+    case "recSettings":
+      return {
+        type: "recSettings",
+        note: typeof value.note === "string" ? value.note : "C4",
+        semitones: numberOr(value.semitones, 0),
+        speed: numberOr(value.speed, 1),
+        volume: numberOr(value.volume, 0.7),
+        countIn: value.countIn === true,
+        bpm: numberOr(value.bpm, 120),
+        guideWhile: value.guideWhile === true,
+        advance: value.advance === true,
+      }
     case "preview":
       if (!Array.isArray(value.lo) || !Array.isArray(value.hi) || typeof value.png !== "string")
         return null
@@ -312,7 +397,51 @@ function parseOto(value: Record<string, unknown>): OtoState | null {
           }]
         })
       : [],
+    spans: parseSpans(value.spans),
   }
+}
+
+function parseRecList(value: Record<string, unknown>): RecListEvent | null {
+  if (typeof value.path !== "string" || !Array.isArray(value.lines) || !Array.isArray(value.outside))
+    return null
+  return {
+    type: "recList",
+    path: value.path,
+    recent: Array.isArray(value.recent)
+      ? value.recent.flatMap((item) => {
+          if (!isRecord(item) || typeof item.path !== "string" || typeof item.label !== "string")
+            return []
+          return [{ path: item.path, label: item.label }]
+        })
+      : [],
+    lines: value.lines.flatMap((item) => {
+      if (!isRecord(item) || typeof item.sing !== "string" || typeof item.wav !== "string")
+        return []
+      return [{
+        sing: item.sing,
+        comment: typeof item.comment === "string" ? item.comment : "",
+        error: typeof item.error === "string" ? item.error : null,
+        recorded: item.recorded === true,
+        wav: item.wav,
+      }]
+    }),
+    outside: value.outside.filter((item): item is string => typeof item === "string"),
+  }
+}
+
+function parseSpans(value: unknown): PhoneSpan[] {
+  if (!Array.isArray(value))
+    return []
+  return value.flatMap((item) => {
+    if (!isRecord(item) || typeof item.label !== "string")
+      return []
+    return [{
+      start: numberOr(item.start, 0),
+      end: numberOr(item.end, 0),
+      label: item.label,
+      token: typeof item.token === "string" ? item.token : "",
+    }]
+  })
 }
 
 function strings(value: unknown): string[] {

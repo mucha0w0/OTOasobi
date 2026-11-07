@@ -91,9 +91,31 @@ describe("ホストのメッセージ", () => {
       mode: "mono",
       scope: "all",
       marks: [{ alias: "あ", offset: 0.1, overlap: 0.2, preutter: 0.3, consonant: 0.4, blank: 0.5 }],
+      spans: [{ label: "a", token: "あ", start: 0.2, end: 0.4 }],
     })).toMatchObject({
       type: "oto",
       marks: [{ alias: "あ", offset: 0.1, blank: 0.5 }],
+      spans: [{ label: "a", token: "あ", start: 0.2, end: 0.4 }],
+    })
+  })
+
+  it("解析の進み具合と .frq と録音リストを読む", () => {
+    expect(parseHostEvent({ type: "status", message: "解析しています　1 / 3 ファイル" })).toEqual({
+      type: "status",
+      message: "解析しています　1 / 3 ファイル",
+    })
+    expect(parseHostEvent({
+      type: "frqView",
+      missing: false,
+      name: "あ",
+      hop: 256,
+      sampleRate: 44100,
+      frequency: [440, 0],
+    })).toMatchObject({ type: "frqView", frequency: [440, 0], error: null })
+    expect(parseHostEvent({ type: "opened", name: "あ.wav", missing: true })).toEqual({
+      type: "opened",
+      name: "あ.wav",
+      missing: true,
     })
   })
 })
