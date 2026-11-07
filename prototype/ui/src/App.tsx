@@ -6,7 +6,8 @@ import { connectHost } from "./host"
 import { contains, createDefault, hidePane, setRatio, showPane, type LayoutNode, type PaneBox } from "./layout"
 import { createLiveBus, type LiveBus } from "./live"
 import { MenuBar } from "./MenuBar"
-import { requestsPreviewAfter, type DeviceInfo, type HostEvent, type PageCommand, type PreviewEvent, type SavedEvent } from "./protocol"
+import { OtoIni, OtoSettings } from "./OtoPanels"
+import { requestsPreviewAfter, type DeviceInfo, type HostEvent, type OtoMark, type OtoState, type PageCommand, type PreviewEvent, type SavedEvent } from "./protocol"
 import { GuidePanel, MicPanel, RecPanel } from "./SidePanels"
 import { buttonColors, resolveTheme, type ThemeChoice } from "./theme"
 import type { Range } from "./viewport"
@@ -25,7 +26,8 @@ export function App() {
   const boxes = useRef<Record<string, PaneBox>>({})
   const pictureRef = useRef<PreviewEvent | null>(null)
   const rangeRef = useRef<Range>({ t0: 0, t1: 0 })
-  const modelRef = useRef<GraphModel>({ picture: null, range: rangeRef.current })
+  const marksRef = useRef<OtoMark[]>([])
+  const modelRef = useRef<GraphModel>({ picture: null, range: rangeRef.current, marks: [] })
   const fileNameRef = useRef("")
   const namesRef = useRef<string[]>([])
   const previewTimer = useRef<number | undefined>(undefined)
@@ -55,12 +57,19 @@ export function App() {
   const [saved, setSaved] = useState<SavedEvent | null>(null)
   const [settings, setSettings] = useState(false)
   const [layout, setLayout] = useState<LayoutNode | null>(() => createDefault())
+  const [oto, setOto] = useState<OtoState | null>(null)
+  const [saveOpen, setSaveOpen] = useState(false)
+  const [saveName, setSaveName] = useState("")
+  const [loadOpen, setLoadOpen] = useState(false)
+  const [replaceName, setReplaceName] = useState<string | null>(null)
+  const [reanalyzeOpen, setReanalyzeOpen] = useState(false)
+  const layoutTouched = useRef(false)
   const resolved = resolveTheme(theme, systemDark)
   const themeLabel = resolved === "dark" ? "ダーク" : "ライト"
   pictureRef.current = picture
   fileNameRef.current = fileName
   namesRef.current = names
-  modelRef.current = { picture, range: rangeRef.current }
+  modelRef.current = { picture, range: rangeRef.current, marks: marksRef.current }
 
   const register = useCallback((handle: BandHandle) => {
     bands.current.add(handle)
@@ -99,10 +108,15 @@ export function App() {
         event.preventDefault()
         sendRef.current({ type: "openFolder" })
       }
+      if (event.ctrlKey && event.key.toLowerCase() === "s") {
+        event.preventDefault()
+        if (oto?.analyzed && !oto.busy)
+          sendRef.current({ type: "oto", op: "write" })
+      }
     }
     window.addEventListener("keydown", keys)
     return () => window.removeEventListener("keydown", keys)
-  }, [])
+  }, [oto])
 
   useEffect(() => {
     sendRef.current({ type: "watchMic", on: contains(layout, "rec") || contains(layout, "mic") })
@@ -135,7 +149,7 @@ export function App() {
 
   function onRange(range: Range, commit: boolean) {
     rangeRef.current = range
-    modelRef.current = { picture: pictureRef.current, range }
+    modelRef.current = { picture: pictureRef.current, range, marks: marksRef.current }
     redraw()
     if (!requestsPreviewAfter(commit ? "pan" : "zoom"))
       return
@@ -186,7 +200,7 @@ export function App() {
       case "preview":
         setPicture(event)
         rangeRef.current = { t0: event.waveT0, t1: event.waveT1 }
-        modelRef.current = { picture: event, range: rangeRef.current }
+        modelRef.current = { picture: event, range: rangeRef.current, marks: marksRef.current }
         break
       case "capture":
         bus.show(event)
@@ -199,14 +213,35 @@ export function App() {
         setNotice(`${event.path} を書きました。入力 ${event.inputRate} Hz、ヘッダ ${event.headerRate} Hz / ${event.bits} bit / ${event.channels} ch。`)
         break
       case "failed":
+      case "notice":
         setNotice(event.message)
+        break
+      case "otoExists":
+        setReplaceName(event.name)
+        break
+      case "oto":
+        marksRef.current = event.marks
+        modelRef.current = { ...modelRef.current, marks: event.marks }
+        setOto(event)
+        for (const band of bands.current)
+          band.redraw()
+        break
+      case "layout":
+        if (!layoutTouched.current)
+          setLayout(event.root)
         break
     }
   }
   applyRef.current = applyHost
 
+  function commitLayout(next: LayoutNode | null) {
+    layoutTouched.current = true
+    setLayout(next)
+    sendRef.current({ type: "layout", root: next })
+  }
+
   function togglePane(id: string) {
-    setLayout((current) => (contains(current, id) ? hidePane(current, id) : showPane(current, id, boxes.current)))
+    commitLayout(contains(layout, id) ? hidePane(layout, id) : showPane(layout, id, boxes.current))
   }
 
   const appearance = `${resolved}-${accent}`
@@ -215,11 +250,21 @@ export function App() {
     <div className="flex h-full min-h-0 flex-col bg-[var(--bg)] text-[var(--text)]">
       <MenuBar
         layout={layout}
+        canEdit={folder.length > 0}
+        canWrite={Boolean(oto?.analyzed && !oto.busy)}
+        canAnalyze={folder.length > 0 && !oto?.busy}
         onOpenFolder={() => sendRef.current({ type: "openFolder" })}
+        onSaveSettings={() => {
+          setSaveName("")
+          setSaveOpen(true)
+        }}
+        onLoadSettings={() => setLoadOpen(true)}
+        onWrite={() => sendRef.current({ type: "oto", op: "write" })}
+        onReanalyze={() => setReanalyzeOpen(true)}
         onSettings={() => setSettings(true)}
         onClose={() => sendRef.current({ type: "close" })}
         onToggle={togglePane}
-        onReset={() => setLayout(createDefault())}
+        onReset={() => commitLayout(createDefault())}
       />
       {notice && (
         <div className="flex items-center justify-between border-b border-[var(--line)] bg-[var(--panel)] px-4 py-2 text-sm">
@@ -232,7 +277,13 @@ export function App() {
           <Dock
             layout={layout}
             boxes={boxes}
-            onRatio={(path, ratio) => setLayout((current) => (current ? setRatio(current, path, ratio) : current))}
+            onChange={(next, persist) => {
+              if (persist)
+                commitLayout(next)
+              else
+                setLayout(next)
+            }}
+            onRatio={(path, ratio) => commitLayout(layout ? setRatio(layout, path, ratio) : layout)}
             onResizing={(holding) => {
               for (const band of bands.current)
                 band.holdLayout(holding)
@@ -286,6 +337,10 @@ export function App() {
                     send={(command) => sendRef.current(command)}
                   />
                 )
+              if (id === "oto")
+                return <OtoSettings oto={oto} send={(command) => sendRef.current(command)} />
+              if (id === "otoIni")
+                return <OtoIni oto={oto} send={(command) => sendRef.current(command)} />
               return null
             }}
           />
@@ -302,6 +357,97 @@ export function App() {
           </button>
           {!connected && <p className="text-sm text-[var(--muted)]">ホストに接続していません</p>}
         </main>
+      )}
+      {saveOpen && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-6">
+          <form
+            className="w-full max-w-md rounded-lg border border-[var(--line)] bg-[var(--panel)] p-4"
+            onSubmit={(event) => {
+              event.preventDefault()
+              sendRef.current({ type: "saveSettings", name: saveName, replace: false })
+              setSaveOpen(false)
+            }}
+          >
+            <h2 className="text-base font-semibold">設定を保存</h2>
+            <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
+              いまの計算方法、スライダー、プリセットを、このフォルダに保存します。
+            </p>
+            <input className="field mt-3 w-full" value={saveName} placeholder="設定名" onChange={(event) => setSaveName(event.target.value)} />
+            <div className="mt-4 flex gap-2">
+              <button type="button" className="ghost-button flex-1" onClick={() => setSaveOpen(false)}>キャンセル</button>
+              <button type="submit" className="accent-button flex-1">保存</button>
+            </div>
+          </form>
+        </div>
+      )}
+      {replaceName && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-6">
+          <div className="w-full max-w-md rounded-lg border border-[var(--line)] bg-[var(--panel)] p-4">
+            <h2 className="text-base font-semibold">設定を上書きしますか？</h2>
+            <p className="mt-2 text-sm">「{replaceName}」は既にあります。いまの設定で置き換えます。</p>
+            <div className="mt-4 flex gap-2">
+              <button type="button" className="ghost-button flex-1" onClick={() => setReplaceName(null)}>キャンセル</button>
+              <button
+                type="button"
+                className="accent-button flex-1"
+                onClick={() => {
+                  sendRef.current({ type: "saveSettings", name: replaceName, replace: true })
+                  setReplaceName(null)
+                }}
+              >
+                上書きする
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {loadOpen && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-6">
+          <div className="w-full max-w-md rounded-lg border border-[var(--line)] bg-[var(--panel)] p-4">
+            <h2 className="text-base font-semibold">設定を読み込む</h2>
+            {oto && oto.saves.length > 0 ? (
+              <div className="mt-3 grid max-h-64 gap-1 overflow-auto">
+                {oto.saves.map((item) => (
+                  <button
+                    key={item.name}
+                    type="button"
+                    className="ghost-button text-left"
+                    onClick={() => {
+                      sendRef.current({ type: "loadSettings", name: item.name })
+                      setLoadOpen(false)
+                    }}
+                  >
+                    {item.name}　{item.mode}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-3 text-sm text-[var(--muted)]">このフォルダには、まだ設定ファイルがありません。「設定を保存」で作れます。</p>
+            )}
+            <button type="button" className="ghost-button mt-4 w-full" onClick={() => setLoadOpen(false)}>閉じる</button>
+          </div>
+        </div>
+      )}
+      {reanalyzeOpen && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-6">
+          <div className="w-full max-w-md rounded-lg border border-[var(--line)] bg-[var(--panel)] p-4">
+            <h2 className="text-base font-semibold">すべてのデータを解析します</h2>
+            <p className="mt-2 text-sm">フォルダ内の WAV をすべて解析します。</p>
+            <div className="mt-4 flex gap-2">
+              <button type="button" className="ghost-button flex-1" onClick={() => setReanalyzeOpen(false)}>いいえ</button>
+              <button
+                type="button"
+                className="accent-button flex-1"
+                onClick={() => {
+                  sendRef.current({ type: "oto", op: "analyze", force: true })
+                  setReanalyzeOpen(false)
+                }}
+              >
+                はい
+              </button>
+            </div>
+          </div>
+        </div>
       )}
       {settings && (
         <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/40 p-6">

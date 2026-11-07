@@ -5,14 +5,35 @@ const viewOrder = Object.keys(paneTitles)
 
 type Props = {
   layout: LayoutNode | null
+  canEdit: boolean
+  canWrite: boolean
+  canAnalyze: boolean
   onOpenFolder: () => void
+  onSaveSettings: () => void
+  onLoadSettings: () => void
+  onWrite: () => void
+  onReanalyze: () => void
   onSettings: () => void
   onClose: () => void
   onToggle: (id: string) => void
   onReset: () => void
 }
 
-export function MenuBar({ layout, onOpenFolder, onSettings, onClose, onToggle, onReset }: Props) {
+export function MenuBar({
+  layout,
+  canEdit,
+  canWrite,
+  canAnalyze,
+  onOpenFolder,
+  onSaveSettings,
+  onLoadSettings,
+  onWrite,
+  onReanalyze,
+  onSettings,
+  onClose,
+  onToggle,
+  onReset,
+}: Props) {
   const [open, setOpen] = useState<string | null>(null)
   const barRef = useRef<HTMLElement>(null)
 
@@ -29,16 +50,16 @@ export function MenuBar({ layout, onOpenFolder, onSettings, onClose, onToggle, o
     <nav ref={barRef} className="flex h-9 shrink-0 items-center gap-1 border-b border-[var(--line)] bg-[var(--panel)] px-2 text-sm">
       <Menu title="ファイル" open={open} setOpen={setOpen}>
         <Item onClick={onOpenFolder}>フォルダを開く</Item>
-        <Item disabled>設定を保存</Item>
-        <Item disabled>設定を読み込む</Item>
-        <Item disabled>oto.iniを生成</Item>
+        <Item disabled={!canEdit} onClick={onSaveSettings}>設定を保存</Item>
+        <Item disabled={!canEdit} onClick={onLoadSettings}>設定を読み込む</Item>
+        <Item disabled={!canWrite} onClick={onWrite}>oto.iniを生成</Item>
         <Item onClick={onClose}>終了</Item>
       </Menu>
       <Menu title="編集" open={open} setOpen={setOpen}>
         <Item onClick={onSettings}>環境設定</Item>
       </Menu>
       <Menu title="解析" open={open} setOpen={setOpen}>
-        <Item disabled>再解析</Item>
+        <Item disabled={!canAnalyze} onClick={onReanalyze}>再解析</Item>
         <Item disabled>選択した音声だけを再解析</Item>
       </Menu>
       <Menu title="表示" open={open} setOpen={setOpen}>

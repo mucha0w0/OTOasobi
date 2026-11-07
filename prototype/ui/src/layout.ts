@@ -38,6 +38,12 @@ export function createDefault(): LayoutNode {
   )
 }
 
+export function parseLayout(value: unknown): LayoutNode | null {
+  const seen = new Set<string>()
+  const node = readNode(value, seen)
+  return node && seen.size > 0 ? node : null
+}
+
 export function leaf(id: string): LayoutNode {
   return { id }
 }
@@ -70,6 +76,47 @@ export function hidePane(root: LayoutNode | null, id: string): LayoutNode | null
   return remove(root, id)
 }
 
+export type DockEdge = "left" | "right" | "top" | "bottom"
+
+export function movePane(root: LayoutNode | null, draggedId: string, targetIds: string[], edge: DockEdge): LayoutNode | null {
+  if (!root || !contains(root, draggedId))
+    return root
+  const stay = targetIds.filter((id) => id !== draggedId)
+  if (stay.length === 0)
+    return root
+  const dragged = findPane(root, draggedId)
+  if (!dragged)
+    return root
+  const without = remove(root, draggedId)
+  if (!without)
+    return dragged
+  const resolved = smallestContaining(without, stay) ?? without
+  const split = edge === "left"
+    ? h(0.5, dragged, resolved)
+    : edge === "right"
+      ? h(0.5, resolved, dragged)
+      : edge === "top"
+        ? v(0.5, dragged, resolved)
+        : v(0.5, resolved, dragged)
+  return replaceNode(without, resolved, split)
+}
+
+export function commitMove(
+  origin: LayoutNode | null,
+  draggedId: string | null,
+  targetIds: string[] | null,
+  edge: DockEdge | null,
+): LayoutNode | null {
+  if (!origin)
+    return origin
+  if (!draggedId || !targetIds || !edge)
+    return origin
+  const moved = movePane(origin, draggedId, targetIds, edge)
+  if (moved && contains(moved, draggedId))
+    return moved
+  return origin
+}
+
 export function setRatio(node: LayoutNode, path: number[], ratio: number): LayoutNode {
   if ("id" in node)
     return node
@@ -81,12 +128,71 @@ export function setRatio(node: LayoutNode, path: number[], ratio: number): Layou
     : { ...node, second: setRatio(node.second, rest, ratio) }
 }
 
+function readNode(value: unknown, seen: Set<string>): LayoutNode | null {
+  if (typeof value !== "object" || value === null)
+    return null
+  const record = value as Record<string, unknown>
+  if (typeof record.id === "string") {
+    if (!paneIds.includes(record.id) || seen.has(record.id))
+      return null
+    seen.add(record.id)
+    return { id: record.id }
+  }
+  if (record.axis !== "h" && record.axis !== "v")
+    return null
+  if (typeof record.ratio !== "number" || !Number.isFinite(record.ratio) || record.ratio <= 0 || record.ratio >= 1)
+    return null
+  const first = readNode(record.first, seen)
+  const second = readNode(record.second, seen)
+  if (!first || !second)
+    return null
+  return { axis: record.axis, ratio: record.ratio, first, second }
+}
+
 function h(ratio: number, first: LayoutNode, second: LayoutNode): LayoutNode {
   return { axis: "h", ratio, first, second }
 }
 
 function v(ratio: number, first: LayoutNode, second: LayoutNode): LayoutNode {
   return { axis: "v", ratio, first, second }
+}
+
+function findPane(node: LayoutNode, id: string): LayoutNode | null {
+  if ("id" in node)
+    return node.id === id ? node : null
+  return findPane(node.first, id) ?? findPane(node.second, id)
+}
+
+export function idsOf(node: LayoutNode): string[] {
+  if ("id" in node)
+    return [node.id]
+  return [...idsOf(node.first), ...idsOf(node.second)]
+}
+
+function smallestContaining(node: LayoutNode, ids: string[]): LayoutNode | null {
+  if (!ids.every((id) => contains(node, id)))
+    return null
+  if (!("id" in node)) {
+    const inFirst = smallestContaining(node.first, ids)
+    if (inFirst)
+      return inFirst
+    const inSecond = smallestContaining(node.second, ids)
+    if (inSecond)
+      return inSecond
+  }
+  return node
+}
+
+function replaceNode(node: LayoutNode, find: LayoutNode, replacement: LayoutNode): LayoutNode {
+  if (node === find)
+    return replacement
+  if ("id" in node)
+    return node
+  return {
+    ...node,
+    first: replaceNode(node.first, find, replacement),
+    second: replaceNode(node.second, find, replacement),
+  }
 }
 
 function replace(node: LayoutNode, id: string, next: LayoutNode): LayoutNode {

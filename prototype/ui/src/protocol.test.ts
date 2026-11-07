@@ -83,4 +83,17 @@ describe("ホストのメッセージ", () => {
       elapsed: 1.2,
     })
   })
+
+  it("oto の区間を読み、壊れた計算方法は捨てる", () => {
+    expect(parseHostEvent({ type: "oto", mode: "other", scope: "all" })).toBeNull()
+    expect(parseHostEvent({
+      type: "oto",
+      mode: "mono",
+      scope: "all",
+      marks: [{ alias: "あ", offset: 0.1, overlap: 0.2, preutter: 0.3, consonant: 0.4, blank: 0.5 }],
+    })).toMatchObject({
+      type: "oto",
+      marks: [{ alias: "あ", offset: 0.1, blank: 0.5 }],
+    })
+  })
 })

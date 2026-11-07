@@ -1,3 +1,5 @@
+import { parseLayout, type LayoutNode } from "./layout"
+
 export type PreviewGesture = "boundary" | "pan" | "zoom" | "resize"
 
 export type PageCommand =
@@ -15,6 +17,17 @@ export type PageCommand =
   | { type: "watchMic"; on: boolean }
   | { type: "close" }
   | { type: "caption"; theme: "light" | "dark" }
+  | { type: "layout"; root: LayoutNode | null }
+  | { type: "oto"; op: "mode"; mode: string }
+  | { type: "oto"; op: "slider"; group: string; key: string; value: number }
+  | { type: "oto"; op: "preset"; target: string; name: string }
+  | { type: "oto"; op: "savePreset"; which: string; name: string }
+  | { type: "oto"; op: "alias"; which: string; on: boolean }
+  | { type: "oto"; op: "scope"; scope: string }
+  | { type: "oto"; op: "analyze"; force: boolean }
+  | { type: "oto"; op: "write" }
+  | { type: "saveSettings"; name: string; replace: boolean }
+  | { type: "loadSettings"; name: string }
 
 export type DeviceInfo = { id: string; label: string }
 
@@ -63,6 +76,60 @@ export type HostEvent =
   | { type: "guide"; playing: boolean }
   | SavedEvent
   | { type: "failed"; message: string }
+  | { type: "notice"; message: string }
+  | { type: "otoExists"; name: string }
+  | { type: "layout"; root: LayoutNode | null }
+  | OtoState
+
+export type OtoMark = {
+  alias: string
+  offset: number
+  overlap: number
+  preutter: number
+  consonant: number
+  blank: number
+}
+
+export type OtoKind = { group: string; key: string; caption: string }
+
+export type OtoState = {
+  type: "oto"
+  mode: "mono" | "renzoku" | "cvvc"
+  busy: boolean
+  analyzed: boolean
+  hasIni: boolean
+  scope: "all" | "missing" | "overlap"
+  aliasMono: boolean
+  aliasMonoLocked: boolean
+  aliasRenzoku: boolean
+  aliasCvvc: boolean
+  presets: string[]
+  cvvcPresets: string[]
+  saves: { name: string; mode: string }[]
+  standalonePreset: string
+  standaloneDirty: boolean
+  restPreset: string
+  leadPreset: string
+  cvvcPreset: string
+  cvvcDirty: boolean
+  offset: number
+  consonant: number
+  blank: number
+  overlap: Record<string, number>
+  renzokuOffset: number
+  renzokuConsonant: number
+  renzokuBlank: number
+  renzokuOverlap: number
+  cvvcConsonant: number
+  cvvcBlank: number
+  cvvcOverlap: Record<string, number>
+  vcOffset: number
+  vcOverlap: number
+  vcConsonant: Record<string, number>
+  vcBlank: Record<string, number>
+  kinds: OtoKind[]
+  marks: OtoMark[]
+}
 
 export function requestsPreview(gesture: PreviewGesture): boolean {
   return gesture === "pan"
@@ -161,9 +228,106 @@ export function parseHostEvent(value: unknown): HostEvent | null {
       }
     case "failed":
       return typeof value.message === "string" ? { type: "failed", message: value.message } : null
+    case "notice":
+      return typeof value.message === "string" ? { type: "notice", message: value.message } : null
+    case "otoExists":
+      return typeof value.name === "string" ? { type: "otoExists", name: value.name } : null
+    case "oto":
+      return parseOto(value)
+    case "layout": {
+      if (value.root === null)
+        return { type: "layout", root: null }
+      const root = parseLayout(value.root)
+      return root ? { type: "layout", root } : null
+    }
     default:
       return null
   }
+}
+
+function parseOto(value: Record<string, unknown>): OtoState | null {
+  if (value.mode !== "mono" && value.mode !== "renzoku" && value.mode !== "cvvc")
+    return null
+  if (value.scope !== "all" && value.scope !== "missing" && value.scope !== "overlap")
+    return null
+  return {
+    type: "oto",
+    mode: value.mode,
+    busy: value.busy === true,
+    analyzed: value.analyzed === true,
+    hasIni: value.hasIni === true,
+    scope: value.scope,
+    aliasMono: value.aliasMono === true,
+    aliasMonoLocked: value.aliasMonoLocked === true,
+    aliasRenzoku: value.aliasRenzoku === true,
+    aliasCvvc: value.aliasCvvc === true,
+    presets: strings(value.presets),
+    cvvcPresets: strings(value.cvvcPresets),
+    saves: Array.isArray(value.saves)
+      ? value.saves.flatMap((item) => {
+          if (!isRecord(item) || typeof item.name !== "string" || typeof item.mode !== "string")
+            return []
+          return [{ name: item.name, mode: item.mode }]
+        })
+      : [],
+    standalonePreset: typeof value.standalonePreset === "string" ? value.standalonePreset : "初期値",
+    standaloneDirty: value.standaloneDirty === true,
+    restPreset: typeof value.restPreset === "string" ? value.restPreset : "初期値",
+    leadPreset: typeof value.leadPreset === "string" ? value.leadPreset : "初期値",
+    cvvcPreset: typeof value.cvvcPreset === "string" ? value.cvvcPreset : "初期値",
+    cvvcDirty: value.cvvcDirty === true,
+    offset: numberOr(value.offset, 0),
+    consonant: numberOr(value.consonant, 0.2),
+    blank: numberOr(value.blank, 0),
+    overlap: numberMap(value.overlap),
+    renzokuOffset: numberOr(value.renzokuOffset, 0),
+    renzokuConsonant: numberOr(value.renzokuConsonant, 0.2),
+    renzokuBlank: numberOr(value.renzokuBlank, 0),
+    renzokuOverlap: numberOr(value.renzokuOverlap, 50),
+    cvvcConsonant: numberOr(value.cvvcConsonant, 0.2),
+    cvvcBlank: numberOr(value.cvvcBlank, 0),
+    cvvcOverlap: numberMap(value.cvvcOverlap),
+    vcOffset: numberOr(value.vcOffset, 0),
+    vcOverlap: numberOr(value.vcOverlap, 50),
+    vcConsonant: numberMap(value.vcConsonant),
+    vcBlank: numberMap(value.vcBlank),
+    kinds: Array.isArray(value.kinds)
+      ? value.kinds.flatMap((item) => {
+          if (!isRecord(item) || typeof item.group !== "string" || typeof item.key !== "string" || typeof item.caption !== "string")
+            return []
+          return [{ group: item.group, key: item.key, caption: item.caption }]
+        })
+      : [],
+    marks: Array.isArray(value.marks)
+      ? value.marks.flatMap((item) => {
+          if (!isRecord(item) || typeof item.alias !== "string")
+            return []
+          return [{
+            alias: item.alias,
+            offset: numberOr(item.offset, 0),
+            overlap: numberOr(item.overlap, 0),
+            preutter: numberOr(item.preutter, 0),
+            consonant: numberOr(item.consonant, 0),
+            blank: numberOr(item.blank, 0),
+          }]
+        })
+      : [],
+  }
+}
+
+function strings(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : []
+}
+
+function numberMap(value: unknown): Record<string, number> {
+  if (!isRecord(value))
+    return {}
+  const result: Record<string, number> = {}
+  for (const [key, item] of Object.entries(value)) {
+    if (typeof item === "number" && Number.isFinite(item))
+      result[key] = item
+  }
+  return result
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

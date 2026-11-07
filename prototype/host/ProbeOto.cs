@@ -1,0 +1,792 @@
+using System.Text.Json;
+using Otoasobi;
+
+namespace Otoasobi.Probe;
+
+// スライダー、プリセット、oto.ini の材料。数値の計算は製品の OtoMarks と OtoExport。
+sealed class ProbeOto
+{
+    const double DefaultOverlap = 50;
+    const double DefaultVcConsonant = 100;
+    const double DefaultVcBlank = 100;
+
+    readonly List<WavFile> _files = [];
+    readonly OtoSliderState _mono = new();
+    readonly Dictionary<string, double> _overlap = [];
+    readonly RenzokuSliderState _renzoku = new();
+    readonly CvvcSliderState _cvvc = new();
+    readonly List<OtoPreset> _presets = [];
+    readonly List<CvvcPreset> _cvvcPresets = [];
+    string? _folder;
+    bool _locked;
+    string _mode = "mono";
+    string _preset = OtoPreset.BuiltInName;
+    string _rest = OtoPreset.BuiltInName;
+    string _lead = OtoPreset.BuiltInName;
+    string _cvvcName = CvvcPreset.BuiltInName;
+    bool _aliasMonoWanted = true;
+    bool _aliasRenzoku;
+    bool _aliasCvvc;
+    string _scope = "all";
+    bool _busy;
+    string? _loudPath;
+    double[]? _loudness;
+
+    public bool Busy => _busy;
+
+    public bool Analyzed => _files.Count > 0;
+
+    public void Open(string folder)
+    {
+        if (!string.IsNullOrEmpty(_folder) && !string.Equals(_folder, folder, StringComparison.OrdinalIgnoreCase))
+            FlushSession();
+        _folder = folder;
+        _files.Clear();
+        _loudPath = null;
+        _loudness = null;
+        ReloadLibraries();
+        var session = OtoSaveStore.TryLoadSession(folder, out var keep);
+        if (session != null)
+        {
+            _locked = false;
+            Apply(session);
+        }
+        else if (!keep)
+        {
+            _locked = false;
+            Apply(new OtoSaveFile());
+        }
+        else
+        {
+            _locked = true;
+        }
+    }
+
+    public void FlushSession()
+    {
+        if (_locked || string.IsNullOrEmpty(_folder))
+            return;
+        try
+        {
+            OtoSaveStore.WriteSession(_folder, Capture(false));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+        }
+    }
+
+    public void SetBusy(bool busy) => _busy = busy;
+
+    public void SetFiles(IReadOnlyList<WavFile> files)
+    {
+        _files.Clear();
+        _files.AddRange(files);
+    }
+
+    public IReadOnlyList<WavFile> Files => _files;
+
+    public bool SetSlider(string? group, string? key, double value)
+    {
+        if (string.IsNullOrEmpty(group) || string.IsNullOrEmpty(key))
+            return false;
+        switch (group)
+        {
+            case "mono":
+                if (key == "offset")
+                    _mono.Offset = Seconds(value, -0.1, 0.1, 0);
+                else if (key == "consonant")
+                    _mono.Consonant = Seconds(value, 0, 0.2, 0.2);
+                else if (key == "blank")
+                    _mono.Blank = Seconds(value, -0.1, 0.1, 0);
+                else
+                    return false;
+                return true;
+            case "monoOverlap":
+                if (!Known(key))
+                    return false;
+                _overlap[key] = ConsonantOverlap.Stored(value);
+                return true;
+            case "renzoku":
+                if (key == "offset")
+                    _renzoku.Offset = Seconds(value, -0.1, 0.1, 0);
+                else if (key == "consonant")
+                    _renzoku.Consonant = Seconds(value, 0, 0.2, 0.2);
+                else if (key == "blank")
+                    _renzoku.Blank = Seconds(value, -0.1, 0.1, 0);
+                else if (key == "overlap")
+                    _renzoku.Overlap = CvvcPresetStore.Percent(value, DefaultOverlap);
+                else
+                    return false;
+                return true;
+            case "cvvc":
+                if (key == "consonant")
+                    _cvvc.Consonant = Seconds(value, 0, 0.2, 0.2);
+                else if (key == "blank")
+                    _cvvc.Blank = Seconds(value, -0.1, 0.1, 0);
+                else if (key == "vcOffset")
+                    _cvvc.VcOffset = Seconds(value, -0.1, 0.1, 0);
+                else if (key == "vcOverlap")
+                    _cvvc.VcOverlap = CvvcPresetStore.Percent(value, DefaultOverlap);
+                else
+                    return false;
+                return true;
+            case "cvvcOverlap":
+                return PutPercent(_cvvc.Overlap, key, value, DefaultOverlap);
+            case "vcConsonant":
+                return PutPercent(_cvvc.VcConsonant, key, value, DefaultVcConsonant);
+            case "vcBlank":
+                return PutPercent(_cvvc.VcBlank, key, value, DefaultVcBlank);
+            default:
+                return false;
+        }
+    }
+
+    public void SetMode(string? mode)
+    {
+        _mode = mode switch
+        {
+            "renzoku" => "renzoku",
+            "cvvc" => "cvvc",
+            _ => "mono",
+        };
+    }
+
+    public void SelectPreset(string? target, string? name)
+    {
+        if (target == "cvvc")
+        {
+            var preset = FindCvvc(name);
+            _cvvcName = preset.Name;
+            ApplyCvvc(preset);
+            return;
+        }
+
+        var oto = FindOto(name);
+        if (target == "rest")
+            _rest = oto.Name;
+        else if (target == "lead")
+            _lead = oto.Name;
+        else
+        {
+            _preset = oto.Name;
+            ApplyMono(oto);
+        }
+    }
+
+    public string? SavePreset(string? which, string? raw)
+    {
+        try
+        {
+            if (which == "cvvc")
+                return SaveCvvc(raw);
+            var error = PresetUi.ReservedNameError(raw ?? "", name => name == OtoPreset.BuiltInName, "初期値という名前は使えません。");
+            if (error != null)
+                return error;
+            var name = (raw ?? "").Trim();
+            var existing = _presets.FirstOrDefault(preset => preset.Name == name);
+            if (existing == null)
+            {
+                existing = new OtoPreset { Name = name };
+                _presets.Add(existing);
+            }
+
+            CopyMono(existing);
+            _preset = name;
+            OtoPresetStore.Save(_presets);
+            return null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            return ex.Message;
+        }
+    }
+
+    public void SetAlias(string? which, bool on)
+    {
+        if (which == "renzoku")
+            _aliasRenzoku = on;
+        else if (which == "cvvc")
+            _aliasCvvc = on;
+        else if (!_aliasRenzoku && !_aliasCvvc)
+            _aliasMonoWanted = on;
+    }
+
+    public void SetScope(string? scope)
+    {
+        if (!HasIni)
+        {
+            _scope = "all";
+            return;
+        }
+
+        _scope = scope switch
+        {
+            "missing" => "missing",
+            "overlap" => "overlap",
+            _ => "all",
+        };
+    }
+
+    public List<string> AliasModes()
+    {
+        var modes = new List<string>();
+        if (_aliasRenzoku || _aliasCvvc || _aliasMonoWanted)
+            modes.Add("mono");
+        if (_aliasRenzoku)
+            modes.Add("renzoku");
+        if (_aliasCvvc)
+            modes.Add("cvvc");
+        return modes;
+    }
+
+    public string ScopeForWrite() => HasIni ? _scope : "all";
+
+    public OtoExport ExportFor(string mode)
+    {
+        if (mode == "cvvc")
+            return CvvcExport();
+        if (mode == "renzoku")
+            return RenzokuExport();
+        return MonoExport();
+    }
+
+    public string? SaveNamed(string? raw, bool replace)
+    {
+        if (string.IsNullOrEmpty(_folder))
+            return "フォルダを開いてください。";
+        var error = OtoSaveStore.NameError(raw ?? "");
+        if (error != null)
+            return error;
+        var name = (raw ?? "").Trim();
+        var path = OtoSaveStore.FilePathFor(_folder, name);
+        if (!replace && File.Exists(path))
+            return "exists";
+        try
+        {
+            var file = Capture(true);
+            file.Name = name;
+            OtoSaveStore.WriteNamed(_folder, file);
+            FlushSession();
+            return null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            return ex.Message;
+        }
+    }
+
+    public string? LoadNamed(string? name)
+    {
+        if (string.IsNullOrEmpty(_folder))
+            return "フォルダを開いてください。";
+        var error = OtoSaveStore.NameError(name ?? "");
+        if (error != null)
+            return error;
+        try
+        {
+            Apply(OtoSaveStore.Read(OtoSaveStore.FilePathFor(_folder, (name ?? "").Trim())));
+            FlushSession();
+            return null;
+        }
+        catch (InvalidDataException ex)
+        {
+            return ex.Message;
+        }
+        catch (JsonException)
+        {
+            return "ファイルの内容を読めませんでした。";
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            return ex.Message;
+        }
+    }
+
+    public object Snapshot(string? fileName)
+    {
+        var marks = Marks(fileName);
+        return new
+        {
+            type = "oto",
+            mode = _mode,
+            busy = _busy,
+            analyzed = _files.Count > 0,
+            hasIni = HasIni,
+            scope = HasIni ? _scope : "all",
+            aliasMono = _aliasRenzoku || _aliasCvvc || _aliasMonoWanted,
+            aliasMonoLocked = _aliasRenzoku || _aliasCvvc,
+            aliasRenzoku = _aliasRenzoku,
+            aliasCvvc = _aliasCvvc,
+            presets = new[] { OtoPreset.BuiltInName }.Concat(_presets.Select(preset => preset.Name)).ToArray(),
+            cvvcPresets = new[] { CvvcPreset.BuiltInName }.Concat(_cvvcPresets.Select(preset => preset.Name)).ToArray(),
+            saves = Saves(),
+            standalonePreset = _preset,
+            standaloneDirty = MonoDirty(),
+            restPreset = _rest,
+            leadPreset = _lead,
+            cvvcPreset = _cvvcName,
+            cvvcDirty = CvvcDirty(),
+            offset = _mono.Offset,
+            consonant = _mono.Consonant,
+            blank = _mono.Blank,
+            overlap = Shown(_overlap, DefaultOverlap),
+            renzokuOffset = _renzoku.Offset,
+            renzokuConsonant = _renzoku.Consonant,
+            renzokuBlank = _renzoku.Blank,
+            renzokuOverlap = _renzoku.Overlap,
+            cvvcConsonant = _cvvc.Consonant,
+            cvvcBlank = _cvvc.Blank,
+            cvvcOverlap = Shown(_cvvc.Overlap, DefaultOverlap),
+            vcOffset = _cvvc.VcOffset,
+            vcOverlap = _cvvc.VcOverlap,
+            vcConsonant = Shown(_cvvc.VcConsonant, DefaultVcConsonant),
+            vcBlank = Shown(_cvvc.VcBlank, DefaultVcBlank),
+            kinds = ConsonantOverlap.Kinds.Select(kind => new { group = kind.Group, key = kind.Key, caption = kind.Caption }).ToArray(),
+            marks = marks.Select(mark => new
+            {
+                alias = mark.Alias,
+                offset = mark.Offset,
+                overlap = mark.Overlap,
+                preutter = mark.Preutter,
+                consonant = mark.Consonant,
+                blank = mark.Blank,
+            }).ToArray(),
+        };
+    }
+
+    bool HasIni => !string.IsNullOrEmpty(_folder) && File.Exists(Path.Combine(_folder, "oto.ini"));
+
+    void ReloadLibraries()
+    {
+        _presets.Clear();
+        _presets.AddRange(OtoPresetStore.Load());
+        _cvvcPresets.Clear();
+        _cvvcPresets.AddRange(CvvcPresetStore.Load());
+    }
+
+    void Apply(OtoSaveFile file)
+    {
+        if (file.Presets != null)
+        {
+            _presets.Clear();
+            _presets.AddRange(file.Presets.Where(preset => !preset.BuiltIn));
+            try
+            {
+                OtoPresetStore.Save(_presets);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+            }
+        }
+
+        if (file.CvvcPresets != null)
+        {
+            _cvvcPresets.Clear();
+            _cvvcPresets.AddRange(file.CvvcPresets.Where(preset => !preset.BuiltIn));
+            try
+            {
+                CvvcPresetStore.Save(_cvvcPresets);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+            }
+        }
+
+        _mode = file.Mode;
+        _preset = FindOto(file.StandalonePreset).Name;
+        _rest = FindOto(file.RestPreset).Name;
+        _lead = FindOto(file.LeadPreset).Name;
+        _cvvcName = FindCvvc(file.CvvcPreset).Name;
+        _mono.Offset = file.Standalone.Offset;
+        _mono.Consonant = file.Standalone.Consonant;
+        _mono.Blank = file.Standalone.Blank;
+        _overlap.Clear();
+        foreach (var (key, value) in file.Standalone.Overlap)
+            _overlap[key] = value;
+        _renzoku.Offset = file.Renzoku.Offset;
+        _renzoku.Consonant = file.Renzoku.Consonant;
+        _renzoku.Blank = file.Renzoku.Blank;
+        _renzoku.Overlap = file.Renzoku.Overlap;
+        _cvvc.Consonant = file.Cvvc.Consonant;
+        _cvvc.Blank = file.Cvvc.Blank;
+        _cvvc.VcOffset = file.Cvvc.VcOffset;
+        _cvvc.VcOverlap = file.Cvvc.VcOverlap;
+        Replace(_cvvc.Overlap, file.Cvvc.Overlap);
+        Replace(_cvvc.VcConsonant, file.Cvvc.VcConsonant);
+        Replace(_cvvc.VcBlank, file.Cvvc.VcBlank);
+        IReadOnlyList<string> aliases = file.Aliases ?? file.Mode switch
+        {
+            "cvvc" => ["cvvc"],
+            "renzoku" => ["renzoku"],
+            _ => ["mono"],
+        };
+        _aliasMonoWanted = aliases.Contains("mono");
+        _aliasRenzoku = aliases.Contains("renzoku");
+        _aliasCvvc = aliases.Contains("cvvc");
+    }
+
+    OtoSaveFile Capture(bool libraries)
+    {
+        var file = new OtoSaveFile
+        {
+            Version = OtoSaveFile.CurrentVersion,
+            Kind = OtoSaveFile.KindId,
+            Mode = _mode,
+            Aliases = CaptureAliases(),
+            StandalonePreset = _preset,
+            RestPreset = _rest,
+            CvvcPreset = _cvvcName,
+            LeadPreset = _lead,
+            Standalone = new OtoSliderState
+            {
+                Offset = Math.Round(_mono.Offset, 3),
+                Consonant = Math.Round(_mono.Consonant, 3),
+                Blank = Math.Round(_mono.Blank, 3),
+                Overlap = new Dictionary<string, double>(_overlap),
+            },
+            Renzoku = new RenzokuSliderState
+            {
+                Offset = Math.Round(_renzoku.Offset, 3),
+                Consonant = Math.Round(_renzoku.Consonant, 3),
+                Blank = Math.Round(_renzoku.Blank, 3),
+                Overlap = _renzoku.Overlap,
+            },
+            Cvvc = new CvvcSliderState
+            {
+                Consonant = Math.Round(_cvvc.Consonant, 3),
+                Blank = Math.Round(_cvvc.Blank, 3),
+                VcOffset = Math.Round(_cvvc.VcOffset, 3),
+                VcOverlap = _cvvc.VcOverlap,
+                Overlap = new Dictionary<string, double>(_cvvc.Overlap),
+                VcConsonant = new Dictionary<string, double>(_cvvc.VcConsonant),
+                VcBlank = new Dictionary<string, double>(_cvvc.VcBlank),
+            },
+        };
+        if (!libraries)
+            return file;
+        file.Presets = _presets.ToList();
+        file.CvvcPresets = _cvvcPresets.ToList();
+        return file;
+    }
+
+    List<string> CaptureAliases()
+    {
+        var list = new List<string>();
+        if (_aliasMonoWanted)
+            list.Add("mono");
+        if (_aliasRenzoku)
+            list.Add("renzoku");
+        if (_aliasCvvc)
+            list.Add("cvvc");
+        return list;
+    }
+
+    object[] Saves()
+    {
+        if (string.IsNullOrEmpty(_folder))
+            return [];
+        return OtoSaveStore.List(_folder)
+            .Select(item => new { name = item.Name, mode = OtoSaveStore.ModeLabel(item.Mode) })
+            .ToArray();
+    }
+
+    List<OtoMark> Marks(string? fileName)
+    {
+        var marks = new List<OtoMark>();
+        if (string.IsNullOrEmpty(fileName))
+            return marks;
+        var file = _files.FirstOrDefault(item => string.Equals(item.Name, fileName, StringComparison.OrdinalIgnoreCase));
+        if (file == null || string.IsNullOrEmpty(_folder))
+            return marks;
+        OtoMarks.Fill(file, ExportFor(_mode), marks, Loudness(Path.Combine(_folder, file.Name)));
+        return marks;
+    }
+
+    double[]? Loudness(string path)
+    {
+        if (_loudPath == path)
+            return _loudness;
+        _loudPath = path;
+        try
+        {
+            _loudness = FileLoudness.FromFile(path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
+        {
+            _loudness = null;
+        }
+
+        return _loudness;
+    }
+
+    OtoExport MonoExport() => new(
+        Math.Round(-_mono.Offset * 1000.0),
+        Math.Round(_mono.Consonant * 1000.0),
+        _mono.Blank,
+        EngineOverlap(_overlap));
+
+    OtoExport RenzokuExport()
+    {
+        var rest = FindOto(_rest);
+        return new(
+            Math.Round(-_renzoku.Offset * 1000.0),
+            Math.Round(_renzoku.Consonant * 1000.0),
+            _renzoku.Blank,
+            new Dictionary<string, double>(),
+            "renzoku",
+            _renzoku.Overlap / 100.0,
+            Math.Round(-rest.Offset * 1000.0),
+            Math.Round(rest.Consonant * 1000.0),
+            rest.Blank,
+            EngineOverlap(StoredMap(rest.Overlap)));
+    }
+
+    OtoExport CvvcExport()
+    {
+        var lead = FindOto(_lead);
+        return new(
+            0,
+            Math.Round(_cvvc.Consonant * 1000.0),
+            _cvvc.Blank,
+            PercentMap(_cvvc.Overlap, DefaultOverlap),
+            "cvvc",
+            0.5,
+            0,
+            200,
+            0,
+            null,
+            Math.Round(-_cvvc.VcOffset * 1000.0),
+            PercentMap(_cvvc.VcConsonant, DefaultVcConsonant),
+            PercentMap(_cvvc.VcBlank, DefaultVcBlank),
+            _cvvc.VcOverlap / 100.0,
+            Math.Round(-lead.Offset * 1000.0),
+            Math.Round(lead.Consonant * 1000.0),
+            lead.Blank,
+            EngineOverlap(StoredMap(lead.Overlap)));
+    }
+
+    static Dictionary<string, double> EngineOverlap(Dictionary<string, double> stored)
+    {
+        var overlap = new Dictionary<string, double>(ConsonantOverlap.Kinds.Length);
+        foreach (var (_, key, _) in ConsonantOverlap.Kinds)
+            overlap[key] = ConsonantOverlap.ToEngine(stored.TryGetValue(key, out var value) ? value : DefaultOverlap);
+        return overlap;
+    }
+
+    static Dictionary<string, double> StoredMap(Dictionary<string, double> source)
+    {
+        var map = new Dictionary<string, double>(ConsonantOverlap.Kinds.Length);
+        foreach (var (_, key, _) in ConsonantOverlap.Kinds)
+            map[key] = source.TryGetValue(key, out var value) ? ConsonantOverlap.Stored(value) : DefaultOverlap;
+        return map;
+    }
+
+    static Dictionary<string, double> PercentMap(Dictionary<string, double> source, double fallback)
+    {
+        var map = new Dictionary<string, double>(ConsonantOverlap.Kinds.Length);
+        foreach (var (_, key, _) in ConsonantOverlap.Kinds)
+        {
+            var percent = source.TryGetValue(key, out var value) ? value : fallback;
+            map[key] = Math.Clamp(percent, 0, 100) / 100.0;
+        }
+
+        return map;
+    }
+
+    void ApplyMono(OtoPreset preset)
+    {
+        _mono.Offset = preset.Offset;
+        _mono.Consonant = preset.Consonant;
+        _mono.Blank = preset.Blank;
+        _overlap.Clear();
+        foreach (var (_, key, _) in ConsonantOverlap.Kinds)
+        {
+            _overlap[key] = preset.Overlap.TryGetValue(key, out var value)
+                ? ConsonantOverlap.Stored(value)
+                : DefaultOverlap;
+        }
+    }
+
+    void CopyMono(OtoPreset preset)
+    {
+        preset.Offset = Math.Round(_mono.Offset, 3);
+        preset.Consonant = Math.Round(_mono.Consonant, 3);
+        preset.Blank = Math.Round(_mono.Blank, 3);
+        preset.Overlap.Clear();
+        foreach (var (_, key, _) in ConsonantOverlap.Kinds)
+        {
+            preset.Overlap[key] = ConsonantOverlap.Stored(
+                _overlap.TryGetValue(key, out var value) ? value : DefaultOverlap);
+        }
+    }
+
+    void ApplyCvvc(CvvcPreset preset)
+    {
+        _cvvc.Consonant = preset.Consonant;
+        _cvvc.Blank = preset.Blank;
+        _cvvc.VcOffset = preset.VcOffset;
+        _cvvc.VcOverlap = CvvcPresetStore.Percent(preset.VcOverlap, DefaultOverlap);
+        Replace(_cvvc.Overlap, preset.Overlap);
+        Replace(_cvvc.VcConsonant, preset.VcConsonant);
+        Replace(_cvvc.VcBlank, preset.VcBlank);
+    }
+
+    void CopyCvvc(CvvcPreset preset)
+    {
+        preset.Consonant = Math.Round(_cvvc.Consonant, 3);
+        preset.Blank = Math.Round(_cvvc.Blank, 3);
+        preset.VcOffset = Math.Round(_cvvc.VcOffset, 3);
+        preset.VcOverlap = _cvvc.VcOverlap;
+        preset.Overlap = new Dictionary<string, double>(_cvvc.Overlap);
+        preset.VcConsonant = new Dictionary<string, double>(_cvvc.VcConsonant);
+        preset.VcBlank = new Dictionary<string, double>(_cvvc.VcBlank);
+    }
+
+    string? SaveCvvc(string? raw)
+    {
+        var error = PresetUi.ReservedNameError(raw ?? "", name => name == CvvcPreset.BuiltInName, "初期値という名前は使えません。");
+        if (error != null)
+            return error;
+        var name = (raw ?? "").Trim();
+        var existing = _cvvcPresets.FirstOrDefault(preset => preset.Name == name);
+        if (existing == null)
+        {
+            existing = new CvvcPreset { Name = name };
+            _cvvcPresets.Add(existing);
+        }
+
+        CopyCvvc(existing);
+        _cvvcName = name;
+        CvvcPresetStore.Save(_cvvcPresets);
+        return null;
+    }
+
+    bool MonoDirty()
+    {
+        var preset = FindOto(_preset);
+        if (Math.Round(_mono.Offset, 3) != Math.Round(preset.Offset, 3))
+            return true;
+        if (Math.Round(_mono.Consonant, 3) != Math.Round(preset.Consonant, 3))
+            return true;
+        if (Math.Round(_mono.Blank, 3) != Math.Round(preset.Blank, 3))
+            return true;
+        foreach (var (_, key, _) in ConsonantOverlap.Kinds)
+        {
+            var expected = preset.Overlap.TryGetValue(key, out var value)
+                ? ConsonantOverlap.Stored(value)
+                : DefaultOverlap;
+            var actual = _overlap.TryGetValue(key, out var intent) ? intent : DefaultOverlap;
+            if (Math.Round(actual, 3) != Math.Round(expected, 3))
+                return true;
+        }
+
+        return false;
+    }
+
+    bool CvvcDirty()
+    {
+        var preset = FindCvvc(_cvvcName);
+        if (Math.Round(_cvvc.Consonant, 3) != Math.Round(preset.Consonant, 3))
+            return true;
+        if (Math.Round(_cvvc.Blank, 3) != Math.Round(preset.Blank, 3))
+            return true;
+        if (Math.Round(_cvvc.VcOffset, 3) != Math.Round(preset.VcOffset, 3))
+            return true;
+        if (Math.Round(_cvvc.VcOverlap) != Math.Round(CvvcPresetStore.Percent(preset.VcOverlap, DefaultOverlap)))
+            return true;
+        return !SamePercent(_cvvc.Overlap, preset.Overlap, DefaultOverlap)
+            || !SamePercent(_cvvc.VcConsonant, preset.VcConsonant, DefaultVcConsonant)
+            || !SamePercent(_cvvc.VcBlank, preset.VcBlank, DefaultVcBlank);
+    }
+
+    static bool SamePercent(Dictionary<string, double> actual, Dictionary<string, double> expected, double fallback)
+    {
+        foreach (var (_, key, _) in ConsonantOverlap.Kinds)
+        {
+            var left = actual.TryGetValue(key, out var value) ? value : fallback;
+            var right = expected.TryGetValue(key, out var stored)
+                ? CvvcPresetStore.Percent(stored, fallback)
+                : fallback;
+            if (Math.Round(left) != Math.Round(right))
+                return false;
+        }
+
+        return true;
+    }
+
+    OtoPreset FindOto(string? name)
+    {
+        if (string.IsNullOrEmpty(name) || name == OtoPreset.BuiltInName)
+            return BuiltInOto();
+        return _presets.FirstOrDefault(preset => preset.Name == name) ?? BuiltInOto();
+    }
+
+    CvvcPreset FindCvvc(string? name)
+    {
+        if (string.IsNullOrEmpty(name) || name == CvvcPreset.BuiltInName)
+            return BuiltInCvvc();
+        return _cvvcPresets.FirstOrDefault(preset => preset.Name == name) ?? BuiltInCvvc();
+    }
+
+    static OtoPreset BuiltInOto() => new()
+    {
+        Name = OtoPreset.BuiltInName,
+        BuiltIn = true,
+        Offset = 0,
+        Consonant = 0.2,
+        Blank = 0,
+    };
+
+    static CvvcPreset BuiltInCvvc() => new()
+    {
+        Name = CvvcPreset.BuiltInName,
+        BuiltIn = true,
+        Consonant = 0.2,
+        Blank = 0,
+        VcOffset = 0,
+        VcOverlap = DefaultOverlap,
+    };
+
+    static bool PutPercent(Dictionary<string, double> dest, string key, double value, double fallback)
+    {
+        if (!Known(key))
+            return false;
+        dest[key] = CvvcPresetStore.Percent(value, fallback);
+        return true;
+    }
+
+    static bool Known(string key)
+    {
+        foreach (var (_, kind, _) in ConsonantOverlap.Kinds)
+        {
+            if (kind == key)
+                return true;
+        }
+
+        return false;
+    }
+
+    static Dictionary<string, double> Shown(Dictionary<string, double> source, double fallback)
+    {
+        var map = new Dictionary<string, double>(ConsonantOverlap.Kinds.Length);
+        foreach (var (_, key, _) in ConsonantOverlap.Kinds)
+            map[key] = source.TryGetValue(key, out var value) ? value : fallback;
+        return map;
+    }
+
+    static void Replace(Dictionary<string, double> dest, Dictionary<string, double>? source)
+    {
+        dest.Clear();
+        if (source == null)
+            return;
+        foreach (var (key, value) in source)
+            dest[key] = value;
+    }
+
+    static double Seconds(double value, double lo, double hi, double fallback)
+    {
+        if (double.IsNaN(value) || double.IsInfinity(value))
+            return fallback;
+        return Math.Clamp(Math.Round(value, 3), lo, hi);
+    }
+}

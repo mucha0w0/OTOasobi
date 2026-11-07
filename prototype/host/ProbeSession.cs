@@ -21,6 +21,10 @@ sealed class ProbeSession : IDisposable
     readonly PreviewPlayer _player;
     readonly DispatcherQueueTimer _timer;
     ProbePreview? _python;
+    AnalysisClient? _analysis;
+    readonly ProbeOto _oto = new();
+    readonly DispatcherQueueTimer _otoSave;
+    int _analyzeGen;
     string? _folder;
     string? _wavPath;
     string? _inputId;
@@ -46,6 +50,10 @@ sealed class ProbeSession : IDisposable
         _timer.Interval = TimeSpan.FromMilliseconds(100);
         _timer.IsRepeating = true;
         _timer.Tick += (_, _) => PostCapture();
+        _otoSave = _queue.CreateTimer();
+        _otoSave.Interval = TimeSpan.FromMilliseconds(400);
+        _otoSave.IsRepeating = false;
+        _otoSave.Tick += (_, _) => _oto.FlushSession();
     }
 
     public async Task AttachAsync()
@@ -88,7 +96,10 @@ sealed class ProbeSession : IDisposable
             WriteTake();
         _capture.Dispose();
         _player.Dispose();
+        _otoSave.Stop();
+        _oto.FlushSession();
         _python?.Dispose();
+        _analysis?.Dispose();
     }
 
     void OnMessage(CoreWebView2 sender, CoreWebView2WebMessageReceivedEventArgs args)
@@ -156,6 +167,18 @@ sealed class ProbeSession : IDisposable
                 case "caption":
                     _window.PaintCaption(Text(root, "theme") == "dark");
                     break;
+                case "layout":
+                    SaveLayout(root);
+                    break;
+                case "oto":
+                    HandleOto(root);
+                    break;
+                case "saveSettings":
+                    SaveSettings(Text(root, "name"), root.TryGetProperty("replace", out var replaceValue) && replaceValue.ValueKind == JsonValueKind.True);
+                    break;
+                case "loadSettings":
+                    LoadSettings(Text(root, "name"));
+                    break;
             }
         }
     }
@@ -165,6 +188,7 @@ sealed class ProbeSession : IDisposable
         if (_disposed)
             return;
         _ready = true;
+        PostLayout();
         try
         {
             var inputs = await RecCapture.DevicesAsync();
@@ -209,6 +233,12 @@ sealed class ProbeSession : IDisposable
         _previewGen++;
         PostFiles();
         Post(new { type = "opened", name = file.Name });
+        if (!string.IsNullOrEmpty(_folder))
+        {
+            _oto.Open(_folder);
+            PostOto();
+            BeginAnalyze(false);
+        }
     }
 
     async Task OpenFolderAsync()
@@ -243,6 +273,9 @@ sealed class ProbeSession : IDisposable
             }
 
             Post(new { type = "files", folder = _folder, names = WavNames(_folder) });
+            _oto.Open(folder);
+            PostOto();
+            BeginAnalyze(false);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -287,6 +320,7 @@ sealed class ProbeSession : IDisposable
         _wavPath = Path.Combine(_folder, match);
         _previewGen++;
         Post(new { type = "opened", name = match });
+        PostOto();
     }
 
     void PostFiles()
@@ -537,6 +571,197 @@ sealed class ProbeSession : IDisposable
         {
             Post(new { type = "failed", message = ex.Message });
             return null;
+        }
+    }
+
+    void HandleOto(JsonElement root)
+    {
+        var op = Text(root, "op");
+        switch (op)
+        {
+            case "mode":
+                _oto.SetMode(Text(root, "mode"));
+                RememberOto();
+                break;
+            case "slider":
+                if (_oto.SetSlider(Text(root, "group"), Text(root, "key"), Number(root, "value")))
+                    RememberOto();
+                break;
+            case "preset":
+                _oto.SelectPreset(Text(root, "target"), Text(root, "name"));
+                RememberOto();
+                break;
+            case "savePreset":
+                var presetError = _oto.SavePreset(Text(root, "which"), Text(root, "name"));
+                if (presetError != null)
+                    Post(new { type = "failed", message = presetError });
+                RememberOto();
+                break;
+            case "alias":
+                _oto.SetAlias(Text(root, "which"), root.TryGetProperty("on", out var aliasOn) && aliasOn.ValueKind == JsonValueKind.True);
+                RememberOto();
+                break;
+            case "scope":
+                _oto.SetScope(Text(root, "scope"));
+                RememberOto();
+                break;
+            case "analyze":
+                BeginAnalyze(root.TryGetProperty("force", out var forceValue) && forceValue.ValueKind == JsonValueKind.True);
+                break;
+            case "write":
+                _ = WriteOtoAsync();
+                break;
+        }
+    }
+
+    void RememberOto()
+    {
+        PostOto();
+        _otoSave.Stop();
+        _otoSave.Start();
+    }
+
+    void SaveSettings(string? name, bool replace)
+    {
+        var error = _oto.SaveNamed(name, replace);
+        if (error == "exists")
+        {
+            Post(new { type = "otoExists", name });
+            return;
+        }
+
+        if (error != null)
+            Post(new { type = "failed", message = error });
+        else
+            Post(new { type = "notice", message = "設定を保存しました。" });
+        PostOto();
+    }
+
+    void LoadSettings(string? name)
+    {
+        var error = _oto.LoadNamed(name);
+        if (error != null)
+            Post(new { type = "failed", message = error });
+        else
+            Post(new { type = "notice", message = "設定を読み込みました。" });
+        PostOto();
+    }
+
+    void BeginAnalyze(bool force)
+    {
+        if (string.IsNullOrEmpty(_folder) || _disposed)
+            return;
+        var gen = ++_analyzeGen;
+        _ = AnalyzeAsync(gen, force);
+    }
+
+    async Task AnalyzeAsync(int gen, bool force)
+    {
+        _oto.SetBusy(true);
+        PostOto();
+        try
+        {
+            _analysis ??= new AnalysisClient();
+            var data = await _analysis.AnalyzeFolderAsync(_folder!, null, force);
+            if (gen != _analyzeGen || _disposed)
+                return;
+            if (!data.Ok)
+                Post(new { type = "failed", message = string.IsNullOrEmpty(data.Error) ? "解析できませんでした。" : data.Error });
+            else
+                _oto.SetFiles(data.Files);
+        }
+        catch (Exception ex)
+        {
+            if (gen == _analyzeGen && !_disposed)
+                Post(new { type = "failed", message = ex.Message });
+        }
+        finally
+        {
+            if (gen == _analyzeGen && !_disposed)
+            {
+                _oto.SetBusy(false);
+                PostOto();
+            }
+        }
+    }
+
+    async Task WriteOtoAsync()
+    {
+        if (_disposed || string.IsNullOrEmpty(_folder) || _oto.Files.Count == 0)
+        {
+            Post(new { type = "failed", message = "解析が終わってから生成できます。" });
+            return;
+        }
+
+        var modes = _oto.AliasModes();
+        if (modes.Count == 0)
+        {
+            Post(new { type = "failed", message = "単独音、連続音、CVVC のどれかを選んでください。" });
+            return;
+        }
+
+        _oto.SetBusy(true);
+        PostOto();
+        try
+        {
+            _analysis ??= new AnalysisClient();
+            var parts = modes.Select(mode => new OtoWritePart(_oto.ExportFor(mode), [])).ToList();
+            var result = await _analysis.WriteAsync(_folder, _oto.Files, parts, _oto.ScopeForWrite());
+            if (_disposed)
+                return;
+            if (!result.Ok)
+                Post(new { type = "failed", message = string.IsNullOrEmpty(result.Error) ? "oto.iniを生成できませんでした。" : result.Error });
+            else
+                Post(new { type = "notice", message = string.IsNullOrWhiteSpace(result.Notice) ? "oto.iniを生成しました。" : "oto.iniを生成しました。 " + result.Notice });
+        }
+        catch (Exception ex)
+        {
+            if (!_disposed)
+                Post(new { type = "failed", message = ex.Message });
+        }
+        finally
+        {
+            if (!_disposed)
+            {
+                _oto.SetBusy(false);
+                PostOto();
+            }
+        }
+    }
+
+    void PostOto()
+    {
+        var name = string.IsNullOrEmpty(_wavPath) ? null : Path.GetFileName(_wavPath);
+        Post(_oto.Snapshot(name));
+    }
+
+    static readonly string LayoutFile = Path.Combine(AppPaths.DataRoot, "probe-layout.json");
+
+    void SaveLayout(JsonElement message)
+    {
+        if (!message.TryGetProperty("root", out var body))
+            return;
+        try
+        {
+            Directory.CreateDirectory(AppPaths.DataRoot);
+            File.WriteAllText(LayoutFile, body.GetRawText());
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+        }
+    }
+
+    void PostLayout()
+    {
+        if (!File.Exists(LayoutFile))
+            return;
+        try
+        {
+            using var saved = JsonDocument.Parse(File.ReadAllText(LayoutFile));
+            Post(new { type = "layout", root = saved.RootElement.Clone() });
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        {
         }
     }
 

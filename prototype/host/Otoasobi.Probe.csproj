@@ -33,6 +33,34 @@
     <Compile Include="..\..\winui\RecTone.cs" Link="Winui\RecTone.cs" />
     <Compile Include="..\..\winui\WavAudio.cs" Link="Winui\WavAudio.cs" />
     <Compile Include="..\..\winui\WavPicker.cs" Link="Winui\WavPicker.cs" />
+    <Compile Include="..\..\winui\AnalysisClient.cs" Link="Winui\AnalysisClient.cs" />
+    <Compile Include="..\..\winui\Session.cs" Link="Winui\Session.cs" />
+    <Compile Include="..\..\winui\OtoExport.cs" Link="Winui\OtoExport.cs" />
+    <Compile Include="..\..\winui\OtoSave.cs" Link="Winui\OtoSave.cs" />
+    <Compile Include="..\..\winui\OtoMarks.cs" Link="Winui\OtoMarks.cs" />
+    <Compile Include="..\..\winui\OtoIni.cs" Link="Winui\OtoIni.cs" />
+    <Compile Include="..\..\winui\ConsonantOverlap.cs" Link="Winui\ConsonantOverlap.cs" />
+    <Compile Include="..\..\winui\OtoPreset.cs" Link="Winui\OtoPreset.cs" />
+    <Compile Include="..\..\winui\CvvcPreset.cs" Link="Winui\CvvcPreset.cs" />
+    <Compile Include="..\..\winui\JsonFiles.cs" Link="Winui\JsonFiles.cs" />
+    <Compile Include="..\..\winui\NamedList.cs" Link="Winui\NamedList.cs" />
+    <Compile Include="..\..\winui\BlankRelease.cs" Link="Winui\BlankRelease.cs" />
+    <Compile Include="..\..\winui\FileLoudness.cs" Link="Winui\FileLoudness.cs" />
+    <Compile Include="..\..\winui\AudioEffect.cs" Link="Winui\AudioEffect.cs" />
+    <Compile Include="..\..\winui\EffectRackPreset.cs" Link="Winui\EffectRackPreset.cs" />
+    <Compile Include="..\..\winui\EqPreset.cs" Link="Winui\EqPreset.cs" />
+    <Compile Include="..\..\winui\NormalizePreset.cs" Link="Winui\NormalizePreset.cs" />
+    <Compile Include="..\..\winui\HighPassPreset.cs" Link="Winui\HighPassPreset.cs" />
+    <Compile Include="..\..\winui\NoisePreset.cs" Link="Winui\NoisePreset.cs" />
+    <Compile Include="..\..\winui\CompressorPreset.cs" Link="Winui\CompressorPreset.cs" />
+    <Compile Include="..\..\winui\Equalizer.cs" Link="Winui\Equalizer.cs" />
+    <Compile Include="..\..\winui\Normalize.cs" Link="Winui\Normalize.cs" />
+    <Compile Include="..\..\winui\HighPass.cs" Link="Winui\HighPass.cs" />
+    <Compile Include="..\..\winui\NoiseSuppressor.cs" Link="Winui\NoiseSuppressor.cs" />
+    <Compile Include="..\..\winui\OriginalLibrary.cs" Link="Winui\OriginalLibrary.cs" />
+    <Compile Include="..\..\winui\WavStandard.cs" Link="Winui\WavStandard.cs" />
+    <Compile Include="..\..\winui\Compressor.cs" Link="Winui\Compressor.cs" />
+    <Compile Include="..\..\winui\PresetUi.cs" Link="Winui\PresetUi.cs" />
   </ItemGroup>
 
   <ItemGroup>

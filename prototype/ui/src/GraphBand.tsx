@@ -1,7 +1,7 @@
 import { useEffect, useRef, type RefObject } from "react"
 import { shouldReplaceBitmap } from "./bitmap"
 import { drawPeaks } from "./drawPeaks"
-import { timeAt, type PreviewEvent } from "./protocol"
+import { timeAt, type OtoMark, type PreviewEvent } from "./protocol"
 import { imagePlacement, panRange, zoomRange, type Range } from "./viewport"
 
 export type BandKind = "wave" | "spec" | "loud" | "oto"
@@ -16,6 +16,7 @@ export type BandHandle = {
 export type GraphModel = {
   picture: PreviewEvent | null
   range: Range
+  marks: OtoMark[]
 }
 
 type Props = {
@@ -160,6 +161,8 @@ export function GraphBand({ kind, picture, model, appearance, register, onRange,
       ctx.drawImage(imageRef.current, placed.x, 0, placed.width, height)
     if (kind === "wave" || kind === "oto")
       drawPeaks(ctx, placed.width, height, pictureNow.lo, pictureNow.hi, getCss("--wave"), placed.x)
+    if (kind === "oto")
+      drawMarks(ctx, placed, source, current.marks, height)
     if (kind === "loud")
       drawLoud(ctx, placed, pictureNow.loudness, getCss("--wave"))
   }
@@ -195,6 +198,42 @@ export function GraphBand({ kind, picture, model, appearance, register, onRange,
       }}
     />
   )
+}
+
+function drawMarks(
+  ctx: CanvasRenderingContext2D,
+  placed: { x: number; width: number },
+  source: { t0: number; t1: number },
+  marks: OtoMark[],
+  height: number,
+) {
+  const span = source.t1 - source.t0
+  if (!(span > 0) || marks.length === 0)
+    return
+  const xAtTime = (time: number) => placed.x + ((time - source.t0) / span) * placed.width
+  const dark = document.documentElement.dataset.theme === "dark"
+  const colors = [dark ? "#ececec" : "#374151", "#fb923c", "#f87171", "#60a5fa", "#c4b5fd"]
+  ctx.font = "12px sans-serif"
+  ctx.textAlign = "center"
+  ctx.textBaseline = "top"
+  for (const mark of marks) {
+    const left = xAtTime(Math.min(mark.offset, mark.blank))
+    const right = xAtTime(Math.max(mark.offset, mark.blank))
+    ctx.fillStyle = "rgba(15, 157, 142, 0.25)"
+    ctx.fillRect(left, 0, Math.max(1, right - left), height)
+    const points = [mark.offset, mark.overlap, mark.preutter, mark.consonant, mark.blank]
+    points.forEach((time, index) => {
+      const x = xAtTime(time)
+      ctx.strokeStyle = colors[index] ?? colors[0]!
+      ctx.lineWidth = 2
+      ctx.beginPath()
+      ctx.moveTo(x, 0)
+      ctx.lineTo(x, height)
+      ctx.stroke()
+    })
+    ctx.fillStyle = dark ? "#f9fafb" : "#1f2937"
+    ctx.fillText(mark.alias, (left + right) / 2, 4, Math.max(12, right - left - 4))
+  }
 }
 
 function drawLoud(
