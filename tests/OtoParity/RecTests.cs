@@ -243,4 +243,41 @@ public class RecTests
         Assert.Equal(-0.5f, min[1]);
         Assert.Equal(-0.5f, max[1]);
     }
+
+    [Fact]
+    public void TakeHeaderIs44100Mono16WhileInputRateStaysSeparate()
+    {
+        const int inputRate = 48000;
+        var interleaved = new float[inputRate * 2];
+        for (var frame = 0; frame < inputRate; frame++)
+        {
+            interleaved[frame * 2] = 0.25f;
+            interleaved[frame * 2 + 1] = -0.25f;
+        }
+
+        var mono = RecTone.ToMono44100(interleaved, 2, inputRate);
+        var path = Path.Combine(Path.GetTempPath(), "otoasobi-take-" + Guid.NewGuid().ToString("N") + ".wav");
+        try
+        {
+            WavAudio.Write(path, new WavAudio
+            {
+                SampleRate = RecTone.TargetRate,
+                Channels = 1,
+                BitsPerSample = 16,
+                Samples = mono,
+            });
+            var read = WavAudio.Read(path);
+            var seconds = read.Samples.Length / (double)read.Channels / read.SampleRate;
+            Assert.Equal(44100, read.SampleRate);
+            Assert.Equal(16, read.BitsPerSample);
+            Assert.Equal(1, read.Channels);
+            Assert.NotEqual(inputRate, read.SampleRate);
+            Assert.InRange(seconds, 0.98, 1.02);
+        }
+        finally
+        {
+            if (File.Exists(path))
+                File.Delete(path);
+        }
+    }
 }

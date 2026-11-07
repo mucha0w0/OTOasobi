@@ -21,6 +21,7 @@ sealed class ProbeSession : IDisposable
     readonly PreviewPlayer _player;
     readonly DispatcherQueueTimer _timer;
     ProbePreview? _python;
+    string? _folder;
     string? _wavPath;
     string? _inputId;
     string? _outputId;
@@ -113,6 +114,12 @@ sealed class ProbeSession : IDisposable
                 case "openWav":
                     _ = OpenWavAsync();
                     break;
+                case "openFolder":
+                    _ = OpenFolderAsync();
+                    break;
+                case "selectFile":
+                    SelectFile(Text(root, "name"));
+                    break;
                 case "preview":
                     _ = PreviewAsync(
                         Number(root, "t0"),
@@ -193,9 +200,123 @@ sealed class ProbeSession : IDisposable
 
         if (file == null || _disposed)
             return;
+        _folder = Path.GetDirectoryName(file.Path);
         _wavPath = file.Path;
         _previewGen++;
+        PostFiles();
         Post(new { type = "opened", name = file.Name });
+    }
+
+    async Task OpenFolderAsync()
+    {
+        if (_disposed)
+            return;
+        string? folder;
+        try
+        {
+            folder = await WavPicker.PickAsync(WindowNative.GetWindowHandle(_window));
+        }
+        catch (Exception ex)
+        {
+            Post(new { type = "failed", message = ex.Message });
+            return;
+        }
+
+        if (string.IsNullOrEmpty(folder) || _disposed)
+            return;
+        _folder = folder;
+        try
+        {
+            if (!string.IsNullOrEmpty(_wavPath))
+            {
+                var current = Path.GetFileName(_wavPath);
+                var still = WavNames(folder).Any(name => string.Equals(name, current, StringComparison.OrdinalIgnoreCase));
+                if (!still)
+                {
+                    _wavPath = null;
+                    _previewGen++;
+                }
+            }
+
+            Post(new { type = "files", folder = _folder, names = WavNames(_folder) });
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Post(new { type = "failed", message = ex.Message });
+        }
+    }
+
+    void SelectFile(string? name)
+    {
+        if (_disposed)
+            return;
+        if (string.IsNullOrEmpty(_folder))
+        {
+            Post(new { type = "failed", message = "フォルダを開いてください。" });
+            return;
+        }
+
+        if (!IsPlainFileName(name))
+        {
+            Post(new { type = "failed", message = "ファイル名だけを指定してください。" });
+            return;
+        }
+
+        List<string> names;
+        try
+        {
+            names = WavNames(_folder);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Post(new { type = "failed", message = ex.Message });
+            return;
+        }
+
+        var match = names.FirstOrDefault(item => string.Equals(item, name, StringComparison.OrdinalIgnoreCase));
+        if (match == null)
+        {
+            Post(new { type = "failed", message = "このファイルは存在しません。" });
+            return;
+        }
+
+        _wavPath = Path.Combine(_folder, match);
+        _previewGen++;
+        Post(new { type = "opened", name = match });
+    }
+
+    void PostFiles()
+    {
+        if (string.IsNullOrEmpty(_folder))
+            return;
+        try
+        {
+            Post(new { type = "files", folder = _folder, names = WavNames(_folder) });
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Post(new { type = "failed", message = ex.Message });
+        }
+    }
+
+    static List<string> WavNames(string folder)
+    {
+        var names = new List<string>();
+        foreach (var path in Directory.EnumerateFiles(folder))
+        {
+            if (path.EndsWith(".wav", StringComparison.OrdinalIgnoreCase))
+                names.Add(Path.GetFileName(path));
+        }
+
+        names.Sort(StringComparer.OrdinalIgnoreCase);
+        return names;
+    }
+
+    static bool IsPlainFileName(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name) || name is "." or "..")
+            return false;
+        return name.IndexOfAny(['\\', '/', ':']) < 0;
     }
 
     async Task PreviewAsync(double t0, double t1, int columns, int rows)

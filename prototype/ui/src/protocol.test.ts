@@ -1,15 +1,22 @@
 import { describe, expect, it } from "vitest"
-import { requestsPreview, shownInputRate, timeAt, xAt } from "./protocol"
+import { parseHostEvent, requestsPreview, requestsPreviewAfter, shownInputRate, timeAt, xAt } from "./protocol"
 
 describe("プレビューを頼む操作", () => {
-  it("境界のドラッグとリサイズでは頼まない", () => {
+  it("境界のドラッグとリサイズの途中では頼まない", () => {
     expect(requestsPreview("boundary")).toBe(false)
     expect(requestsPreview("resize")).toBe(false)
+    expect(requestsPreviewAfter("boundary")).toBe(false)
   })
 
   it("パンと拡大では頼む", () => {
     expect(requestsPreview("pan")).toBe(true)
     expect(requestsPreview("zoom")).toBe(true)
+  })
+
+  it("リサイズは離したあとだけ頼む", () => {
+    expect(requestsPreviewAfter("resize")).toBe(true)
+    expect(requestsPreviewAfter("pan")).toBe(true)
+    expect(requestsPreviewAfter("zoom")).toBe(true)
   })
 })
 
@@ -28,5 +35,52 @@ describe("入力レート", () => {
     expect(shownInputRate({ rate: 48000 })).toBe(48000)
     expect(shownInputRate(null)).toBeNull()
     expect(shownInputRate({ rate: 0 })).toBeNull()
+  })
+})
+
+describe("ホストのメッセージ", () => {
+  it("ファイル一覧は名前だけを足す", () => {
+    expect(parseHostEvent({ type: "files", folder: "C:/voice", names: ["あ.wav", 1, "い.wav"] })).toEqual({
+      type: "files",
+      folder: "C:/voice",
+      names: ["あ.wav", "い.wav"],
+    })
+  })
+
+  it("preview と saved の形は変えない", () => {
+    const preview = parseHostEvent({
+      type: "preview",
+      duration: 2,
+      lo: [0],
+      hi: [1],
+      png: "abc",
+      specT0: 0,
+      specT1: 2,
+      waveT0: 0,
+      waveT1: 2,
+      sampleRate: 44100,
+    })
+    expect(preview).toMatchObject({ type: "preview", png: "abc", sampleRate: 44100 })
+    expect(preview && "names" in preview).toBe(false)
+
+    expect(parseHostEvent({
+      type: "saved",
+      path: "take.wav",
+      inputRate: 48000,
+      headerRate: 44100,
+      bits: 16,
+      channels: 1,
+      seconds: 1,
+      elapsed: 1.2,
+    })).toEqual({
+      type: "saved",
+      path: "take.wav",
+      inputRate: 48000,
+      headerRate: 44100,
+      bits: 16,
+      channels: 1,
+      seconds: 1,
+      elapsed: 1.2,
+    })
   })
 })

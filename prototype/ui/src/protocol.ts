@@ -3,6 +3,8 @@ export type PreviewGesture = "boundary" | "pan" | "zoom" | "resize"
 export type PageCommand =
   | { type: "hello" }
   | { type: "openWav" }
+  | { type: "openFolder" }
+  | { type: "selectFile"; name: string }
   | { type: "preview"; t0: number; t1: number; columns: number; rows: number }
   | { type: "setDevices"; inputId: string; outputId: string }
   | { type: "monitor"; on: boolean }
@@ -51,6 +53,7 @@ export type SavedEvent = {
 
 export type HostEvent =
   | { type: "devices"; inputs: DeviceInfo[]; outputs: DeviceInfo[] }
+  | { type: "files"; folder: string; names: string[] }
   | { type: "opened"; name: string }
   | PreviewEvent
   | CaptureEvent
@@ -60,6 +63,10 @@ export type HostEvent =
 
 export function requestsPreview(gesture: PreviewGesture): boolean {
   return gesture === "pan" || gesture === "zoom"
+}
+
+export function requestsPreviewAfter(gesture: PreviewGesture): boolean {
+  return gesture === "pan" || gesture === "zoom" || gesture === "resize"
 }
 
 export function timeAt(x: number, width: number, t0: number, t1: number, panPx = 0): number {
@@ -92,6 +99,14 @@ export function parseHostEvent(value: unknown): HostEvent | null {
         type: "devices",
         inputs: value.inputs.filter(isDevice),
         outputs: value.outputs.filter(isDevice),
+      }
+    case "files":
+      if (typeof value.folder !== "string" || !Array.isArray(value.names))
+        return null
+      return {
+        type: "files",
+        folder: value.folder,
+        names: value.names.filter((item): item is string => typeof item === "string"),
       }
     case "opened":
       return typeof value.name === "string" ? { type: "opened", name: value.name } : null

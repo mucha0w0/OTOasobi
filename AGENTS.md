@@ -10,7 +10,7 @@
 ## 置き場所
 
 - `winui/` — WinUI 3。名前空間は `Otoasobi`。画面は `MainPage` ひとつで、別 Page へは遷移しません。状態は `IdleView` / `BusyView` / `EditorView` / `ErrorView` の Visibility です。
-- `prototype/` — 移行判断用の試作です。製品には組み込みません。`prototype/host` が WinUI の別ウィンドウで、`prototype/ui` の React を WebView2 に表示します。ページは `npm run dev`、ホストは `dotnet run --project prototype/host` です。アドレスは環境変数 `OTOASOBI_PROBE_URL`（既定 `http://localhost:5173`）です。
+- `prototype/` — 移行判断用の試作です。製品には組み込みません。製品の画面は、試作の確認が終わるまで置き換えません。`prototype/host` が WinUI の別ウィンドウで、`prototype/ui` の React を WebView2 に表示します。ページは `npm run dev`、ホストは `dotnet run --project prototype/host` です。アドレスは環境変数 `OTOASOBI_PROBE_URL`（既定 `http://localhost:5173`）です。境界のドラッグと仕切りの移動ではキャンバスのバッファを作り直さず、スペクトログラムは離したあとに取り直します。ファイル一覧は `files` と `selectFile` で足し、`preview`・`capture`・`saved` の形は変えません。
 - `otoasobi/` — 解析の Python。画面は `AnalysisClient` が `python -m otoasobi.worker` を起動し、UTF-8 の JSON 行で話します。WAV 一覧と 1 ファイルの解析結果 `AnalyzedFile` は `wavs.py` です。
 - `tests/OtoParity/` — xUnit。WinUI のロジック用 `.cs` をプロジェクト参照ではなく `Compile Include` で直にコンパイルします。新しい純粋ロジックをテストするときは、この csproj にもリンクを足します。`MainPage` と XAML はテストに入りません。
 - `tests/test_*.py` — Python 側のテストです。

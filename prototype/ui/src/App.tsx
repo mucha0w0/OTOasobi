@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from "react"
-import { drawPeaks } from "./drawPeaks"
+import { FileList } from "./FileList"
 import { connectHost } from "./host"
+import { LiveMonitor, type LiveHandle } from "./LiveMonitor"
 import {
   requestsPreview,
-  shownInputRate,
-  type CaptureEvent,
-  type DeviceInfo,
+  requestsPreviewAfter,
   type HostEvent,
+  type DeviceInfo,
   type PageCommand,
   type PreviewEvent,
   type PreviewGesture,
@@ -20,7 +20,11 @@ const notes = ["C3", "D3", "E3", "F3", "G3", "A3", "B3", "C4", "D4", "E4", "F4",
 export function App() {
   const sendRef = useRef<(command: PageCommand) => void>(() => undefined)
   const waveRef = useRef<WaveHandle | null>(null)
+  const liveRef = useRef<LiveHandle | null>(null)
   const previewTimer = useRef<number | undefined>(undefined)
+  const pictureRef = useRef<PreviewEvent | null>(null)
+  const pointerText = useRef<HTMLSpanElement>(null)
+  const boundaryText = useRef<HTMLSpanElement>(null)
   const [connected, setConnected] = useState(false)
   const [theme, setTheme] = useState<ThemeChoice>("system")
   const [systemDark, setSystemDark] = useState(() => window.matchMedia("(prefers-color-scheme: dark)").matches)
@@ -34,20 +38,27 @@ export function App() {
   const [semitones, setSemitones] = useState(0)
   const [speed, setSpeed] = useState(1)
   const [guidePlaying, setGuidePlaying] = useState(false)
-  const [capture, setCapture] = useState<CaptureEvent | null>(null)
+  const [folder, setFolder] = useState("")
+  const [names, setNames] = useState<string[]>([])
   const [fileName, setFileName] = useState("")
   const [picture, setPicture] = useState<PreviewEvent | null>(null)
   const [boundary, setBoundary] = useState(0)
-  const [pointerTime, setPointerTime] = useState<number | null>(null)
   const [notice, setNotice] = useState("")
   const [saved, setSaved] = useState<SavedEvent | null>(null)
   const [dialog, setDialog] = useState<string | null>(null)
   const [fraction, setFraction] = useState(0.68)
+  const fractionRef = useRef(0.68)
   const frameRef = useRef<HTMLDivElement>(null)
-  const liveRef = useRef<HTMLCanvasElement>(null)
+  const sectionRef = useRef<HTMLElement>(null)
+  const fileNameRef = useRef("")
+  const applyRef = useRef<(event: HostEvent) => void>(() => undefined)
+  pictureRef.current = picture
+  fileNameRef.current = fileName
+  const resolved = resolveTheme(theme, systemDark)
+  const themeLabel = resolved === "dark" ? "ダーク" : "ライト"
 
   useEffect(() => {
-    const connection = connectHost((event) => applyHost(event))
+    const connection = connectHost((event) => applyRef.current(event))
     sendRef.current = connection.send
     setConnected(window.chrome?.webview != null)
     connection.send({ type: "hello" })
@@ -65,31 +76,18 @@ export function App() {
   }, [])
 
   useEffect(() => {
-    const resolved = resolveTheme(theme, systemDark)
     document.documentElement.dataset.theme = resolved
     const colors = buttonColors(accent)
     document.documentElement.style.setProperty("--accent", colors.fill)
     document.documentElement.style.setProperty("--on-accent", colors.ink)
     sendRef.current({ type: "caption", theme: resolved })
-  }, [theme, systemDark, accent])
+  }, [resolved, accent])
 
-  useEffect(() => {
-    const canvas = liveRef.current
-    if (!canvas)
-      return
-    const width = canvas.clientWidth
-    const height = canvas.clientHeight
-    const ratio = window.devicePixelRatio || 1
-    canvas.width = Math.max(1, Math.floor(width * ratio))
-    canvas.height = Math.max(1, Math.floor(height * ratio))
-    const ctx = canvas.getContext("2d")
-    if (!ctx)
-      return
-    ctx.setTransform(ratio, 0, 0, ratio, 0, 0)
-    ctx.clearRect(0, 0, width, height)
-    if (capture)
-      drawPeaks(ctx, width, height, capture.lo, capture.hi, getCss("--wave"))
-  }, [capture, theme, systemDark, accent])
+  applyRef.current = applyHost
+
+  function sameName(left: string, right: string) {
+    return left.localeCompare(right, undefined, { sensitivity: "accent" }) === 0
+  }
 
   function applyHost(event: HostEvent) {
     switch (event.type) {
@@ -97,17 +95,33 @@ export function App() {
         setInputs(event.inputs)
         setOutputs(event.outputs)
         break
+      case "files": {
+        const keep = event.names.some((name) => sameName(name, fileNameRef.current))
+        setFolder(event.folder)
+        setNames(event.names)
+        if (!keep) {
+          fileNameRef.current = ""
+          setFileName("")
+          setPicture(null)
+        }
+        break
+      }
       case "opened":
+        fileNameRef.current = event.name
         setFileName(event.name)
         setPicture(null)
         sendPreview(0, 0)
         break
       case "preview":
         setPicture(event)
-        setBoundary((current) => Math.min(Math.max(current, event.waveT0), Math.max(event.waveT0, event.duration)))
+        setBoundary((current) => {
+          const next = Math.min(Math.max(current, event.waveT0), Math.max(event.waveT0, event.duration))
+          writeBoundary(next)
+          return next
+        })
         break
       case "capture":
-        setCapture(event)
+        liveRef.current?.show(event)
         break
       case "guide":
         setGuidePlaying(event.playing)
@@ -134,8 +148,21 @@ export function App() {
     previewTimer.current = window.setTimeout(() => sendPreview(t0, t1), 80)
   }
 
-  const inputRate = shownInputRate(capture)
-  const recording = capture?.recording ?? false
+  function writeBoundary(time: number) {
+    if (boundaryText.current)
+      boundaryText.current.textContent = `境界 ${time.toFixed(3)} 秒`
+  }
+
+  function onBoundary(time: number, commit: boolean) {
+    writeBoundary(time)
+    if (commit)
+      setBoundary(time)
+  }
+
+  function onPointerTime(time: number | null) {
+    if (pointerText.current)
+      pointerText.current.textContent = time == null ? "ポインタ" : `ポインタ ${time.toFixed(3)} 秒`
+  }
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-[var(--bg)] text-[var(--text)]">
@@ -173,148 +200,152 @@ export function App() {
           <button type="button" className="ghost-button" onClick={() => setNotice("")}>閉じる</button>
         </div>
       )}
-      <div ref={frameRef} className="flex min-h-0 flex-1">
-        <section className="min-w-0" style={{ width: `${fraction * 100}%` }}>
-          <div className="flex items-center justify-between px-3 py-2 text-xs text-[var(--muted)]">
-            <span>境界 {boundary.toFixed(3)} 秒</span>
-            <span>{pointerTime == null ? "ポインタ" : `ポインタ ${pointerTime.toFixed(3)} 秒`}</span>
-          </div>
-          <div className="h-[calc(100%-2rem)] bg-[var(--canvas)]">
-            <WaveView
-              picture={picture}
-              boundary={boundary}
-              appearance={`${resolveTheme(theme, systemDark)}-${accent}`}
-              onBoundary={setBoundary}
-              onPreview={onPreview}
-              onPointerTime={setPointerTime}
-              handle={waveRef}
-            />
-          </div>
-        </section>
-        <div
-          className="w-1.5 cursor-col-resize bg-[var(--line)]"
-          onPointerDown={(event) => {
-            const frame = frameRef.current
-            if (!frame)
-              return
-            const bounds = frame.getBoundingClientRect()
-            const move = (ev: PointerEvent) => {
-              const min = 160 / bounds.width
-              const aside = 280 / bounds.width
-              const next = (ev.clientX - bounds.left) / bounds.width
-              setFraction(Math.min(1 - aside, Math.max(min, next)))
-            }
-            const up = () => {
-              window.removeEventListener("pointermove", move)
-              window.removeEventListener("pointerup", up)
-            }
-            window.addEventListener("pointermove", move)
-            window.addEventListener("pointerup", up)
-            event.currentTarget.setPointerCapture(event.pointerId)
-          }}
+      <div className="flex min-h-0 flex-1">
+        <FileList
+          folder={folder}
+          names={names}
+          selected={fileName}
+          onOpenFolder={() => sendRef.current({ type: "openFolder" })}
+          onSelect={(name) => sendRef.current({ type: "selectFile", name })}
         />
-        <aside className="flex min-w-[280px] flex-1 flex-col gap-4 overflow-auto border-l border-[var(--line)] bg-[var(--panel)] p-4">
-          <label className="grid gap-1 text-sm">
-            入力
-            <select
-              className="field"
-              value={inputId}
-              onChange={(event) => {
-                setInputId(event.target.value)
-                sendRef.current({ type: "setDevices", inputId: event.target.value, outputId })
-              }}
-            >
-              <option value="">既定</option>
-              {inputs.map((device) => (
-                <option key={device.id} value={device.id}>{device.label}</option>
-              ))}
-            </select>
-          </label>
-          <label className="grid gap-1 text-sm">
-            出力
-            <select
-              className="field"
-              value={outputId}
-              onChange={(event) => {
-                setOutputId(event.target.value)
-                sendRef.current({ type: "setDevices", inputId, outputId: event.target.value })
-              }}
-            >
-              <option value="">既定</option>
-              {outputs.map((device) => (
-                <option key={device.id} value={device.id}>{device.label}</option>
-              ))}
-            </select>
-          </label>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={monitor}
-              onChange={(event) => {
-                setMonitor(event.target.checked)
-                sendRef.current({ type: "monitor", on: event.target.checked })
-              }}
-            />
-            入力を聴く
-          </label>
-          {capture?.listenError && <p className="text-sm">{capture.listenError}</p>}
-          <p className="text-sm text-[var(--muted)]">
-            入力 {inputRate == null ? "—" : `${inputRate} Hz`}
-            {recording ? " / 録音中" : ""}
-          </p>
-          <div className="h-16 rounded border border-[var(--line)] bg-[var(--canvas)]">
-            <canvas ref={liveRef} className="h-full w-full" />
-          </div>
-          <div className="h-2 overflow-hidden rounded bg-[var(--line)]">
-            <div className="h-full bg-[var(--accent)]" style={{ width: `${Math.min(1, capture?.peak ?? 0) * 100}%` }} />
-          </div>
-          <label className="grid gap-1 text-sm">
-            ガイドの音
-            <select className="field" value={note} onChange={(event) => setNote(event.target.value)}>
-              {notes.map((item) => (
-                <option key={item}>{item}</option>
-              ))}
-            </select>
-          </label>
-          <label className="grid gap-1 text-sm">
-            音程 {semitones} 半音
-            <input type="range" min={-12} max={12} step={1} value={semitones} onChange={(event) => setSemitones(Number(event.target.value))} />
-          </label>
-          <label className="grid gap-1 text-sm">
-            速さ {Math.round(speed * 100)}%
-            <input type="range" min={0.5} max={2} step={0.05} value={speed} onChange={(event) => setSpeed(Number(event.target.value))} />
-          </label>
-          <button
-            type="button"
-            className="accent-button"
-            onClick={() => sendRef.current(guidePlaying ? { type: "guideStop" } : { type: "guide", note, semitones, speed })}
-          >
-            {guidePlaying ? "ガイドを停止" : "ガイドを聴く"}
-          </button>
-          <button
-            type="button"
-            className="accent-button"
-            onClick={() => sendRef.current(recording ? { type: "recordStop" } : { type: "record" })}
-          >
-            {recording ? "停止" : "録音"}
-          </button>
-          {saved && (
-            <p className="text-sm leading-6">
-              入力 {saved.inputRate} Hz、ヘッダ {saved.headerRate} Hz / {saved.bits} bit / {saved.channels} ch、
-              ファイル {saved.seconds.toFixed(2)} 秒、操作 {saved.elapsed.toFixed(2)} 秒
-            </p>
-          )}
-        </aside>
+        <div ref={frameRef} className="flex min-w-0 flex-1">
+          <section ref={sectionRef} className="min-w-0" style={{ width: `${fraction * 100}%` }}>
+            <div className="flex items-center justify-between px-3 py-2 text-xs text-[var(--muted)]">
+              <span ref={boundaryText}>境界 {boundary.toFixed(3)} 秒</span>
+              <span ref={pointerText}>ポインタ</span>
+            </div>
+            <div className="h-[calc(100%-2rem)] bg-[var(--canvas)]">
+              <WaveView
+                picture={picture}
+                boundary={boundary}
+                appearance={`${resolved}-${accent}`}
+                onBoundary={onBoundary}
+                onPreview={onPreview}
+                onPointerTime={onPointerTime}
+                handle={waveRef}
+              />
+            </div>
+          </section>
+          <div
+            className="w-1.5 cursor-col-resize bg-[var(--line)]"
+            onPointerDown={(event) => {
+              const frame = frameRef.current
+              if (!frame)
+                return
+              const bounds = frame.getBoundingClientRect()
+              waveRef.current?.holdLayout(true)
+              const move = (ev: PointerEvent) => {
+                const min = 160 / bounds.width
+                const aside = 280 / bounds.width
+                const next = Math.min(1 - aside, Math.max(min, (ev.clientX - bounds.left) / bounds.width))
+                fractionRef.current = next
+                if (sectionRef.current)
+                  sectionRef.current.style.width = `${next * 100}%`
+              }
+              const up = () => {
+                window.removeEventListener("pointermove", move)
+                window.removeEventListener("pointerup", up)
+                waveRef.current?.holdLayout(false)
+                setFraction(fractionRef.current)
+                const current = pictureRef.current
+                if (current && requestsPreviewAfter("resize"))
+                  sendPreview(current.waveT0, current.waveT1)
+              }
+              window.addEventListener("pointermove", move)
+              window.addEventListener("pointerup", up)
+              event.currentTarget.setPointerCapture(event.pointerId)
+            }}
+          />
+          <aside className="flex min-w-[280px] flex-1 flex-col gap-4 overflow-auto border-l border-[var(--line)] bg-[var(--panel)] p-4">
+            <label className="grid gap-1 text-sm">
+              入力
+              <select
+                className="field"
+                value={inputId}
+                onChange={(event) => {
+                  setInputId(event.target.value)
+                  sendRef.current({ type: "setDevices", inputId: event.target.value, outputId })
+                }}
+              >
+                <option value="">既定</option>
+                {inputs.map((device) => (
+                  <option key={device.id} value={device.id}>{device.label}</option>
+                ))}
+              </select>
+            </label>
+            <label className="grid gap-1 text-sm">
+              出力
+              <select
+                className="field"
+                value={outputId}
+                onChange={(event) => {
+                  setOutputId(event.target.value)
+                  sendRef.current({ type: "setDevices", inputId, outputId: event.target.value })
+                }}
+              >
+                <option value="">既定</option>
+                {outputs.map((device) => (
+                  <option key={device.id} value={device.id}>{device.label}</option>
+                ))}
+              </select>
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={monitor}
+                onChange={(event) => {
+                  setMonitor(event.target.checked)
+                  sendRef.current({ type: "monitor", on: event.target.checked })
+                }}
+              />
+              入力を聴く
+            </label>
+            <LiveMonitor sink={liveRef} send={(command) => sendRef.current(command)} appearance={`${resolved}-${accent}`}>
+              <label className="grid gap-1 text-sm">
+                ガイドの音
+                <select className="field" value={note} onChange={(event) => setNote(event.target.value)}>
+                  {notes.map((item) => (
+                    <option key={item}>{item}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="grid gap-1 text-sm">
+                音程 {semitones} 半音
+                <input type="range" min={-12} max={12} step={1} value={semitones} onChange={(event) => setSemitones(Number(event.target.value))} />
+              </label>
+              <label className="grid gap-1 text-sm">
+                速さ {Math.round(speed * 100)}%
+                <input type="range" min={0.5} max={2} step={0.05} value={speed} onChange={(event) => setSpeed(Number(event.target.value))} />
+              </label>
+              <button
+                type="button"
+                className="accent-button"
+                onClick={() => sendRef.current(guidePlaying ? { type: "guideStop" } : { type: "guide", note, semitones, speed })}
+              >
+                {guidePlaying ? "ガイドを停止" : "ガイドを聴く"}
+              </button>
+            </LiveMonitor>
+            {saved && (
+              <p className="text-sm leading-6">
+                入力 {saved.inputRate} Hz、ヘッダ {saved.headerRate} Hz / {saved.bits} bit / {saved.channels} ch、
+                ファイル {saved.seconds.toFixed(2)} 秒、操作 {saved.elapsed.toFixed(2)} 秒
+              </p>
+            )}
+          </aside>
+        </div>
       </div>
       {dialog && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black/40 p-6">
+        <div className="fixed inset-0 z-10 flex items-center justify-center bg-black/40 p-6">
           <div className="w-full max-w-md rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6 text-[var(--text)]">
             <h2 className="text-lg font-semibold">{dialog}</h2>
             <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
-              {dialog === "録音を保存しました" && saved
-                ? `${saved.path} を書きました。ヘッダは ${saved.headerRate} Hz、${saved.bits} bit、${saved.channels} チャンネルです。`
-                : "このダイアログとボタンは、選んだ明暗とアクセントに従います。"}
+              明暗は{themeLabel}です。タイトルバーへも同じ明暗を送っています。ボタンの文字はアクセントに対して黒か白です。
             </p>
+            {dialog === "録音を保存しました" && saved && (
+              <p className="mt-2 text-sm leading-6">
+                {saved.path} を書きました。入力は {saved.inputRate} Hz、ヘッダは {saved.headerRate} Hz、{saved.bits} bit、{saved.channels} チャンネルです。ファイル {saved.seconds.toFixed(2)} 秒、操作 {saved.elapsed.toFixed(2)} 秒。
+              </p>
+            )}
             <button type="button" className="accent-button mt-4 w-full" onClick={() => setDialog(null)}>
               閉じる
             </button>
@@ -340,8 +371,4 @@ export function App() {
       `}</style>
     </div>
   )
-}
-
-function getCss(name: string): string {
-  return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || "#222"
 }

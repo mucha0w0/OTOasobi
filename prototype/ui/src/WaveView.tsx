@@ -1,4 +1,5 @@
 import { useEffect, useRef, type PointerEvent as ReactPointerEvent, type RefObject } from "react"
+import { shouldReplaceBitmap } from "./bitmap"
 import { drawPeaks } from "./drawPeaks"
 import { requestsPreview, timeAt, xAt, type PreviewEvent, type PreviewGesture } from "./protocol"
 
@@ -6,13 +7,14 @@ const hitPx = 8
 
 export type WaveHandle = {
   pixelSize: () => { columns: number; rows: number }
+  holdLayout: (holding: boolean) => void
 }
 
 type Props = {
   picture: PreviewEvent | null
   boundary: number
   appearance: string
-  onBoundary: (time: number) => void
+  onBoundary: (time: number, commit: boolean) => void
   onPreview: (gesture: PreviewGesture, t0: number, t1: number) => void
   onPointerTime: (time: number | null) => void
   handle: RefObject<WaveHandle | null>
@@ -29,10 +31,12 @@ export function WaveView({ picture, boundary, appearance, onBoundary, onPreview,
   const panRef = useRef(0)
   const pendingRef = useRef<{ t0: number; t1: number } | null>(null)
   const dragRef = useRef<Drag>({ kind: "none" })
+  const holdRef = useRef(false)
   const pictureRef = useRef(picture)
   const boundaryRef = useRef(boundary)
   pictureRef.current = picture
-  boundaryRef.current = boundary
+  if (dragRef.current.kind !== "boundary")
+    boundaryRef.current = boundary
 
   useEffect(() => {
     panRef.current = 0
@@ -76,6 +80,11 @@ export function WaveView({ picture, boundary, appearance, onBoundary, onPreview,
           rows: clamp(Math.round(canvas?.clientHeight ?? 320), 32, 1200),
         }
       },
+      holdLayout: (holding) => {
+        holdRef.current = holding
+        if (!holding)
+          draw()
+      },
     }
     return () => {
       handle.current = null
@@ -90,21 +99,28 @@ export function WaveView({ picture, boundary, appearance, onBoundary, onPreview,
   }
 
   function draw() {
+    if (holdRef.current)
+      return
     const canvas = canvasRef.current
     const current = pictureRef.current
     if (!canvas)
       return
     const width = canvas.clientWidth
     const height = canvas.clientHeight
+    if (width <= 0 || height <= 0)
+      return
     const ratio = window.devicePixelRatio || 1
-    canvas.width = Math.max(1, Math.floor(width * ratio))
-    canvas.height = Math.max(1, Math.floor(height * ratio))
+    const nextWidth = Math.max(1, Math.floor(width * ratio))
+    const nextHeight = Math.max(1, Math.floor(height * ratio))
+    if (shouldReplaceBitmap(false, canvas.width, canvas.height, nextWidth, nextHeight)) {
+      canvas.width = nextWidth
+      canvas.height = nextHeight
+    }
     const ctx = canvas.getContext("2d")
-    if (!ctx || width <= 0 || height <= 0)
+    if (!ctx)
       return
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0)
-    const canvasColor = getCss("--canvas")
-    ctx.fillStyle = canvasColor
+    ctx.fillStyle = getCss("--canvas")
     ctx.fillRect(0, 0, width, height)
     const pan = panRef.current
     const image = imageRef.current
@@ -154,7 +170,7 @@ export function WaveView({ picture, boundary, appearance, onBoundary, onPreview,
         onPointerTime(time)
         const drag = dragRef.current
         if (drag.kind === "boundary") {
-          onBoundary(time)
+          onBoundary(time, false)
           boundaryRef.current = time
           draw()
           return
@@ -167,6 +183,13 @@ export function WaveView({ picture, boundary, appearance, onBoundary, onPreview,
       onPointerUp={(event) => {
         const drag = dragRef.current
         dragRef.current = { kind: "none" }
+        if (drag.kind === "boundary") {
+          const time = pointerTime(event)
+          boundaryRef.current = time
+          onBoundary(time, true)
+          draw()
+          return
+        }
         if (drag.kind !== "pan" || !requestsPreview("pan"))
           return
         const rect = event.currentTarget.getBoundingClientRect()

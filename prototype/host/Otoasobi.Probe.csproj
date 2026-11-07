@@ -32,6 +32,7 @@
     <Compile Include="..\..\winui\RecMonitor.cs" Link="Winui\RecMonitor.cs" />
     <Compile Include="..\..\winui\RecTone.cs" Link="Winui\RecTone.cs" />
     <Compile Include="..\..\winui\WavAudio.cs" Link="Winui\WavAudio.cs" />
+    <Compile Include="..\..\winui\WavPicker.cs" Link="Winui\WavPicker.cs" />
   </ItemGroup>
 
   <ItemGroup>
