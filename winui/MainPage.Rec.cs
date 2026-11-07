@@ -25,7 +25,6 @@ public sealed partial class MainPage
     int _recIndex = -1;
     int _recWaitToken;
     string _recFilter = "all";
-    bool _recPrefix;
     bool _recApplying = true;
     bool _recSuppress;
     bool _recAction;
@@ -155,13 +154,11 @@ public sealed partial class MainPage
         _recLines = [];
         _recIndex = -1;
         _recGuide = null;
-        _recPrefix = false;
         _recListPath = null;
         _recListNone = false;
         if (_folder != null)
         {
             var stored = RecFolderStore.Load(_folder);
-            _recPrefix = stored.PrefixPitch;
             _recGuide = string.IsNullOrWhiteSpace(stored.Guide) ? null : stored.Guide;
             if (!string.IsNullOrEmpty(_recGuide))
                 RecGuideHistory.Remember(_recGuide);
@@ -188,13 +185,6 @@ public sealed partial class MainPage
             }
             else
                 _recListPath = null;
-        }
-
-        if (RecPrefixSwitch != null)
-        {
-            _recApplying = true;
-            RecPrefixSwitch.IsOn = _recPrefix;
-            _recApplying = false;
         }
 
         RefreshRecDisk();
@@ -241,25 +231,15 @@ public sealed partial class MainPage
         if (RecListView == null)
             return;
         var view = new List<RecDisplay>();
-        var recordable = 0;
         var done = 0;
-        var invalid = 0;
-        var note = CurrentNote();
         foreach (var line in _recLines)
         {
-            var wav = RecNames.WavName(line.Sing, note, _recPrefix);
+            var wav = RecNames.WavName(line.Sing);
             var exists = _recWavNames.Contains(wav);
             var status = RecNames.Status(line, exists);
-            if (line.NameError != null)
-                invalid++;
-            else
-            {
-                recordable++;
-                if (exists)
-                    done++;
-            }
-
-            if (!ShowRecStatus(status))
+            if (line.NameError == null && exists)
+                done++;
+            if (_recFilter == "extra" || !ShowRecStatus(status))
                 continue;
             var detail = line.Comment.Length == 0 ? $"{wav}　{status}" : $"{wav}　{status}　{line.Comment}";
             if (line.NameError != null)
@@ -267,15 +247,29 @@ public sealed partial class MainPage
             view.Add(new RecDisplay { Line = line, Title = line.Sing, Detail = detail });
         }
 
-        if (RecProgress != null)
+        if (_recFilter == "extra")
         {
-            RecProgress.Text = invalid == 0
-                ? $"{done} / {recordable}"
-                : $"{done} / {recordable}　使えない行 {invalid}";
+            foreach (var name in RecNames.Outside(_recWavNames, _recLines))
+            {
+                var stem = name.EndsWith(".wav", StringComparison.OrdinalIgnoreCase) ? name[..^4] : name;
+                view.Add(new RecDisplay { Title = stem, Detail = name });
+            }
         }
 
+        if (RecProgress != null)
+            RecProgress.Text = $"{done} / {_recLines.Count}";
+
         if (RecListEmpty != null)
-            RecListEmpty.Visibility = _recLines.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        {
+            var showEmpty = view.Count == 0 && (_recFilter == "extra" || _recLines.Count == 0);
+            RecListEmpty.Visibility = showEmpty ? Visibility.Visible : Visibility.Collapsed;
+            if (showEmpty)
+            {
+                RecListEmpty.Text = _recFilter == "extra"
+                    ? "リストに無い WAV はありません。"
+                    : "リストを選ぶと、ここに行が出ます。";
+            }
+        }
         var lineNow = CurrentLine();
         RecDisplay? match = null;
         foreach (var item in view)
@@ -316,11 +310,10 @@ public sealed partial class MainPage
             RecNextText.Text = "";
             RecFileText.Text = "";
             RecStatusText.Text = "";
-            RecPrefixNote.Visibility = Visibility.Collapsed;
             return;
         }
 
-        var wav = RecNames.WavName(line.Sing, CurrentNote(), _recPrefix);
+        var wav = RecNames.WavName(line.Sing);
         RecSingText.Text = line.Sing;
         RecCommentText.Text = line.Comment;
         RecCommentText.Visibility = line.Comment.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
@@ -328,7 +321,6 @@ public sealed partial class MainPage
         RecNextText.Text = next == null ? "" : "次　" + next.Sing;
         RecFileText.Text = wav;
         RecStatusText.Text = line.NameError ?? RecNames.Status(line, _recWavNames.Contains(wav));
-        RecPrefixNote.Visibility = _recPrefix ? Visibility.Visible : Visibility.Collapsed;
     }
 
     void UpdateRecCaptions()
@@ -343,7 +335,7 @@ public sealed partial class MainPage
             return;
         var idle = !_busy && EditorView.Visibility == Visibility.Visible && _folder != null;
         var line = CurrentLine();
-        var wav = line == null ? "" : RecNames.WavName(line.Sing, CurrentNote(), _recPrefix);
+        var wav = line == null ? "" : RecNames.WavName(line.Sing);
         var ready = idle && line != null && RecNames.CanRecord(line, wav) && (_recCapture?.Running ?? false);
         RecRecordButton.IsEnabled = _recTaking || _recWaiting || ready;
         RecRecordLabel.Text = _recTaking ? "停止" : _recWaiting ? "待機をやめる" : "録音";
@@ -371,22 +363,12 @@ public sealed partial class MainPage
         RebuildRecView();
     }
 
-    void RecPrefix_Toggled(object sender, RoutedEventArgs e)
-    {
-        if (_recApplying || RecPrefixSwitch == null)
-            return;
-        _recPrefix = RecPrefixSwitch.IsOn;
-        SaveRecFolder();
-        RebuildRecView();
-    }
-
     void RecNote_Changed(object sender, SelectionChangedEventArgs e)
     {
         if (_recApplying || RecNoteBox.SelectedItem is not string note)
             return;
         _recSettings.Note = note;
         _recSettings.Save();
-        RebuildRecView();
     }
 
     void RecVolume_Changed(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
@@ -437,7 +419,7 @@ public sealed partial class MainPage
 
     void RecList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (_recSuppress || RecListView.SelectedItem is not RecDisplay display)
+        if (_recSuppress || RecListView.SelectedItem is not RecDisplay display || display.Line == null)
             return;
         for (var i = 0; i < _recLines.Count; i++)
         {
@@ -675,7 +657,7 @@ public sealed partial class MainPage
         {
             var index = (start + step) % _recLines.Count;
             var line = _recLines[index];
-            var wav = RecNames.WavName(line.Sing, CurrentNote(), _recPrefix);
+            var wav = RecNames.WavName(line.Sing);
             if (RecNames.Status(line, _recWavNames.Contains(wav)) != RecNames.Missing)
                 continue;
             _recIndex = index;
@@ -727,7 +709,7 @@ public sealed partial class MainPage
         var line = CurrentLine();
         if (line == null)
             return;
-        var wavName = RecNames.WavName(line.Sing, CurrentNote(), _recPrefix);
+        var wavName = RecNames.WavName(line.Sing);
         if (!RecNames.CanRecord(line, wavName))
             return;
         var path = Path.Combine(_folder, wavName);
@@ -883,7 +865,7 @@ public sealed partial class MainPage
         var line = CurrentLine();
         if (line == null || _folder == null || _recPlayer == null || _recTaking)
             return;
-        var path = Path.Combine(_folder, RecNames.WavName(line.Sing, CurrentNote(), _recPrefix));
+        var path = Path.Combine(_folder, RecNames.WavName(line.Sing));
         if (!File.Exists(path))
             return;
         try
@@ -971,7 +953,6 @@ public sealed partial class MainPage
             {
                 List = list,
                 Guide = _recGuide,
-                PrefixPitch = _recPrefix,
             });
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)

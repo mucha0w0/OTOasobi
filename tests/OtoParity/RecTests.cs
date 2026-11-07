@@ -32,15 +32,22 @@ public class RecTests
     }
 
     [Fact]
-    public void PitchPrefixIsAWindowsNameTheAnalyzerDoesNotRead()
+    public void WavNameIsThePhonemeFile()
     {
-        var wav = RecNames.WavName("あ", "C4", prefixPitch: true);
-        Assert.Equal("C4あ.wav", wav);
+        var wav = RecNames.WavName("あ");
+        Assert.Equal("あ.wav", wav);
         Assert.Null(RecNames.WavError(wav));
         Assert.True(RecNames.CanRecord(new RecLine("あ", "", null), wav));
-        Assert.Equal("あ.wav", RecNames.WavName("あ", "C4", prefixPitch: false));
         Assert.Equal(RecNames.Recorded, RecNames.Status(new RecLine("あ", "", null), exists: true));
         Assert.Equal(RecNames.Invalid, RecNames.Status(new RecLine("a", "", "使えない文字です: a"), exists: false));
+    }
+
+    [Fact]
+    public void OutsideWavsAreFolderFilesMissingFromTheList()
+    {
+        var lines = new[] { new RecLine("あ", "", null), new RecLine("か", "", null) };
+        var extra = RecNames.Outside(["か.WAV", "さ.wav", "あ.wav", "C4あ.wav"], lines);
+        Assert.Equal(["C4あ.wav", "さ.wav"], extra);
     }
 
     [Fact]

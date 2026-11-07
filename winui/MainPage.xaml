@@ -1550,7 +1550,16 @@
                         <StackPanel Padding="12,12,12,8" Spacing="8">
                             <local:InfoNote
                                 Title="録音リスト"
-                                Text="1 行が 1 テイクです。空行と # で始まる行は読み飛ばし、タブの右側はコメントです。文字コードは CP932 と UTF-8 に対応します。フォルダに録音リスト.txt があれば、それを開きます。一度選んだリストは、次からこのメニューに出ます。" />
+                                Text="1 行が 1 テイクです。空行と # で始まる行は読み飛ばし、タブの右側はコメントです。文字コードは CP932 と UTF-8 に対応します。フォルダに録音リスト.txt があれば、それを開きます。一度選んだリストは、次からこのメニューに出ます。リスト外は、リストに無いフォルダ内の WAV です。" />
+                            <ComboBox
+                                x:Name="RecListBox"
+                                MinWidth="0"
+                                HorizontalAlignment="Stretch"
+                                AutomationProperties.Name="録音リスト"
+                                DisplayMemberPath="Label"
+                                MaxDropDownHeight="320"
+                                PlaceholderText="選択しない"
+                                SelectionChanged="RecListBox_Changed" />
                             <TextBlock
                                 x:Name="RecProgress"
                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
@@ -1562,6 +1571,7 @@
                                 CornerRadius="8">
                                 <Grid ColumnSpacing="2">
                                     <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="*" />
@@ -1593,23 +1603,17 @@
                                         GroupName="RecFilter"
                                         Style="{StaticResource SegmentButtonStyle}"
                                         Tag="done" />
+                                    <RadioButton
+                                        x:Name="RecFilterExtra"
+                                        Grid.Column="3"
+                                        AutomationProperties.Name="リストに無い WAV"
+                                        Checked="RecFilter_Checked"
+                                        Content="リスト外"
+                                        GroupName="RecFilter"
+                                        Style="{StaticResource SegmentButtonStyle}"
+                                        Tag="extra" />
                                 </Grid>
                             </Border>
-                            <ToggleSwitch
-                                x:Name="RecPrefixSwitch"
-                                AutomationProperties.Name="ファイル名に音程を付ける"
-                                OffContent="ファイル名に音程を付けない"
-                                OnContent="ファイル名に音程を付ける"
-                                Toggled="RecPrefix_Toggled" />
-                            <ComboBox
-                                x:Name="RecListBox"
-                                MinWidth="0"
-                                HorizontalAlignment="Stretch"
-                                AutomationProperties.Name="録音リスト"
-                                DisplayMemberPath="Label"
-                                MaxDropDownHeight="320"
-                                PlaceholderText="選択しない"
-                                SelectionChanged="RecListBox_Changed" />
                         </StackPanel>
                         <ListView
                             x:Name="RecListView"
@@ -1679,13 +1683,6 @@
                                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                     Style="{StaticResource CaptionTextBlockStyle}" />
                             </Grid>
-                            <TextBlock
-                                x:Name="RecPrefixNote"
-                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                Style="{StaticResource CaptionTextBlockStyle}"
-                                Text="ファイル名の頭に音程が付きます。この名前は、いまの解析では読めません。"
-                                TextWrapping="Wrap"
-                                Visibility="Collapsed" />
                             <Grid ColumnSpacing="8">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />

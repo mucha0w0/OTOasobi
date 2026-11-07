@@ -6,7 +6,7 @@ public sealed record RecLine(string Sing, string Comment, string? NameError);
 
 public sealed class RecDisplay
 {
-    public required RecLine Line { get; init; }
+    public RecLine? Line { get; init; }
 
     public required string Title { get; init; }
 
@@ -46,12 +46,22 @@ static class RecNames
     public const string Recorded = "録音済み";
     public const string Invalid = "使えない文字";
 
-    public static string WavName(string sing, string? note, bool prefixPitch)
+    public static string WavName(string sing) => sing.Trim() + ".wav";
+
+    public static IReadOnlyList<string> Outside(IEnumerable<string> wavNames, IEnumerable<RecLine> lines)
     {
-        var stem = sing.Trim();
-        if (prefixPitch && !string.IsNullOrEmpty(note))
-            stem = note + stem;
-        return stem + ".wav";
+        var listed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var line in lines)
+            listed.Add(WavName(line.Sing));
+        var extra = new List<string>();
+        foreach (var name in wavNames)
+        {
+            if (!listed.Contains(name))
+                extra.Add(name);
+        }
+
+        extra.Sort(StringComparer.OrdinalIgnoreCase);
+        return extra;
     }
 
     public static string Status(RecLine line, bool exists) =>
@@ -136,8 +146,6 @@ sealed class RecFolderFile
     public string? List { get; set; }
 
     public string? Guide { get; set; }
-
-    public bool PrefixPitch { get; set; }
 }
 
 static class RecFolderStore
