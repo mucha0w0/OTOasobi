@@ -11,6 +11,10 @@ export function isQuietLabel(label: string): boolean {
   return label === "無音" || label === "息"
 }
 
+export function isVowelLabel(label: string): boolean {
+  return vowels.has(label)
+}
+
 export function spanCaption(span: Pick<PhoneSpan, "label" | "token">): string {
   if (!span.token || span.token === "_" || span.token === span.label)
     return span.label

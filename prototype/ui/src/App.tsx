@@ -5,7 +5,7 @@ import { EffectsPanel } from "./EffectsPanel"
 import { FileList } from "./FileList"
 import { FrqEditor } from "./FrqEditor"
 import { FrqPanel } from "./FrqPanel"
-import { GraphBand, type BandHandle, type BandKind, type GraphModel } from "./GraphBand"
+import { GraphBand, type BandHandle, type BandKind, type GraphModel, type LiveTune } from "./GraphBand"
 import { connectHost } from "./host"
 import { contains, createDefault, hidePane, setRatio, showPane, type LayoutNode, type PaneBox } from "./layout"
 import { createLiveBus, type LiveBus } from "./live"
@@ -37,7 +37,9 @@ export function App() {
   const spansRef = useRef<PhoneSpan[]>([])
   const noteRef = useRef("")
   const missingRef = useRef(false)
-  const modelRef = useRef<GraphModel>({ picture: null, range: rangeRef.current, marks: [], spans: [], note: "" })
+  const focusRef = useRef(-1)
+  const liveRef = useRef<LiveTune | null>(null)
+  const modelRef = useRef<GraphModel>({ picture: null, range: rangeRef.current, marks: [], spans: [], note: "", focus: -1, live: null })
   const fileNameRef = useRef("")
   const namesRef = useRef<string[]>([])
   const previewTimer = useRef<number | undefined>(undefined)
@@ -112,7 +114,7 @@ export function App() {
   recListRef.current = recList
   recIndexRef.current = recIndex
   advanceRef.current = advance
-  modelRef.current = { picture, range: rangeRef.current, marks: marksRef.current, spans: spansRef.current, note: noteRef.current }
+  modelRef.current = viewModel()
 
   const register = useCallback((handle: BandHandle) => {
     bands.current.add(handle)
@@ -156,6 +158,15 @@ export function App() {
         if (oto?.analyzed && !oto.busy)
           sendRef.current({ type: "oto", op: "write" })
       }
+      if (event.key === "Escape" && focusRef.current >= 0) {
+        const target = event.target
+        if (target instanceof HTMLElement && target.closest("input, textarea, select"))
+          return
+        focusRef.current = -1
+        liveRef.current = null
+        modelRef.current = viewModel()
+        redraw()
+      }
     }
     window.addEventListener("keydown", keys)
     return () => window.removeEventListener("keydown", keys)
@@ -191,9 +202,30 @@ export function App() {
     return () => window.clearTimeout(timer)
   }, [advance, bpm, countIn, guideWhile, note, semitones, speed, volume])
 
+  function viewModel(over: Partial<GraphModel> = {}): GraphModel {
+    return {
+      picture: pictureRef.current,
+      range: rangeRef.current,
+      marks: marksRef.current,
+      spans: spansRef.current,
+      note: noteRef.current,
+      focus: focusRef.current,
+      live: liveRef.current,
+      ...over,
+    }
+  }
+
   function redraw() {
     for (const band of bands.current)
       band.redraw()
+  }
+
+  function setFocus(index: number) {
+    if (focusRef.current === index)
+      return
+    focusRef.current = index
+    modelRef.current = viewModel()
+    redraw()
   }
 
   function sendPreview(range: Range) {
@@ -211,7 +243,7 @@ export function App() {
 
   function onRange(range: Range, commit: boolean) {
     rangeRef.current = range
-    modelRef.current = { picture: pictureRef.current, range, marks: marksRef.current, spans: spansRef.current, note: noteRef.current }
+    modelRef.current = viewModel()
     redraw()
     if (!requestsPreviewAfter(commit ? "pan" : "zoom"))
       return
@@ -250,6 +282,8 @@ export function App() {
           setPicture(null)
           rangeRef.current = { t0: 0, t1: 0 }
           noteRef.current = ""
+          focusRef.current = -1
+          liveRef.current = null
         }
         break
       }
@@ -259,8 +293,11 @@ export function App() {
         noteRef.current = event.missing ? "このファイルは存在しません" : ""
         setFileName(event.name)
         setPicture(null)
+        pictureRef.current = null
         rangeRef.current = { t0: 0, t1: 0 }
-        modelRef.current = { picture: null, range: rangeRef.current, marks: marksRef.current, spans: spansRef.current, note: noteRef.current }
+        focusRef.current = -1
+        liveRef.current = null
+        modelRef.current = viewModel()
         window.clearTimeout(previewTimer.current)
         redraw()
         syncRecIndex(event.name)
@@ -269,8 +306,9 @@ export function App() {
         missingRef.current = false
         noteRef.current = ""
         setPicture(event)
+        pictureRef.current = event
         rangeRef.current = { t0: event.waveT0, t1: event.waveT1 }
-        modelRef.current = { picture: event, range: rangeRef.current, marks: marksRef.current, spans: spansRef.current, note: "" }
+        modelRef.current = viewModel()
         break
       case "capture":
         bus.show(event)
@@ -326,7 +364,9 @@ export function App() {
       case "oto":
         marksRef.current = event.marks
         spansRef.current = event.spans
-        modelRef.current = { ...modelRef.current, marks: event.marks, spans: event.spans }
+        if (focusRef.current >= 0 && !event.marks.some((mark) => mark.index === focusRef.current))
+          focusRef.current = -1
+        modelRef.current = viewModel()
         setOto(event)
         for (const band of bands.current)
           band.redraw()
@@ -595,7 +635,13 @@ export function App() {
                     register={register}
                     onRange={onRange}
                     onFileStep={stepFile}
-                    onTune={id === "otoBand" ? (index, point, time) => sendRef.current({ type: "oto", op: "tune", file: fileNameRef.current, index, point, time }) : undefined}
+                    onTune={(index, point, time) => sendRef.current({ type: "oto", op: "tune", file: fileNameRef.current, index, point, time })}
+                    onFocus={setFocus}
+                    onLive={(live) => {
+                      liveRef.current = live
+                      modelRef.current = viewModel()
+                      redraw()
+                    }}
                   />
                 )
               if (id === "rec")

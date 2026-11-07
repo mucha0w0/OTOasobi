@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { isQuietLabel, spanBoundaries, spanCaption, spanFill } from "./spans"
+import { isQuietLabel, isVowelLabel, spanBoundaries, spanCaption, spanFill } from "./spans"
 
 describe("音素のラベル", () => {
   it("トークンがあるときは音素名と並べる", () => {
@@ -13,6 +13,8 @@ describe("音素のラベル", () => {
     expect(isQuietLabel("無音")).toBe(true)
     expect(isQuietLabel("息")).toBe(true)
     expect(spanFill("無音", true)).toBeNull()
+    expect(isVowelLabel("a")).toBe(true)
+    expect(isVowelLabel("k")).toBe(false)
     expect(spanFill("a", true)).toContain("15, 157, 142")
     expect(spanFill("k", false)).toContain("217, 119, 6")
   })
