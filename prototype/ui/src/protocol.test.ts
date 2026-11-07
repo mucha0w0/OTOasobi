@@ -117,5 +117,20 @@ describe("ホストのメッセージ", () => {
       name: "あ.wav",
       missing: true,
     })
+    expect(parseHostEvent({
+      type: "bank",
+      generation: 2,
+      name: "音",
+      encoding: "utf-8",
+      profile: [{ label: "年齢", value: "16" }],
+      locales: [{ code: "ja", name: "音" }],
+    })).toMatchObject({ type: "bank", generation: 2, name: "音", encoding: "utf-8" })
+    expect(parseHostEvent({
+      type: "effects",
+      preset: "標準",
+      presets: ["標準"],
+      gains: [0, 0, 0, 0, 0, 0, 0, 0],
+      noiseNote: "ノイズサプレッサーは、選んだ 0.50秒の無音で抑えます。",
+    })).toMatchObject({ type: "effects", preset: "標準", noiseNote: "ノイズサプレッサーは、選んだ 0.50秒の無音で抑えます。" })
   })
 })

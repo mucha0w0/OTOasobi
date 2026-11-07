@@ -25,6 +25,9 @@ sealed class ProbeSession : IDisposable
     readonly ProbeOto _oto = new();
     readonly ProbeFrq _frq = new();
     readonly ProbeRec _rec = new();
+    readonly ProbeBank _bank = new();
+    readonly ProbeEffects _effects = new();
+    bool _applying;
     readonly DispatcherQueueTimer _otoSave;
     int _analyzeGen;
     string? _folder;
@@ -172,6 +175,15 @@ sealed class ProbeSession : IDisposable
                 case "frq":
                     HandleFrq(root);
                     break;
+                case "bank":
+                    HandleBank(root);
+                    break;
+                case "bankPick":
+                    _ = PickBankAsync(Text(root, "which"));
+                    break;
+                case "effects":
+                    HandleEffects(root);
+                    break;
                 case "watchMic":
                     _ = WatchMicAsync(root.TryGetProperty("on", out var watchValue) && watchValue.ValueKind == JsonValueKind.True);
                     break;
@@ -221,6 +233,7 @@ sealed class ProbeSession : IDisposable
 
         PostCapture();
         PostRecSettings();
+        Post(_effects.Snapshot());
     }
 
     async Task OpenWavAsync()
@@ -252,6 +265,7 @@ sealed class ProbeSession : IDisposable
         {
             _oto.Open(_folder);
             _rec.OpenFolder(_folder);
+            OpenVoice(_folder);
             PostOto();
             PostRec();
             PostFrqCount();
@@ -294,6 +308,7 @@ sealed class ProbeSession : IDisposable
             Post(new { type = "files", folder = _folder, names = WavNames(_folder) });
             _oto.Open(folder);
             _rec.OpenFolder(folder);
+            OpenVoice(folder);
             PostOto();
             PostRec();
             PostFrqCount();
@@ -1118,6 +1133,173 @@ sealed class ProbeSession : IDisposable
     }
 
     void PostStatus(string message) => Post(new { type = "status", message });
+
+    void OpenVoice(string folder)
+    {
+        _bank.Open(folder);
+        _effects.SetFolder(folder);
+        _ = PostBankAsync();
+        Post(_effects.Snapshot());
+    }
+
+    void HandleBank(JsonElement root)
+    {
+        var error = _bank.Save(root, (int)Math.Round(Number(root, "generation")));
+        if (error != null)
+            Post(new { type = "failed", message = error });
+    }
+
+    async Task PickBankAsync(string? which)
+    {
+        if (_disposed)
+            return;
+        if (string.IsNullOrEmpty(_folder))
+        {
+            Post(new { type = "failed", message = "フォルダを開いてください。" });
+            return;
+        }
+
+        var picker = new FileOpenPicker();
+        InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(_window));
+        picker.SuggestedStartLocation = PickerLocationId.PicturesLibrary;
+        foreach (var ext in new[] { ".png", ".jpg", ".jpeg", ".bmp", ".gif", ".tif", ".tiff", ".webp", ".heic", ".ico" })
+            picker.FileTypeFilter.Add(ext);
+        Windows.Storage.StorageFile? file;
+        try
+        {
+            file = await picker.PickSingleFileAsync();
+        }
+        catch (Exception ex)
+        {
+            Post(new { type = "failed", message = ex.Message });
+            return;
+        }
+
+        if (file == null || _disposed || string.IsNullOrEmpty(_folder))
+            return;
+        var generation = _bank.Generation;
+        string? error;
+        try
+        {
+            error = which == "portrait"
+                ? await _bank.SavePortraitAsync(file.Path)
+                : await _bank.SaveIconAsync(file.Path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or ArgumentException)
+        {
+            error = ex.Message;
+        }
+
+        if (error != null)
+            Post(new { type = "failed", message = error });
+        else
+            Post(new { type = "notice", message = which == "portrait" ? "立ち絵を設定しました。" : "100×100 の icon.bmp にしました。" });
+        if (generation == _bank.Generation)
+            await PostBankAsync();
+    }
+
+    async Task PostBankAsync()
+    {
+        var generation = _bank.Generation;
+        object snapshot;
+        try
+        {
+            snapshot = await _bank.SnapshotAsync();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Post(new { type = "failed", message = ex.Message });
+            return;
+        }
+
+        if (!_disposed && generation == _bank.Generation)
+            Post(snapshot);
+    }
+
+    void HandleEffects(JsonElement root)
+    {
+        switch (Text(root, "op"))
+        {
+            case "set":
+                _effects.Set(root);
+                break;
+            case "preset":
+                _effects.ApplyPreset(Text(root, "name"));
+                Post(_effects.Snapshot());
+                break;
+            case "noise":
+                var error = _effects.SetNoise(Text(root, "file"), Number(root, "start"), Number(root, "end"));
+                if (error != null)
+                    Post(new { type = "failed", message = error });
+                Post(_effects.Snapshot());
+                break;
+            case "apply":
+                _ = ApplyEffectsAsync();
+                break;
+        }
+    }
+
+    async Task ApplyEffectsAsync()
+    {
+        if (string.IsNullOrEmpty(_folder))
+        {
+            Post(new { type = "failed", message = "フォルダを開いてください。" });
+            return;
+        }
+
+        if (_effects.NeedsNoiseRange)
+        {
+            Post(new { type = "failed", message = "ノイズサプレッサーがオンです。原音から無音の範囲を選んでから、適用してください。" });
+            return;
+        }
+
+        if (_applying || _oto.IsBusy)
+        {
+            Post(new { type = "failed", message = "解析が終わるまで待ってください。" });
+            return;
+        }
+
+        var folder = _folder;
+        _applying = true;
+        PostStatus("エフェクトを適用しています");
+        try
+        {
+            await Task.Run(() => OriginalLibrary.Apply(folder, _effects.Chain, (name, index, count) =>
+            {
+                _queue.TryEnqueue(() =>
+                {
+                    if (!_disposed && _folder == folder)
+                        PostStatus(name + "　" + index + " / " + count);
+                });
+            }));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
+        {
+            _applying = false;
+            if (_folder == folder)
+            {
+                PostStatus("");
+                Post(new { type = "failed", message = "適用できませんでした。" + ex.Message });
+            }
+
+            return;
+        }
+
+        _applying = false;
+        if (_disposed || _folder != folder)
+            return;
+        var cache = Path.Combine(folder, OtoSaveStore.CacheFileName);
+        try
+        {
+            if (File.Exists(cache))
+                File.Delete(cache);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+        }
+
+        BeginAnalyze(true);
+    }
 
     void PostOto()
     {

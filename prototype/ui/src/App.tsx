@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
+import { BankPanel } from "./BankPanel"
 import { Dock } from "./Dock"
+import { EffectsPanel } from "./EffectsPanel"
 import { FileList } from "./FileList"
 import { FrqEditor } from "./FrqEditor"
 import { FrqPanel } from "./FrqPanel"
@@ -10,7 +12,7 @@ import { createLiveBus, type LiveBus } from "./live"
 import { MenuBar } from "./MenuBar"
 import { OtoTable } from "./OtoTable"
 import { OtoIni, OtoSettings } from "./OtoPanels"
-import { requestsPreviewAfter, type DeviceInfo, type FrqViewEvent, type HostEvent, type OtoMark, type OtoState, type PageCommand, type PreviewEvent, type RecListEvent, type SavedEvent } from "./protocol"
+import { requestsPreviewAfter, type BankEvent, type DeviceInfo, type EffectsEvent, type FrqViewEvent, type HostEvent, type OtoMark, type OtoState, type PageCommand, type PreviewEvent, type RecListEvent, type SavedEvent } from "./protocol"
 import { RecListPanel, RecScriptPanel } from "./RecPanels"
 import { GuidePanel, MicPanel, RecPanel } from "./SidePanels"
 import type { PhoneSpan } from "./spans"
@@ -85,6 +87,8 @@ export function App() {
   const [recIndex, setRecIndex] = useState<number | null>(null)
   const [recFilter, setRecFilter] = useState<"all" | "todo" | "done" | "extra">("all")
   const [overwriteWav, setOverwriteWav] = useState<string | null>(null)
+  const [bank, setBank] = useState<BankEvent | null>(null)
+  const [effects, setEffects] = useState<EffectsEvent | null>(null)
   const layoutTouched = useRef(false)
   const recTouched = useRef(false)
   const recListRef = useRef<RecListEvent | null>(null)
@@ -306,6 +310,12 @@ export function App() {
           const next = event.lines.findIndex((line) => sameName(line.wav, previous.wav))
           return next >= 0 ? next : null
         })
+        break
+      case "bank":
+        setBank(event)
+        break
+      case "effects":
+        setEffects(event)
         break
       case "recSettings":
         if (recTouched.current)
@@ -588,6 +598,10 @@ export function App() {
                     send={(command) => sendRef.current(command)}
                   />
                 )
+              if (id === "source")
+                return <EffectsPanel effects={effects} busy={Boolean(oto?.busy)} send={(command) => sendRef.current(command)} />
+              if (id === "bank")
+                return <BankPanel bank={bank} send={(command) => sendRef.current(command)} />
               if (id === "oto")
                 return <OtoSettings oto={oto} send={(command) => sendRef.current(command)} />
               if (id === "otoIni")

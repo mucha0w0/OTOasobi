@@ -21,6 +21,12 @@ export type PageCommand =
   | { type: "frq"; op: "stroke"; points: { frame: number; midi: number; unvoiced: boolean }[] }
   | { type: "frq"; op: "octave"; frames: number[]; octaves: number }
   | { type: "frq"; op: "clear"; frames: number[] }
+  | { type: "bank"; generation: number; name: string; image: string; sample: string; author: string; web: string; profile: BankRow[]; extra: string; readme: string; voice: string; version: string; locales: BankLocale[]; portrait: string; opacity: number; height: number }
+  | { type: "bankPick"; which: "icon" | "portrait" }
+  | { type: "effects"; op: "set"; noiseEnabled: boolean; noiseReduction: number; highpassEnabled: boolean; highpassHz: number; highpassSlope: number; eqEnabled: boolean; gains: number[]; compressorEnabled: boolean; compressorRatio: number; compressorReduction: number; normalizeEnabled: boolean; normalizeTarget: number }
+  | { type: "effects"; op: "preset"; name: string }
+  | { type: "effects"; op: "noise"; file: string; start: number; end: number }
+  | { type: "effects"; op: "apply" }
   | { type: "watchMic"; on: boolean }
   | { type: "close" }
   | { type: "caption"; theme: "light" | "dark" }
@@ -85,6 +91,8 @@ export type HostEvent =
   | FrqViewEvent
   | RecListEvent
   | RecSettingsEvent
+  | BankEvent
+  | EffectsEvent
   | PreviewEvent
   | CaptureEvent
   | { type: "guide"; playing: boolean }
@@ -131,6 +139,58 @@ export type RecSettingsEvent = {
   bpm: number
   guideWhile: boolean
   advance: boolean
+}
+
+export type BankRow = { label: string; value: string; fullwidth: boolean }
+
+export type BankLocale = { code: string; name: string }
+
+export type BankEvent = {
+  type: "bank"
+  generation: number
+  name: string
+  image: string
+  sample: string
+  samples: string[]
+  author: string
+  web: string
+  profile: BankRow[]
+  extra: string
+  readme: string
+  encoding: string
+  voice: string
+  version: string
+  locales: BankLocale[]
+  languages: { code: string; label: string }[]
+  portrait: string
+  opacity: number
+  height: number
+  icon: string | null
+  portraitImage: string | null
+}
+
+export type EffectsEvent = {
+  type: "effects"
+  preset: string
+  presets: string[]
+  noiseEnabled: boolean
+  noiseReduction: number
+  noiseFiles: string[]
+  noiseFile: string
+  noiseStart: number
+  noiseEnd: number
+  noiseReady: boolean
+  highpassEnabled: boolean
+  highpassHz: number
+  highpassSlope: number
+  eqEnabled: boolean
+  gains: number[]
+  compressorEnabled: boolean
+  compressorRatio: number
+  compressorReduction: number
+  normalizeEnabled: boolean
+  normalizeTarget: number
+  noiseNote: string | null
 }
 
 export type OtoMark = {
@@ -265,6 +325,10 @@ export function parseHostEvent(value: unknown): HostEvent | null {
         guideWhile: value.guideWhile === true,
         advance: value.advance === true,
       }
+    case "bank":
+      return parseBank(value)
+    case "effects":
+      return parseEffects(value)
     case "preview":
       if (!Array.isArray(value.lo) || !Array.isArray(value.hi) || typeof value.png !== "string")
         return null
@@ -398,6 +462,86 @@ function parseOto(value: Record<string, unknown>): OtoState | null {
         })
       : [],
     spans: parseSpans(value.spans),
+  }
+}
+
+function parseBank(value: Record<string, unknown>): BankEvent | null {
+  if (typeof value.name !== "string" || typeof value.encoding !== "string")
+    return null
+  const profile = Array.isArray(value.profile)
+    ? value.profile.flatMap((item) => {
+        if (!isRecord(item))
+          return []
+        return [{
+          label: typeof item.label === "string" ? item.label : "",
+          value: typeof item.value === "string" ? item.value : "",
+          fullwidth: item.fullwidth !== false,
+        }]
+      })
+    : [{ label: "", value: "", fullwidth: true }]
+  const locales = Array.isArray(value.locales)
+    ? value.locales.flatMap((item) => {
+        if (!isRecord(item))
+          return []
+        return [{ code: typeof item.code === "string" ? item.code : "", name: typeof item.name === "string" ? item.name : "" }]
+      })
+    : [{ code: "", name: "" }]
+  return {
+    type: "bank",
+    generation: numberOr(value.generation, 0),
+    name: value.name,
+    image: typeof value.image === "string" ? value.image : "",
+    sample: typeof value.sample === "string" ? value.sample : "",
+    samples: strings(value.samples),
+    author: typeof value.author === "string" ? value.author : "",
+    web: typeof value.web === "string" ? value.web : "",
+    profile: profile.length > 0 ? profile : [{ label: "", value: "", fullwidth: true }],
+    extra: typeof value.extra === "string" ? value.extra : "",
+    readme: typeof value.readme === "string" ? value.readme : "",
+    encoding: value.encoding,
+    voice: typeof value.voice === "string" ? value.voice : "",
+    version: typeof value.version === "string" ? value.version : "",
+    locales: locales.length > 0 ? locales : [{ code: "", name: "" }],
+    languages: Array.isArray(value.languages)
+      ? value.languages.flatMap((item) => {
+          if (!isRecord(item) || typeof item.code !== "string" || typeof item.label !== "string")
+            return []
+          return [{ code: item.code, label: item.label }]
+        })
+      : [],
+    portrait: typeof value.portrait === "string" ? value.portrait : "",
+    opacity: numberOr(value.opacity, 0.67),
+    height: numberOr(value.height, 0),
+    icon: typeof value.icon === "string" ? value.icon : null,
+    portraitImage: typeof value.portraitImage === "string" ? value.portraitImage : null,
+  }
+}
+
+function parseEffects(value: Record<string, unknown>): EffectsEvent | null {
+  if (!Array.isArray(value.gains) || !Array.isArray(value.presets))
+    return null
+  return {
+    type: "effects",
+    preset: typeof value.preset === "string" ? value.preset : "カスタム",
+    presets: strings(value.presets),
+    noiseEnabled: value.noiseEnabled === true,
+    noiseReduction: numberOr(value.noiseReduction, 8),
+    noiseFiles: strings(value.noiseFiles),
+    noiseFile: typeof value.noiseFile === "string" ? value.noiseFile : "",
+    noiseStart: numberOr(value.noiseStart, 0),
+    noiseEnd: numberOr(value.noiseEnd, 0),
+    noiseReady: value.noiseReady === true,
+    highpassEnabled: value.highpassEnabled === true,
+    highpassHz: numberOr(value.highpassHz, 80),
+    highpassSlope: numberOr(value.highpassSlope, 12),
+    eqEnabled: value.eqEnabled === true,
+    gains: value.gains.filter((item): item is number => typeof item === "number").slice(0, 8),
+    compressorEnabled: value.compressorEnabled === true,
+    compressorRatio: numberOr(value.compressorRatio, 2.5),
+    compressorReduction: numberOr(value.compressorReduction, 3),
+    normalizeEnabled: value.normalizeEnabled === true,
+    normalizeTarget: numberOr(value.normalizeTarget, -1),
+    noiseNote: typeof value.noiseNote === "string" ? value.noiseNote : null,
   }
 }
 

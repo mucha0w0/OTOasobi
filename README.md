@@ -285,7 +285,7 @@ dotnet run --project winui
 | パス | 役割 |
 | --- | --- |
 | `winui/` | OTOasobi の画面（WinUI 3） |
-| `prototype/` | 移行を判断するための試作。WinUI のホストに React を表示する。配置は `probe-layout.json`。音素ラベル、.frq、録音リストまでページから操作できる。製品の画面は確認が終わるまで残す |
+| `prototype/` | 移行を判断するための試作。WinUI のホストに React を表示する。配置は `probe-layout.json`。音素ラベル、.frq、録音リスト、音源設定、エフェクターまでページから操作できる。製品の画面は確認が終わるまで残す |
 | `.github/workflows/release.yml` | タグ `v*` で Setup と高精度エンジンをリリースする |
 | `scripts/stage_release.ps1` | 音響用 Python、エンジン zip、`engine.json` を作る |
 | `otoasobi/worker.py` | 画面から呼ばれる解析プロセス |
