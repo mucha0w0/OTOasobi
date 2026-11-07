@@ -43,6 +43,17 @@ public class RecTests
     }
 
     [Fact]
+    public void WavOfFindsTheListRowAndOutsideFiles()
+    {
+        var line = new RecLine("あ", "", null);
+        Assert.Equal("あ.wav", RecNames.WavOf(line, "あ.wav　未録音"));
+        Assert.Equal("さ.wav", RecNames.WavOf(null, "さ.wav"));
+        Assert.Equal("", RecNames.WavOf(null, "メモ"));
+        Assert.Equal(1, RecNames.IndexOfWav([line, new RecLine("か", "", null)], "か.WAV"));
+        Assert.Equal(-1, RecNames.IndexOfWav([line], "さ.wav"));
+    }
+
+    [Fact]
     public void OutsideWavsAreFolderFilesMissingFromTheList()
     {
         var lines = new[] { new RecLine("あ", "", null), new RecLine("か", "", null) };

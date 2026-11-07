@@ -48,6 +48,25 @@ static class RecNames
 
     public static string WavName(string sing) => sing.Trim() + ".wav";
 
+    // 行は音素.wav。リスト外の行は Detail がファイル名。
+    public static string WavOf(RecLine? line, string detail)
+    {
+        if (line != null)
+            return WavName(line.Sing);
+        return detail.EndsWith(".wav", StringComparison.OrdinalIgnoreCase) ? detail : "";
+    }
+
+    public static int IndexOfWav(IReadOnlyList<RecLine> lines, string wavName)
+    {
+        for (var i = 0; i < lines.Count; i++)
+        {
+            if (string.Equals(WavName(lines[i].Sing), wavName, StringComparison.OrdinalIgnoreCase))
+                return i;
+        }
+
+        return -1;
+    }
+
     public static IReadOnlyList<string> Outside(IEnumerable<string> wavNames, IEnumerable<RecLine> lines)
     {
         var listed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

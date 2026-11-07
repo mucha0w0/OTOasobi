@@ -376,7 +376,22 @@ public sealed partial class SpanEditor : UserControl
         _otoWave = null;
         _otoWaveLine = null;
         _otoZero = null;
+        _labelGate.Visibility = Visibility.Collapsed;
+        _otoView.ChildrenOverlay.IsHitTestVisible = false;
+        _specView.Notice.Visibility = Visibility.Collapsed;
+        _loudView.Notice.Text = "音量データがありません";
+        _loudView.Notice.Visibility = Visibility.Collapsed;
         UseCursor(_cursorArrow);
+    }
+
+    public void ShowMissingFile()
+    {
+        Clear();
+        const string message = "このファイルは存在しません";
+        _specView.Notice.Text = message;
+        _loudView.Notice.Text = message;
+        _specView.Notice.Visibility = Visibility.Visible;
+        _loudView.Notice.Visibility = Visibility.Visible;
     }
 
     public void SetFile(
@@ -914,6 +929,8 @@ public sealed partial class SpanEditor : UserControl
     {
         if (_file == null)
             return;
+        _specView.Notice.Visibility = Visibility.Collapsed;
+        _loudView.Notice.Text = "音量データがありません";
         _loudView.Notice.Visibility = HasLoudness ? Visibility.Collapsed : Visibility.Visible;
         ArrangeWave();
         ArrangeSpans();

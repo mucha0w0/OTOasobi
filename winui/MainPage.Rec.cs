@@ -499,16 +499,138 @@ public sealed partial class MainPage
 
     void RecList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (_recSuppress || RecListView.SelectedItem is not RecDisplay display || display.Line == null)
+        if (_recSuppress || RecListView.SelectedItem is not RecDisplay display)
             return;
-        for (var i = 0; i < _recLines.Count; i++)
+        if (display.Line == null)
+            _recIndex = -1;
+        else
         {
-            if (!ReferenceEquals(_recLines[i], display.Line))
+            for (var i = 0; i < _recLines.Count; i++)
+            {
+                if (!ReferenceEquals(_recLines[i], display.Line))
+                    continue;
+                _recIndex = i;
+                break;
+            }
+        }
+
+        UpdateBooth();
+        UpdateRecButtons();
+        FollowRecSelection();
+    }
+
+    void FollowRecSelection()
+    {
+        if (_fileSync || RecListView == null)
+            return;
+        if (RecListView.SelectedItem is RecDisplay display)
+        {
+            ShowRecWav(RecNames.WavOf(display.Line, display.Detail));
+            return;
+        }
+
+        var line = CurrentLine();
+        if (line != null)
+            ShowRecWav(RecNames.WavName(line.Sing));
+    }
+
+    void ShowRecWav(string wav)
+    {
+        if (wav.Length == 0 || _folder == null)
+            return;
+        if (!WavOnDisk(wav))
+        {
+            _fileSync = true;
+            FileList.SelectedItem = null;
+            _fileSync = false;
+            ShowMissingGraphs();
+            return;
+        }
+
+        WavFile? file = null;
+        foreach (var item in _files)
+        {
+            if (!item.Name.Equals(wav, StringComparison.OrdinalIgnoreCase))
                 continue;
-            _recIndex = i;
+            file = item;
             break;
         }
 
+        if (file != null)
+        {
+            var same = ReferenceEquals(FileList.SelectedItem, file);
+            _fileSync = true;
+            if (!same)
+            {
+                FileList.SelectedItem = file;
+                FileList.ScrollIntoView(file);
+            }
+
+            _fileSync = false;
+            if (!same || (ReferenceEquals(file, _shownFile) && Editor.HasContent))
+                return;
+            ShowFrqFor(file);
+            _ = LoadPreviewAsync(file);
+            return;
+        }
+
+        _fileSync = true;
+        FileList.SelectedItem = null;
+        _fileSync = false;
+        var loose = new WavFile { Name = wav };
+        ShowFrqFor(loose);
+        _ = LoadPreviewAsync(loose);
+    }
+
+    bool WavOnDisk(string wav)
+    {
+        if (_folder == null || wav.Length == 0 || wav != Path.GetFileName(wav))
+            return false;
+        try
+        {
+            return File.Exists(Path.Combine(_folder, wav));
+        }
+        catch (Exception ex) when (ex is ArgumentException or IOException or NotSupportedException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    void ShowMissingGraphs()
+    {
+        _viewportTimer?.Stop();
+        _previewGen++;
+        _appliedKey = "";
+        _shownFile = null;
+        ShowFrqFor(null);
+        Editor.ShowMissingFile();
+    }
+
+    void SelectRecForWav(string? wav)
+    {
+        if (RecListView == null)
+            return;
+        RecDisplay? match = null;
+        var index = -1;
+        if (!string.IsNullOrEmpty(wav) && RecListView.ItemsSource is IEnumerable<RecDisplay> items)
+        {
+            index = RecNames.IndexOfWav(_recLines, wav);
+            foreach (var item in items)
+            {
+                var name = RecNames.WavOf(item.Line, item.Detail);
+                if (name.Length == 0 || !name.Equals(wav, StringComparison.OrdinalIgnoreCase))
+                    continue;
+                match = item;
+                break;
+            }
+        }
+
+        _recIndex = index;
+        _recSuppress = true;
+        RecListView.SelectedItem = match;
+        if (match != null)
+            RecListView.ScrollIntoView(match);
+        _recSuppress = false;
         UpdateBooth();
         UpdateRecButtons();
     }
@@ -818,6 +940,8 @@ public sealed partial class MainPage
             _recSuppress = false;
         }
 
+        FollowRecSelection();
+
         UpdateRecButtons();
     }
 
@@ -947,8 +1071,11 @@ public sealed partial class MainPage
         RefreshRecDisk();
         EndMicTake();
         ShowNotice("録音を保存しました", name + " を書きました。解析するとファイルリストに入ります。");
+        var recorded = _recIndex;
         if (advance && _recSettings.AutoAdvance)
             SelectNextMissing();
+        if (_recIndex == recorded)
+            FollowRecSelection();
         UpdateCommands();
     }
 

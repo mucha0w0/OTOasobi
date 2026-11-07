@@ -24,6 +24,7 @@ public sealed partial class MainPage : Page
     bool _busy;
     bool _wrote;
     bool _suppressSelection;
+    bool _fileSync;
     int _previewGen;
     int _saveGen;
     IDisposable? _previewStream;
@@ -894,6 +895,21 @@ public sealed partial class MainPage : Page
         if (FileList.SelectedItem is not WavFile file)
         {
             ShowFrqFor(null);
+            if (!_fileSync)
+            {
+                SelectRecForWav(null);
+                Editor.Clear();
+                _shownFile = null;
+            }
+
+            return;
+        }
+
+        if (!_fileSync)
+            SelectRecForWav(file.Name);
+        if (!WavOnDisk(file.Name))
+        {
+            ShowMissingGraphs();
             return;
         }
 
@@ -1122,7 +1138,10 @@ public sealed partial class MainPage : Page
 
     async Task LoadViewportAsync()
     {
-        if (_folder == null || FileList.SelectedItem is not WavFile file || !Editor.HasContent)
+        if (_folder == null || !Editor.HasContent)
+            return;
+        var file = ShownWav();
+        if (file == null)
             return;
         var query = Editor.ViewportQuery();
         var key = ViewportKey(file.Name, query.T0, query.T1, query.Columns, query.Rows);
@@ -1134,10 +1153,10 @@ public sealed partial class MainPage : Page
             _analysis ??= new AnalysisClient();
             var preview = await _analysis.PreviewAsync(
                 Path.Combine(_folder, file.Name), query.T0, query.T1, query.Columns, query.Rows);
-            if (gen != _previewGen || FileList.SelectedItem != file || !Editor.HasContent || !preview.Ok)
+            if (gen != _previewGen || !ReferenceEquals(ShownWav(), file) || !Editor.HasContent || !preview.Ok)
                 return;
             var image = await DecodePngAsync(preview.Png);
-            if (gen != _previewGen || FileList.SelectedItem != file || !Editor.HasContent)
+            if (gen != _previewGen || !ReferenceEquals(ShownWav(), file) || !Editor.HasContent)
                 return;
             var latest = Editor.ViewportQuery();
             if (ViewportKey(file.Name, latest.T0, latest.T1, latest.Columns, latest.Rows) != key)
@@ -1160,6 +1179,8 @@ public sealed partial class MainPage : Page
                 _appliedKey = "";
         }
     }
+
+    WavFile? ShownWav() => FileList.SelectedItem as WavFile ?? _shownFile;
 
     static string ViewportKey(string name, double t0, double t1, int columns, int rows)
     {
