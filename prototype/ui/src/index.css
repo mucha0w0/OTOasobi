@@ -1,0 +1,40 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: light;
+  --bg: #f4f4f5;
+  --text: #1f2937;
+  --muted: #4b5563;
+  --panel: #ffffff;
+  --line: #d4d4d8;
+  --canvas: #f4f4f5;
+  --wave: #202024;
+  --boundary: #b45309;
+  --accent: #0f766e;
+  --on-accent: #ffffff;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #161616;
+  --text: #f9fafb;
+  --muted: #d1d5db;
+  --panel: #222226;
+  --line: #3f3f46;
+  --canvas: #161616;
+  --wave: #ececec;
+  --boundary: #fbbf24;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Segoe UI", sans-serif;
+}

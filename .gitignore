@@ -12,4 +12,5 @@ engine-dist/
 .vscode/
 [Bb]in/
 [Oo]bj/
+node_modules/
 samples/
