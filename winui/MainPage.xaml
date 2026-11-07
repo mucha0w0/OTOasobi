@@ -1667,57 +1667,11 @@
                                 x:Name="RecNextText"
                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                 TextWrapping="Wrap" />
-                            <Grid ColumnSpacing="8">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <TextBlock
-                                    x:Name="RecFileText"
-                                    VerticalAlignment="Center"
-                                    Style="{StaticResource CaptionTextBlockStyle}"
-                                    TextTrimming="CharacterEllipsis" />
-                                <TextBlock
-                                    x:Name="RecStatusText"
-                                    Grid.Column="1"
-                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                    Style="{StaticResource CaptionTextBlockStyle}" />
-                            </Grid>
-                            <Grid ColumnSpacing="8">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <Grid
-                                    x:Name="RecMeterTrack"
-                                    Height="10"
-                                    VerticalAlignment="Center"
-                                    Background="{ThemeResource ControlFillColorDefaultBrush}"
-                                    CornerRadius="5"
-                                    SizeChanged="RecMeter_SizeChanged">
-                                    <Border
-                                        x:Name="RecMeterZone"
-                                        HorizontalAlignment="Left"
-                                        Background="{ThemeResource AccentFillColorTertiaryBrush}"
-                                        CornerRadius="5"
-                                        Opacity="0.45" />
-                                    <Border
-                                        x:Name="RecMeterFill"
-                                        Width="0"
-                                        HorizontalAlignment="Left"
-                                        Background="{ThemeResource AccentFillColorDefaultBrush}"
-                                        CornerRadius="5" />
-                                </Grid>
-                                <TextBlock
-                                    x:Name="RecLevelText"
-                                    Grid.Column="1"
-                                    MinWidth="52"
-                                    VerticalAlignment="Center"
-                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                    Style="{StaticResource CaptionTextBlockStyle}"
-                                    TextAlignment="Right"
-                                    ToolTipService.ToolTip="右端が 0 dB です。薄い帯は -12 dB から -6 dB です。" />
-                            </Grid>
+                            <TextBlock
+                                x:Name="RecStatusText"
+                                HorizontalAlignment="Right"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Style="{StaticResource CaptionTextBlockStyle}" />
                             <TextBlock
                                 x:Name="RecDeviceError"
                                 Foreground="{ThemeResource SystemFillColorCriticalBrush}"

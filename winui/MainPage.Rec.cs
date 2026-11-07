@@ -1,7 +1,6 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
-using Microsoft.UI.Xaml.Media;
 using Windows.Storage.Pickers;
 using Windows.System;
 using WinRT.Interop;
@@ -15,8 +14,6 @@ public sealed partial class MainPage
     RecAppSettings _recSettings = new();
     RecCapture? _recCapture;
     PreviewPlayer? _recPlayer;
-    Microsoft.UI.Dispatching.DispatcherQueueTimer? _recMeterTimer;
-    Brush? _recAccentBrush;
     string? _recListPath;
     bool _recListNone;
     string? _recGuide;
@@ -31,8 +28,6 @@ public sealed partial class MainPage
     bool _recAction;
     bool _recWaiting;
     bool _recTaking;
-    float _recMeter;
-    DateTime _recClipUntil;
     string? _recInputError;
     string? _recOutputError;
     TaskCompletionSource<bool>? _recWait;
@@ -48,7 +43,6 @@ public sealed partial class MainPage
             _recPlayer.SetOutput(_recSettings.OutputDeviceId);
             _recPlayer.Failed += (_, message) => ShowNotice("再生できませんでした", message);
         }
-        _recAccentBrush = RecMeterFill.Background;
         _recApplying = true;
         foreach (var note in RecTone.Notes)
             RecNoteBox.Items.Add(note);
@@ -60,14 +54,6 @@ public sealed partial class MainPage
         RecGuideWhileSwitch.IsOn = _recSettings.GuideWhileRecording;
         RecAutoSwitch.IsOn = _recSettings.AutoAdvance;
         _recApplying = false;
-        if (queue != null)
-        {
-            _recMeterTimer = queue.CreateTimer();
-            _recMeterTimer.Interval = TimeSpan.FromMilliseconds(33);
-            _recMeterTimer.IsRepeating = true;
-            _recMeterTimer.Tick += (_, _) => RecMeterTick();
-            _recMeterTimer.Start();
-        }
 
         PreviewKeyDown += Rec_PreviewKeyDown;
         RecAppSettings.DevicesChanged += OnRecDevicesChanged;
@@ -75,7 +61,6 @@ public sealed partial class MainPage
         {
             RecAppSettings.DevicesChanged -= OnRecDevicesChanged;
             RecCommitTake(false);
-            _recMeterTimer?.Stop();
             _recPlayer?.Dispose();
             _recCapture?.Dispose();
             _recCapture = null;
@@ -314,7 +299,6 @@ public sealed partial class MainPage
             RecCommentText.Text = "";
             RecCommentText.Visibility = Visibility.Collapsed;
             RecNextText.Text = "";
-            RecFileText.Text = "";
             RecStatusText.Text = "";
             return;
         }
@@ -325,7 +309,6 @@ public sealed partial class MainPage
         RecCommentText.Visibility = line.Comment.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
         var next = _recIndex + 1 < _recLines.Count ? _recLines[_recIndex + 1] : null;
         RecNextText.Text = next == null ? "" : "次　" + next.Sing;
-        RecFileText.Text = wav;
         RecStatusText.Text = line.NameError ?? RecNames.Status(line, _recWavNames.Contains(wav));
     }
 
@@ -1024,43 +1007,6 @@ public sealed partial class MainPage
         {
             ShowNotice("録音の設定を保存できませんでした", ex.Message);
         }
-    }
-
-    void RecMeter_SizeChanged(object sender, SizeChangedEventArgs e)
-    {
-        var width = RecMeterTrack.ActualWidth;
-        RecMeterZone.Margin = new Thickness(width * 0.75, 0, 0, 0);
-        RecMeterZone.Width = Math.Max(0, width * 0.125);
-    }
-
-    void RecMeterTick()
-    {
-        if (RecMeterTrack == null || RecMeterTrack.ActualWidth <= 0)
-            return;
-        var live = _recCapture?.Running ?? false;
-        var peak = live ? _recCapture!.Peak : 0;
-        _recMeter = Math.Max(peak, _recMeter * 0.85f);
-        if (!live && _recMeter < 0.001f)
-            _recMeter = 0;
-        var db = _recMeter < 0.0001f ? -96 : 20 * Math.Log10(_recMeter);
-        var width = RecMeterTrack.ActualWidth;
-        var position = Math.Clamp((db + 48) / 48, 0, 1);
-        RecMeterFill.Width = width * position;
-        if (peak >= 0.94f)
-            _recClipUntil = DateTime.UtcNow.AddSeconds(1);
-        var clipped = DateTime.UtcNow < _recClipUntil;
-        if (clipped)
-        {
-            var critical = AppearanceTheme.Brush(RecMeterTrack.ActualTheme, "SystemFillColorCriticalBrush");
-            if (critical != null)
-                RecMeterFill.Background = critical;
-        }
-        else if (_recAccentBrush != null)
-        {
-            RecMeterFill.Background = _recAccentBrush;
-        }
-
-        RecLevelText.Text = db <= -60 ? "" : $"{db:0.0} dB";
     }
 
     void Rec_PreviewKeyDown(object sender, KeyRoutedEventArgs e)
