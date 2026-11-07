@@ -146,6 +146,9 @@ sealed class RecFolderFile
     public string? List { get; set; }
 
     public string? Guide { get; set; }
+
+    // null は未選択。WAV が選ばれていればファイル、そうでなければ自分で設定する。
+    public bool? GuideManual { get; set; }
 }
 
 static class RecFolderStore
@@ -155,6 +158,15 @@ static class RecFolderStore
     public static bool ListIsCleared(string? list) =>
         list != null && list.Trim().Length == 0;
 
+    public static bool IsGuideWav(string? path) =>
+        !string.IsNullOrWhiteSpace(path) && path.EndsWith(".wav", StringComparison.OrdinalIgnoreCase);
+
+    public static string GuideTextPath(string wavPath) =>
+        Path.ChangeExtension(wavPath, ".txt");
+
+    public static bool UseManualGuide(bool? saved, string? guide) =>
+        saved ?? !IsGuideWav(guide);
+
     public static RecFolderFile Load(string folder) =>
         JsonFiles.Read<RecFolderFile>(Path.Combine(folder, FileName)) ?? new RecFolderFile();
 
@@ -162,13 +174,22 @@ static class RecFolderStore
         JsonFiles.Write(Path.Combine(folder, FileName), file);
 }
 
-// 一度選んだガイド音源フォルダ。音源フォルダではなく、この PC に残す。
+// 一度選んだガイド BGM の WAV。音源フォルダではなく、この PC に残す。
 static class RecGuideHistory
 {
     public static string FilePath { get; } = Path.Combine(AppPaths.DataRoot, "recording-guides.json");
 
-    public static IReadOnlyList<string> Load() =>
-        RecListHistory.Merge(null, JsonFiles.Read<List<string>>(FilePath));
+    public static IReadOnlyList<string> Load()
+    {
+        var wavs = new List<string>();
+        foreach (var path in RecListHistory.Merge(null, JsonFiles.Read<List<string>>(FilePath)))
+        {
+            if (RecFolderStore.IsGuideWav(path))
+                wavs.Add(path);
+        }
+
+        return wavs;
+    }
 
     public static void Remember(string path)
     {

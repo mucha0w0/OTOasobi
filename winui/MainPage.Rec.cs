@@ -20,6 +20,7 @@ public sealed partial class MainPage
     string? _recListPath;
     bool _recListNone;
     string? _recGuide;
+    bool _recGuideManual = true;
     string? _recTakeFolder;
     string? _recTakeName;
     int _recIndex = -1;
@@ -154,14 +155,18 @@ public sealed partial class MainPage
         _recLines = [];
         _recIndex = -1;
         _recGuide = null;
+        _recGuideManual = true;
         _recListPath = null;
         _recListNone = false;
         if (_folder != null)
         {
             var stored = RecFolderStore.Load(_folder);
-            _recGuide = string.IsNullOrWhiteSpace(stored.Guide) ? null : stored.Guide;
-            if (!string.IsNullOrEmpty(_recGuide))
-                RecGuideHistory.Remember(_recGuide);
+            _recGuideManual = RecFolderStore.UseManualGuide(stored.GuideManual, stored.Guide);
+            if (RecFolderStore.IsGuideWav(stored.Guide) && stored.Guide != null)
+            {
+                _recGuide = stored.Guide;
+                RecGuideHistory.Remember(stored.Guide);
+            }
             _recListNone = RecFolderStore.ListIsCleared(stored.List);
             if (_recListNone)
                 _recListPath = null;
@@ -188,6 +193,7 @@ public sealed partial class MainPage
         }
 
         RefreshRecDisk();
+        ApplyGuideKind();
         UpdateRecCaptions();
     }
 
@@ -475,6 +481,36 @@ public sealed partial class MainPage
         UseRecGuide(choice.Path);
     }
 
+    void RecGuideKind_Checked(object sender, RoutedEventArgs e)
+    {
+        if (_recApplying || sender is not RadioButton radio || radio.IsChecked != true)
+            return;
+        var manual = ReferenceEquals(radio, RecGuideManualRadio);
+        if (manual == _recGuideManual)
+        {
+            ApplyGuideKind();
+            return;
+        }
+
+        _recGuideManual = manual;
+        ApplyGuideKind();
+        SaveRecFolder();
+    }
+
+    void ApplyGuideKind()
+    {
+        if (RecGuideFilePanel != null)
+            RecGuideFilePanel.Visibility = _recGuideManual ? Visibility.Collapsed : Visibility.Visible;
+        if (RecGuideManualPanel != null)
+            RecGuideManualPanel.Visibility = _recGuideManual ? Visibility.Visible : Visibility.Collapsed;
+        if (RecGuideFileRadio == null || RecGuideManualRadio == null)
+            return;
+        _recApplying = true;
+        RecGuideFileRadio.IsChecked = !_recGuideManual;
+        RecGuideManualRadio.IsChecked = _recGuideManual;
+        _recApplying = false;
+    }
+
     void RecGuide_Click(object sender, RoutedEventArgs e) => _ = PlayGuideAsync(loop: false);
 
     void RecPlay_Click(object sender, RoutedEventArgs e) => _ = PlayTakeAsync();
@@ -530,7 +566,7 @@ public sealed partial class MainPage
         FillRecChoiceMenu(RecListBox, _recListPath, RecListHistory.Load(), "ファイルから選ぶ");
 
     void FillRecGuideMenu() =>
-        FillRecChoiceMenu(RecGuideBox, _recGuide, RecGuideHistory.Load(), "フォルダから選ぶ");
+        FillRecChoiceMenu(RecGuideBox, _recGuide, RecGuideHistory.Load(), "ファイルから選ぶ");
 
     void FillRecChoiceMenu(ComboBox? box, string? current, IReadOnlyList<string> history, string browse)
     {
@@ -587,9 +623,25 @@ public sealed partial class MainPage
 
     void UseRecGuide(string path)
     {
-        if (_folder != null && SameRecPath(path, _folder))
+        if (!RecFolderStore.IsGuideWav(path))
         {
-            ShowNotice("ガイド音源は別のフォルダです", "録音先と同じフォルダは選べません。");
+            ShowNotice("ガイドは WAV を選んでください", "同じ名前の txt が対になります。");
+            FillRecGuideMenu();
+            return;
+        }
+
+        string? directory = null;
+        try
+        {
+            directory = Path.GetDirectoryName(Path.GetFullPath(path));
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+        }
+
+        if (_folder != null && directory != null && SameRecPath(directory, _folder))
+        {
+            ShowNotice("ガイドは別の場所の WAV にしてください", "録音先のフォルダにあるファイルは選べません。");
             FillRecGuideMenu();
             return;
         }
@@ -599,6 +651,9 @@ public sealed partial class MainPage
         SaveRecFolder();
         UpdateRecCaptions();
         UpdateRecButtons();
+        var text = RecFolderStore.GuideTextPath(path);
+        if (!File.Exists(text))
+            ShowNotice("同じ名前の txt がありません", Path.GetFileName(text));
     }
 
     async Task RecOpenListAsync()
@@ -630,14 +685,17 @@ public sealed partial class MainPage
             return;
         }
 
-        var path = await WavPicker.PickAsync(WindowNative.GetWindowHandle(App.MainWindow));
-        if (path == null || _folder == null)
+        var picker = new FileOpenPicker();
+        InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(App.MainWindow));
+        picker.FileTypeFilter.Add(".wav");
+        var file = await picker.PickSingleFileAsync();
+        if (file == null || _folder == null)
         {
             FillRecGuideMenu();
             return;
         }
 
-        UseRecGuide(path);
+        UseRecGuide(file.Path);
     }
 
     void StepRec(int delta)
@@ -733,7 +791,7 @@ public sealed partial class MainPage
         _recAction = true;
         try
         {
-            if (_recSettings.CountIn)
+            if (_recGuideManual && _recSettings.CountIn)
             {
                 _recWaiting = true;
                 UpdateRecButtons();
@@ -752,7 +810,7 @@ public sealed partial class MainPage
             _recCapture.BeginTake();
             _recTaking = true;
             UpdateRecButtons();
-            if (_recSettings.GuideWhileRecording)
+            if (_recGuideManual && _recSettings.GuideWhileRecording)
                 _ = PlayGuideAsync(loop: true);
         }
         finally
@@ -817,16 +875,22 @@ public sealed partial class MainPage
             return;
         if (!loop)
             _recPlayer.Stop();
-        var guide = GuideFile(line);
+        var guide = _recGuideManual ? null : GuideWav();
         byte[] wav;
-        if (guide != null)
+        if (!_recGuideManual)
         {
+            if (guide == null)
+            {
+                ShowNotice("ガイドのファイルを選んでください", "WAV を選ぶと、同じ名前の txt が対になります。");
+                return;
+            }
+
             try
             {
                 var info = new FileInfo(guide);
                 if (info.Length > 32 * 1024 * 1024)
                 {
-                    ShowNotice("ガイド音源が大きすぎます", Path.GetFileName(guide));
+                    ShowNotice("ガイドが大きすぎます", Path.GetFileName(guide));
                     return;
                 }
 
@@ -834,7 +898,7 @@ public sealed partial class MainPage
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                ShowNotice("ガイド音源を読めませんでした", ex.Message);
+                ShowNotice("ガイドを読めませんでした", ex.Message);
                 return;
             }
         }
@@ -852,12 +916,12 @@ public sealed partial class MainPage
         await _recPlayer.PlayAsync(wav, loop);
     }
 
-    string? GuideFile(RecLine line)
+    string? GuideWav()
     {
-        if (string.IsNullOrEmpty(_recGuide))
+        var path = _recGuide;
+        if (!RecFolderStore.IsGuideWav(path) || path == null || !File.Exists(path))
             return null;
-        var path = Path.Combine(_recGuide, line.Sing.Trim() + ".wav");
-        return File.Exists(path) ? path : null;
+        return path;
     }
 
     async Task PlayTakeAsync()
@@ -953,6 +1017,7 @@ public sealed partial class MainPage
             {
                 List = list,
                 Guide = _recGuide,
+                GuideManual = _recGuideManual,
             });
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)

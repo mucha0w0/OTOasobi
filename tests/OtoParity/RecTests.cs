@@ -92,6 +92,19 @@ public class RecTests
     }
 
     [Fact]
+    public void GuideBgmIsAWavAndTheSameNamedText()
+    {
+        Assert.False(RecFolderStore.IsGuideWav(null));
+        Assert.False(RecFolderStore.IsGuideWav(@"C:\guide"));
+        Assert.True(RecFolderStore.IsGuideWav(@"C:\guide\song.WAV"));
+        Assert.Equal(@"C:\guide\song.txt", RecFolderStore.GuideTextPath(@"C:\guide\song.WAV"));
+        Assert.True(RecFolderStore.UseManualGuide(null, null));
+        Assert.False(RecFolderStore.UseManualGuide(null, @"C:\guide\song.wav"));
+        Assert.False(RecFolderStore.UseManualGuide(false, null));
+        Assert.True(RecFolderStore.UseManualGuide(true, @"C:\guide\song.wav"));
+    }
+
+    [Fact]
     public void RecentListsKeepTheNewestAndDropDuplicates()
     {
         var older = RecListHistory.Merge(@"C:\voice\あ.txt", null);
