@@ -39,6 +39,8 @@ sealed class RecTrace : UserControl
 
     public RecTrace()
     {
+        HorizontalAlignment = HorizontalAlignment.Stretch;
+        VerticalAlignment = VerticalAlignment.Stretch;
         _canvas.Children.Add(_zero);
         _canvas.Children.Add(_wave);
         _canvas.Children.Add(_playhead);
@@ -61,6 +63,14 @@ sealed class RecTrace : UserControl
             Draw();
         };
         ApplyTheme();
+    }
+
+    protected override Size MeasureOverride(Size availableSize)
+    {
+        var desired = base.MeasureOverride(availableSize);
+        var width = double.IsInfinity(availableSize.Width) ? desired.Width : availableSize.Width;
+        var height = double.IsInfinity(availableSize.Height) ? desired.Height : availableSize.Height;
+        return new Size(Math.Max(0, width), Math.Max(0, height));
     }
 
     public void SetColumnDrag(bool dragging)
@@ -149,7 +159,10 @@ sealed class RecTrace : UserControl
     {
         var theme = AppearanceTheme.Resolve(this);
         _frame.Background = AppearanceTheme.Brush(theme, "SolidBackgroundFillColorBaseBrush") ?? _frame.Background;
-        _wave.Fill = AppearanceTheme.Brush(theme, "TextFillColorPrimaryBrush");
+        var ink = AppearanceTheme.Brush(theme, "TextFillColorPrimaryBrush");
+        _wave.Fill = ink;
+        _wave.Stroke = ink;
+        _wave.StrokeThickness = 1;
         _zero.Fill = AppearanceTheme.Brush(theme, "TextFillColorSecondaryBrush") ?? _zero.Fill;
         _playhead.Fill = AppearanceTheme.Brush(theme, "AccentFillColorDefaultBrush") ?? _playhead.Fill;
     }
@@ -158,8 +171,8 @@ sealed class RecTrace : UserControl
     {
         if (_columnDrag)
             return;
-        var width = _frame.ActualWidth;
-        var height = _frame.ActualHeight;
+        var width = ActualWidth;
+        var height = ActualHeight;
         _canvas.Width = width;
         _canvas.Height = height;
         if (width < 2 || height < 2 || _sampleCount <= 0 || (_buckets ? _min.Length == 0 : _live.Length == 0))
@@ -236,8 +249,8 @@ sealed class RecTrace : UserControl
 
     void PlacePlayhead()
     {
-        var width = _frame.ActualWidth;
-        var height = _frame.ActualHeight;
+        var width = ActualWidth;
+        var height = ActualHeight;
         if (_playheadSeconds is not double seconds || _sampleCount <= 0 || _rate <= 0 || width < 2 || height < 2)
         {
             _playhead.Visibility = Visibility.Collapsed;

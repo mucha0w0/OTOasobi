@@ -13,6 +13,7 @@ public sealed partial class MainPage
     string? _micShownPath;
     string? _micListenError;
     bool _micPlaying;
+    bool _micLevelLive;
     double _micHold;
     long _micHoldAt;
 
@@ -54,6 +55,7 @@ public sealed partial class MainPage
     DispatcherQueueTimer CreateMicTimer()
     {
         var timer = DispatcherQueue.CreateTimer();
+        timer.IsRepeating = true;
         timer.Interval = TimeSpan.FromMilliseconds(33);
         timer.Tick += (_, _) => MicTick();
         return timer;
@@ -66,6 +68,7 @@ public sealed partial class MainPage
         var live = _micShownPath == null;
         if (_recCapture.Running)
         {
+            _micLevelLive = true;
             if (live)
             {
                 var (samples, rate) = _recCapture.CopyLive();
@@ -74,8 +77,9 @@ public sealed partial class MainPage
 
             ShowMicLevel(_recCapture.Peak);
         }
-        else
+        else if (_micLevelLive)
         {
+            _micLevelLive = false;
             if (live)
                 _micTrace.Clear();
             ShowMicLevel(0, stopped: true);
