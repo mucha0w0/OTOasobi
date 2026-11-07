@@ -163,7 +163,7 @@ public sealed partial class MainPage : Page
         LoudHost.Children.Add(Editor.LoudSurface);
         OtoBandHost.Children.Add(Editor.OtoSurface);
         // ページが読み込まれる前は Parent が空のままなので、ここから外してからドックへ入れる。
-        foreach (var pane in new UIElement[] { FilePane, WavePane, SpecHost, LoudHost, OtoBandHost, SourcePane, OtoPane, OtoParams, OtoIniPane, FrqPane, FrqEditPane, BankPane, RecListPane, RecPane, MicPane })
+        foreach (var pane in new UIElement[] { FilePane, WavePane, SpecHost, LoudHost, OtoBandHost, SourcePane, OtoPane, OtoParams, OtoIniPane, FrqPane, FrqEditPane, BankPane, RecListPane, RecScriptPane, RecPane, GuidePane, MicPane })
             PaneHolder.Children.Remove(pane);
         Dock.Mount(
         [
@@ -180,7 +180,9 @@ public sealed partial class MainPage : Page
             ("frqEdit", "frqエディター", FrqEditPane),
             ("bank", "音源の各種設定", BankPane),
             ("recList", "録音リスト", RecListPane),
+            ("recScript", "録音スクリプト", RecScriptPane),
             ("rec", "録音", RecPane),
+            ("guide", "ガイドBGM設定", GuidePane),
             ("mic", "マイクモニター", MicPane),
         ]);
         Dock.PaneResizing += (_, dragging) =>
@@ -226,7 +228,9 @@ public sealed partial class MainPage : Page
         ShowFrqEditItem.IsChecked = Dock.Contains("frqEdit");
         ShowBankItem.IsChecked = Dock.Contains("bank");
         ShowRecListItem.IsChecked = Dock.Contains("recList");
+        ShowRecScriptItem.IsChecked = Dock.Contains("recScript");
         ShowRecItem.IsChecked = Dock.Contains("rec");
+        ShowGuideItem.IsChecked = Dock.Contains("guide");
         ShowMicItem.IsChecked = Dock.Contains("mic");
         _paneMenuWrite = false;
     }

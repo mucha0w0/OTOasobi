@@ -146,8 +146,12 @@ public class RecTests
         Assert.True(EditorLayout.IsValid(recording));
         Assert.True(EditorLayout.Contains(recording, "rec"));
         Assert.True(EditorLayout.Contains(recording, "recList"));
+        Assert.True(EditorLayout.Contains(recording, "recScript"));
+        Assert.True(EditorLayout.Contains(recording, "guide"));
         Assert.True(EditorLayout.Contains(recording, "mic"));
         Assert.False(EditorLayout.Contains(EditorLayout.CreateDefault(), "rec"));
+        Assert.False(EditorLayout.Contains(EditorLayout.CreateDefault(), "recScript"));
+        Assert.False(EditorLayout.Contains(EditorLayout.CreateDefault(), "guide"));
         Assert.False(EditorLayout.Contains(EditorLayout.CreateDefault(), "mic"));
         Assert.False(EditorLayout.Contains(recording, "oto"));
         var template = LayoutTemplate.CreateRecording();

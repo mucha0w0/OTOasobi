@@ -327,7 +327,9 @@ public sealed partial class MainPage
             RecCommentText.Text = "";
             RecCommentText.Visibility = Visibility.Collapsed;
             RecNextText.Text = "";
+            RecNextText.Visibility = Visibility.Collapsed;
             RecStatusText.Text = "";
+            RecStatusHost.Visibility = Visibility.Collapsed;
             RefreshMicTake();
             return;
         }
@@ -338,7 +340,9 @@ public sealed partial class MainPage
         RecCommentText.Visibility = line.Comment.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
         var next = _recIndex + 1 < _recLines.Count ? _recLines[_recIndex + 1] : null;
         RecNextText.Text = next == null ? "" : "次　" + next.Sing;
+        RecNextText.Visibility = next == null ? Visibility.Collapsed : Visibility.Visible;
         RecStatusText.Text = line.NameError ?? RecNames.Status(line, _recWavNames.Contains(wav));
+        RecStatusHost.Visibility = Visibility.Visible;
         RefreshMicTake();
     }
 
