@@ -146,11 +146,44 @@ public class RecTests
         Assert.True(EditorLayout.IsValid(recording));
         Assert.True(EditorLayout.Contains(recording, "rec"));
         Assert.True(EditorLayout.Contains(recording, "recList"));
+        Assert.True(EditorLayout.Contains(recording, "mic"));
         Assert.False(EditorLayout.Contains(EditorLayout.CreateDefault(), "rec"));
+        Assert.False(EditorLayout.Contains(EditorLayout.CreateDefault(), "mic"));
         Assert.False(EditorLayout.Contains(recording, "oto"));
         var template = LayoutTemplate.CreateRecording();
         Assert.Equal("録音", template.Name);
         Assert.True(template.BuiltIn);
         Assert.True(template.Matches(recording, false));
+    }
+
+    [Fact]
+    public void LiveBufferKeepsTheNewestWindow()
+    {
+        var buffer = new RecLiveBuffer();
+        buffer.Write([1, 2], 1);
+        var (early, rate) = buffer.Snapshot();
+        Assert.Equal(1, rate);
+        Assert.Equal([0f, 1, 2], early);
+
+        buffer.Write([3, 4], 1);
+        var (full, _) = buffer.Snapshot();
+        Assert.Equal([2f, 3, 4], full);
+    }
+
+    [Fact]
+    public void PeakTrackFlushesEveryBucket()
+    {
+        var track = new RecPeakTrack();
+        var samples = new float[RecPeakTrack.Bucket + 1];
+        Array.Fill(samples, 0.25f);
+        samples[^1] = -0.5f;
+        track.Append(samples);
+        var (min, max) = track.Snapshot();
+        Assert.Equal(RecPeakTrack.Bucket + 1, track.Samples);
+        Assert.Equal(2, min.Length);
+        Assert.Equal(0.25f, min[0]);
+        Assert.Equal(0.25f, max[0]);
+        Assert.Equal(-0.5f, min[1]);
+        Assert.Equal(-0.5f, max[1]);
     }
 }

@@ -163,7 +163,7 @@ public sealed partial class MainPage : Page
         LoudHost.Children.Add(Editor.LoudSurface);
         OtoBandHost.Children.Add(Editor.OtoSurface);
         // ページが読み込まれる前は Parent が空のままなので、ここから外してからドックへ入れる。
-        foreach (var pane in new UIElement[] { FilePane, WavePane, SpecHost, LoudHost, OtoBandHost, SourcePane, OtoPane, OtoParams, OtoIniPane, FrqPane, FrqEditPane, BankPane, RecListPane, RecPane })
+        foreach (var pane in new UIElement[] { FilePane, WavePane, SpecHost, LoudHost, OtoBandHost, SourcePane, OtoPane, OtoParams, OtoIniPane, FrqPane, FrqEditPane, BankPane, RecListPane, RecPane, MicPane })
             PaneHolder.Children.Remove(pane);
         Dock.Mount(
         [
@@ -181,12 +181,15 @@ public sealed partial class MainPage : Page
             ("bank", "音源の各種設定", BankPane),
             ("recList", "録音リスト", RecListPane),
             ("rec", "録音", RecPane),
+            ("mic", "マイクモニター", MicPane),
         ]);
         Dock.PaneResizing += (_, dragging) =>
         {
             Editor.SetColumnDrag(dragging);
             Effects.SetColumnDrag(dragging);
             FrqRoll.SetColumnDrag(dragging);
+            _micLive?.SetColumnDrag(dragging);
+            _micTake?.SetColumnDrag(dragging);
         };
             Dock.LayoutChanged += (_, _) =>
             {
@@ -225,6 +228,7 @@ public sealed partial class MainPage : Page
         ShowBankItem.IsChecked = Dock.Contains("bank");
         ShowRecListItem.IsChecked = Dock.Contains("recList");
         ShowRecItem.IsChecked = Dock.Contains("rec");
+        ShowMicItem.IsChecked = Dock.Contains("mic");
         _paneMenuWrite = false;
     }
 
@@ -1693,10 +1697,7 @@ public sealed partial class MainPage : Page
         ErrorView.Visibility = view == "error" ? Visibility.Visible : Visibility.Collapsed;
         BusyRing.IsActive = view == "busy";
         UpdateCommands();
-        if (view == "editor")
-            RecSyncMonitor();
-        else if (!_recTaking && !_recWaiting)
-            _recCapture?.Stop();
+        RecSyncMonitor();
     }
 
     void UpdateCommands()

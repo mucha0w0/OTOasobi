@@ -54,7 +54,7 @@ static class EditorLayout
 {
     public const double MinPane = 160;
 
-    public static readonly string[] PaneIds = ["file", "wave", "spec", "loud", "otoBand", "source", "oto", "otoParams", "otoIni", "frq", "frqEdit", "bank", "recList", "rec"];
+    public static readonly string[] PaneIds = ["file", "wave", "spec", "loud", "otoBand", "source", "oto", "otoParams", "otoIni", "frq", "frqEdit", "bank", "recList", "rec", "mic"];
 
     // 1540px 幅でファイル約 280、oto推定設定約 320。グラフの高さ比は、以前の 1 枚キャンバスの帯に合わせる。
     public static LayoutNode CreateDefault() =>
@@ -72,15 +72,17 @@ static class EditorLayout
                     Leaf("oto"),
                     Leaf("otoIni"))));
 
-    // 録音の作業配置。初期配置には入れない。左が台本、右上がブース、下がファイルと波形。
+    // 録音の作業配置。初期配置には入れない。左が台本、右がブース、マイクモニター、ファイルと波形。
     public static LayoutNode CreateRecording() =>
-        H(0.32,
+        H(0.28,
             Leaf("recList"),
-            V(0.64,
+            V(0.34,
                 Leaf("rec"),
-                H(0.36,
-                    Leaf("file"),
-                    Leaf("wave"))));
+                V(0.46,
+                    Leaf("mic"),
+                    H(0.36,
+                        Leaf("file"),
+                        Leaf("wave")))));
 
     public static LayoutNode? Clone(LayoutNode? node)
     {

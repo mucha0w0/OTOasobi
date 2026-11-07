@@ -38,6 +38,11 @@ sealed class PreviewPlayer : IDisposable
         set => _player.Volume = Math.Clamp(value, 0, 1);
     }
 
+    public bool IsPlaying => _live;
+
+    public double PositionSeconds =>
+        _live ? _player.PlaybackSession.Position.TotalSeconds : 0;
+
     public void SetOutput(string? deviceId) =>
         _outputId = string.IsNullOrWhiteSpace(deviceId) ? null : deviceId;
 

@@ -61,10 +61,13 @@ public sealed partial class MainPage
         {
             RecAppSettings.DevicesChanged -= OnRecDevicesChanged;
             RecCommitTake(false);
+            _micTimer?.Stop();
+            _micPlayer?.Dispose();
             _recPlayer?.Dispose();
             _recCapture?.Dispose();
             _recCapture = null;
         };
+        WireMic();
         _ = ApplyRecOutputAsync();
         RecSyncMonitor();
     }
@@ -75,28 +78,40 @@ public sealed partial class MainPage
         _recSettings.DeviceId = fresh.DeviceId;
         _recSettings.OutputDeviceId = fresh.OutputDeviceId;
         _recPlayer?.SetOutput(_recSettings.OutputDeviceId);
+        _micPlayer?.SetOutput(_recSettings.OutputDeviceId);
         _ = ApplyRecOutputAsync();
         if (!_recTaking && !_recWaiting)
             _ = EnsureCaptureAsync();
+        _ = ApplyMicListenAsync();
     }
+
+    bool RecMonitorWanted() =>
+        EditorView.Visibility == Visibility.Visible && (Dock.Contains("rec") || Dock.Contains("mic"));
 
     void RecSyncMonitor()
     {
         if (_recCapture == null)
             return;
-        if (Dock.Contains("rec") && EditorView.Visibility == Visibility.Visible)
+        if (RecMonitorWanted())
             _ = EnsureCaptureAsync();
         else if (!_recTaking && !_recWaiting)
             _recCapture.Stop();
+        MicSync();
     }
 
     async Task EnsureCaptureAsync()
     {
-        if (_recCapture == null || !Dock.Contains("rec") || EditorView.Visibility != Visibility.Visible)
+        if (_recCapture == null || !RecMonitorWanted())
             return;
         try
         {
-            await _recCapture.StartAsync(_recSettings.DeviceId);
+            await _recCapture.StartAsync(_recSettings.DeviceId, _recSettings.OutputDeviceId);
+            if (!RecMonitorWanted() && !_recTaking && !_recWaiting)
+            {
+                _recCapture.Stop();
+                return;
+            }
+
             _recInputError = null;
         }
         catch (Exception ex)
@@ -106,22 +121,28 @@ public sealed partial class MainPage
 
         ShowRecDeviceError();
         UpdateRecButtons();
+        await ApplyMicListenAsync();
+        MicSync();
     }
 
     async Task ApplyRecOutputAsync()
     {
-        if (_recPlayer == null)
-            return;
-        try
+        var failed = false;
+        foreach (var player in new[] { _recPlayer, _micPlayer })
         {
-            await _recPlayer.ApplyOutputAsync();
-            _recOutputError = null;
-        }
-        catch (Exception)
-        {
-            _recOutputError = "出力デバイスを開けませんでした。";
+            if (player == null)
+                continue;
+            try
+            {
+                await player.ApplyOutputAsync();
+            }
+            catch (Exception)
+            {
+                failed = true;
+            }
         }
 
+        _recOutputError = failed ? "出力デバイスを開けませんでした。" : null;
         ShowRecDeviceError();
     }
 
@@ -131,6 +152,13 @@ public sealed partial class MainPage
             return;
         RecDeviceError.Text = _recInputError ?? "";
         RecDeviceError.Visibility = string.IsNullOrEmpty(_recInputError) ? Visibility.Collapsed : Visibility.Visible;
+        if (MicDeviceError != null)
+        {
+            var monitor = string.Join(" ", new[] { _recInputError, _recOutputError, _micListenError }.Where(text => !string.IsNullOrEmpty(text)));
+            MicDeviceError.Text = monitor;
+            MicDeviceError.Visibility = monitor.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
+        }
+
         var message = string.Join(" ", new[] { _recInputError, _recOutputError }.Where(text => !string.IsNullOrEmpty(text)));
         RecAppSettings.ReportCapture(message.Length == 0 ? null : message);
     }
@@ -300,6 +328,7 @@ public sealed partial class MainPage
             RecCommentText.Visibility = Visibility.Collapsed;
             RecNextText.Text = "";
             RecStatusText.Text = "";
+            RefreshMicTake();
             return;
         }
 
@@ -310,6 +339,7 @@ public sealed partial class MainPage
         var next = _recIndex + 1 < _recLines.Count ? _recLines[_recIndex + 1] : null;
         RecNextText.Text = next == null ? "" : "次　" + next.Sing;
         RecStatusText.Text = line.NameError ?? RecNames.Status(line, _recWavNames.Contains(wav));
+        RefreshMicTake();
     }
 
     void UpdateRecCaptions()
@@ -330,7 +360,14 @@ public sealed partial class MainPage
         RecRecordLabel.Text = _recTaking ? "停止" : _recWaiting ? "待機をやめる" : "録音";
         var browsing = idle && !_recTaking && !_recWaiting;
         RecGuideButton.IsEnabled = browsing && line != null;
-        RecPlayButton.IsEnabled = browsing && line != null && wav.Length > 0 && _recWavNames.Contains(wav);
+        var canHear = browsing && line != null && wav.Length > 0 && _recWavNames.Contains(wav);
+        RecPlayButton.IsEnabled = canHear;
+        if (MicPlayButton != null)
+        {
+            MicPlayButton.IsEnabled = canHear || _micPlaying;
+            MicPlayLabel.Text = _micPlaying ? "停止" : "テイクを聴く";
+            MicListenSwitch.IsEnabled = idle && (_recCapture?.Running ?? false);
+        }
         RecPrevButton.IsEnabled = browsing && _recIndex > 0;
         RecNextButton.IsEnabled = browsing && _recIndex >= 0 && _recIndex < _recLines.Count - 1;
         RecMissingButton.IsEnabled = browsing && _recLines.Count > 0;
@@ -777,6 +814,7 @@ public sealed partial class MainPage
             if (_recGuideManual && _recSettings.CountIn)
             {
                 _recWaiting = true;
+                StopMicPlayback();
                 UpdateRecButtons();
                 var clicks = PreviewWav.Encode(RecTone.CountIn(_recSettings.Bpm, RecTone.TargetRate), 1, RecTone.TargetRate);
                 var played = await PlayAndWaitAsync(clicks);
@@ -792,6 +830,7 @@ public sealed partial class MainPage
             _recTakeName = wavName;
             _recCapture.BeginTake();
             _recTaking = true;
+            BeginMicTake();
             UpdateRecButtons();
             if (_recGuideManual && _recSettings.GuideWhileRecording)
                 _ = PlayGuideAsync(loop: true);
@@ -813,6 +852,7 @@ public sealed partial class MainPage
         var (samples, channels, rate) = _recCapture.EndTake();
         if (string.IsNullOrEmpty(folder) || string.IsNullOrEmpty(name))
         {
+            EndMicTake();
             UpdateRecButtons();
             return;
         }
@@ -821,6 +861,7 @@ public sealed partial class MainPage
         if (mono.Length == 0)
         {
             ShowNotice("音が入りませんでした", "マイクの入力を確認して、もう一度録音してください。");
+            EndMicTake();
             UpdateRecButtons();
             return;
         }
@@ -838,13 +879,19 @@ public sealed partial class MainPage
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             ShowNotice("録音を保存できませんでした", ex.Message);
+            EndMicTake();
             UpdateRecButtons();
             return;
         }
 
         if (!string.Equals(_folder, folder, StringComparison.OrdinalIgnoreCase))
+        {
+            EndMicTake();
             return;
+        }
+
         RefreshRecDisk();
+        EndMicTake();
         ShowNotice("録音を保存しました", name + " を書きました。解析するとファイルリストに入ります。");
         if (advance && _recSettings.AutoAdvance)
             SelectNextMissing();
