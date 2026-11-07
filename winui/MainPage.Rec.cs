@@ -365,7 +365,9 @@ public sealed partial class MainPage
         if (MicPlayButton != null)
         {
             MicPlayButton.IsEnabled = canHear || _micPlaying;
-            MicPlayLabel.Text = _micPlaying ? "停止" : "テイクを聴く";
+            MicPlayButton.Visibility = canHear || _micPlaying ? Visibility.Visible : Visibility.Collapsed;
+            MicPlayIcon.Symbol = _micPlaying ? Symbol.Stop : Symbol.Play;
+            ToolTipService.SetToolTip(MicPlayButton, _micPlaying ? "停止" : "テイクを聴く");
             MicListenSwitch.IsEnabled = idle && (_recCapture?.Running ?? false);
         }
         RecPrevButton.IsEnabled = browsing && _recIndex > 0;

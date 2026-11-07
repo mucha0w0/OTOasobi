@@ -87,14 +87,13 @@ public sealed partial class MainPage
 
     void ShowMicLevel(float peak, bool stopped = false)
     {
-        if (MicLevelTrack == null || MicLevelFill == null || MicLevelHold == null || MicLevelText == null)
+        if (MicLevelTrack == null || MicLevelFill == null || MicLevelHold == null)
             return;
         if (stopped)
         {
             _micHold = 0;
             MicLevelFill.Height = 0;
             MicLevelHold.Visibility = Visibility.Collapsed;
-            MicLevelText.Text = "停止中";
             return;
         }
 
@@ -117,7 +116,6 @@ public sealed partial class MainPage
         MicLevelFill.Background = AppearanceTheme.Brush(AppearanceTheme.Resolve(this), key) ?? MicLevelFill.Background;
         MicLevelHold.Margin = new Thickness(3, 0, 3, Math.Max(3, 3 + inner * _micHold - 2));
         MicLevelHold.Visibility = _micHold <= 0 ? Visibility.Collapsed : Visibility.Visible;
-        MicLevelText.Text = double.IsNegativeInfinity(db) ? "-∞" : $"{db:0}";
     }
 
     void BeginMicTake()
@@ -127,15 +125,13 @@ public sealed partial class MainPage
             return;
         _micTakeToken++;
         _micTrace?.Clear();
-        if (MicWaveText != null)
-            MicWaveText.Text = "マイク入力";
     }
 
     void EndMicTake() => RefreshMicTake(reload: true);
 
     void RefreshMicTake(bool reload = false)
     {
-        if (MicWaveText == null || _recTaking)
+        if (_recTaking)
             return;
         var line = CurrentLine();
         string? path = null;
@@ -154,11 +150,9 @@ public sealed partial class MainPage
         if (path == null)
         {
             _micTrace?.Clear();
-            MicWaveText.Text = "マイク入力";
             return;
         }
 
-        MicWaveText.Text = Path.GetFileName(path);
         _ = LoadMicTakeAsync(path, token);
     }
 
@@ -174,7 +168,7 @@ public sealed partial class MainPage
                     if (token != _micTakeToken)
                         return;
                     _micTrace?.Clear();
-                    MicWaveText.Text = "WAV が大きすぎます";
+                    ShowNotice("WAV が大きすぎます", Path.GetFileName(path));
                 });
                 return;
             }
@@ -202,7 +196,7 @@ public sealed partial class MainPage
                 if (token != _micTakeToken)
                     return;
                 _micTrace?.Clear();
-                MicWaveText.Text = "WAV を読めませんでした";
+                ShowNotice("WAV を読めませんでした", Path.GetFileName(path));
             });
         }
     }
