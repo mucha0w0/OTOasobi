@@ -1018,6 +1018,13 @@ sealed class ProbeSession : IDisposable
                 if (_oto.TunePoint(Text(root, "file"), (int)Math.Round(Number(root, "index")), (int)Math.Round(Number(root, "point")), Number(root, "time")))
                     RememberOto();
                 break;
+            case "spans":
+                if (_oto.MoveSpans(Text(root, "file"), ReadSpanTimes(Property(root, "spans"))))
+                {
+                    PostOto();
+                    _ = SaveSpanCacheAsync();
+                }
+                break;
             case "fields":
                 if (_oto.TuneFields(Text(root, "file"), (int)Math.Round(Number(root, "index")), Text(root, "alias"), Number(root, "offset"), Number(root, "overlap"), Number(root, "preutter"), Number(root, "consonant"), Number(root, "blank")))
                     RememberOto();
@@ -1031,6 +1038,39 @@ sealed class ProbeSession : IDisposable
                     RememberOto();
                 break;
         }
+    }
+
+    async Task SaveSpanCacheAsync()
+    {
+        if (_disposed || string.IsNullOrEmpty(_folder) || _oto.Files.Count == 0)
+            return;
+        try
+        {
+            _analysis ??= new AnalysisClient();
+            await _analysis.SaveCacheAsync(_folder, _oto.Files);
+        }
+        catch (Exception ex)
+        {
+            if (!_disposed)
+                Post(new { type = "failed", message = ex.Message });
+        }
+    }
+
+    static List<(double Start, double End)> ReadSpanTimes(JsonElement value)
+    {
+        var times = new List<(double Start, double End)>();
+        if (value.ValueKind != JsonValueKind.Array)
+            return times;
+        foreach (var item in value.EnumerateArray())
+        {
+            if (!item.TryGetProperty("start", out var startValue) || !item.TryGetProperty("end", out var endValue))
+                return [];
+            if (!startValue.TryGetDouble(out var start) || !endValue.TryGetDouble(out var end))
+                return [];
+            times.Add((start, end));
+        }
+
+        return times;
     }
 
     void RememberOto()

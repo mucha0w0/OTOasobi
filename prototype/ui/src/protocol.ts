@@ -48,6 +48,7 @@ export type PageCommand =
   | { type: "oto"; op: "analyzeFile" }
   | { type: "oto"; op: "write" }
   | { type: "oto"; op: "tune"; file: string; index: number; point: number; time: number }
+  | { type: "oto"; op: "spans"; file: string; spans: { start: number; end: number }[] }
   | { type: "oto"; op: "fields"; file: string; index: number; alias: string; offset: number; overlap: number; preutter: number; consonant: number; blank: number }
   | { type: "oto"; op: "aliasName"; file: string; index: number; alias: string; name: string }
   | { type: "oto"; op: "comment"; file: string; index: number; alias: string; comment: string }

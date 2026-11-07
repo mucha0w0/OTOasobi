@@ -406,6 +406,31 @@ sealed class ProbeOto
         return StorePlaced(file, index, auto[index], OtoTune.Apply(auto[index], next, duration));
     }
 
+    public bool MoveSpans(string? fileName, IReadOnlyList<(double Start, double End)> times)
+    {
+        var file = FindFile(fileName);
+        if (file == null || times.Count == 0 || times.Count != file.Spans.Count)
+            return false;
+        var duration = Math.Max(file.Duration, 0);
+        foreach (var span in file.Spans)
+            duration = Math.Max(duration, span.End);
+        foreach (var (start, end) in times)
+        {
+            if (!double.IsFinite(start) || !double.IsFinite(end))
+                return false;
+            if (start < -1e-4 || end > duration + 1e-4 || end - start < 1e-6)
+                return false;
+        }
+
+        for (var i = 0; i < times.Count; i++)
+        {
+            file.Spans[i].Start = times[i].Start;
+            file.Spans[i].End = times[i].End;
+        }
+
+        return true;
+    }
+
     public bool TuneFields(string? fileName, int index, string? alias, double offset, double overlap, double preutter, double consonant, double blank)
     {
         var file = FindFile(fileName);

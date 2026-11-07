@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { isQuietLabel, isVowelLabel, spanBoundaries, spanCaption, spanFill } from "./spans"
+import { hitBoundary, isQuietLabel, isVowelLabel, moveBoundary, spanBoundaries, spanCaption, spanFill, type PhoneSpan } from "./spans"
 
 describe("音素のラベル", () => {
   it("トークンがあるときは音素名と並べる", () => {
@@ -27,5 +27,23 @@ describe("音素のラベル", () => {
     expect(times.some((time) => time < 0.05)).toBe(false)
     expect(times).toContain(0.1)
     expect(times).toContain(0.4)
+  })
+
+  it("境界をドラッグすると隣の区間と時刻を分け、5ms より狭くしない", () => {
+    const spans: PhoneSpan[] = [
+      { start: 0, end: 0.2, label: "無音", token: "" },
+      { start: 0.2, end: 0.6, label: "k", token: "か" },
+      { start: 0.6, end: 1, label: "a", token: "か" },
+    ]
+    expect(hitBoundary(spans, 0, 100, 0, 1)).toBe(-1)
+    const group = hitBoundary(spans, 60, 100, 0, 1)
+    expect(group).toBeGreaterThan(0)
+    const moved = moveBoundary(spans, group, 0.7, 1)
+    expect(moved[1]?.end).toBeCloseTo(0.7)
+    expect(moved[2]?.start).toBeCloseTo(0.7)
+    expect(moved[0]).toEqual(spans[0])
+    const clamped = moveBoundary(spans, group, 0.999, 1)
+    expect(clamped[1]?.end).toBeCloseTo(0.995)
+    expect(clamped[2]?.start).toBeCloseTo(0.995)
   })
 })

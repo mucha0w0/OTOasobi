@@ -3,7 +3,7 @@ import { shouldReplaceBitmap } from "./bitmap"
 import { drawPeaks } from "./drawPeaks"
 import { cycleOtoFocus, focusedOwnsTime, hitOtoPoint } from "./otoHit"
 import { timeAt, type OtoMark, type PreviewEvent } from "./protocol"
-import { spanBoundaries, spanCaption, spanFill, type PhoneSpan } from "./spans"
+import { hitBoundary, moveBoundary, spanBoundaries, spanCaption, spanFill, spanTimesChanged, type PhoneSpan } from "./spans"
 import { imagePlacement, panRange, zoomRange, type Range } from "./viewport"
 
 export type BandKind = "wave" | "spec" | "loud" | "oto"
@@ -25,6 +25,7 @@ export type GraphModel = {
   note: string
   focus: number
   live: LiveTune | null
+  draft: PhoneSpan[] | null
 }
 
 type Props = {
@@ -38,20 +39,27 @@ type Props = {
   onTune?: (index: number, point: number, time: number) => void
   onFocus?: (index: number) => void
   onLive?: (live: LiveTune | null) => void
+  onDraft?: (spans: PhoneSpan[] | null) => void
+  onSpans?: (spans: PhoneSpan[]) => void
 }
 
-export function GraphBand({ kind, picture, model, appearance, register, onRange, onFileStep, onTune, onFocus, onLive }: Props) {
+export function GraphBand({ kind, picture, model, appearance, register, onRange, onFileStep, onTune, onFocus, onLive, onDraft, onSpans }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const imageRef = useRef<HTMLImageElement | null>(null)
   const holdRef = useRef(false)
   const dragRef = useRef<{ x: number; range: Range } | null>(null)
   const pressRef = useRef<{ index: number; point: number; x: number } | null>(null)
+  const boundaryRef = useRef<{ group: number; origin: PhoneSpan[] } | null>(null)
   const onTuneRef = useRef(onTune)
   const onFocusRef = useRef(onFocus)
   const onLiveRef = useRef(onLive)
+  const onDraftRef = useRef(onDraft)
+  const onSpansRef = useRef(onSpans)
   onTuneRef.current = onTune
   onFocusRef.current = onFocus
   onLiveRef.current = onLive
+  onDraftRef.current = onDraft
+  onSpansRef.current = onSpans
   const wheelRef = useRef(0)
   const onRangeRef = useRef(onRange)
   const onFileStepRef = useRef(onFileStep)
@@ -183,7 +191,7 @@ export function GraphBand({ kind, picture, model, appearance, register, onRange,
       drawPeaks(ctx, placed.width, height, pictureNow.lo, pictureNow.hi, getCss("--wave"), placed.x)
     if (kind === "loud")
       drawLoud(ctx, placed, pictureNow.loudness, getCss("--wave"))
-    const spans = current.spans ?? []
+    const spans = current.draft ?? current.spans ?? []
     const shown = tunedMarks(current.marks, current.live)
     if (kind === "wave" || kind === "spec")
       drawSpans(ctx, placed, source, spans, height, kind === "wave")
@@ -209,6 +217,14 @@ export function GraphBand({ kind, picture, model, appearance, register, onRange,
       onLiveRef.current?.(null)
       if (live?.moved && live.index === press.index && live.point === press.point)
         onTuneRef.current?.(live.index, live.point, live.time)
+    }
+    const boundary = boundaryRef.current
+    if (boundary) {
+      boundaryRef.current = null
+      const draft = model.current.draft
+      onDraftRef.current?.(null)
+      if (draft && spanTimesChanged(boundary.origin, draft))
+        onSpansRef.current?.(draft)
     }
     if (!dragRef.current)
       return
@@ -247,6 +263,14 @@ export function GraphBand({ kind, picture, model, appearance, register, onRange,
             const time = timeAt(x, rect.width, current.range.t0, current.range.t1)
             if (!focusedOwnsTime(current.marks, current.spans, current.focus, time))
               onFocusRef.current?.(-1)
+            return
+          }
+          const shown = current.draft ?? current.spans
+          const group = hitBoundary(shown, x, rect.width, current.range.t0, current.range.t1)
+          if (group >= 0) {
+            boundaryRef.current = { group, origin: shown.map((span) => ({ ...span })) }
+            event.currentTarget.style.cursor = "ew-resize"
+            event.currentTarget.setPointerCapture(event.pointerId)
           }
           return
         }
@@ -257,6 +281,14 @@ export function GraphBand({ kind, picture, model, appearance, register, onRange,
       }}
       onPointerMove={(event) => {
         const current = model.current
+        const boundary = boundaryRef.current
+        if (boundary && current.picture) {
+          const rect = event.currentTarget.getBoundingClientRect()
+          const time = timeAt(event.clientX - rect.left, rect.width, current.range.t0, current.range.t1)
+          onDraftRef.current?.(moveBoundary(boundary.origin, boundary.group, time, current.picture.duration))
+          event.currentTarget.style.cursor = "ew-resize"
+          return
+        }
         const press = pressRef.current
         if (press && current.picture) {
           const rect = event.currentTarget.getBoundingClientRect()
@@ -270,10 +302,13 @@ export function GraphBand({ kind, picture, model, appearance, register, onRange,
           event.currentTarget.style.cursor = "ew-resize"
           return
         }
-        if (current.picture && (kind === "oto" || current.focus >= 0)) {
+        if (current.picture) {
           const rect = event.currentTarget.getBoundingClientRect()
-          const hit = hitOtoPoint(tunableMarks(kind, current), event.clientX - rect.left, rect.width, current.range.t0, current.range.t1)
-          event.currentTarget.style.cursor = hit ? "ew-resize" : "default"
+          const x = event.clientX - rect.left
+          const onValue = kind === "oto" || current.focus >= 0
+          const valueHit = onValue && hitOtoPoint(tunableMarks(kind, current), x, rect.width, current.range.t0, current.range.t1)
+          const boundaryHit = !onValue && hitBoundary(current.draft ?? current.spans, x, rect.width, current.range.t0, current.range.t1) >= 0
+          event.currentTarget.style.cursor = valueHit || boundaryHit ? "ew-resize" : "default"
         }
         const drag = dragRef.current
         if (!drag || !current.picture)

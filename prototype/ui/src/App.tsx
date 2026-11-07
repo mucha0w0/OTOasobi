@@ -39,7 +39,8 @@ export function App() {
   const missingRef = useRef(false)
   const focusRef = useRef(-1)
   const liveRef = useRef<LiveTune | null>(null)
-  const modelRef = useRef<GraphModel>({ picture: null, range: rangeRef.current, marks: [], spans: [], note: "", focus: -1, live: null })
+  const draftRef = useRef<PhoneSpan[] | null>(null)
+  const modelRef = useRef<GraphModel>({ picture: null, range: rangeRef.current, marks: [], spans: [], note: "", focus: -1, live: null, draft: null })
   const fileNameRef = useRef("")
   const namesRef = useRef<string[]>([])
   const previewTimer = useRef<number | undefined>(undefined)
@@ -164,6 +165,7 @@ export function App() {
           return
         focusRef.current = -1
         liveRef.current = null
+        draftRef.current = null
         modelRef.current = viewModel()
         redraw()
       }
@@ -211,6 +213,7 @@ export function App() {
       note: noteRef.current,
       focus: focusRef.current,
       live: liveRef.current,
+      draft: draftRef.current,
       ...over,
     }
   }
@@ -284,6 +287,7 @@ export function App() {
           noteRef.current = ""
           focusRef.current = -1
           liveRef.current = null
+          draftRef.current = null
         }
         break
       }
@@ -297,6 +301,7 @@ export function App() {
         rangeRef.current = { t0: 0, t1: 0 }
         focusRef.current = -1
         liveRef.current = null
+        draftRef.current = null
         modelRef.current = viewModel()
         window.clearTimeout(previewTimer.current)
         redraw()
@@ -642,6 +647,17 @@ export function App() {
                       modelRef.current = viewModel()
                       redraw()
                     }}
+                    onDraft={(spans) => {
+                      draftRef.current = spans
+                      modelRef.current = viewModel()
+                      redraw()
+                    }}
+                    onSpans={(spans) => sendRef.current({
+                      type: "oto",
+                      op: "spans",
+                      file: fileNameRef.current,
+                      spans: spans.map((span) => ({ start: span.start, end: span.end })),
+                    })}
                   />
                 )
               if (id === "rec")
