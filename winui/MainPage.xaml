@@ -1869,20 +1869,20 @@
                     <Grid x:Name="MicPane">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="*" />
-                            <RowDefinition Height="*" />
                             <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
-                        <Border Margin="12,12,12,6" Style="{StaticResource PanelCardStyle}">
+                        <Border Margin="12" Style="{StaticResource PanelCardStyle}">
                             <Grid>
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="*" MinHeight="72" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="*" MinHeight="120" />
                                 </Grid.RowDefinitions>
                                 <local:InfoNote
-                                    Title="入力"
-                                    Text="直近 3 秒のマイク入力です。入力を聴くと、環境設定で選んだ出力から同じ音が出ます。スピーカーの音をマイクが拾うことがあります。" />
+                                    Title="波形"
+                                    Text="録音していない行ではマイクの直近 3 秒、録音済みの行ではその WAV です。右のメーターはマイクのレベルです。入力を聴くと、環境設定で選んだ出力から同じ音が出ます。スピーカーの音をマイクが拾うことがあります。" />
                                 <ToggleSwitch
                                     x:Name="MicListenSwitch"
                                     Grid.Row="1"
@@ -1891,65 +1891,121 @@
                                     OffContent="入力を聴かない"
                                     OnContent="入力を聴く"
                                     Toggled="MicListen_Toggled" />
-                                <Grid Grid.Row="2" ColumnSpacing="8">
+                                <TextBlock
+                                    x:Name="MicWaveText"
+                                    Grid.Row="2"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Text="マイク入力"
+                                    TextWrapping="Wrap" />
+                                <TextBlock
+                                    x:Name="MicDeviceError"
+                                    Grid.Row="3"
+                                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                    TextWrapping="Wrap"
+                                    Visibility="Collapsed" />
+                                <Grid Grid.Row="4" Margin="0,8,0,0" ColumnSpacing="8">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <Grid x:Name="MicLevelTrack" Height="8" VerticalAlignment="Center">
-                                        <Border
-                                            CornerRadius="4"
-                                            Background="{ThemeResource ControlStrongFillColorDefaultBrush}" />
-                                        <Border
-                                            x:Name="MicLevelFill"
-                                            Width="0"
-                                            HorizontalAlignment="Left"
-                                            CornerRadius="4"
-                                            Background="{ThemeResource AccentFillColorDefaultBrush}" />
-                                    </Grid>
-                                    <TextBlock
-                                        x:Name="MicLevelText"
+                                    <Grid x:Name="MicWaveHost" MinHeight="120" />
+                                    <Grid
                                         Grid.Column="1"
-                                        VerticalAlignment="Center"
-                                        AutomationProperties.Name="入力レベル"
-                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                        Style="{StaticResource CaptionTextBlockStyle}"
-                                        Text="停止中" />
+                                        Width="64"
+                                        AutomationProperties.Name="入力レベル">
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="*" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="14" />
+                                            </Grid.ColumnDefinitions>
+                                            <Grid>
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="0.1*" />
+                                                    <RowDefinition Height="0.1*" />
+                                                    <RowDefinition Height="0.2*" />
+                                                    <RowDefinition Height="0.4*" />
+                                                    <RowDefinition Height="0.2*" />
+                                                </Grid.RowDefinitions>
+                                                <TextBlock
+                                                    HorizontalAlignment="Right"
+                                                    VerticalAlignment="Top"
+                                                    Margin="0,0,4,0"
+                                                    FontSize="11"
+                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                    Text="0" />
+                                                <TextBlock
+                                                    Grid.Row="1"
+                                                    HorizontalAlignment="Right"
+                                                    VerticalAlignment="Top"
+                                                    Margin="0,-6,4,0"
+                                                    FontSize="11"
+                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                    Text="-6" />
+                                                <TextBlock
+                                                    Grid.Row="2"
+                                                    HorizontalAlignment="Right"
+                                                    VerticalAlignment="Top"
+                                                    Margin="0,-6,4,0"
+                                                    FontSize="11"
+                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                    Text="-12" />
+                                                <TextBlock
+                                                    Grid.Row="3"
+                                                    HorizontalAlignment="Right"
+                                                    VerticalAlignment="Top"
+                                                    Margin="0,-6,4,0"
+                                                    FontSize="11"
+                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                    Text="-24" />
+                                                <TextBlock
+                                                    Grid.Row="4"
+                                                    HorizontalAlignment="Right"
+                                                    VerticalAlignment="Top"
+                                                    Margin="0,-6,4,0"
+                                                    FontSize="11"
+                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                    Text="-48" />
+                                            </Grid>
+                                            <Grid x:Name="MicLevelTrack" Grid.Column="1">
+                                                <Border
+                                                    CornerRadius="3"
+                                                    Background="{ThemeResource SolidBackgroundFillColorBaseBrush}" />
+                                                <Border
+                                                    x:Name="MicLevelFill"
+                                                    Height="0"
+                                                    Margin="3"
+                                                    HorizontalAlignment="Stretch"
+                                                    VerticalAlignment="Bottom"
+                                                    CornerRadius="2"
+                                                    Background="{ThemeResource AccentFillColorDefaultBrush}" />
+                                                <Border
+                                                    x:Name="MicLevelHold"
+                                                    Height="2"
+                                                    Margin="3,0,3,3"
+                                                    HorizontalAlignment="Stretch"
+                                                    VerticalAlignment="Bottom"
+                                                    Background="{ThemeResource TextFillColorPrimaryBrush}"
+                                                    Visibility="Collapsed" />
+                                            </Grid>
+                                        </Grid>
+                                        <TextBlock
+                                            x:Name="MicLevelText"
+                                            Grid.Row="1"
+                                            Margin="0,4,0,0"
+                                            HorizontalAlignment="Right"
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            Style="{StaticResource CaptionTextBlockStyle}"
+                                            Text="停止中" />
+                                    </Grid>
                                 </Grid>
-                                <Grid x:Name="MicLiveHost" Grid.Row="3" Margin="0,8,0,0" MinHeight="72" />
                             </Grid>
                         </Border>
                         <Border
                             Grid.Row="1"
-                            Margin="12,6,12,0"
-                            Style="{StaticResource PanelCardStyle}">
-                            <Grid>
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="*" MinHeight="72" />
-                                </Grid.RowDefinitions>
-                                <local:InfoNote
-                                    Title="録音"
-                                    Text="録音中は、入った音の波形が伸びます。選んでいる行に WAV があるときは、その波形を出して、再生すると位置が動きます。" />
-                                <TextBlock
-                                    x:Name="MicTakeText"
-                                    Grid.Row="1"
-                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                    Text="行を選ぶと、録音した WAV が出ます。"
-                                    TextWrapping="Wrap" />
-                                <TextBlock
-                                    x:Name="MicDeviceError"
-                                    Grid.Row="2"
-                                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                    TextWrapping="Wrap"
-                                    Visibility="Collapsed" />
-                                <Grid x:Name="MicTakeHost" Grid.Row="3" Margin="0,8,0,0" MinHeight="72" />
-                            </Grid>
-                        </Border>
-                        <Border
-                            Grid.Row="2"
                             Padding="12,10,12,12"
                             BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
                             BorderThickness="0,1,0,0">

@@ -188,8 +188,7 @@ public sealed partial class MainPage : Page
             Editor.SetColumnDrag(dragging);
             Effects.SetColumnDrag(dragging);
             FrqRoll.SetColumnDrag(dragging);
-            _micLive?.SetColumnDrag(dragging);
-            _micTake?.SetColumnDrag(dragging);
+            _micTrace?.SetColumnDrag(dragging);
         };
             Dock.LayoutChanged += (_, _) =>
             {

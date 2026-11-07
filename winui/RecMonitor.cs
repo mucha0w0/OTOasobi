@@ -1,5 +1,19 @@
 namespace Otoasobi;
 
+// マイクのピークを、レベルメーターの 0（無音）から 1（0 dB）にする。
+static class RecMeter
+{
+    public const double FloorDb = -60;
+
+    public static double Normalize(float peak)
+    {
+        if (peak <= 0.00001f)
+            return 0;
+        var db = 20 * Math.Log10(Math.Clamp((double)peak, 1e-8, 1));
+        return Math.Clamp((db - FloorDb) / -FloorDb, 0, 1);
+    }
+}
+
 // マイクモニターの直近波形。呼び出し側がロックする。
 sealed class RecLiveBuffer
 {

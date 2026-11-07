@@ -157,6 +157,14 @@ public class RecTests
     }
 
     [Fact]
+    public void MeterUsesDecibels()
+    {
+        Assert.Equal(0, RecMeter.Normalize(0));
+        Assert.Equal(1, RecMeter.Normalize(1));
+        Assert.Equal(0.5, RecMeter.Normalize((float)Math.Pow(10, -30.0 / 20)), 2);
+    }
+
+    [Fact]
     public void LiveBufferKeepsTheNewestWindow()
     {
         var buffer = new RecLiveBuffer();

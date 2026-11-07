@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 
@@ -7,24 +6,20 @@ namespace Otoasobi;
 public sealed partial class MainPage
 {
     DispatcherQueueTimer? _micTimer;
-    RecTrace? _micLive;
-    RecTrace? _micTake;
+    RecTrace? _micTrace;
     PreviewPlayer? _micPlayer;
-    readonly RecPeakTrack _micPeaks = new();
-    readonly List<float> _micNew = [];
-    int _micTakeFrame;
     int _micTakeToken;
     int _micListenToken;
     string? _micShownPath;
     string? _micListenError;
     bool _micPlaying;
+    double _micHold;
+    long _micHoldAt;
 
     void WireMic()
     {
-        _micLive = new RecTrace();
-        _micTake = new RecTrace();
-        MicLiveHost.Children.Add(_micLive);
-        MicTakeHost.Children.Add(_micTake);
+        _micTrace = new RecTrace();
+        MicWaveHost.Children.Add(_micTrace);
         var queue = DispatcherQueue;
         if (queue == null)
             return;
@@ -40,7 +35,7 @@ public sealed partial class MainPage
 
     void MicSync()
     {
-        if (MicLiveHost == null || _recCapture == null)
+        if (MicWaveHost == null || _recCapture == null)
             return;
         var watch = EditorView.Visibility == Visibility.Visible && Dock.Contains("mic");
         if (!watch)
@@ -66,75 +61,81 @@ public sealed partial class MainPage
 
     void MicTick()
     {
-        if (_micLive == null || _recCapture == null)
+        if (_micTrace == null || _recCapture == null)
             return;
+        var live = _micShownPath == null;
         if (_recCapture.Running)
         {
-            var (samples, rate) = _recCapture.CopyLive();
-            _micLive.SetLive(samples, rate);
+            if (live)
+            {
+                var (samples, rate) = _recCapture.CopyLive();
+                _micTrace.SetLive(samples, rate);
+            }
+
             ShowMicLevel(_recCapture.Peak);
         }
         else
         {
-            _micLive.Clear();
+            if (live)
+                _micTrace.Clear();
             ShowMicLevel(0, stopped: true);
         }
 
-        if (_recTaking)
-        {
-            _micNew.Clear();
-            _recCapture.CopyTakeMono(_micTakeFrame, _micNew, out var rate, out var frames);
-            _micTakeFrame = frames;
-            if (_micNew.Count > 0)
-            {
-                _micPeaks.Append(CollectionsMarshal.AsSpan(_micNew));
-                var (min, max) = _micPeaks.Snapshot();
-                _micTake?.SetBuckets(min, max, _micPeaks.Samples, Math.Max(1, rate));
-                MicTakeText.Text = "録音中";
-            }
-
-            return;
-        }
-
-        if (_micPlaying && _micPlayer != null)
-            _micTake?.SetPlayhead(_micPlayer.PositionSeconds);
+        if (_micPlaying && _micPlayer != null && _micShownPath != null)
+            _micTrace.SetPlayhead(_micPlayer.PositionSeconds);
     }
 
     void ShowMicLevel(float peak, bool stopped = false)
     {
-        if (MicLevelTrack == null || MicLevelFill == null || MicLevelText == null)
+        if (MicLevelTrack == null || MicLevelFill == null || MicLevelHold == null || MicLevelText == null)
             return;
         if (stopped)
         {
-            MicLevelFill.Width = 0;
+            _micHold = 0;
+            MicLevelFill.Height = 0;
+            MicLevelHold.Visibility = Visibility.Collapsed;
             MicLevelText.Text = "停止中";
             return;
         }
 
-        var clamped = Math.Clamp(peak, 0f, 1f);
-        MicLevelFill.Width = MicLevelTrack.ActualWidth * clamped;
-        var key = clamped >= 0.98f ? "SystemFillColorCriticalBrush" : "AccentFillColorDefaultBrush";
+        var level = RecMeter.Normalize(peak);
+        var now = Environment.TickCount64;
+        if (level >= _micHold)
+        {
+            _micHold = level;
+            _micHoldAt = now;
+        }
+        else if (now - _micHoldAt > 1000)
+        {
+            _micHold = level;
+        }
+
+        var inner = Math.Max(0, MicLevelTrack.ActualHeight - 6);
+        MicLevelFill.Height = inner * level;
+        var db = peak <= 0.00001f ? double.NegativeInfinity : 20 * Math.Log10(Math.Clamp(peak, 1e-8f, 1f));
+        var key = db >= -3 ? "SystemFillColorCriticalBrush" : "AccentFillColorDefaultBrush";
         MicLevelFill.Background = AppearanceTheme.Brush(AppearanceTheme.Resolve(this), key) ?? MicLevelFill.Background;
-        MicLevelText.Text = clamped <= 0.00001f ? "-∞ dB" : $"{20 * Math.Log10(clamped):0.0} dB";
+        MicLevelHold.Margin = new Thickness(3, 0, 3, Math.Max(3, 3 + inner * _micHold - 2));
+        MicLevelHold.Visibility = _micHold <= 0 ? Visibility.Collapsed : Visibility.Visible;
+        MicLevelText.Text = double.IsNegativeInfinity(db) ? "-∞" : $"{db:0}";
     }
 
     void BeginMicTake()
     {
         StopMicPlayback();
-        _micPeaks.Clear();
-        _micTakeFrame = 0;
-        _micShownPath = null;
+        if (_micShownPath != null)
+            return;
         _micTakeToken++;
-        _micTake?.Clear();
-        if (MicTakeText != null)
-            MicTakeText.Text = "録音中";
+        _micTrace?.Clear();
+        if (MicWaveText != null)
+            MicWaveText.Text = "マイク入力";
     }
 
     void EndMicTake() => RefreshMicTake(reload: true);
 
     void RefreshMicTake(bool reload = false)
     {
-        if (MicTakeText == null || _recTaking)
+        if (MicWaveText == null || _recTaking)
             return;
         var line = CurrentLine();
         string? path = null;
@@ -152,12 +153,12 @@ public sealed partial class MainPage
         var token = ++_micTakeToken;
         if (path == null)
         {
-            _micTake?.Clear();
-            MicTakeText.Text = line == null ? "行を選ぶと、録音した WAV が出ます。" : "まだ録音していません";
+            _micTrace?.Clear();
+            MicWaveText.Text = "マイク入力";
             return;
         }
 
-        MicTakeText.Text = Path.GetFileName(path);
+        MicWaveText.Text = Path.GetFileName(path);
         _ = LoadMicTakeAsync(path, token);
     }
 
@@ -172,8 +173,8 @@ public sealed partial class MainPage
                 {
                     if (token != _micTakeToken)
                         return;
-                    _micTake?.Clear();
-                    MicTakeText.Text = "WAV が大きすぎます";
+                    _micTrace?.Clear();
+                    MicWaveText.Text = "WAV が大きすぎます";
                 });
                 return;
             }
@@ -189,9 +190,9 @@ public sealed partial class MainPage
             });
             DispatcherQueue.TryEnqueue(() =>
             {
-                if (token != _micTakeToken || _recTaking)
+                if (token != _micTakeToken || _recTaking || _micShownPath == null)
                     return;
-                _micTake?.SetBuckets(drawn.min, drawn.max, drawn.Length, drawn.Item4);
+                _micTrace?.SetBuckets(drawn.min, drawn.max, drawn.Length, drawn.Item4);
             });
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
@@ -200,8 +201,8 @@ public sealed partial class MainPage
             {
                 if (token != _micTakeToken)
                     return;
-                _micTake?.Clear();
-                MicTakeText.Text = "WAV を読めませんでした";
+                _micTrace?.Clear();
+                MicWaveText.Text = "WAV を読めませんでした";
             });
         }
     }
@@ -262,7 +263,7 @@ public sealed partial class MainPage
         try
         {
             var wav = await File.ReadAllBytesAsync(path);
-            if (_micPlayer == null || _recTaking)
+            if (_micPlayer == null || _recTaking || _micShownPath == null)
                 return;
             _micPlayer.Volume = 1;
             _micPlaying = true;
@@ -283,7 +284,7 @@ public sealed partial class MainPage
         var was = _micPlaying;
         _micPlaying = false;
         _micPlayer?.Stop();
-        _micTake?.SetPlayhead(null);
+        _micTrace?.SetPlayhead(null);
         if (was || MicPlayButton?.IsEnabled == true)
             UpdateRecButtons();
     }

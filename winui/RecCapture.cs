@@ -145,28 +145,6 @@ sealed class RecCapture : IDisposable
             return _live.Snapshot();
     }
 
-    public void CopyTakeMono(int fromFrame, List<float> destination, out int rate, out int frames)
-    {
-        lock (_gate)
-        {
-            rate = _rate;
-            var channels = Math.Max(1, _channels);
-            frames = _recording ? _take.Count / channels : fromFrame;
-            if (!_recording || fromFrame >= frames)
-                return;
-            if (fromFrame < 0)
-                fromFrame = 0;
-            for (var frame = fromFrame; frame < frames; frame++)
-            {
-                double sum = 0;
-                var offset = frame * channels;
-                for (var channel = 0; channel < channels; channel++)
-                    sum += _take[offset + channel];
-                destination.Add((float)(sum / channels));
-            }
-        }
-    }
-
     public async Task ApplyListenAsync(bool on, string? deviceId)
     {
         _listenWanted = on;
