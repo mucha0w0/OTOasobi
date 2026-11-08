@@ -42,17 +42,14 @@ export function OtoSettings({ oto, send }: { oto: OtoState | null; send: Send })
             <Seconds label="子音部" value={oto.consonant} min={0} max={0.2} onChange={(value) => slider(send, "mono", "consonant", value)} />
             <Seconds label="ブランク" value={oto.blank} min={-0.1} max={0.1} onChange={(value) => slider(send, "mono", "blank", value)} />
           </Card>
-          <Card
-            title="オーバーラップ"
-            note="0% は子音の開始、100% は母音の開始です。0% で左へ引いて離すと、その行は秒のスライダーになります。"
-          >
+          <Card title="オーバーラップ">
             <OverlapGroups kinds={oto.kinds} values={oto.overlap} allowSeconds onChange={(key, value) => slider(send, "monoOverlap", key, value)} />
           </Card>
         </div>
       )}
       {oto.mode === "renzoku" && (
         <div className="mt-3 grid gap-4">
-          <Card title="無音の直後" note="アンダーバーの無音の直後の音素は、選んだ単独音のプリセットで計算します。">
+          <Card title="無音の直後">
             <PresetSelect
               names={oto.presets}
               value={oto.restPreset}
@@ -65,14 +62,14 @@ export function OtoSettings({ oto, send }: { oto: OtoState | null; send: Send })
             <Seconds label="子音部" value={oto.renzokuConsonant} min={0} max={0.2} onChange={(value) => slider(send, "renzoku", "consonant", value)} />
             <Seconds label="ブランク" value={oto.renzokuBlank} min={-0.1} max={0.1} onChange={(value) => slider(send, "renzoku", "blank", value)} />
           </Card>
-          <Card title="オーバーラップ" note="0% はオフセットの位置、100% はその音素の開始です。">
+          <Card title="オーバーラップ">
             <Percent label="割合" value={oto.renzokuOverlap} onChange={(value) => slider(send, "renzoku", "overlap", value)} />
           </Card>
         </div>
       )}
       {oto.mode === "cvvc" && (
         <div className="mt-3 grid gap-4">
-          <Card title="先頭音素" note="ファイルの先頭と、アンダーバーの無音の直後は、選んだ単独音のプリセットで計算します。">
+          <Card title="先頭音素">
             <PresetSelect
               names={oto.presets}
               value={oto.leadPreset}
@@ -80,7 +77,7 @@ export function OtoSettings({ oto, send }: { oto: OtoState | null; send: Send })
               onChange={(next) => send({ type: "oto", op: "preset", target: "lead", name: next })}
             />
           </Card>
-          <Card title="プリセット" note="通常音素と子音音素のスライダーです。単独音のプリセットとは別です。">
+          <Card title="プリセット">
             <PresetSelect
               names={oto.cvvcPresets}
               value={oto.cvvcPreset}
@@ -109,7 +106,6 @@ export function OtoSettings({ oto, send }: { oto: OtoState | null; send: Send })
       {naming && (
         <NameDialog
           title="現在の設定を保存"
-          prompt="この設定につける名前を入力してください。"
           name={name}
           setName={setName}
           onCancel={() => setNaming(false)}
@@ -130,7 +126,6 @@ export function OtoIni({ oto, send }: { oto: OtoState | null; send: Send }) {
     <div className="flex h-full min-h-0 flex-col">
       <div className="min-h-0 flex-1 overflow-auto p-3">
         <div className="grid gap-4">
-          <Card title="oto.ini" note="選んだエイリアスを、直した区間から計算してフォルダに保存します。位置は oto推定設定のスライダーを使います。" />
           <Card title="生成するエイリアス">
             <label className="flex items-center gap-2 text-sm">
               <input
@@ -141,7 +136,6 @@ export function OtoIni({ oto, send }: { oto: OtoState | null; send: Send }) {
               />
               単独音
             </label>
-            {oto.aliasMonoLocked && <p className="text-xs text-[var(--muted)]">単独音はエイリアスに自動的に含まれます。</p>}
             <label className="flex items-center gap-2 text-sm">
               <input
                 type="checkbox"
@@ -178,7 +172,6 @@ export function OtoIni({ oto, send }: { oto: OtoState | null; send: Send }) {
                 </label>
               ))}
             </div>
-            {!oto.hasIni && <p className="text-xs text-[var(--muted)]">まずはoto.iniを生成してください。</p>}
           </Card>
         </div>
       </div>
@@ -200,11 +193,10 @@ function slider(send: Send, group: string, key: string, value: number) {
   send({ type: "oto", op: "slider", group, key, value })
 }
 
-function Card({ title, note, children }: { title: string; note?: string; children?: ReactNode }) {
+function Card({ title, children }: { title: string; children?: ReactNode }) {
   return (
     <section className="grid gap-2">
       <h3 className="section-title">{title}</h3>
-      {note && <p className="text-xs leading-5 text-[var(--muted)]">{note}</p>}
       {children}
     </section>
   )
@@ -324,14 +316,12 @@ function OverlapGroups({
 
 function NameDialog({
   title,
-  prompt,
   name,
   setName,
   onCancel,
   onSave,
 }: {
   title: string
-  prompt: string
   name: string
   setName: (name: string) => void
   onCancel: () => void
@@ -347,7 +337,6 @@ function NameDialog({
         }}
       >
         <h2 className="text-base font-semibold">{title}</h2>
-        <p className="mt-2 text-sm text-[var(--muted)]">{prompt}</p>
         <input className="field mt-3 w-full" value={name} placeholder="プリセット名" onChange={(event) => setName(event.target.value)} />
         <div className="mt-4 flex gap-2">
           <button type="button" className="ghost-button flex-1" onClick={onCancel}>キャンセル</button>

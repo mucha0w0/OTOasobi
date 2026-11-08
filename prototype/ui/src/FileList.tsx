@@ -8,10 +8,8 @@ type Props = {
 export function FileList({ folder, names, selected, onSelect }: Props) {
   return (
     <ul className="h-full overflow-auto py-1">
-      {names.length === 0 && (
-        <li className="px-3 py-2 text-sm text-[var(--muted)]">
-          {folder ? "WAV はありません" : "フォルダを開いてください"}
-        </li>
+      {names.length === 0 && folder && (
+        <li className="px-3 py-2 text-sm text-[var(--muted)]">WAV はありません</li>
       )}
       {names.map((name) => {
         const current = name.localeCompare(selected, undefined, { sensitivity: "accent" }) === 0

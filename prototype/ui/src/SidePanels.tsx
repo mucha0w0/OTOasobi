@@ -38,9 +38,7 @@ export function RecPanel({
   return (
     <div className="flex h-full flex-col text-sm">
       <div className="flex flex-1 flex-col gap-3 overflow-auto p-3">
-        <p className="text-[var(--muted)]">
-          {status || "行を選ぶと、未録音か録音済みかがここに出ます。"}
-        </p>
+        {status && <p className="text-[var(--muted)]">{status}</p>}
         <p className="text-[var(--muted)]">
           入力 {inputRate == null ? "—" : `${inputRate} Hz`}
           {recording ? " / 録音中" : waiting ? " / カウント中" : ""}

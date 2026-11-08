@@ -107,7 +107,7 @@ export function FrqEditor({
   }
 
   const message = !view
-    ? "ファイルを選ぶと、.frq の点が出ます。"
+    ? ""
     : view.error
       ? view.error
       : view.missing

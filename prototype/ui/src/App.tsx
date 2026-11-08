@@ -121,7 +121,6 @@ export function App() {
   const advanceRef = useRef(false)
   const recordNameRef = useRef<string | null>(null)
   const resolved = resolveTheme(theme, systemDark)
-  const themeLabel = resolved === "dark" ? "ダーク" : "ライト"
   pictureRef.current = picture
   fileNameRef.current = fileName
   namesRef.current = names
@@ -793,9 +792,6 @@ export function App() {
         <main className="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
           <h1 className="text-2xl font-semibold">オトアソビ</h1>
           <p className="text-sm text-[var(--muted)]">OTOasobi</p>
-          <p className="max-w-md text-sm leading-6 text-[var(--muted)]">
-            フォルダを開くと編集画面に入ります。保存データがあるときは、その区間を読み込みます。無いときは、解析してから区間を直せます。
-          </p>
           <div className="mt-2 flex flex-col gap-2">
             <button
               type="button"
@@ -849,9 +845,6 @@ export function App() {
             }}
           >
             <h2 className="text-base font-semibold">新しいプロジェクト</h2>
-            <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
-              空の音源フォルダを作り、編集画面で開きます。名前は character.txt と character.yaml に書きます。
-            </p>
             <label className="mt-3 block text-sm" htmlFor="project-name">名前</label>
             <input
               id="project-name"
@@ -897,9 +890,6 @@ export function App() {
             }}
           >
             <h2 className="text-base font-semibold">設定を保存</h2>
-            <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
-              いまの計算方法、スライダー、プリセットを、このフォルダに保存します。
-            </p>
             <input className="field mt-3 w-full" value={saveName} placeholder="設定名" onChange={(event) => setSaveName(event.target.value)} />
             <div className="mt-4 flex gap-2">
               <button type="button" className="ghost-button flex-1" onClick={() => setSaveOpen(false)}>キャンセル</button>
@@ -949,9 +939,7 @@ export function App() {
                   </button>
                 ))}
               </div>
-            ) : (
-              <p className="mt-3 text-sm text-[var(--muted)]">このフォルダには、まだ設定ファイルがありません。「設定を保存」で作れます。</p>
-            )}
+            ) : null}
             <button type="button" className="ghost-button mt-4 w-full" onClick={() => setLoadOpen(false)}>閉じる</button>
           </div>
         </div>
@@ -1026,7 +1014,6 @@ export function App() {
           tabs={settingsTabs(
             {
               theme,
-              themeLabel,
               accent: accent ?? defaultAccent(resolved),
               onTheme: chooseTheme,
               onAccent: chooseAccent,

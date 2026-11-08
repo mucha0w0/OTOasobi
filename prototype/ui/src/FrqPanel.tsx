@@ -24,10 +24,7 @@ export function FrqPanel({
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-3">
         <section className="grid gap-2">
           <h2 className="section-title">周波数表</h2>
-          <p className="mt-1 leading-6 text-[var(--muted)]">
-            フォルダ直下の各 WAV と同じ名前で、UTAU 用の .frq を書きます。256 サンプルごとの高さと、有声部分の平均です。
-          </p>
-          <p className="mt-2 text-[var(--muted)]">{summary}</p>
+          <p className="text-[var(--muted)]">{summary}</p>
         </section>
         <section className="grid gap-2">
           <h2 className="section-title">対象</h2>
@@ -49,7 +46,6 @@ export function FrqPanel({
             <input type="checkbox" checked={clear} onChange={(event) => setClear(event.target.checked)} />
             先行発声までを０に統一する
           </label>
-          <p className="mt-1 pl-6 text-[var(--muted)]">これは単独音のときのみオンにしてください。</p>
         </section>
       </div>
       <div className="border-t border-[var(--line)] p-3">

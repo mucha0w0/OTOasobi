@@ -83,7 +83,6 @@ export function EffectsPanel({
               <input className="field" value={form.noiseEnd} onChange={(event) => { const end = Number(event.target.value); setForm({ ...form, noiseEnd: end }); pushNoise(form, send, form.noiseStart, end) }} />
             </label>
           </div>
-          <p className="text-[var(--muted)]">{form.noiseReady ? "無音の範囲を使います。" : "オンにするときは、無音の範囲を選んでください。"}</p>
         </section>
             )}
             {kind === "highpass" && (

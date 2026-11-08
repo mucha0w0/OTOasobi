@@ -108,14 +108,13 @@ export function BankPanel({
   }
 
   if (!form)
-    return <p className="p-3 text-sm text-[var(--muted)]">フォルダを開くと、character.txt と character.yaml がここに出ます。</p>
+    return null
 
   const portraitHeight = form.height > 0 ? form.height : undefined
   return (
     <div className="flex h-full flex-col gap-4 overflow-auto p-3 text-sm">
       <section className="grid gap-2">
         <h2 className="section-title">アイコン</h2>
-        <p className="mt-1 text-[var(--muted)]">100×100 の icon.bmp として、音源フォルダの直下に保存します。</p>
         {form.icon
           ? <img src={form.icon} alt="アイコン" className="mt-2 h-[100px] w-[100px]" />
           : <p className="mt-2 text-[var(--muted)]">アイコン画像が設定されていません</p>}
@@ -123,7 +122,6 @@ export function BankPanel({
       </section>
       <section className="grid gap-2">
         <h2 className="section-title">character.txt</h2>
-        <p className="mt-1 text-[var(--muted)]">UTAU の原音プロパティに出る内容です。名前、画像、作者、配布サイトは character.yaml とも揃えます。</p>
         <Field label="名前" value={form.name} onChange={(name) => patch({ name })} />
         <Field label="画像ファイル名" value={form.image} onChange={(image) => patch({ image })} />
         <label className="mt-2 grid gap-1">
@@ -158,11 +156,9 @@ export function BankPanel({
       <section className="grid gap-2">
         <h2 className="section-title">エンコード</h2>
         <p className="mt-1">text_file_encoding: {form.encoding}</p>
-        <p className="mt-1 text-[var(--muted)]">character.txt、prefix.map、oto.ini の内容から決めます。</p>
       </section>
       <section className="grid gap-2">
         <h2 className="section-title">キャラクター情報</h2>
-        <p className="mt-1 text-[var(--muted)]">シンガータイプは utau です。声とバージョンは yaml だけに書きます。</p>
         <p className="mt-2">シンガータイプ　utau</p>
         <Field label="声" value={form.voice} onChange={(voice) => patch({ voice })} />
         <Field label="バージョン" value={form.version} onChange={(version) => patch({ version })} />
@@ -185,7 +181,6 @@ export function BankPanel({
       </section>
       <section className="grid gap-2">
         <h2 className="section-title">立ち絵</h2>
-        <p className="mt-1 text-[var(--muted)]">高さ 0 は既定です。画素の高さが 800 を超えるときだけ、表示を 800 にします。</p>
         {form.portraitImage
           ? <img src={form.portraitImage} alt="立ち絵" className="mt-2 max-w-full" style={{ opacity: form.opacity, maxHeight: portraitHeight && portraitHeight < 800 ? portraitHeight : 320 }} />
           : <p className="mt-2 text-[var(--muted)]">立ち絵が設定されていません</p>}

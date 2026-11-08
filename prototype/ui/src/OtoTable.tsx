@@ -97,7 +97,7 @@ export function OtoTable({
   }, [])
 
   if (rows.length === 0)
-    return <p className="p-3 text-sm text-[var(--muted)]">解析が終わると、計算した oto.ini の数値がここに出ます。</p>
+    return null
 
   const rect = normalizeRect(active, extent)
   const current = rows[active.row]

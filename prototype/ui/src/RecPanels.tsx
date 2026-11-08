@@ -35,7 +35,6 @@ export function RecListPanel({
     <div className="flex h-full min-h-0 flex-col text-sm">
       <div className="flex flex-col gap-2 p-3">
         <h2 className="font-semibold">録音リスト</h2>
-        <p className="leading-6 text-[var(--muted)]">1 行が 1 テイクです。空行と # で始まる行は読み飛ばし、タブの右側はコメントです。</p>
         <select
           className="field"
           value={current}
@@ -80,8 +79,6 @@ export function RecListPanel({
                 <span className="mt-1 block text-xs text-[var(--muted)]">リスト外</span>
               </button>
             ))
-        ) : shown.length === 0 ? (
-          <p className="p-3 text-center text-[var(--muted)]">リストを選ぶと、ここに行が出ます。</p>
         ) : shown.map(({ line, index }) => (
           <button
             key={`${line.wav}-${index}`}
@@ -107,7 +104,7 @@ export function RecScriptPanel({
   next: string
   outside: string
 }) {
-  const title = line?.sing || outside || "録音リストを開いてください"
+  const title = line?.sing || outside || ""
   return (
     <div className="flex h-full flex-col justify-center gap-3 p-4">
       <p className="text-4xl leading-tight">{title}</p>

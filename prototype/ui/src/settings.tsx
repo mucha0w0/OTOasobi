@@ -10,7 +10,6 @@ export type SettingsTab = {
 
 type LookModel = {
   theme: ThemeChoice
-  themeLabel: string
   accent: string
   onTheme: (theme: ThemeChoice) => void
   onAccent: (hex: string) => void
@@ -103,20 +102,19 @@ export function SettingsDialog({ tabs, onClose }: { tabs: SettingsTab[]; onClose
   )
 }
 
-export function Setting({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
+export function Setting({ label, children }: { label: string; children: ReactNode }) {
   return (
     <section className="grid gap-2">
       <h4 className="text-sm font-semibold">{label}</h4>
-      {hint ? <p className="text-sm leading-6 text-[var(--muted)]">{hint}</p> : null}
       {children}
     </section>
   )
 }
 
-function LookSettings({ theme, themeLabel, accent, onTheme, onAccent, onSystemAccent }: LookModel) {
+function LookSettings({ theme, accent, onTheme, onAccent, onSystemAccent }: LookModel) {
   return (
     <div className="grid gap-6">
-      <Setting label="明暗" hint={`いまは${themeLabel}です。タイトルバーも同じ明暗です。`}>
+      <Setting label="明暗">
         <fieldset className="flex flex-wrap gap-3 text-sm">
           {themes.map((choice) => (
             <label key={choice.id} className="flex items-center gap-1">
@@ -126,7 +124,7 @@ function LookSettings({ theme, themeLabel, accent, onTheme, onAccent, onSystemAc
           ))}
         </fieldset>
       </Setting>
-      <Setting label="アクセント" hint="ボタンや選択中の行に付く色です。">
+      <Setting label="アクセント">
         <div className="flex flex-wrap items-center gap-2 text-sm">
           <input type="color" value={accent} aria-label="アクセント" onChange={(event) => onAccent(event.target.value)} />
           <button type="button" className="ghost-button" onClick={onSystemAccent}>端末に合わせる</button>
@@ -139,10 +137,10 @@ function LookSettings({ theme, themeLabel, accent, onTheme, onAccent, onSystemAc
 function IoSettings({ inputs, outputs, inputId, outputId, onInput, onOutput }: IoModel) {
   return (
     <div className="grid gap-6">
-      <Setting label="入力" hint="録音するマイクです。">
+      <Setting label="入力">
         <DeviceSelect label="入力" devices={inputs} value={inputId} onChange={onInput} />
       </Setting>
-      <Setting label="出力" hint="ガイドとテイクの再生先です。">
+      <Setting label="出力">
         <DeviceSelect label="出力" devices={outputs} value={outputId} onChange={onOutput} />
       </Setting>
     </div>
