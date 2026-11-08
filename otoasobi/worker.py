@@ -21,6 +21,7 @@ spec が "index" のときは、ファイルごとのメルを 1 回計算して
 wave が false のときは波形を返さず、色番号だけ返す。
 同じファイルの preview が続けて溜まっているときは、古い要求へ skipped を返してから最新だけ計算する。
 計算の途中で次の preview が来たときも、そのメルは残さず skipped を返す。
+読み込んだ波形と、計算したメルと音量は、直近 12 ファイルを残す。時刻か大きさが変わったら読み直す。
 要求: {"id": 3, "cmd": "save", "folder": "C:/音声フォルダ", "files": [...]}
 要求: {"id": 4, "cmd": "write", "folder": "C:/音声フォルダ", "files": [...], "config": {...}}
 config は offset_ms（ミリ秒。正は手前、負は後で、±100ms）、consonant_ms（ミリ秒）、blank（秒、-0.1 から 0.1）、overlap、mode。
@@ -53,7 +54,7 @@ import os
 import sys
 import threading
 import traceback
-from collections import deque
+from collections import OrderedDict, deque
 from pathlib import Path
 
 # torch.hub の進捗表示は改行しない。標準エラーのパイプが埋まると、音素対応のまま止まる。
@@ -189,18 +190,22 @@ def _analyze(request_id: object, path: str, force: bool) -> dict:
     return payload
 
 
-_wav_cache: tuple[str, int, int, object, int] | None = None
+_WAV_KEEP = 12
+_wavs: OrderedDict[tuple[str, int, int], tuple[np.ndarray, int]] = OrderedDict()
 
 
-def _load_cached(path: str) -> tuple[np.ndarray, int]:
-    global _wav_cache
+def _load_cached(path: str) -> tuple[np.ndarray, int, tuple[str, int, int]]:
     st = os.stat(path)
     key = (path, st.st_mtime_ns, st.st_size)
-    if _wav_cache is not None and _wav_cache[0] == key[0] and _wav_cache[1] == key[1] and _wav_cache[2] == key[2]:
-        return _wav_cache[3], _wav_cache[4]
+    cached = _wavs.get(key)
+    if cached is not None:
+        _wavs.move_to_end(key)
+        return cached[0], cached[1], key
     y, sr = load_wav(path)
-    _wav_cache = (key[0], key[1], key[2], y, sr)
-    return y, sr
+    _wavs[key] = (y, sr)
+    while len(_wavs) > _WAV_KEEP:
+        _wavs.popitem(last=False)
+    return y, sr, key
 
 
 def _optional_float(value: object) -> float | None:
@@ -244,7 +249,7 @@ def _preview_waiting() -> bool:
 
 
 def _preview(path: str, request: dict, request_id: object) -> dict:
-    y, sr = _load_cached(path)
+    y, sr, key = _load_cached(path)
     duration = len(y) / float(sr) if sr else 0.0
     t0 = _optional_float(request.get("t0"))
     t1 = _optional_float(request.get("t1"))
@@ -257,13 +262,13 @@ def _preview(path: str, request: dict, request_id: object) -> dict:
     want_wave = request.get("wave") is not False
     try:
         if request.get("spec") == "index":
-            if want_wave and not film_ready(y, sr):
+            if want_wave and not film_ready(y, sr, key):
                 early = index_wave(y, sr, t0, t1, columns)
                 _respond({"id": request_id, "event": "wave", **_wave_fields(early, duration)})
             preview = (
-                render_index(y, sr, t0, t1, columns, _preview_waiting)
+                render_index(y, sr, t0, t1, columns, _preview_waiting, key)
                 if want_wave
-                else spectrogram_only(y, sr, t0, t1, columns, _preview_waiting)
+                else spectrogram_only(y, sr, t0, t1, columns, _preview_waiting, key)
             )
             payload = _wave_fields(preview, duration)
             payload["spec_index"] = base64.b64encode(preview.spec).decode("ascii")

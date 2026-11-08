@@ -85,3 +85,114 @@ static class ProbeWave
         return (lo, hi, start / (double)rate, end / (double)rate);
     }
 }
+
+// 読み込んだ波形を直近のファイル分残す。時刻か大きさが変わったら捨てる。
+sealed class ProbeWaveCache
+{
+    public const int Keep = 12;
+
+    readonly object _gate = new();
+    readonly Dictionary<string, LinkedListNode<Entry>> _nodes = new(StringComparer.OrdinalIgnoreCase);
+    readonly LinkedList<Entry> _order = new();
+    int _epoch;
+
+    sealed class Entry
+    {
+        public required string Path { get; init; }
+        public long Length { get; init; }
+        public long WriteTicks { get; init; }
+        public required ProbeWave.Audio Audio { get; init; }
+    }
+
+    public int Epoch
+    {
+        get
+        {
+            lock (_gate)
+                return _epoch;
+        }
+    }
+
+    public int Bump()
+    {
+        lock (_gate)
+        {
+            _order.Clear();
+            _nodes.Clear();
+            return ++_epoch;
+        }
+    }
+
+    public ProbeWave.Audio? TryGet(string path)
+    {
+        lock (_gate)
+        {
+            if (!_nodes.TryGetValue(path, out var node))
+                return null;
+            if (!SameFile(path, node.Value))
+            {
+                _order.Remove(node);
+                _nodes.Remove(path);
+                return null;
+            }
+
+            _order.Remove(node);
+            _order.AddFirst(node);
+            return node.Value.Audio;
+        }
+    }
+
+    public void Store(string path, ProbeWave.Audio audio, int epoch)
+    {
+        FileInfo info;
+        try
+        {
+            info = new FileInfo(path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            return;
+        }
+
+        if (!info.Exists)
+            return;
+        lock (_gate)
+        {
+            if (epoch != _epoch)
+                return;
+            if (_nodes.TryGetValue(path, out var existing))
+            {
+                _order.Remove(existing);
+                _nodes.Remove(path);
+            }
+
+            var node = _order.AddFirst(new Entry
+            {
+                Path = path,
+                Length = info.Length,
+                WriteTicks = info.LastWriteTimeUtc.Ticks,
+                Audio = audio,
+            });
+            _nodes[path] = node;
+            while (_order.Last != null && _order.Count > Keep)
+            {
+                var last = _order.Last;
+                _order.RemoveLast();
+                _nodes.Remove(last.Value.Path);
+            }
+        }
+    }
+
+    static bool SameFile(string path, Entry entry)
+    {
+        try
+        {
+            var info = new FileInfo(path);
+            return info.Exists && info.Length == entry.Length && info.LastWriteTimeUtc.Ticks == entry.WriteTicks;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            return false;
+        }
+    }
+}

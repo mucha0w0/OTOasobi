@@ -45,8 +45,14 @@ sealed class ProbeSession : IDisposable
     int _fileGen;
     readonly object _frqGate = new();
     List<string> _listedNames = [];
-    Task<ProbeWave.Audio?>? _waveLoad;
-    string? _waveLoadPath;
+    readonly ProbeWaveCache _waves = new();
+    WaveLoad? _waveLoad;
+
+    sealed class WaveLoad(string path, Task<ProbeWave.Audio?> task)
+    {
+        public string Path { get; } = path;
+        public Task<ProbeWave.Audio?> Task { get; } = task;
+    }
     int _countGen;
     bool _counting;
     string? _recordStem;
@@ -542,7 +548,6 @@ sealed class ProbeSession : IDisposable
                 _previewGen++;
                 _fileGen++;
                 _waveLoad = null;
-                _waveLoadPath = null;
                 lock (_frqGate)
                 {
                     _frq.Clear();
@@ -567,18 +572,12 @@ sealed class ProbeSession : IDisposable
     void BeginFile(string path)
     {
         var fileGen = ++_fileGen;
-        _waveLoadPath = path;
-        _waveLoad = Task.Run(() =>
-        {
-            try
-            {
-                return (ProbeWave.Audio?)ProbeWave.Load(path);
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or ArgumentException)
-            {
-                return null;
-            }
-        });
+        var epoch = _waves.Epoch;
+        var cached = _waves.TryGet(path);
+        var task = cached != null
+            ? Task.FromResult<ProbeWave.Audio?>(cached)
+            : Task.Run(() => LoadWave(path, epoch));
+        _waveLoad = new WaveLoad(path, task);
         _ = Task.Run(() =>
         {
             object view;
@@ -708,19 +707,30 @@ sealed class ProbeSession : IDisposable
         }
     }
 
-    async Task<ProbeWave.Audio?> WaveAsync(string path)
+    ProbeWave.Audio? LoadWave(string path, int epoch)
     {
-        var pending = _waveLoad;
-        if (pending != null && string.Equals(_waveLoadPath, path, StringComparison.OrdinalIgnoreCase))
-            return await pending.ConfigureAwait(true);
         try
         {
-            return await Task.Run(() => ProbeWave.Load(path)).ConfigureAwait(true);
+            var audio = ProbeWave.Load(path);
+            if (audio != null)
+                _waves.Store(path, audio, epoch);
+            return audio;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or ArgumentException)
         {
             return null;
         }
+    }
+
+    async Task<ProbeWave.Audio?> WaveAsync(string path)
+    {
+        var cached = _waves.TryGet(path);
+        if (cached != null)
+            return cached;
+        var pending = _waveLoad;
+        if (pending != null && string.Equals(pending.Path, path, StringComparison.OrdinalIgnoreCase))
+            return await pending.Task.ConfigureAwait(true);
+        return await Task.Run(() => LoadWave(path, _waves.Epoch)).ConfigureAwait(true);
     }
 
     async Task SetDevicesAsync(string? inputId, string? outputId)
@@ -1802,8 +1812,8 @@ sealed class ProbeSession : IDisposable
         }
 
         var folder = _folder;
+        _waves.Bump();
         _waveLoad = null;
-        _waveLoadPath = null;
         _applying = true;
         PostStatus("エフェクトを適用しています");
         try
@@ -1820,6 +1830,8 @@ sealed class ProbeSession : IDisposable
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
         {
             _applying = false;
+            _waves.Bump();
+            _waveLoad = null;
             if (_folder == folder)
             {
                 PostStatus("");
@@ -1830,6 +1842,8 @@ sealed class ProbeSession : IDisposable
         }
 
         _applying = false;
+        _waves.Bump();
+        _waveLoad = null;
         if (_disposed || _folder != folder)
             return;
         var cache = Path.Combine(folder, OtoSaveStore.CacheFileName);

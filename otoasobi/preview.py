@@ -4,6 +4,7 @@
 波形は 1 列が 1 ピクセルの最小最大で、サンプル数が列数以下なら全サンプルを返す。
 旧画面のスペクトラムは、同じ範囲を指定ピクセルへ最近傍で描いた PNG です。
 配布画面は、ファイルを開いたときにメルを 1 回計算し、表示範囲をそこから切り出します。
+計算したメルと音量は直近のファイルを残し、同じ中身へ戻ったときは計算し直しません。
 色は付けず、低い帯を下にした色番号の列を返します。横は 1024 列までです。
 """
 
@@ -11,6 +12,7 @@ from __future__ import annotations
 
 import struct
 import zlib
+from collections import OrderedDict
 from dataclasses import dataclass
 
 import numpy as np
@@ -25,6 +27,7 @@ from otoasobi.features import (
 )
 
 INDEX_COLUMNS = 1024
+FILM_KEEP = 12
 _FILM_CHUNK = 2048
 
 _STOPS = np.array(
@@ -243,7 +246,8 @@ class Film:
     n: int
 
 
-_film: tuple[np.ndarray, int, Film] | None = None
+# (配列, sr, メル, 音量)。キーはパスと更新時刻と大きさ。無いときは配列の識別子。
+_films: OrderedDict[object, tuple[np.ndarray, int, Film, np.ndarray | None]] = OrderedDict()
 
 
 def _wave(y: np.ndarray) -> np.ndarray:
@@ -252,24 +256,59 @@ def _wave(y: np.ndarray) -> np.ndarray:
     return np.ascontiguousarray(np.asarray(y, dtype=np.float64).reshape(-1))
 
 
-def film_ready(y: np.ndarray, sr: int) -> bool:
-    cached = _film
-    return cached is not None and cached[0] is y and cached[1] == sr
+def _film_key(y: np.ndarray, key: object) -> object:
+    return id(y) if key is None else key
+
+
+def _film_hit(y: np.ndarray, sr: int, key: object):
+    cache_key = _film_key(y, key)
+    cached = _films.get(cache_key)
+    if cached is None or cached[1] != sr:
+        return cache_key, None
+    if key is None and cached[0] is not y:
+        return cache_key, None
+    _films.move_to_end(cache_key)
+    return cache_key, cached
+
+
+def film_ready(y: np.ndarray, sr: int, key: object = None) -> bool:
+    if key is not None:
+        cached = _films.get(key)
+        if cached is not None and cached[1] == sr:
+            return True
+    for item in _films.values():
+        if item[0] is y and item[1] == sr:
+            return True
+    return False
 
 
 class FilmSkipped(Exception):
     """次の preview が来たので、途中のメルは捨てる。"""
 
 
-def film_for(y: np.ndarray, sr: int, stop=None) -> Film:
-    """渡された配列のメルを、最初の 1 回だけ計算する。"""
-    global _film
-    cached = _film
-    if cached is not None and cached[0] is y and cached[1] == sr:
+def film_for(y: np.ndarray, sr: int, stop=None, key: object = None) -> Film:
+    """渡された配列のメルを、同じキーでは 1 回だけ計算する。"""
+    cache_key, cached = _film_hit(y, sr, key)
+    if cached is not None:
         return cached[2]
     film = _build_film(_wave(y), sr, stop)
-    _film = (y, sr, film)
+    loud = cached[3] if cached is not None else None
+    _films[cache_key] = (y, sr, film, loud)
+    _films.move_to_end(cache_key)
+    while len(_films) > FILM_KEEP:
+        _films.popitem(last=False)
     return film
+
+
+def _loudness(y: np.ndarray, sr: int, key: object = None) -> np.ndarray:
+    cache_key, cached = _film_hit(y, sr, key)
+    if cached is not None and cached[3] is not None:
+        return cached[3]
+    loud = loudness_db(y, sr)
+    if cached is not None:
+        _films[cache_key] = (cached[0], cached[1], cached[2], loud)
+        _films.move_to_end(cache_key)
+    return loud
 
 
 def _build_film(y: np.ndarray, sr: int, stop=None) -> Film:
@@ -325,10 +364,11 @@ def spectrogram_index(
     t1: float,
     columns: int,
     stop=None,
+    key: object = None,
 ) -> tuple[bytes, int, int, float, float]:
     """表示範囲の色番号。行は低い帯が先、列は時間。"""
     columns = max(1, min(int(columns), INDEX_COLUMNS))
-    film = film_for(y, sr, stop)
+    film = film_for(y, sr, stop, key)
     n = film.n
     n_mels = int(film.db.shape[0])
     if sr <= 0 or n == 0:
@@ -402,6 +442,7 @@ def render_index(
     t1: float | None = None,
     columns: int = 1024,
     stop=None,
+    key: object = None,
 ) -> IndexPreview:
     n = int(np.asarray(y).reshape(-1).shape[0])
     duration = n / float(sr) if sr > 0 and n else 0.0
@@ -411,9 +452,9 @@ def render_index(
         t1 = duration
     columns = max(1, min(int(columns), INDEX_COLUMNS))
     lo, hi, wt0, wt1, samples = waveform_view(y, sr, t0, t1, columns)
-    spec, spec_columns, spec_rows, spec_t0, spec_t1 = spectrogram_index(y, sr, t0, t1, columns, stop)
+    spec, spec_columns, spec_rows, spec_t0, spec_t1 = spectrogram_index(y, sr, t0, t1, columns, stop, key)
     full = duration <= 0 or (t1 - t0) >= duration * 0.999
-    loud = loudness_db(y, sr) if full else np.zeros(0)
+    loud = _loudness(y, sr, key) if full else np.zeros(0)
     return IndexPreview(
         wave_lo=_nums(lo),
         wave_hi=_nums(hi),
@@ -438,13 +479,14 @@ def spectrogram_only(
     t1: float,
     columns: int,
     stop=None,
+    key: object = None,
 ) -> IndexPreview:
     """波形は呼ばない。色番号と、全体を見ているときの音量だけ返す。"""
     n = int(np.asarray(y).reshape(-1).shape[0])
     duration = n / float(sr) if sr > 0 and n else 0.0
-    spec, spec_columns, spec_rows, spec_t0, spec_t1 = spectrogram_index(y, sr, t0, t1, columns, stop)
+    spec, spec_columns, spec_rows, spec_t0, spec_t1 = spectrogram_index(y, sr, t0, t1, columns, stop, key)
     full = duration <= 0 or (t1 - t0) >= duration * 0.999
-    loud = loudness_db(y, sr) if full else np.zeros(0)
+    loud = _loudness(y, sr, key) if full else np.zeros(0)
     return IndexPreview(
         wave_lo=[],
         wave_hi=[],

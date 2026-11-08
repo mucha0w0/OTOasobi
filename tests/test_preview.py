@@ -14,6 +14,7 @@ if str(ROOT) not in sys.path:
 
 from otoasobi import preview as preview_module  # noqa: E402
 from otoasobi.preview import (  # noqa: E402
+    FILM_KEEP,
     INDEX_COLUMNS,
     FilmSkipped,
     _LUT,
@@ -22,6 +23,7 @@ from otoasobi.preview import (  # noqa: E402
     index_wave,
     render_index,
     render_preview,
+    spectrogram_only,
     waveform_view,
 )
 
@@ -69,11 +71,39 @@ class PreviewTests(unittest.TestCase):
         self.assertTrue(preview.png.startswith(b"\x89PNG"))
 
     def test_cancelled_film_is_not_cached(self) -> None:
-        preview_module._film = None
+        preview_module._films.clear()
         y = np.zeros(16000 * 2, dtype=np.float64)
         with self.assertRaises(FilmSkipped):
             film_for(y, 16000, lambda: True)
         self.assertFalse(film_ready(y, 16000))
+
+    def test_same_key_reuses_film_and_loudness(self) -> None:
+        preview_module._films.clear()
+        key = ("あ.wav", 1, 2)
+        a = np.sin(np.linspace(0, 40, 8000)).astype(np.float64)
+        b = a.copy()
+        first = spectrogram_only(a, 8000, 0.0, 1.0, 32, key=key)
+        self.assertGreater(len(first.loudness), 0)
+        stored = preview_module._films[key][3]
+        calls = {"n": 0}
+
+        def stop() -> bool:
+            calls["n"] += 1
+            return False
+
+        film_for(b, 8000, stop, key)
+        self.assertEqual(calls["n"], 0)
+        again = spectrogram_only(b, 8000, 0.0, 1.0, 32, key=key)
+        self.assertIs(preview_module._films[key][3], stored)
+        self.assertEqual(again.loudness, first.loudness)
+        self.assertEqual(again.spec_rows, first.spec_rows)
+
+    def test_oldest_film_is_dropped(self) -> None:
+        preview_module._films.clear()
+        for index in range(FILM_KEEP + 1):
+            film_for(np.zeros(3000, dtype=np.float64), 8000, key=("n", index))
+        self.assertNotIn(("n", 0), preview_module._films)
+        self.assertIn(("n", FILM_KEEP), preview_module._films)
 
     def test_lut_ends(self) -> None:
         self.assertEqual(_LUT[0].tolist(), [0, 0, 4])

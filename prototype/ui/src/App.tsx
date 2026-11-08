@@ -28,7 +28,20 @@ function applyPageScale(scale: number) {
   document.documentElement.style.zoom = String(scale)
 }
 
-function mergePreview(current: PreviewEvent | null, event: PreviewEvent): PreviewEvent {
+const pictureKeep = 12
+
+function rememberPicture(cache: Map<string, PreviewEvent>, name: string, picture: PreviewEvent) {
+  cache.delete(name)
+  cache.set(name, picture)
+  while (cache.size > pictureKeep) {
+    const oldest = cache.keys().next().value
+    if (oldest === undefined)
+      break
+    cache.delete(oldest)
+  }
+}
+
+function mergePreview(current: PreviewEvent | null, event: PreviewEvent, keepSpec: boolean): PreviewEvent {
   const hasWave = event.lo.length > 0
   const hasSpec = event.specColumns > 0 && event.spec.length > 0
   if (hasSpec && !hasWave && current)
@@ -43,6 +56,17 @@ function mergePreview(current: PreviewEvent | null, event: PreviewEvent): Previe
       png: "",
       loudness: event.loudness.length > 0 ? event.loudness : current.loudness,
       sampleRate: event.sampleRate || current.sampleRate,
+    }
+  if (hasWave && !hasSpec && keepSpec && current && current.spec.length > 0)
+    return {
+      ...current,
+      lo: event.lo,
+      hi: event.hi,
+      waveT0: event.waveT0,
+      waveT1: event.waveT1,
+      duration: event.duration || current.duration,
+      sampleRate: event.sampleRate || current.sampleRate,
+      png: "",
     }
   if (hasWave && !hasSpec)
     return { ...event, spec: "", specColumns: 0, specRows: 0, png: "" }
@@ -62,6 +86,9 @@ export function App() {
   const bands = useRef(new Set<BandHandle>())
   const boxes = useRef<Record<string, PaneBox>>({})
   const pictureRef = useRef<PreviewEvent | null>(null)
+  const pictureName = useRef("")
+  const pictureCache = useRef(new Map<string, PreviewEvent>())
+  const folderRef = useRef("")
   const rangeRef = useRef<Range>({ t0: 0, t1: 0 })
   const marksRef = useRef<OtoMark[]>([])
   const spansRef = useRef<PhoneSpan[]>([])
@@ -154,6 +181,7 @@ export function App() {
   const resolved = resolveTheme(theme, systemDark)
   pictureRef.current = picture
   fileNameRef.current = fileName
+  folderRef.current = folder
   namesRef.current = names
   recListRef.current = recList
   recIndexRef.current = recIndex
@@ -361,6 +389,8 @@ export function App() {
         const keep = missingRef.current || event.names.some((name) => sameName(name, fileNameRef.current))
         setCreateOpen(false)
         setCreating(false)
+        if (event.folder !== folderRef.current)
+          pictureCache.current.clear()
         setFolder(event.folder)
         setNames(event.names)
         window.clearTimeout(fileStepTimer.current)
@@ -389,9 +419,19 @@ export function App() {
           fileListRef.current?.release()
         }
         if (event.missing) {
+          pictureCache.current.delete(event.name)
+          pictureName.current = ""
           setPicture(null)
           pictureRef.current = null
           rangeRef.current = { t0: 0, t1: 0 }
+        } else {
+          const cached = pictureCache.current.get(event.name)
+          pictureName.current = cached ? event.name : ""
+          if (cached) {
+            setPicture(cached)
+            pictureRef.current = cached
+            rangeRef.current = { t0: cached.waveT0, t1: cached.waveT1 }
+          }
         }
         focusRef.current = -1
         liveRef.current = null
@@ -407,7 +447,13 @@ export function App() {
           break
         missingRef.current = false
         noteRef.current = ""
-        const next = mergePreview(pictureRef.current, event)
+        const sameFile = pictureName.current !== "" && pictureName.current === fileNameRef.current
+        const sameLength = pictureRef.current == null || event.duration === 0 || event.duration === pictureRef.current.duration
+        const keepSpec = sameFile && sameLength
+        const next = mergePreview(pictureRef.current, event, keepSpec)
+        pictureName.current = fileNameRef.current
+        if (fileNameRef.current)
+          rememberPicture(pictureCache.current, fileNameRef.current, next)
         setPicture(next)
         pictureRef.current = next
         if (event.lo.length > 0)
