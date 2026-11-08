@@ -1651,7 +1651,6 @@ public sealed partial class MainPage : Page
             FileList.SelectedIndex = 0;
         UpdateCommands();
         RefreshOtoTable();
-        RefreshFrqSummary();
         RefreshOtoIniScope();
     }
 
@@ -1692,7 +1691,6 @@ public sealed partial class MainPage : Page
         }
 
         RefreshOtoTable();
-        RefreshFrqSummary();
         RefreshOtoIniScope();
         StartLoudness();
     }

@@ -948,19 +948,6 @@
                             <StackPanel Padding="12" Spacing="10">
                                 <Border Style="{StaticResource PanelCardStyle}">
                                     <StackPanel Spacing="8">
-                                        <local:InfoNote
-                                            Title="周波数表"
-                                            Text="フォルダ直下の各 WAV と同じ名前で、UTAU 用の .frq を書きます。256 サンプルごとの高さと、有声部分の平均です。エフェクターのあとや WAV を差し替えたあとは作り直します。original には書きません。" />
-                                        <TextBlock
-                                            x:Name="FrqSummary"
-                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                            Style="{StaticResource CaptionTextBlockStyle}"
-                                            Text="フォルダを開くと、WAV と .frq の件数がここに出ます。"
-                                            TextWrapping="Wrap" />
-                                    </StackPanel>
-                                </Border>
-                                <Border Style="{StaticResource PanelCardStyle}">
-                                    <StackPanel Spacing="8">
                                         <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="対象" />
                                         <RadioButton
                                             x:Name="FrqModeAll"
@@ -984,11 +971,17 @@
                                     </StackPanel>
                                 </Border>
                                 <Border Style="{StaticResource PanelCardStyle}">
-                                    <StackPanel Spacing="4">
+                                    <StackPanel Spacing="8">
+                                        <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="先行発声" />
                                         <CheckBox
                                             x:Name="FrqClearPreutterBox"
                                             AutomationProperties.Name="先行発声までを０に統一する"
                                             Content="先行発声までを０に統一する"
+                                            IsChecked="False" />
+                                        <CheckBox
+                                            x:Name="FrqNonePreutterBox"
+                                            AutomationProperties.Name="先行発声までを「なし」にする"
+                                            Content="先行発声までを「なし」にする"
                                             IsChecked="False" />
                                         <TextBlock
                                             Margin="28,0,0,0"

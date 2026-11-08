@@ -995,7 +995,6 @@ export function App() {
                 return (
                   <FrqPanel
                     wavs={frqCount.wavs}
-                    frqs={frqCount.frqs}
                     busy={Boolean(oto?.busy) || frqCount.busy}
                     hasFile={fileName.length > 0 && !missingRef.current}
                     send={(command) => sendRef.current(command)}

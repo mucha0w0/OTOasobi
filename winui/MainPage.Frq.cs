@@ -31,7 +31,7 @@ public sealed partial class MainPage
         }
 
         object? clear = null;
-        if (FrqClearPreutterBox.IsChecked == true)
+        if (FrqClearPreutterBox.IsChecked == true || FrqNonePreutterBox.IsChecked == true)
             clear = PreutterClears();
 
         _busy = true;
@@ -84,7 +84,6 @@ public sealed partial class MainPage
                 ConfigBody.IsEnabled = true;
                 UpdateCommands();
                 HideStatus();
-                RefreshFrqSummary();
                 ShowFrqFor(FileList.SelectedItem as WavFile, reload: true);
             }
         }
@@ -97,36 +96,6 @@ public sealed partial class MainPage
         StatusProgress.Maximum = Math.Max(total, 1);
         StatusProgress.Value = done;
         StatusBar.Visibility = Visibility.Visible;
-    }
-
-    void RefreshFrqSummary()
-    {
-        if (string.IsNullOrEmpty(_folder) || !Directory.Exists(_folder))
-        {
-            FrqSummary.Text = "フォルダを開くと、WAV と .frq の件数がここに出ます。";
-            return;
-        }
-
-        var (wavs, frq) = CountFrq(_folder);
-        FrqSummary.Text = wavs == 0
-            ? "フォルダ直下に WAV がありません。"
-            : $"WAV {wavs} 件のうち、.frq は {frq} 件あります。";
-    }
-
-    static (int Wavs, int Frq) CountFrq(string folder)
-    {
-        var wavs = 0;
-        var frq = 0;
-        foreach (var path in Directory.EnumerateFiles(folder))
-        {
-            if (!path.EndsWith(".wav", StringComparison.OrdinalIgnoreCase))
-                continue;
-            wavs++;
-            if (File.Exists(Path.ChangeExtension(path, ".frq")))
-                frq++;
-        }
-
-        return (wavs, frq);
     }
 
     object[] PreutterClears()
