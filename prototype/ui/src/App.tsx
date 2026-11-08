@@ -14,6 +14,7 @@ import { OtoTable } from "./OtoTable"
 import { OtoIni, OtoSettings } from "./OtoPanels"
 import { requestsPreviewAfter, type BankEvent, type DeviceInfo, type EffectsEvent, type FrqViewEvent, type HostEvent, type OtoMark, type OtoState, type PageCommand, type PreviewEvent, type RecListEvent, type SavedEvent } from "./protocol"
 import { RecListPanel, RecScriptPanel } from "./RecPanels"
+import { SettingsDialog, settingsTabs } from "./settings"
 import { GuidePanel, MicPanel, RecPanel, type GuideFileState } from "./SidePanels"
 import type { PhoneSpan } from "./spans"
 import { buttonColors, resolveTheme, type ThemeChoice } from "./theme"
@@ -918,51 +919,36 @@ export function App() {
         </div>
       )}
       {settings && (
-        <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/40 p-6">
-          <div className="w-full max-w-lg rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6 text-[var(--text)]">
-            <h2 className="text-lg font-semibold">環境設定</h2>
-            <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
-              明暗は{themeLabel}です。タイトルバーへも同じ明暗を送っています。
-            </p>
-            <fieldset className="mt-4 flex gap-3 text-sm">
-              {(["light", "dark", "system"] as const).map((choice) => (
-                <label key={choice} className="flex items-center gap-1">
-                  <input type="radio" name="theme" checked={theme === choice} onChange={() => chooseTheme(choice)} />
-                  {choice === "light" ? "ライト" : choice === "dark" ? "ダーク" : "端末に合わせる"}
-                </label>
-              ))}
-            </fieldset>
-            <label className="mt-4 flex items-center gap-2 text-sm">
-              アクセント
-              <input type="color" value={accent} onChange={(event) => chooseAccent(event.target.value)} />
-              <button type="button" className="ghost-button" onClick={() => {
+        <SettingsDialog
+          tabs={settingsTabs(
+            {
+              theme,
+              themeLabel,
+              accent,
+              onTheme: chooseTheme,
+              onAccent: chooseAccent,
+              onSystemAccent: () => {
                 accentCustom.current = false
                 sendRef.current({ type: "appearance", theme, accent: null })
-              }}>端末に合わせる</button>
-            </label>
-            <label className="mt-4 grid gap-1 text-sm">
-              入力
-              <select className="field" value={inputId} onChange={(event) => {
-                setInputId(event.target.value)
-                sendRef.current({ type: "setDevices", inputId: event.target.value, outputId })
-              }}>
-                <option value="">既定</option>
-                {inputs.map((device) => <option key={device.id} value={device.id}>{device.label}</option>)}
-              </select>
-            </label>
-            <label className="mt-3 grid gap-1 text-sm">
-              出力
-              <select className="field" value={outputId} onChange={(event) => {
-                setOutputId(event.target.value)
-                sendRef.current({ type: "setDevices", inputId, outputId: event.target.value })
-              }}>
-                <option value="">既定</option>
-                {outputs.map((device) => <option key={device.id} value={device.id}>{device.label}</option>)}
-              </select>
-            </label>
-            <button type="button" className="accent-button mt-5 w-full" onClick={() => setSettings(false)}>閉じる</button>
-          </div>
-        </div>
+              },
+            },
+            {
+              inputs,
+              outputs,
+              inputId,
+              outputId,
+              onInput: (id) => {
+                setInputId(id)
+                sendRef.current({ type: "setDevices", inputId: id, outputId })
+              },
+              onOutput: (id) => {
+                setOutputId(id)
+                sendRef.current({ type: "setDevices", inputId, outputId: id })
+              },
+            },
+          )}
+          onClose={() => setSettings(false)}
+        />
       )}
       {updatePrompt && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-6">
