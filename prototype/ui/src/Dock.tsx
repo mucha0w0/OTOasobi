@@ -2,17 +2,19 @@ import { useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNod
 import { armBox, hitDrop, type DropAim, type HitLeaf, type HitRegion, type ScreenBox } from "./dockHit"
 import { pickTitleResize, type TitleEdge } from "./dockSplit"
 import { commitMove, hidePane, idsOf, paneTitles, type LayoutNode, type PaneBox } from "./layout"
+import { measureFloors, measureSplitters, moveSplitter } from "./splitter"
 
 type Props = {
   layout: LayoutNode | null
   boxes: { current: Record<string, PaneBox> }
   onChange: (next: LayoutNode | null, persist: boolean) => void
-  onRatio: (path: number[], ratio: number) => void
+  onRatio: (next: LayoutNode) => void
   onResizing: (holding: boolean) => void
   render: (id: string) => ReactNode
 }
 
 type NodeProps = Omit<Props, "layout" | "onChange"> & {
+  layout: LayoutNode
   node: LayoutNode
   path: number[]
   onTitleDown: (event: ReactPointerEvent<HTMLDivElement>, id: string) => void
@@ -87,6 +89,7 @@ export function Dock({ layout, boxes, onChange, onRatio, onResizing, render }: P
     <div ref={rootRef} data-dock-root="" className="relative h-full min-h-0 bg-[var(--bg)]">
       {layout && (
         <Node
+          layout={layout}
           node={layout}
           path={[]}
           boxes={boxes}
@@ -162,7 +165,7 @@ function readHits(root: HTMLElement): [HitLeaf[], HitRegion[]] {
   return [leaves, regions]
 }
 
-function Node({ node, path, boxes, onRatio, onResizing, render, onTitleDown, onClose }: NodeProps) {
+function Node({ layout, node, path, boxes, onRatio, onResizing, render, onTitleDown, onClose }: NodeProps) {
   const ids = idsOf(node).join(",")
   if ("id" in node) {
     const title = paneTitles[node.id] ?? node.id
@@ -194,7 +197,7 @@ function Node({ node, path, boxes, onRatio, onResizing, render, onTitleDown, onC
               return onTitleDown(event, node.id)
             clearSplitHot(event.currentTarget)
             event.currentTarget.style.cursor = ""
-            beginResize(event, split, onRatio, onResizing)
+            beginResize(event, split, layout, onRatio, onResizing)
           }}
         >
           <span className="min-w-0 flex-1 truncate px-2 text-xs text-[var(--muted)]">{title}</span>
@@ -225,7 +228,7 @@ function Node({ node, path, boxes, onRatio, onResizing, render, onTitleDown, onC
         className="min-h-0 min-w-0"
         style={horizontal ? { width: `${node.ratio * 100}%` } : { height: `${node.ratio * 100}%` }}
       >
-        <Node key={path.join(".") + ".0"} node={node.first} path={[...path, 0]} boxes={boxes} onRatio={onRatio} onResizing={onResizing} render={render} onTitleDown={onTitleDown} onClose={onClose} />
+        <Node key={path.join(".") + ".0"} layout={layout} node={node.first} path={[...path, 0]} boxes={boxes} onRatio={onRatio} onResizing={onResizing} render={render} onTitleDown={onTitleDown} onClose={onClose} />
       </div>
       <div
         role="separator"
@@ -234,12 +237,12 @@ function Node({ node, path, boxes, onRatio, onResizing, render, onTitleDown, onC
         data-axis={node.axis}
         data-path={path.join(".")}
         className={horizontal ? "split-x" : "split-y"}
-        onPointerDown={(event) => beginResize(event, event.currentTarget, onRatio, onResizing)}
+        onPointerDown={(event) => beginResize(event, event.currentTarget, layout, onRatio, onResizing)}
       >
         <span className="split-line" />
       </div>
       <div className="min-h-0 min-w-0 flex-1">
-        <Node key={path.join(".") + ".1"} node={node.second} path={[...path, 1]} boxes={boxes} onRatio={onRatio} onResizing={onResizing} render={render} onTitleDown={onTitleDown} onClose={onClose} />
+        <Node key={path.join(".") + ".1"} layout={layout} node={node.second} path={[...path, 1]} boxes={boxes} onRatio={onRatio} onResizing={onResizing} render={render} onTitleDown={onTitleDown} onClose={onClose} />
       </div>
     </div>
   )
@@ -248,12 +251,14 @@ function Node({ node, path, boxes, onRatio, onResizing, render, onTitleDown, onC
 function beginResize(
   event: ReactPointerEvent<HTMLDivElement>,
   split: HTMLElement,
-  onRatio: (path: number[], ratio: number) => void,
+  layout: LayoutNode,
+  onRatio: (next: LayoutNode) => void,
   onResizing: (holding: boolean) => void,
 ) {
   if (event.button !== 0)
     return
-  const frame = split.parentElement as HTMLDivElement | null
+  const dock = split.closest("[data-dock-root]")
+  const frame = dock?.querySelector(":scope > [data-dock-node]") as HTMLElement | null
   if (!frame)
     return
   event.preventDefault()
@@ -261,23 +266,19 @@ function beginResize(
   const horizontal = split.classList.contains("split-x")
   const path = (split.dataset.path ?? "").split(".").filter(Boolean).map(Number)
   const bounds = frame.getBoundingClientRect()
-  const first = split.previousElementSibling as HTMLElement | null
-  const parsed = Number.parseFloat(horizontal ? first?.style.width ?? "" : first?.style.height ?? "")
-  let ratio = Number.isFinite(parsed) ? parsed / 100 : 0.5
+  const frozen = measureSplitters(layout, bounds.width, bounds.height)
+  const floors = measureFloors(layout, bounds.width, bounds.height)
+  let latest = layout
   onResizing(true)
   document.documentElement.classList.add(horizontal ? "resizing-x" : "resizing-y")
   const line = split.querySelector(".split-line") as HTMLElement | null
   if (line)
     line.style.background = "var(--accent)"
   const move = (ev: PointerEvent) => {
-    const total = horizontal ? bounds.width : bounds.height
-    const origin = horizontal ? bounds.left : bounds.top
-    const pointer = horizontal ? ev.clientX : ev.clientY
-    const min = Math.min(0.5, 160 / Math.max(total, 1))
-    const next = Math.min(1 - min, Math.max(min, (pointer - origin) / Math.max(total, 1)))
-    if (first)
-      first.style[horizontal ? "width" : "height"] = `${next * 100}%`
-    ratio = next
+    const box = frame.getBoundingClientRect()
+    const proposed = horizontal ? ev.clientX - box.left : ev.clientY - box.top
+    latest = moveSplitter(layout, path, proposed, frozen, bounds.width, bounds.height, floors)
+    applyLayout(frame, latest)
   }
   const up = () => {
     window.removeEventListener("pointermove", move)
@@ -286,12 +287,37 @@ function beginResize(
     if (line)
       line.style.background = ""
     onResizing(false)
-    onRatio(path, ratio)
+    if (latest !== layout)
+      onRatio(latest)
   }
   window.addEventListener("pointermove", move)
   window.addEventListener("pointerup", up)
   const cap = event.currentTarget === split ? split : event.currentTarget
   cap.setPointerCapture(event.pointerId)
+}
+
+function applyLayout(frame: HTMLElement, node: LayoutNode) {
+  if ("id" in node)
+    return
+  const horizontal = node.axis === "h"
+  const firstWrap = frame.children[0] as HTMLElement | undefined
+  const secondWrap = frame.children[2] as HTMLElement | undefined
+  if (!firstWrap || !secondWrap)
+    return
+  if (horizontal) {
+    firstWrap.style.width = `${node.ratio * 100}%`
+    firstWrap.style.height = ""
+  }
+  else {
+    firstWrap.style.height = `${node.ratio * 100}%`
+    firstWrap.style.width = ""
+  }
+  const first = firstWrap.firstElementChild as HTMLElement | null
+  const second = secondWrap.firstElementChild as HTMLElement | null
+  if (first)
+    applyLayout(first, node.first)
+  if (second)
+    applyLayout(second, node.second)
 }
 
 function hoverTitle(title: HTMLDivElement, clientX: number, clientY: number, target: EventTarget | null) {

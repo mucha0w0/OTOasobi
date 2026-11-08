@@ -7,7 +7,7 @@ import { FrqEditor } from "./FrqEditor"
 import { FrqPanel } from "./FrqPanel"
 import { GraphBand, type BandHandle, type BandKind, type GraphModel, type LiveTune } from "./GraphBand"
 import { connectHost } from "./host"
-import { contains, createDefault, hidePane, setRatio, showPane, type LayoutNode, type PaneBox } from "./layout"
+import { contains, createDefault, hidePane, showPane, type LayoutNode, type PaneBox } from "./layout"
 import { createLiveBus, type LiveBus } from "./live"
 import { MenuBar } from "./MenuBar"
 import { OtoTable } from "./OtoTable"
@@ -613,7 +613,7 @@ export function App() {
               else
                 setLayout(next)
             }}
-            onRatio={(path, ratio) => commitLayout(layout ? setRatio(layout, path, ratio) : layout, true)}
+            onRatio={(next) => commitLayout(next, true)}
             onResizing={(holding) => {
               for (const band of bands.current)
                 band.holdLayout(holding)

@@ -129,17 +129,6 @@ export function commitMove(
   return origin
 }
 
-export function setRatio(node: LayoutNode, path: number[], ratio: number): LayoutNode {
-  if ("id" in node)
-    return node
-  if (path.length === 0)
-    return { ...node, ratio }
-  const [head, ...rest] = path
-  return head === 0
-    ? { ...node, first: setRatio(node.first, rest, ratio) }
-    : { ...node, second: setRatio(node.second, rest, ratio) }
-}
-
 function readNode(value: unknown, seen: Set<string>): LayoutNode | null {
   if (typeof value !== "object" || value === null)
     return null
