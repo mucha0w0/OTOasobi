@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { shouldReplaceBitmap } from "./bitmap"
+import { IconButton, IconNext, IconPlay, IconPrev, IconRecord, IconSkip, IconStop } from "./IconButton"
 import { drawPeaks } from "./drawPeaks"
 import { shownInputRate, type CaptureEvent, type PageCommand, type SavedEvent } from "./protocol"
 import type { LiveBus } from "./live"
@@ -55,13 +56,18 @@ export function RecPanel({
           </p>
         )}
       </div>
-      <div className="grid grid-cols-2 gap-2 border-t border-[var(--line)] p-3">
-        <button type="button" className="ghost-button" onClick={onPrev}>前へ</button>
-        <button type="button" className="ghost-button" onClick={onNext}>次へ</button>
-        <button type="button" className="ghost-button col-span-2" onClick={onNextMissing}>次の未録音</button>
-        <button type="button" className="accent-button col-span-2" disabled={Boolean(blocked) && !recording && !waiting} onClick={() => onRecord(recording || waiting)}>
-          {recording || waiting ? "停止" : "録音"}
-        </button>
+      <div className="flex gap-2 border-t border-[var(--line)] p-3">
+        <IconButton label="前へ" onClick={onPrev}><IconPrev /></IconButton>
+        <IconButton label="次へ" onClick={onNext}><IconNext /></IconButton>
+        <IconButton label="次の未録音" onClick={onNextMissing}><IconSkip /></IconButton>
+        <IconButton
+          label={recording || waiting ? "停止" : "録音"}
+          accent
+          disabled={Boolean(blocked) && !recording && !waiting}
+          onClick={() => onRecord(recording || waiting)}
+        >
+          {recording || waiting ? <IconStop /> : <IconRecord />}
+        </IconButton>
       </div>
     </div>
   )
@@ -179,14 +185,14 @@ export function GuidePanel({
           </>
         )}
       </div>
-      <div className="border-t border-[var(--line)] p-3">
-        <button
-          type="button"
-          className="accent-button w-full"
+      <div className="flex border-t border-[var(--line)] p-3">
+        <IconButton
+          label={playing ? "停止" : "ガイドを聴く"}
+          accent
           onClick={() => send(playing ? { type: "guideStop" } : { type: "guide", note, semitones, speed, volume })}
         >
-          {playing ? "停止" : "ガイドを聴く"}
-        </button>
+          {playing ? <IconStop /> : <IconPlay />}
+        </IconButton>
       </div>
     </div>
   )
@@ -271,15 +277,15 @@ export function MicPanel({
           <div className="h-full bg-[var(--accent)]" style={{ width: `${Math.min(1, capture?.peak ?? 0) * 100}%` }} />
         </div>
       </div>
-      <div className="border-t border-[var(--line)] p-3">
-        <button
-          type="button"
-          className="accent-button w-full"
+      <div className="flex border-t border-[var(--line)] p-3">
+        <IconButton
+          label={playing ? "停止" : "テイクを聴く"}
+          accent
           disabled={!recorded || takeName.length === 0}
           onClick={() => send(playing ? { type: "take", op: "stop" } : { type: "take", op: "play", name: takeName })}
         >
-          {playing ? "停止" : "テイクを聴く"}
-        </button>
+          {playing ? <IconStop /> : <IconPlay />}
+        </IconButton>
       </div>
     </div>
   )

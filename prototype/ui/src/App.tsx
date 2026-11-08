@@ -986,6 +986,15 @@ export function App() {
           min-height: 32px;
           padding: 4px 8px;
         }
+        .icon-button {
+          display: grid;
+          width: 32px;
+          height: 32px;
+          min-width: 32px;
+          min-height: 32px;
+          place-items: center;
+          padding: 0;
+        }
       `}</style>
     </div>
   )

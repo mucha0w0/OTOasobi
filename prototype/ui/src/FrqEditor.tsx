@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react"
+import { IconButton, IconPen } from "./IconButton"
 import type { FrqViewEvent, PageCommand } from "./protocol"
 
 const row = 14
@@ -114,9 +115,9 @@ export function FrqEditor({
   return (
     <div className="flex h-full min-h-0 flex-col text-sm">
       <div className="flex items-center gap-2 border-b border-[var(--line)] px-3 py-2">
-        <button type="button" className={pen ? "accent-button" : "ghost-button"} onClick={() => setPen((value) => !value)}>
-          ペン
-        </button>
+        <IconButton label="ペン" accent={pen} onClick={() => setPen((value) => !value)}>
+          <IconPen />
+        </IconButton>
         <button type="button" className="ghost-button" disabled={selected.length === 0} onClick={() => send({ type: "frq", op: "octave", frames: selected, octaves: 1 })}>
           +12
         </button>

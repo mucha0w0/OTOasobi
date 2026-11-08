@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react"
+import { IconButton, IconDown, IconUp } from "./IconButton"
 import type { EffectsEvent, PageCommand } from "./protocol"
 
 const bands = [63, 125, 250, 500, 1000, 2000, 4000, 8000]
@@ -53,8 +54,8 @@ export function EffectsPanel({
           <div key={kind}>
             {kind !== "noise-suppressor" && (
               <div className="mb-1 flex justify-end gap-2">
-                <button type="button" className="ghost-button" disabled={index <= 1} onClick={() => send({ type: "effects", op: "move", from: index, to: index - 1 })}>上へ</button>
-                <button type="button" className="ghost-button" disabled={index >= order.length - 1} onClick={() => send({ type: "effects", op: "move", from: index, to: index + 1 })}>下へ</button>
+                <IconButton label="上へ" disabled={index <= 1} onClick={() => send({ type: "effects", op: "move", from: index, to: index - 1 })}><IconUp /></IconButton>
+                <IconButton label="下へ" disabled={index >= order.length - 1} onClick={() => send({ type: "effects", op: "move", from: index, to: index + 1 })}><IconDown /></IconButton>
               </div>
             )}
             {kind === "noise-suppressor" && (
