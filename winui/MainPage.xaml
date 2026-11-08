@@ -974,16 +974,21 @@
                                     <StackPanel Spacing="8">
                                         <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="先行発声" />
                                         <RadioButton
+                                            x:Name="FrqPreutterKeep"
+                                            AutomationProperties.Name="なにもしない"
+                                            GroupName="FrqPreutter"
+                                            IsChecked="True">
+                                            <TextBlock Text="なにもしない" TextWrapping="Wrap" />
+                                        </RadioButton>
+                                        <RadioButton
                                             x:Name="FrqClearPreutter"
                                             AutomationProperties.Name="先行発声までを０に統一する"
-                                            Click="FrqPreutter_Click"
                                             GroupName="FrqPreutter">
                                             <TextBlock Text="先行発声までを０に統一する" TextWrapping="Wrap" />
                                         </RadioButton>
                                         <RadioButton
                                             x:Name="FrqNonePreutter"
                                             AutomationProperties.Name="先行発声までを「なし」にする"
-                                            Click="FrqPreutter_Click"
                                             GroupName="FrqPreutter">
                                             <TextBlock Text="先行発声までを「なし」にする" TextWrapping="Wrap" />
                                         </RadioButton>
