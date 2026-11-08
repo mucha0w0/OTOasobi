@@ -113,7 +113,8 @@ sealed class ProbeSession : IDisposable
         _view.CoreWebView2.Settings.IsZoomControlEnabled = false;
         AppAppearance.Load();
         await _view.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
-            "document.documentElement.style.zoom='" + AppAppearance.Scale.ToString(CultureInfo.InvariantCulture) + "';");
+            "document.documentElement.style.zoom='" + AppAppearance.Scale.ToString(CultureInfo.InvariantCulture) + "';" +
+            "document.documentElement.dataset.panelsLocked='" + (AppAppearance.LockPanels ? "1" : "") + "';");
         _view.CoreWebView2.WebMessageReceived += OnMessage;
         var url = Environment.GetEnvironmentVariable("OTOASOBI_PROBE_URL");
         if (!string.IsNullOrWhiteSpace(url))
@@ -2010,6 +2011,7 @@ sealed class ProbeSession : IDisposable
             },
             accent = AppAppearance.Accent?.ToHex(),
             scale = AppAppearance.Scale,
+            lockPanels = AppAppearance.LockPanels,
         });
     }
 
@@ -2026,6 +2028,8 @@ sealed class ProbeSession : IDisposable
         AppAppearance.SaveAccent(RgbColor.TryParse(accent, out var color) ? color : null);
         if (root.TryGetProperty("scale", out var scale) && scale.TryGetDouble(out var value))
             AppAppearance.SaveScale(value);
+        if (root.TryGetProperty("lockPanels", out var locked) && locked.ValueKind is JsonValueKind.True or JsonValueKind.False)
+            AppAppearance.SaveLockPanels(locked.ValueKind == JsonValueKind.True);
     }
 
     async Task HandleUpdateAsync(string? op)

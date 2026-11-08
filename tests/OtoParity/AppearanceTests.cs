@@ -72,12 +72,17 @@ public class AppearanceTests
             Assert.Equal(AppThemeChoice.Dark, loaded.Theme);
             Assert.Equal(new RgbColor(0xE8, 0x5D, 0x04), loaded.Accent);
             Assert.Equal(1.5, loaded.Scale);
+            Assert.False(loaded.LockPanels);
+
+            AppAppearanceStore.Write(path, new AppAppearanceState(AppThemeChoice.Light, null, 1, true));
+            Assert.True(AppAppearanceStore.Read(path).LockPanels);
 
             File.WriteAllText(path, """{ "theme": "nope", "accent": "red" }""");
             loaded = AppAppearanceStore.Read(path);
             Assert.Equal(AppThemeChoice.System, loaded.Theme);
             Assert.Null(loaded.Accent);
             Assert.Equal(1, loaded.Scale);
+            Assert.False(loaded.LockPanels);
 
             File.WriteAllText(path, """{ "theme": "light", "scale": 9 }""");
             Assert.Equal(2, AppAppearanceStore.Read(path).Scale);

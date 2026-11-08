@@ -28,6 +28,13 @@ function applyPageScale(scale: number) {
   document.documentElement.style.zoom = String(scale)
 }
 
+function applyPanelsLocked(locked: boolean) {
+  if (locked)
+    document.documentElement.dataset.panelsLocked = "1"
+  else
+    delete document.documentElement.dataset.panelsLocked
+}
+
 const pictureKeep = 12
 
 function rememberPicture(cache: Map<string, PreviewEvent>, name: string, picture: PreviewEvent) {
@@ -118,6 +125,7 @@ export function App() {
   const [connected, setConnected] = useState(false)
   const [theme, setTheme] = useState<ThemeChoice>("system")
   const [scale, setScale] = useState(() => uiScale(Number.parseFloat(document.documentElement.style.zoom)))
+  const [lockPanels, setLockPanels] = useState(() => document.documentElement.dataset.panelsLocked === "1")
   const [systemDark, setSystemDark] = useState(() => window.matchMedia("(prefers-color-scheme: dark)").matches)
   const [accent, setAccent] = useState<string | null>(null)
   const pointerState = useRef<ReturnType<typeof createPointerBus> | null>(null)
@@ -575,6 +583,8 @@ export function App() {
         setTheme(event.theme)
         setScale(event.scale)
         applyPageScale(event.scale)
+        setLockPanels(event.lockPanels)
+        applyPanelsLocked(event.lockPanels)
         if (event.accent) {
           accentCustom.current = true
           setAccent(event.accent)
@@ -686,8 +696,8 @@ export function App() {
     sendRef.current({ type: "template", op: "save", name: name.trim() })
   }
 
-  function sendAppearance(nextTheme: ThemeChoice, nextAccent: string | null, nextScale = scale) {
-    sendRef.current({ type: "appearance", theme: nextTheme, accent: nextAccent, scale: nextScale })
+  function sendAppearance(nextTheme: ThemeChoice, nextAccent: string | null, nextScale = scale, nextLock = lockPanels) {
+    sendRef.current({ type: "appearance", theme: nextTheme, accent: nextAccent, scale: nextScale, lockPanels: nextLock })
   }
 
   function chooseTheme(choice: ThemeChoice) {
@@ -706,6 +716,12 @@ export function App() {
     setScale(next)
     applyPageScale(next)
     sendAppearance(theme, accentCustom.current ? accent : null, next)
+  }
+
+  function chooseLock(value: boolean) {
+    setLockPanels(value)
+    applyPanelsLocked(value)
+    sendAppearance(theme, accentCustom.current ? accent : null, scale, value)
   }
 
   function togglePane(id: string) {
@@ -1017,6 +1033,7 @@ export function App() {
           >
             <Dock
               layout={layout}
+              locked={lockPanels}
               boxes={boxes}
               onChange={(next, persist) => {
                 if (persist)
@@ -1262,9 +1279,11 @@ export function App() {
               theme,
               accent: accent ?? defaultAccent(resolved),
               scale,
+              lockPanels,
               onTheme: chooseTheme,
               onAccent: chooseAccent,
               onScale: chooseScale,
+              onLockPanels: chooseLock,
               onSystemAccent: () => {
                 accentCustom.current = false
                 setAccent(null)

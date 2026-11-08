@@ -173,6 +173,37 @@ html.resizing-y * {
   cursor: ns-resize !important;
 }
 
+html[data-panels-locked="1"] .split-x {
+  width: 1px;
+  margin-right: 0;
+  margin-left: 0;
+  pointer-events: none;
+}
+
+html[data-panels-locked="1"] .split-y {
+  height: 1px;
+  margin-top: 0;
+  margin-bottom: 0;
+  pointer-events: none;
+}
+
+html[data-panels-locked="1"] .split-x > .split-line {
+  left: 0;
+  width: 1px;
+}
+
+html[data-panels-locked="1"] .split-y > .split-line {
+  top: 0;
+  height: 1px;
+}
+
+html[data-panels-locked="1"] .split-x:hover > .split-line,
+html[data-panels-locked="1"] .split-y:hover > .split-line,
+html[data-panels-locked="1"] .split-x.is-hot > .split-line,
+html[data-panels-locked="1"] .split-y.is-hot > .split-line {
+  background: var(--line);
+}
+
 .frq-pen {
   cursor: crosshair;
 }

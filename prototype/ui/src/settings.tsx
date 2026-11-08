@@ -12,9 +12,11 @@ type LookModel = {
   theme: ThemeChoice
   accent: string
   scale: number
+  lockPanels: boolean
   onTheme: (theme: ThemeChoice) => void
   onAccent: (hex: string) => void
   onScale: (scale: number) => void
+  onLockPanels: (locked: boolean) => void
   onSystemAccent: () => void
 }
 
@@ -113,7 +115,7 @@ export function Setting({ label, children }: { label: string; children: ReactNod
   )
 }
 
-function LookSettings({ theme, accent, scale, onTheme, onAccent, onScale, onSystemAccent }: LookModel) {
+function LookSettings({ theme, accent, scale, lockPanels, onTheme, onAccent, onScale, onLockPanels, onSystemAccent }: LookModel) {
   return (
     <div className="grid gap-6">
       <Setting label="明暗">
@@ -146,6 +148,10 @@ function LookSettings({ theme, accent, scale, onTheme, onAccent, onScale, onSyst
           />
         </label>
       </Setting>
+      <label className="flex items-center gap-1 text-sm">
+        <input type="checkbox" checked={lockPanels} onChange={(event) => onLockPanels(event.target.checked)} />
+        パネルを固定
+      </label>
     </div>
   )
 }

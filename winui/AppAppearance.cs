@@ -32,7 +32,7 @@ readonly record struct RgbColor(byte R, byte G, byte B)
     public string ToHex() => FormattableString.Invariant($"#{R:X2}{G:X2}{B:X2}");
 }
 
-readonly record struct AppAppearanceState(AppThemeChoice Theme, RgbColor? Accent, double Scale = 1);
+readonly record struct AppAppearanceState(AppThemeChoice Theme, RgbColor? Accent, double Scale = 1, bool LockPanels = false);
 
 // 配布画面の全体倍率。50% から 200% まで、10% 刻み。
 static class UiScale
@@ -202,7 +202,7 @@ static class AppAppearanceStore
         var file = JsonFiles.Read<AppAppearanceFile>(path);
         RgbColor? accent = RgbColor.TryParse(file?.Accent, out var color) ? color : null;
         var scale = file?.Scale is double value ? UiScale.Clamp(value) : UiScale.Default;
-        return new AppAppearanceState(AppThemes.Parse(file?.Theme), accent, scale);
+        return new AppAppearanceState(AppThemes.Parse(file?.Theme), accent, scale, file?.LockPanels == true);
     }
 
     public static void Write(string path, AppAppearanceState state)
@@ -212,6 +212,7 @@ static class AppAppearanceStore
             Theme = AppThemes.FileName(state.Theme),
             Accent = state.Accent?.ToHex(),
             Scale = UiScale.Clamp(state.Scale),
+            LockPanels = state.LockPanels,
         }, JsonFiles.OptionsIgnoringNull);
     }
 
@@ -222,6 +223,8 @@ static class AppAppearanceStore
         public string? Accent { get; set; }
 
         public double? Scale { get; set; }
+
+        public bool LockPanels { get; set; }
     }
 }
 
@@ -233,6 +236,8 @@ static class AppAppearance
 
     public static double Scale { get; private set; } = UiScale.Default;
 
+    public static bool LockPanels { get; private set; }
+
     public static event Action? Changed;
 
     public static void Load()
@@ -241,6 +246,7 @@ static class AppAppearance
         Theme = state.Theme;
         Accent = state.Accent;
         Scale = state.Scale;
+        LockPanels = state.LockPanels;
     }
 
     public static void SaveTheme(AppThemeChoice theme)
@@ -268,7 +274,15 @@ static class AppAppearance
         AppAppearanceStore.Write(AppPaths.AppearanceFile, Current());
     }
 
-    static AppAppearanceState Current() => new(Theme, Accent, Scale);
+    public static void SaveLockPanels(bool locked)
+    {
+        if (LockPanels == locked)
+            return;
+        LockPanels = locked;
+        AppAppearanceStore.Write(AppPaths.AppearanceFile, Current());
+    }
+
+    static AppAppearanceState Current() => new(Theme, Accent, Scale, LockPanels);
 
     public static void RaiseChanged() => Changed?.Invoke();
 }

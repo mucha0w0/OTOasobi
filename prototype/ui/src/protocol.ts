@@ -38,7 +38,7 @@ export type PageCommand =
   | { type: "take"; op: "play" | "stop" | "wave"; name?: string }
   | { type: "openRecent"; path: string }
   | { type: "template"; op: "apply" | "save"; name: string }
-  | { type: "appearance"; theme: "light" | "dark" | "system"; accent: string | null; scale: number }
+  | { type: "appearance"; theme: "light" | "dark" | "system"; accent: string | null; scale: number; lockPanels: boolean }
   | { type: "update"; op: "check" | "apply" }
   | { type: "oto"; op: "mode"; mode: string }
   | { type: "oto"; op: "slider"; group: string; key: string; value: number }
@@ -122,7 +122,7 @@ export type HostEvent =
   | { type: "recent"; folders: { path: string; name: string }[] }
   | { type: "projectPlace"; path: string }
   | { type: "templates"; names: string[] }
-  | { type: "appearance"; theme: "light" | "dark" | "system"; accent: string | null; scale: number }
+  | { type: "appearance"; theme: "light" | "dark" | "system"; accent: string | null; scale: number; lockPanels: boolean }
   | { type: "update"; phase: "prompt" | "current" | "unavailable" | "progress" | "done" | "failed"; title: string; body: string }
   | SavedEvent
   | { type: "failed"; message: string }
@@ -471,6 +471,7 @@ export function parseHostEvent(value: unknown): HostEvent | null {
         theme: value.theme === "light" || value.theme === "dark" ? value.theme : "system",
         accent: typeof value.accent === "string" ? value.accent : null,
         scale: uiScale(value.scale),
+        lockPanels: value.lockPanels === true,
       }
     case "update":
       return {

@@ -7,6 +7,7 @@ import { measureFloors, measureSplitters, moveSplitter } from "./splitter"
 
 type Props = {
   layout: LayoutNode | null
+  locked: boolean
   boxes: { current: Record<string, PaneBox> }
   onChange: (next: LayoutNode | null, persist: boolean) => void
   onRatio: (next: LayoutNode) => void
@@ -23,14 +24,14 @@ type NodeProps = Omit<Props, "layout" | "onChange"> & {
 
 type Ghost = { x: number; y: number; title: string }
 
-export function Dock({ layout, boxes, onChange, onRatio, onResizing }: Props) {
+export function Dock({ layout, locked, boxes, onChange, onRatio, onResizing }: Props) {
   const rootRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<{ id: string; title: string; origin: LayoutNode; startX: number; startY: number; moving: boolean } | null>(null)
   const [ghost, setGhost] = useState<Ghost | null>(null)
   const [aim, setAim] = useState<DropAim | null>(null)
 
   function onTitleDown(event: ReactPointerEvent<HTMLDivElement>, id: string) {
-    if (event.button !== 0 || !layout)
+    if (locked || event.button !== 0 || !layout)
       return
     const session = {
       id,
@@ -92,6 +93,7 @@ export function Dock({ layout, boxes, onChange, onRatio, onResizing }: Props) {
           layout={layout}
           node={layout}
           path={[]}
+          locked={locked}
           boxes={boxes}
           onRatio={onRatio}
           onResizing={onResizing}
@@ -168,7 +170,7 @@ function nodeKey(node: LayoutNode, path: number[]) {
   return "id" in node ? node.id : path.join(".")
 }
 
-function Node({ layout, node, path, boxes, onRatio, onResizing, onTitleDown, onClose }: NodeProps) {
+function Node({ layout, node, path, locked, boxes, onRatio, onResizing, onTitleDown, onClose }: NodeProps) {
   const ids = idsOf(node).join(",")
   if ("id" in node) {
     const title = paneTitles[node.id] ?? node.id
@@ -186,36 +188,38 @@ function Node({ layout, node, path, boxes, onRatio, onResizing, onTitleDown, onC
           boxes.current[node.id] = { width: rect.width, height: rect.height }
         }}
       >
-        <div
-          className="drag-handle relative z-10 flex h-[18px] shrink-0 items-center border-b border-[var(--line)] bg-[var(--title)] select-none"
-          onPointerMove={(event) => hoverTitle(event.currentTarget, event.clientX, event.clientY, event.target)}
-          onPointerLeave={(event) => {
-            clearSplitHot(event.currentTarget)
-            event.currentTarget.style.cursor = ""
-          }}
-          onPointerDown={(event) => {
-            if (event.button !== 0)
-              return
-            const split = titleSplit(event.currentTarget, event.clientX, event.clientY, event.target)
-            if (!split)
-              return onTitleDown(event, node.id)
-            clearSplitHot(event.currentTarget)
-            event.currentTarget.style.cursor = ""
-            beginResize(event, split, layout, onRatio, onResizing)
-          }}
-        >
-          <span className="min-w-0 flex-1 truncate px-2 text-xs leading-none text-[var(--muted)]">{title}</span>
-          <button
-            type="button"
-            className="mr-0.5 grid h-full w-[18px] place-items-center rounded text-sm leading-none text-[var(--muted)] hover:bg-[var(--line)]"
-            aria-label={`${title}を閉じる`}
-            title="閉じます"
-            onPointerDown={(event) => event.stopPropagation()}
-            onClick={() => onClose(node.id)}
+        {!locked && (
+          <div
+            className="drag-handle relative z-10 flex h-[18px] shrink-0 items-center border-b border-[var(--line)] bg-[var(--title)] select-none"
+            onPointerMove={(event) => hoverTitle(event.currentTarget, event.clientX, event.clientY, event.target)}
+            onPointerLeave={(event) => {
+              clearSplitHot(event.currentTarget)
+              event.currentTarget.style.cursor = ""
+            }}
+            onPointerDown={(event) => {
+              if (event.button !== 0)
+                return
+              const split = titleSplit(event.currentTarget, event.clientX, event.clientY, event.target)
+              if (!split)
+                return onTitleDown(event, node.id)
+              clearSplitHot(event.currentTarget)
+              event.currentTarget.style.cursor = ""
+              beginResize(event, split, layout, onRatio, onResizing)
+            }}
           >
-            ×
-          </button>
-        </div>
+            <span className="min-w-0 flex-1 truncate px-2 text-xs leading-none text-[var(--muted)]">{title}</span>
+            <button
+              type="button"
+              className="mr-0.5 grid h-full w-[18px] place-items-center rounded text-sm leading-none text-[var(--muted)] hover:bg-[var(--line)]"
+              aria-label={`${title}を閉じる`}
+              title="閉じます"
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={() => onClose(node.id)}
+            >
+              ×
+            </button>
+          </div>
+        )}
         <PaneHost id={node.id} />
       </section>
     )
@@ -232,22 +236,26 @@ function Node({ layout, node, path, boxes, onRatio, onResizing, onTitleDown, onC
         className="min-h-0 min-w-0"
         style={horizontal ? { width: `${node.ratio * 100}%` } : { height: `${node.ratio * 100}%` }}
       >
-        <Node key={nodeKey(node.first, [...path, 0])} layout={layout} node={node.first} path={[...path, 0]} boxes={boxes} onRatio={onRatio} onResizing={onResizing} onTitleDown={onTitleDown} onClose={onClose} />
+        <Node key={nodeKey(node.first, [...path, 0])} layout={layout} node={node.first} path={[...path, 0]} locked={locked} boxes={boxes} onRatio={onRatio} onResizing={onResizing} onTitleDown={onTitleDown} onClose={onClose} />
       </div>
       <div
-        role="separator"
-        tabIndex={0}
-        aria-orientation={horizontal ? "vertical" : "horizontal"}
-        aria-label="パネルの境界"
+        role={locked ? undefined : "separator"}
+        tabIndex={locked ? -1 : 0}
+        aria-orientation={locked ? undefined : horizontal ? "vertical" : "horizontal"}
+        aria-label={locked ? undefined : "パネルの境界"}
+        aria-hidden={locked || undefined}
         data-axis={node.axis}
         data-path={path.join(".")}
         className={horizontal ? "split-x" : "split-y"}
-        onPointerDown={(event) => beginResize(event, event.currentTarget, layout, onRatio, onResizing)}
+        onPointerDown={(event) => {
+          if (!locked)
+            beginResize(event, event.currentTarget, layout, onRatio, onResizing)
+        }}
       >
         <span className="split-line" />
       </div>
       <div className="min-h-0 min-w-0 flex-1">
-        <Node key={nodeKey(node.second, [...path, 1])} layout={layout} node={node.second} path={[...path, 1]} boxes={boxes} onRatio={onRatio} onResizing={onResizing} onTitleDown={onTitleDown} onClose={onClose} />
+        <Node key={nodeKey(node.second, [...path, 1])} layout={layout} node={node.second} path={[...path, 1]} locked={locked} boxes={boxes} onRatio={onRatio} onResizing={onResizing} onTitleDown={onTitleDown} onClose={onClose} />
       </div>
     </div>
   )
@@ -260,7 +268,7 @@ function beginResize(
   onRatio: (next: LayoutNode) => void,
   onResizing: (holding: boolean) => void,
 ) {
-  if (event.button !== 0)
+  if (event.button !== 0 || document.documentElement.dataset.panelsLocked === "1")
     return
   const dock = split.closest("[data-dock-root]")
   const frame = dock?.querySelector(":scope > [data-dock-node]") as HTMLElement | null

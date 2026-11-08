@@ -148,13 +148,14 @@ describe("ホストのメッセージ", () => {
       gains: [0, 0, 0, 0, 0, 0, 0, 0],
       noiseNote: "ノイズサプレッサーは、選んだ 0.50秒の無音で抑えます。",
     })).toMatchObject({ type: "effects", preset: "標準", noiseNote: "ノイズサプレッサーは、選んだ 0.50秒の無音で抑えます。" })
-    expect(parseHostEvent({ type: "appearance", theme: "dark", accent: "#112233", scale: 1.25 })).toEqual({
+    expect(parseHostEvent({ type: "appearance", theme: "dark", accent: "#112233", scale: 1.25, lockPanels: true })).toEqual({
       type: "appearance",
       theme: "dark",
       accent: "#112233",
       scale: 1.3,
+      lockPanels: true,
     })
-    expect(parseHostEvent({ type: "appearance", theme: "system", accent: null })).toMatchObject({ scale: 1 })
+    expect(parseHostEvent({ type: "appearance", theme: "system", accent: null })).toMatchObject({ scale: 1, lockPanels: false })
   })
 })
 
