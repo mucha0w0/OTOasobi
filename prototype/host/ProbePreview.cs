@@ -12,7 +12,7 @@ sealed class ProbePreview : IDisposable
     readonly Process _process;
     readonly StreamWriter _input;
     readonly object _writeLock = new();
-    readonly Dictionary<int, TaskCompletionSource<string>> _pending = [];
+    readonly Dictionary<int, Pending> _pending = [];
     int _nextId;
     bool _disposed;
 
@@ -52,16 +52,23 @@ sealed class ProbePreview : IDisposable
         _ = Task.Run(ReadLoop);
     }
 
-    public async Task<PreviewPicture> LoadAsync(string path, double t0, double t1, int columns, int rows)
+    public async Task<PreviewPicture> LoadAsync(
+        string path,
+        double t0,
+        double t1,
+        int columns,
+        int rows,
+        Action<PreviewPicture>? onWave = null)
     {
         var id = Interlocked.Increment(ref _nextId);
         var done = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
         lock (_pending)
-            _pending[id] = done;
+            _pending[id] = new Pending(done, onWave);
         var request = JsonSerializer.Serialize(new
         {
             id,
             cmd = "preview",
+            spec = "index",
             path,
             t0,
             t1,
@@ -110,6 +117,9 @@ sealed class ProbePreview : IDisposable
         var ok = root.TryGetProperty("ok", out var okValue) && okValue.GetBoolean();
         string? error = root.TryGetProperty("error", out var errorValue) ? errorValue.GetString() : null;
         var png = root.TryGetProperty("spec_png", out var pngValue) ? pngValue.GetString() ?? "" : "";
+        var spec = root.TryGetProperty("spec_index", out var specValue) ? specValue.GetString() ?? "" : "";
+        var skipped = root.TryGetProperty("skipped", out var skippedValue)
+            && skippedValue.ValueKind == JsonValueKind.True;
         var sampleRate = 0;
         if (root.TryGetProperty("sr", out var srValue) && srValue.TryGetInt32(out var parsed))
             sampleRate = parsed;
@@ -119,6 +129,10 @@ sealed class ProbePreview : IDisposable
             ReadDoubles(root, "wave_lo"),
             ReadDoubles(root, "wave_hi"),
             png,
+            spec,
+            Count(root, "spec_columns"),
+            Count(root, "spec_rows"),
+            skipped,
             Number(root, "spec_t0"),
             Number(root, "spec_t1"),
             Number(root, "wave_t0"),
@@ -130,6 +144,9 @@ sealed class ProbePreview : IDisposable
 
     static double Number(JsonElement root, string name) =>
         root.TryGetProperty(name, out var value) && value.TryGetDouble(out var parsed) ? parsed : 0;
+
+    static int Count(JsonElement root, string name) =>
+        root.TryGetProperty(name, out var value) && value.TryGetInt32(out var parsed) ? parsed : 0;
 
     static double[] ReadDoubles(JsonElement root, string name)
     {
@@ -158,15 +175,26 @@ sealed class ProbePreview : IDisposable
                         continue;
                     if (root.TryGetProperty("event", out var eventValue)
                         && eventValue.ValueKind == JsonValueKind.String)
+                    {
+                        if (eventValue.GetString() == "wave")
+                        {
+                            Pending? waiting;
+                            lock (_pending)
+                                _pending.TryGetValue(id, out waiting);
+                            waiting?.OnWave?.Invoke(Read(root));
+                        }
+
                         continue;
-                    TaskCompletionSource<string>? done;
+                    }
+
+                    Pending? done;
                     lock (_pending)
                     {
                         if (!_pending.Remove(id, out done))
                             continue;
                     }
 
-                    done.TrySetResult(line);
+                    done.Done.TrySetResult(line);
                 }
                 catch (JsonException)
                 {
@@ -184,7 +212,7 @@ sealed class ProbePreview : IDisposable
 
     void FailPending(string message)
     {
-        List<TaskCompletionSource<string>> pending;
+        List<Pending> pending;
         lock (_pending)
         {
             pending = _pending.Values.ToList();
@@ -192,7 +220,7 @@ sealed class ProbePreview : IDisposable
         }
 
         foreach (var done in pending)
-            done.TrySetException(new IOException(message));
+            done.Done.TrySetException(new IOException(message));
     }
 
     static string ResolveTorchHome()
@@ -242,12 +270,22 @@ sealed class ProbePreview : IDisposable
     }
 }
 
+sealed class Pending(TaskCompletionSource<string> done, Action<PreviewPicture>? onWave)
+{
+    public TaskCompletionSource<string> Done { get; } = done;
+    public Action<PreviewPicture>? OnWave { get; } = onWave;
+}
+
 sealed record PreviewPicture(
     bool Ok,
     string? Error,
     double[] Lo,
     double[] Hi,
     string Png,
+    string Spec,
+    int SpecColumns,
+    int SpecRows,
+    bool Skipped,
     double SpecT0,
     double SpecT1,
     double WaveT0,

@@ -328,7 +328,7 @@ dotnet run --project winui
 | `otoasobi/segment.py` | 音響エンジンの区間推定 |
 | `otoasobi/precision.py` | MMS と Praat を組み合わせた区間推定 |
 | `otoasobi/features.py` | フレーム特徴とメルスペクトログラム |
-| `otoasobi/preview.py` | 補正画面の波形とメルスペクトログラム |
+| `otoasobi/preview.py` | 補正画面の波形とメルスペクトログラム。配布画面はファイルごとに 1 回計算して切り出す |
 | `otoasobi/breath.py` | 先頭の息 |
 | `app.py` | 開発用の確認画面 |
 | `otoasobi/gui.py` | 開発用画面のウィンドウ |

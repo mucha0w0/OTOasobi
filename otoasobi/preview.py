@@ -2,7 +2,9 @@
 
 表示範囲とピクセル数を受け取り、その画面にちょうど合う解像度で描く。
 波形は 1 列が 1 ピクセルの最小最大で、サンプル数が列数以下なら全サンプルを返す。
-スペクトラムは同じ範囲を指定ピクセルへ最近傍で置く。拡大で画像を引き伸ばさない。
+旧画面のスペクトラムは、同じ範囲を指定ピクセルへ最近傍で描いた PNG です。
+配布画面は、ファイルを開いたときにメルを 1 回計算し、表示範囲をそこから切り出します。
+色は付けず、低い帯を下にした色番号の列を返します。横は 1024 列までです。
 """
 
 from __future__ import annotations
@@ -21,6 +23,9 @@ from otoasobi.features import (
     loudness_db,
     spectrogram_tone,
 )
+
+INDEX_COLUMNS = 1024
+_FILM_CHUNK = 2048
 
 _STOPS = np.array(
     [
@@ -101,19 +106,14 @@ def waveform_view(
     if count <= columns:
         values = np.array(segment, dtype=np.float64, copy=True)
         return values, values.copy(), wt0, wt1, True
-    edges = np.linspace(0, count, columns + 1).astype(np.int64)
+    edges = np.linspace(0, count, columns + 1)
+    edges = np.floor(edges).astype(np.int64)
+    edges[0] = 0
     edges[-1] = count
-    lo = np.zeros(columns)
-    hi = np.zeros(columns)
-    for index in range(columns):
-        start = int(edges[index])
-        end = int(edges[index + 1])
-        if end <= start:
-            end = min(count, start + 1)
-            start = end - 1
-        chunk = segment[start:end]
-        lo[index] = float(chunk.min())
-        hi[index] = float(chunk.max())
+    np.maximum.accumulate(edges, out=edges)
+    starts = np.minimum(edges[:-1], count - 1)
+    lo = np.minimum.reduceat(segment, starts)
+    hi = np.maximum.reduceat(segment, starts)
     return lo, hi, wt0, wt1, False
 
 
@@ -232,4 +232,192 @@ def render_preview(
         wave_t1=wt1,
         samples=samples,
         sr=int(sr),
+    )
+
+
+@dataclass(frozen=True)
+class Film:
+    db: np.ndarray
+    hop: int
+    sr: int
+    n: int
+
+
+_film: tuple[np.ndarray, int, Film] | None = None
+
+
+def _wave(y: np.ndarray) -> np.ndarray:
+    if y.dtype == np.float64 and y.ndim == 1 and y.flags.c_contiguous:
+        return y
+    return np.ascontiguousarray(np.asarray(y, dtype=np.float64).reshape(-1))
+
+
+def film_ready(y: np.ndarray, sr: int) -> bool:
+    cached = _film
+    return cached is not None and cached[0] is y and cached[1] == sr
+
+
+def film_for(y: np.ndarray, sr: int) -> Film:
+    """渡された配列のメルを、最初の 1 回だけ計算する。"""
+    global _film
+    cached = _film
+    if cached is not None and cached[0] is y and cached[1] == sr:
+        return cached[2]
+    film = _build_film(_wave(y), sr)
+    _film = (y, sr, film)
+    return film
+
+
+def _build_film(y: np.ndarray, sr: int) -> Film:
+    n = int(y.shape[0])
+    win = _display_window(sr)
+    if 0 < n < win:
+        win = max(64, 1 << int(np.floor(np.log2(max(n, 64)))))
+    n_fft = _display_fft(win)
+    hop = max(1, win // 4)
+    n_mels = min(96, max(16, n_fft // 2))
+    if sr <= 0 or n == 0:
+        return Film(np.zeros((n_mels, 1), dtype=np.float32), hop, sr, n)
+    emphasized = _preemphasize(y)
+    fmax = min(8000.0, sr / 2.0)
+    fmin = min(40.0, fmax * 0.25)
+    bank = _filterbank(sr, n_fft, n_mels).T
+    pad = win // 2
+    padded = np.pad(emphasized, (pad, pad))
+    n_frames = 1 + (len(padded) - win) // hop
+    frames = np.lib.stride_tricks.as_strided(
+        padded,
+        shape=(n_frames, win),
+        strides=(hop * padded.strides[0], padded.strides[0]),
+        writeable=False,
+    )
+    window = np.hanning(win)
+    db = np.empty((n_mels, n_frames), dtype=np.float32)
+    for start in range(0, n_frames, _FILM_CHUNK):
+        end = min(n_frames, start + _FILM_CHUNK)
+        power = np.abs(np.fft.rfft(frames[start:end] * window, n=n_fft, axis=1)) ** 2
+        db[:, start:end] = (10.0 * np.log10(np.maximum(power @ bank, 1e-10))).T
+    return Film(db, hop, sr, n)
+
+
+def _frame_slice(film: Film, i0: int, i1: int) -> np.ndarray:
+    hop = film.hop
+    n_frames = int(film.db.shape[1])
+    if n_frames <= 1 or hop <= 0:
+        return film.db
+    k0 = int(np.ceil(i0 / float(hop) - 1e-9))
+    k1 = int(np.floor(i1 / float(hop) + 1e-9)) + 1
+    k0 = min(max(0, k0), n_frames - 1)
+    k1 = min(max(k0 + 1, k1), n_frames)
+    return film.db[:, k0:k1]
+
+
+def spectrogram_index(
+    y: np.ndarray,
+    sr: int,
+    t0: float,
+    t1: float,
+    columns: int,
+) -> tuple[bytes, int, int, float, float]:
+    """表示範囲の色番号。行は低い帯が先、列は時間。"""
+    columns = max(1, min(int(columns), INDEX_COLUMNS))
+    film = film_for(y, sr)
+    n = film.n
+    n_mels = int(film.db.shape[0])
+    if sr <= 0 or n == 0:
+        return bytes(n_mels * columns), columns, n_mels, 0.0, 1.0
+    view0, view1, i0, i1 = _bounds(n, sr, t0, t1)
+    frames = _frame_slice(film, i0, i1)
+    n_frames = int(frames.shape[1])
+    if n_frames > columns:
+        pick = np.minimum((np.arange(columns) * n_frames) // columns, n_frames - 1)
+        frames = frames[:, pick]
+        n_frames = columns
+    peak = float(np.max(frames))
+    clipped = np.clip(frames, peak - 80.0, peak)
+    tone = np.clip(np.rint(spectrogram_tone(clipped) * 255.0), 0, 255).astype(np.uint8)
+    indices = np.ascontiguousarray(tone[::-1])
+    return indices.tobytes(), n_frames, n_mels, view0, view1
+
+
+@dataclass(frozen=True)
+class IndexPreview:
+    wave_lo: list[float]
+    wave_hi: list[float]
+    loudness: list[float]
+    spec: bytes
+    spec_columns: int
+    spec_rows: int
+    spec_t0: float
+    spec_t1: float
+    wave_t0: float
+    wave_t1: float
+    samples: bool
+    sr: int
+    duration: float
+
+
+def index_wave(
+    y: np.ndarray,
+    sr: int,
+    t0: float,
+    t1: float,
+    columns: int,
+) -> IndexPreview:
+    """メルを計算せず、波形と、全体を見ているときの音量だけ返す。"""
+    n = int(np.asarray(y).reshape(-1).shape[0])
+    duration = n / float(sr) if sr > 0 and n else 0.0
+    columns = max(1, min(int(columns), INDEX_COLUMNS))
+    lo, hi, wt0, wt1, samples = waveform_view(y, sr, t0, t1, columns)
+    full = duration <= 0 or (t1 - t0) >= duration * 0.999
+    loud = loudness_db(y, sr) if full else np.zeros(0)
+    return IndexPreview(
+        wave_lo=_nums(lo),
+        wave_hi=_nums(hi),
+        loudness=_nums(loud),
+        spec=b"",
+        spec_columns=0,
+        spec_rows=0,
+        spec_t0=0.0,
+        spec_t1=0.0,
+        wave_t0=wt0,
+        wave_t1=wt1,
+        samples=samples,
+        sr=int(sr),
+        duration=duration,
+    )
+
+
+def render_index(
+    y: np.ndarray,
+    sr: int,
+    t0: float | None = None,
+    t1: float | None = None,
+    columns: int = 1024,
+) -> IndexPreview:
+    n = int(np.asarray(y).reshape(-1).shape[0])
+    duration = n / float(sr) if sr > 0 and n else 0.0
+    if t0 is None:
+        t0 = 0.0
+    if t1 is None or t1 <= t0:
+        t1 = duration
+    columns = max(1, min(int(columns), INDEX_COLUMNS))
+    lo, hi, wt0, wt1, samples = waveform_view(y, sr, t0, t1, columns)
+    spec, spec_columns, spec_rows, spec_t0, spec_t1 = spectrogram_index(y, sr, t0, t1, columns)
+    full = duration <= 0 or (t1 - t0) >= duration * 0.999
+    loud = loudness_db(y, sr) if full else np.zeros(0)
+    return IndexPreview(
+        wave_lo=_nums(lo),
+        wave_hi=_nums(hi),
+        loudness=_nums(loud),
+        spec=spec,
+        spec_columns=spec_columns,
+        spec_rows=spec_rows,
+        spec_t0=spec_t0,
+        spec_t1=spec_t1,
+        wave_t0=wt0,
+        wave_t1=wt1,
+        samples=samples,
+        sr=int(sr),
+        duration=duration,
     )

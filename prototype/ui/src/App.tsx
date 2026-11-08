@@ -12,7 +12,7 @@ import { createLiveBus, type LiveBus } from "./live"
 import { MenuBar } from "./MenuBar"
 import { OtoTable } from "./OtoTable"
 import { OtoIni, OtoSettings } from "./OtoPanels"
-import { requestsPreviewAfter, uiScale, type BankEvent, type DeviceInfo, type EffectsEvent, type FrqViewEvent, type HostEvent, type OtoMark, type OtoState, type PageCommand, type PreviewEvent, type RecListEvent, type SavedEvent } from "./protocol"
+import { previewColumnLimit, previewRowLimit, requestsPreviewAfter, uiScale, type BankEvent, type DeviceInfo, type EffectsEvent, type FrqViewEvent, type HostEvent, type OtoMark, type OtoState, type PageCommand, type PreviewEvent, type RecListEvent, type SavedEvent } from "./protocol"
 import { RecListPanel, RecScriptPanel } from "./RecPanels"
 import { noticeTone, ToneIcon, ToneRow, type NoticeTone } from "./notice"
 import { createPointerBus } from "./ruler"
@@ -263,8 +263,14 @@ export function App() {
     if (!fileNameRef.current || missingRef.current)
       return
     const spec = [...bands.current].find((band) => band.kind === "spec")
-    const measured = spec?.pixelSize() ?? { columns: 800, rows: 320 }
-    sendRef.current({ type: "preview", t0: range.t0, t1: range.t1, columns: measured.columns, rows: measured.rows })
+    const measured = spec?.pixelSize() ?? { columns: 800, rows: 256 }
+    sendRef.current({
+      type: "preview",
+      t0: range.t0,
+      t1: range.t1,
+      columns: Math.min(previewColumnLimit, Math.max(32, measured.columns)),
+      rows: Math.min(previewRowLimit, Math.max(32, measured.rows)),
+    })
   }
 
   function schedulePreview() {

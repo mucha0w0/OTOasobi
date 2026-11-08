@@ -2,7 +2,8 @@ import { useCallback, useEffect, useLayoutEffect, useRef, type RefObject } from 
 import { bitmapRatio, canvasContext, shouldReplaceBitmap } from "./bitmap"
 import { drawPeaks } from "./drawPeaks"
 import { cycleOtoFocus, focusedOwnsTime, hitOtoPoint } from "./otoHit"
-import { timeAt, type OtoMark, type PreviewEvent } from "./protocol"
+import { previewColumnLimit, previewRowLimit, timeAt, type OtoMark, type PreviewEvent } from "./protocol"
+import { decodeBase64, paintIndices } from "./specTone"
 import { hitBoundary, moveBoundary, spanBoundaries, spanCaption, spanFill, spanTimesChanged, type PhoneSpan } from "./spans"
 import { xForTime, type PointerBus } from "./ruler"
 import { imagePlacement, panRange, zoomRange, type Range } from "./viewport"
@@ -50,6 +51,14 @@ const markLabels = ["フ", "オ", "先", "子", "ブ"]
 
 export function GraphBand({ kind, picture, model, appearance, register, onRange, onFileStep, onTune, onFocus, onLive, onDraft, onSpans, pointerBus }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const pictureRef = useRef<HTMLCanvasElement>(null)
+  const paintedRef = useRef<PreviewEvent | null>(null)
+  const paintedSizeRef = useRef({ width: 0, height: 0, color: "" })
+  const bindPicture = useCallback((node: HTMLCanvasElement | null) => {
+    pictureRef.current = node
+    if (node)
+      canvasContext(node)
+  }, [])
   const bindCanvas = useCallback((node: HTMLCanvasElement | null) => {
     canvasRef.current = node
     if (node)
@@ -63,7 +72,6 @@ export function GraphBand({ kind, picture, model, appearance, register, onRange,
   const applyHoldRef = useRef<(holding: boolean) => void>(() => undefined)
   kindRef.current = kind
   const lineRef = useRef<HTMLDivElement>(null)
-  const imageRef = useRef<HTMLImageElement | null>(null)
   const holdRef = useRef(false)
   const dragRef = useRef<{ x: number; range: Range } | null>(null)
   const pressRef = useRef<{ index: number; point: number; x: number } | null>(null)
@@ -92,27 +100,12 @@ export function GraphBand({ kind, picture, model, appearance, register, onRange,
       holdLayout: (holding) => applyHoldRef.current(holding),
       redraw: () => drawRef.current(),
       pixelSize: () => ({
-        columns: clamp(Math.round(canvasRef.current?.clientWidth ?? 800), 32, 4096),
-        rows: clamp(Math.round(canvasRef.current?.clientHeight ?? 320), 32, 1200),
+        columns: clamp(Math.round(canvasRef.current?.clientWidth ?? 800), 32, previewColumnLimit),
+        rows: clamp(Math.round(canvasRef.current?.clientHeight ?? 256), 32, previewRowLimit),
       }),
     }
     return register(handle)
   }, [register])
-
-  useLayoutEffect(() => {
-    if (kind !== "spec" || !picture?.png) {
-      if (kind === "spec")
-        imageRef.current = null
-      draw()
-      return
-    }
-    const image = new Image()
-    image.onload = () => {
-      imageRef.current = image
-      draw()
-    }
-    image.src = `data:image/png;base64,${picture.png}`
-  }, [kind, picture?.png])
 
   useLayoutEffect(() => {
     draw()
@@ -216,6 +209,81 @@ export function GraphBand({ kind, picture, model, appearance, register, onRange,
     const height = canvas.clientHeight
     if (width <= 0 || height <= 0)
       return
+    placePointer(lineRef.current, canvas, current.range, pointerBus.get())
+    drawPicture(width, height, current.picture, current.note)
+    drawOverlay(canvas, width, height, current)
+  }
+  drawRef.current = draw
+
+  function drawPicture(width: number, height: number, pictureNow: PreviewEvent | null, note: string) {
+    const canvas = pictureRef.current
+    if (!canvas)
+      return
+    const source = pictureNow
+      ? { t0: pictureNow.waveT0, t1: pictureNow.waveT1 }
+      : { t0: 0, t1: 1 }
+    const placed = pictureNow ? imagePlacement(source, model.current.range, width) : { x: 0, width }
+    canvas.style.left = `${placed.x}px`
+    canvas.style.width = `${Math.max(1, placed.width)}px`
+    canvas.style.height = `${height}px`
+    canvas.style.maxWidth = "none"
+    const color = getCss("--wave")
+    canvas.style.imageRendering = "pixelated"
+    const same = pictureNow !== null
+      && paintedRef.current === pictureNow
+      && paintedSizeRef.current.color === color
+      && (kind === "spec" || (paintedSizeRef.current.width === width && paintedSizeRef.current.height === height))
+    if (same && canvas.width > 0)
+      return
+    const ctx = canvasContext(canvas)
+    if (!ctx)
+      return
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
+    if (!pictureNow) {
+      canvas.width = Math.max(1, Math.floor(width))
+      canvas.height = Math.max(1, Math.floor(height))
+      ctx.fillStyle = getCss("--canvas")
+      ctx.fillRect(0, 0, canvas.width, canvas.height)
+      drawNote(ctx, canvas.width, canvas.height, note)
+      paintedRef.current = null
+      paintedSizeRef.current = { width, height, color }
+      return
+    }
+    if (kind === "spec" && pictureNow.specColumns > 0 && pictureNow.specRows > 0 && pictureNow.spec) {
+      canvas.width = pictureNow.specColumns
+      canvas.height = pictureNow.specRows
+      if (!paintIndices(ctx, decodeBase64(pictureNow.spec), pictureNow.specColumns, pictureNow.specRows)) {
+        ctx.fillStyle = getCss("--canvas")
+        ctx.fillRect(0, 0, canvas.width, canvas.height)
+      }
+    } else if (kind === "wave" || kind === "oto") {
+      canvas.width = Math.max(1, Math.floor(width))
+      canvas.height = Math.max(1, Math.floor(height))
+      ctx.fillStyle = getCss("--canvas")
+      ctx.fillRect(0, 0, canvas.width, canvas.height)
+      drawPeaks(ctx, canvas.width, canvas.height, pictureNow.lo, pictureNow.hi, color)
+    } else if (kind === "loud") {
+      canvas.width = Math.max(1, Math.floor(width))
+      canvas.height = Math.max(1, Math.floor(height))
+      ctx.fillStyle = getCss("--canvas")
+      ctx.fillRect(0, 0, canvas.width, canvas.height)
+      drawLoud(ctx, { x: 0, width: canvas.width }, pictureNow.loudness, color)
+    } else {
+      canvas.width = Math.max(1, Math.floor(width))
+      canvas.height = Math.max(1, Math.floor(height))
+      ctx.fillStyle = getCss("--canvas")
+      ctx.fillRect(0, 0, canvas.width, canvas.height)
+    }
+    paintedRef.current = pictureNow
+    paintedSizeRef.current = { width, height, color }
+  }
+
+  function drawOverlay(
+    canvas: HTMLCanvasElement,
+    width: number,
+    height: number,
+    current: GraphModel,
+  ) {
     const ratio = bitmapRatio()
     const nextWidth = Math.max(1, Math.floor(width * ratio))
     const nextHeight = Math.max(1, Math.floor(height * ratio))
@@ -227,22 +295,12 @@ export function GraphBand({ kind, picture, model, appearance, register, onRange,
     if (!ctx)
       return
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0)
-    ctx.fillStyle = getCss("--canvas")
-    ctx.fillRect(0, 0, width, height)
-    placePointer(lineRef.current, canvas, current.range, pointerBus.get())
+    ctx.clearRect(0, 0, width, height)
     const pictureNow = current.picture
-    if (!pictureNow) {
-      drawNote(ctx, width, height, current.note ?? "")
+    if (!pictureNow)
       return
-    }
     const source = { t0: pictureNow.waveT0, t1: pictureNow.waveT1 }
     const placed = imagePlacement(source, current.range, width)
-    if (kind === "spec" && imageRef.current)
-      ctx.drawImage(imageRef.current, placed.x, 0, placed.width, height)
-    if (kind === "wave" || kind === "oto")
-      drawPeaks(ctx, placed.width, height, pictureNow.lo, pictureNow.hi, getCss("--wave"), placed.x)
-    if (kind === "loud")
-      drawLoud(ctx, placed, pictureNow.loudness, getCss("--wave"))
     const spans = current.draft ?? current.spans ?? []
     const shown = tunedMarks(current.marks, current.live)
     if (kind === "wave" || kind === "spec")
@@ -260,7 +318,6 @@ export function GraphBand({ kind, picture, model, appearance, register, onRange,
     if (kind === "oto")
       drawMarks(ctx, placed, source, shown, height, current.focus, current.live)
   }
-  drawRef.current = draw
 
   function endPointer() {
     const press = pressRef.current
@@ -296,7 +353,7 @@ export function GraphBand({ kind, picture, model, appearance, register, onRange,
     <div
       ref={outerRef}
       data-graph=""
-      className="relative h-full min-h-0 overflow-hidden"
+      className="relative h-full min-h-0 overflow-hidden bg-[var(--canvas)]"
       onPointerMove={(event) => {
         const rect = event.currentTarget.getBoundingClientRect()
         publishPointer(event.clientX, rect.width, rect.left)
@@ -308,12 +365,13 @@ export function GraphBand({ kind, picture, model, appearance, register, onRange,
         pointerBus.set(null)
       }}
     >
-      <div ref={innerRef} className="flex h-full min-h-0 flex-col">
+      <div ref={innerRef} className="relative h-full min-h-0">
+      <canvas ref={bindPicture} className="pointer-events-none absolute top-0" />
       <div ref={lineRef} className="pointer-events-none absolute bottom-0 z-10 hidden w-px bg-[color-mix(in_srgb,var(--muted)_60%,transparent)]" style={{ top: 0 }} />
       <canvas
       ref={bindCanvas}
       tabIndex={0}
-      className="min-h-0 w-full flex-1 touch-none"
+      className="absolute inset-0 h-full w-full touch-none"
       onContextMenu={(event) => event.preventDefault()}
       onPointerDown={(event) => {
         const current = model.current
@@ -602,7 +660,7 @@ function drawLoud(
     high = Math.max(high, value)
   }
   const span = Math.max(1e-6, high - low)
-  const height = ctx.canvas.clientHeight
+  const height = ctx.canvas.height
   ctx.strokeStyle = color
   ctx.beginPath()
   values.forEach((value, index) => {

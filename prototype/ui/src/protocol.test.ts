@@ -60,7 +60,19 @@ describe("ホストのメッセージ", () => {
       waveT1: 2,
       sampleRate: 44100,
     })
-    expect(preview).toMatchObject({ type: "preview", png: "abc", sampleRate: 44100, loudness: [] })
+    expect(preview).toMatchObject({ type: "preview", png: "abc", spec: "", sampleRate: 44100, loudness: [] })
+
+    expect(parseHostEvent({
+      type: "preview",
+      duration: 2,
+      lo: [0],
+      hi: [1],
+      spec: "qqo=",
+      specColumns: 2,
+      specRows: 1,
+      waveT0: 0,
+      waveT1: 2,
+    })).toMatchObject({ type: "preview", png: "", spec: "qqo=", specColumns: 2, specRows: 1 })
     expect(preview && "names" in preview).toBe(false)
 
     expect(parseHostEvent({

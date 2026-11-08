@@ -585,6 +585,27 @@ sealed class ProbeSession : IDisposable
         return name.IndexOfAny(['\\', '/', ':']) < 0;
     }
 
+    void PostPreview(PreviewPicture picture)
+    {
+        Post(new
+        {
+            type = "preview",
+            duration = picture.Duration,
+            lo = picture.Lo,
+            hi = picture.Hi,
+            png = "",
+            spec = picture.Spec,
+            specColumns = picture.SpecColumns,
+            specRows = picture.SpecRows,
+            specT0 = picture.SpecT0,
+            specT1 = picture.SpecT1,
+            waveT0 = picture.WaveT0,
+            waveT1 = picture.WaveT1,
+            sampleRate = picture.SampleRate,
+            loudness = picture.Loudness,
+        });
+    }
+
     async Task PreviewAsync(double t0, double t1, int columns, int rows)
     {
         if (_disposed)
@@ -596,11 +617,17 @@ sealed class ProbeSession : IDisposable
         }
 
         var generation = ++_previewGen;
+        columns = Math.Clamp(columns, 32, 1024);
+        rows = Math.Clamp(rows, 32, 256);
         try
         {
             _python ??= new ProbePreview();
-            var picture = await _python.LoadAsync(_wavPath, t0, t1, columns, rows);
-            if (_disposed || generation != _previewGen)
+            var picture = await _python.LoadAsync(_wavPath, t0, t1, columns, rows, wave =>
+            {
+                if (!_disposed && generation == _previewGen)
+                    PostPreview(wave);
+            });
+            if (_disposed || generation != _previewGen || picture.Skipped)
                 return;
             if (!picture.Ok)
             {
@@ -608,20 +635,7 @@ sealed class ProbeSession : IDisposable
                 return;
             }
 
-            Post(new
-            {
-                type = "preview",
-                duration = picture.Duration,
-                lo = picture.Lo,
-                hi = picture.Hi,
-                png = picture.Png,
-                specT0 = picture.SpecT0,
-                specT1 = picture.SpecT1,
-                waveT0 = picture.WaveT0,
-                waveT1 = picture.WaveT1,
-                sampleRate = picture.SampleRate,
-                loudness = picture.Loudness,
-            });
+            PostPreview(picture);
         }
         catch (Exception ex) when (ex is IOException or FileNotFoundException or JsonException)
         {

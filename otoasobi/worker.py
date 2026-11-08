@@ -15,7 +15,10 @@ analyze は oto.ini を書かない。区間は OTOasibi_cache.json に残す。
 要求: {"id": 2, "cmd": "preview", "path": "C:/音声フォルダ/あ.wav", "t0": 0, "t1": 1.2, "columns": 1600, "rows": 400}
 preview の t0/t1 は表示中の秒。columns/rows は画面のピクセル数。
 波形はその幅の最小最大で、サンプルの方が少なければ 1 点ずつ返す。
-スペクトラムは同じ範囲をそのピクセル数へ最近傍で描き、拡大しても引き伸ばさない。
+spec が無いスペクトラムは、同じ範囲をそのピクセル数へ最近傍で描いた PNG です。
+spec が "index" のときは、ファイルごとのメルを 1 回計算して範囲を切り出し、色番号を返す。
+その計算がまだ無いときは、先に {"event": "wave"} で波形だけ返す。横は 1024 列まで。
+同じファイルの preview が続けて溜まっているときは、古い要求へ skipped を返してから最新だけ計算する。
 要求: {"id": 3, "cmd": "save", "folder": "C:/音声フォルダ", "files": [...]}
 要求: {"id": 4, "cmd": "write", "folder": "C:/音声フォルダ", "files": [...], "config": {...}}
 config は offset_ms（ミリ秒。正は手前、負は後で、±100ms）、consonant_ms（ミリ秒）、blank（秒、-0.1 から 0.1）、overlap、mode。
@@ -46,7 +49,9 @@ import base64
 import json
 import os
 import sys
+import threading
 import traceback
+from collections import deque
 from pathlib import Path
 
 # torch.hub の進捗表示は改行しない。標準エラーのパイプが埋まると、音素対応のまま止まる。
@@ -64,7 +69,7 @@ from otoasobi.cache import file_from_mapping, file_to_mapping, read_cache, save_
 from otoasobi.frq import write_folder_frq
 from otoasobi.oto import adjustments_from, oto_settings_from
 from otoasobi.parser import FilenameError
-from otoasobi.preview import render_preview
+from otoasobi.preview import film_ready, index_wave, render_index, render_preview
 
 
 def _respond(payload: dict) -> None:
@@ -208,7 +213,23 @@ def _optional_int(value: object, default: int, lo: int, hi: int) -> int:
     return max(lo, min(hi, int(value)))
 
 
-def _preview(path: str, request: dict) -> dict:
+def _wave_fields(preview: object, duration: float) -> dict:
+    payload = {
+        "ok": True,
+        "duration": duration,
+        "wave_lo": preview.wave_lo,
+        "wave_hi": preview.wave_hi,
+        "wave_t0": preview.wave_t0,
+        "wave_t1": preview.wave_t1,
+        "wave_samples": preview.samples,
+        "sr": preview.sr,
+    }
+    if preview.loudness:
+        payload["loudness"] = preview.loudness
+    return payload
+
+
+def _preview(path: str, request: dict, request_id: object) -> dict:
     y, sr = _load_cached(path)
     duration = len(y) / float(sr) if sr else 0.0
     t0 = _optional_float(request.get("t0"))
@@ -219,22 +240,23 @@ def _preview(path: str, request: dict) -> dict:
         t1 = duration
     columns = _optional_int(request.get("columns"), 1600, 32, 4096)
     rows = _optional_int(request.get("rows"), 320, 32, 1200)
+    if request.get("spec") == "index":
+        if not film_ready(y, sr):
+            early = index_wave(y, sr, t0, t1, columns)
+            _respond({"id": request_id, "event": "wave", **_wave_fields(early, duration)})
+        preview = render_index(y, sr, t0, t1, columns)
+        payload = _wave_fields(preview, duration)
+        payload["spec_index"] = base64.b64encode(preview.spec).decode("ascii")
+        payload["spec_columns"] = preview.spec_columns
+        payload["spec_rows"] = preview.spec_rows
+        payload["spec_t0"] = preview.spec_t0
+        payload["spec_t1"] = preview.spec_t1
+        return payload
     preview = render_preview(y, sr, t0, t1, columns, rows)
-    payload = {
-        "ok": True,
-        "duration": duration,
-        "wave_lo": preview.wave_lo,
-        "wave_hi": preview.wave_hi,
-        "wave_t0": preview.wave_t0,
-        "wave_t1": preview.wave_t1,
-        "wave_samples": preview.samples,
-        "sr": preview.sr,
-        "spec_png": base64.b64encode(preview.png).decode("ascii"),
-        "spec_t0": preview.spec_t0,
-        "spec_t1": preview.spec_t1,
-    }
-    if preview.loudness:
-        payload["loudness"] = preview.loudness
+    payload = _wave_fields(preview, duration)
+    payload["spec_png"] = base64.b64encode(preview.png).decode("ascii")
+    payload["spec_t0"] = preview.spec_t0
+    payload["spec_t1"] = preview.spec_t1
     return payload
 
 
@@ -368,67 +390,131 @@ def _write(
     return {"ok": True, "txt": str(out)}
 
 
+_lines: deque[str] = deque()
+_lines_cv = threading.Condition()
+_stdin_closed = False
+
+
+def _read_stdin() -> None:
+    global _stdin_closed
+    for line in sys.stdin:
+        with _lines_cv:
+            _lines.append(line)
+            _lines_cv.notify()
+    with _lines_cv:
+        _stdin_closed = True
+        _lines_cv.notify()
+
+
+def _pull_line(block: bool) -> str | None:
+    with _lines_cv:
+        while not _lines and not _stdin_closed:
+            if not block:
+                return None
+            _lines_cv.wait()
+        if not _lines:
+            return None
+        return _lines.popleft()
+
+
+def _parse_request(line: str) -> dict | None:
+    line = line.strip()
+    if not line:
+        return None
+    try:
+        request = json.loads(line)
+    except json.JSONDecodeError as exc:
+        _respond({"id": None, "ok": False, "error": f"不正な要求です: {exc}"})
+        return None
+    if not isinstance(request, dict):
+        _respond({"id": None, "ok": False, "error": "不正な要求です"})
+        return None
+    return request
+
+
+def _coalesce_preview(request: dict) -> dict:
+    """溜まった preview は最新だけ残し、古い id には skipped を返す。"""
+    if request.get("cmd") != "preview":
+        return request
+    while True:
+        line = _pull_line(False)
+        if line is None:
+            return request
+        nxt = _parse_request(line)
+        if nxt is None:
+            continue
+        if nxt.get("cmd") != "preview":
+            with _lines_cv:
+                _lines.appendleft(line)
+            return request
+        _respond({"id": request.get("id"), "ok": True, "skipped": True})
+        request = nxt
+
+
+def _dispatch(request: dict) -> None:
+    request_id = request.get("id")
+    try:
+        command = request.get("cmd")
+        if command == "analyze":
+            path = request.get("path")
+            if not isinstance(path, str) or not path:
+                raise RuntimeError("path がありません")
+            only = request.get("only")
+            if only is not None:
+                payload = _analyze_one(request_id, path, only)
+            else:
+                payload = _analyze(request_id, path, request.get("force") is True)
+        elif command == "preview":
+            path = request.get("path")
+            if not isinstance(path, str) or not path:
+                raise RuntimeError("path がありません")
+            payload = _preview(path, request, request_id)
+        elif command == "save":
+            folder = request.get("folder")
+            if not isinstance(folder, str) or not folder:
+                raise RuntimeError("folder がありません")
+            payload = _save(folder, request.get("files"))
+        elif command == "frq":
+            folder = request.get("folder")
+            if not isinstance(folder, str) or not folder:
+                raise RuntimeError("folder がありません")
+            payload = _frq(request_id, folder, request)
+        elif command == "write":
+            folder = request.get("folder")
+            if not isinstance(folder, str) or not folder:
+                raise RuntimeError("folder がありません")
+            payload = _write(
+                folder,
+                request.get("files"),
+                request.get("config"),
+                request.get("adjustments"),
+                request.get("parts"),
+                request.get("scope"),
+            )
+        else:
+            raise RuntimeError("未対応のコマンドです")
+    except FilenameError as exc:
+        _respond({"id": request_id, "ok": False, "error": str(exc)})
+    except Exception as exc:
+        traceback.print_exc()
+        _respond({"id": request_id, "ok": False, "error": str(exc)})
+    else:
+        payload["id"] = request_id
+        _respond(payload)
+
+
 def main() -> None:
     sys.stdin.reconfigure(encoding="utf-8")
     sys.stdout.reconfigure(encoding="utf-8", newline="\n")
-    for line in sys.stdin:
-        line = line.strip()
-        if not line:
+    threading.Thread(target=_read_stdin, name="otoasobi-stdin", daemon=True).start()
+    while True:
+        line = _pull_line(True)
+        if line is None:
+            break
+        request = _parse_request(line)
+        if request is None:
             continue
-        try:
-            request = json.loads(line)
-        except json.JSONDecodeError as exc:
-            _respond({"id": None, "ok": False, "error": f"不正な要求です: {exc}"})
-            continue
-        request_id = request.get("id")
-        try:
-            command = request.get("cmd")
-            if command == "analyze":
-                path = request.get("path")
-                if not isinstance(path, str) or not path:
-                    raise RuntimeError("path がありません")
-                only = request.get("only")
-                if only is not None:
-                    payload = _analyze_one(request_id, path, only)
-                else:
-                    payload = _analyze(request_id, path, request.get("force") is True)
-            elif command == "preview":
-                path = request.get("path")
-                if not isinstance(path, str) or not path:
-                    raise RuntimeError("path がありません")
-                payload = _preview(path, request)
-            elif command == "save":
-                folder = request.get("folder")
-                if not isinstance(folder, str) or not folder:
-                    raise RuntimeError("folder がありません")
-                payload = _save(folder, request.get("files"))
-            elif command == "frq":
-                folder = request.get("folder")
-                if not isinstance(folder, str) or not folder:
-                    raise RuntimeError("folder がありません")
-                payload = _frq(request_id, folder, request)
-            elif command == "write":
-                folder = request.get("folder")
-                if not isinstance(folder, str) or not folder:
-                    raise RuntimeError("folder がありません")
-                payload = _write(
-                    folder,
-                    request.get("files"),
-                    request.get("config"),
-                    request.get("adjustments"),
-                    request.get("parts"),
-                    request.get("scope"),
-                )
-            else:
-                raise RuntimeError("未対応のコマンドです")
-        except FilenameError as exc:
-            _respond({"id": request_id, "ok": False, "error": str(exc)})
-        except Exception as exc:
-            traceback.print_exc()
-            _respond({"id": request_id, "ok": False, "error": str(exc)})
-        else:
-            payload["id"] = request_id
-            _respond(payload)
+        _dispatch(_coalesce_preview(request))
 
 
 if __name__ == "__main__":

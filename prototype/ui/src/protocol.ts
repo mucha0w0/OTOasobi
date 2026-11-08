@@ -59,12 +59,18 @@ export type PageCommand =
 
 export type DeviceInfo = { id: string; label: string }
 
+export const previewColumnLimit = 1024
+export const previewRowLimit = 256
+
 export type PreviewEvent = {
   type: "preview"
   duration: number
   lo: number[]
   hi: number[]
   png: string
+  spec: string
+  specColumns: number
+  specRows: number
   specT0: number
   specT1: number
   waveT0: number
@@ -361,14 +367,17 @@ export function parseHostEvent(value: unknown): HostEvent | null {
     case "effects":
       return parseEffects(value)
     case "preview":
-      if (!Array.isArray(value.lo) || !Array.isArray(value.hi) || typeof value.png !== "string")
+      if (!Array.isArray(value.lo) || !Array.isArray(value.hi))
         return null
       return {
         type: "preview",
         duration: numberOr(value.duration, 0),
         lo: value.lo.filter((item): item is number => typeof item === "number"),
         hi: value.hi.filter((item): item is number => typeof item === "number"),
-        png: value.png,
+        png: typeof value.png === "string" ? value.png : "",
+        spec: typeof value.spec === "string" ? value.spec : "",
+        specColumns: numberOr(value.specColumns, 0),
+        specRows: numberOr(value.specRows, 0),
         specT0: numberOr(value.specT0, 0),
         specT1: numberOr(value.specT1, 0),
         waveT0: numberOr(value.waveT0, 0),
