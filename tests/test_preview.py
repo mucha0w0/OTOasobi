@@ -12,9 +12,12 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from otoasobi import preview as preview_module  # noqa: E402
 from otoasobi.preview import (  # noqa: E402
     INDEX_COLUMNS,
+    FilmSkipped,
     _LUT,
+    film_for,
     film_ready,
     index_wave,
     render_index,
@@ -64,6 +67,13 @@ class PreviewTests(unittest.TestCase):
         y = np.zeros(1600, dtype=np.float64)
         preview = render_preview(y, 16000, 0.0, 0.1, 32, 32)
         self.assertTrue(preview.png.startswith(b"\x89PNG"))
+
+    def test_cancelled_film_is_not_cached(self) -> None:
+        preview_module._film = None
+        y = np.zeros(16000 * 2, dtype=np.float64)
+        with self.assertRaises(FilmSkipped):
+            film_for(y, 16000, lambda: True)
+        self.assertFalse(film_ready(y, 16000))
 
     def test_lut_ends(self) -> None:
         self.assertEqual(_LUT[0].tolist(), [0, 0, 4])

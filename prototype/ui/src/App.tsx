@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { BankPanel } from "./BankPanel"
 import { Dock } from "./Dock"
 import { EffectsPanel } from "./EffectsPanel"
-import { FileList } from "./FileList"
+import { FileList, type FileListHandle } from "./FileList"
 import { nextFileIndex } from "./fileStep"
 import { FrqEditor } from "./FrqEditor"
 import { FrqPanel } from "./FrqPanel"
@@ -26,6 +26,27 @@ import type { Range } from "./viewport"
 
 function applyPageScale(scale: number) {
   document.documentElement.style.zoom = String(scale)
+}
+
+function mergePreview(current: PreviewEvent | null, event: PreviewEvent): PreviewEvent {
+  const hasWave = event.lo.length > 0
+  const hasSpec = event.specColumns > 0 && event.spec.length > 0
+  if (hasSpec && !hasWave && current)
+    return {
+      ...current,
+      duration: event.duration || current.duration,
+      spec: event.spec,
+      specColumns: event.specColumns,
+      specRows: event.specRows,
+      specT0: event.specT0,
+      specT1: event.specT1,
+      png: "",
+      loudness: event.loudness.length > 0 ? event.loudness : current.loudness,
+      sampleRate: event.sampleRate || current.sampleRate,
+    }
+  if (hasWave && !hasSpec)
+    return { ...event, spec: "", specColumns: 0, specRows: 0, png: "" }
+  return event
 }
 
 const graphKinds: Record<string, BandKind> = {
@@ -86,7 +107,7 @@ export function App() {
   const [folder, setFolder] = useState("")
   const [names, setNames] = useState<string[]>([])
   const [fileName, setFileName] = useState("")
-  const [wheelName, setWheelName] = useState<string | null>(null)
+  const fileListRef = useRef<FileListHandle>(null)
   const [picture, setPicture] = useState<PreviewEvent | null>(null)
   const [notice, setNotice] = useState<{ message: string; tone: NoticeTone } | null>(null)
   const [saved, setSaved] = useState<SavedEvent | null>(null)
@@ -299,7 +320,7 @@ export function App() {
   function chooseFile(name: string) {
     window.clearTimeout(fileStepTimer.current)
     stepTarget.current = null
-    setWheelName(null)
+    fileListRef.current?.highlight(name)
     sendRef.current({ type: "selectFile", name })
   }
 
@@ -316,7 +337,7 @@ export function App() {
     if (!name)
       return
     stepTarget.current = next
-    setWheelName(name)
+    fileListRef.current?.highlight(name)
     window.clearTimeout(fileStepTimer.current)
     fileStepTimer.current = window.setTimeout(() => {
       const landed = stepTarget.current
@@ -325,9 +346,9 @@ export function App() {
         sendRef.current({ type: "selectFile", name: chosen })
       else {
         stepTarget.current = null
-        setWheelName(null)
+        fileListRef.current?.release()
       }
-    }, 60)
+    }, 200)
   }
 
   function applyHost(event: HostEvent) {
@@ -344,7 +365,7 @@ export function App() {
         setNames(event.names)
         window.clearTimeout(fileStepTimer.current)
         stepTarget.current = null
-        setWheelName(null)
+        fileListRef.current?.release()
         if (!keep) {
           fileNameRef.current = ""
           setFileName("")
@@ -365,11 +386,13 @@ export function App() {
         const pending = stepTarget.current == null ? null : namesRef.current[stepTarget.current]
         if (pending == null || sameName(pending, event.name)) {
           stepTarget.current = null
-          setWheelName(null)
+          fileListRef.current?.release()
         }
-        setPicture(null)
-        pictureRef.current = null
-        rangeRef.current = { t0: 0, t1: 0 }
+        if (event.missing) {
+          setPicture(null)
+          pictureRef.current = null
+          rangeRef.current = { t0: 0, t1: 0 }
+        }
         focusRef.current = -1
         liveRef.current = null
         draftRef.current = null
@@ -379,16 +402,19 @@ export function App() {
         syncRecIndex(event.name)
         break
       }
-      case "preview":
+      case "preview": {
         if (stepTarget.current != null)
           break
         missingRef.current = false
         noteRef.current = ""
-        setPicture(event)
-        pictureRef.current = event
-        rangeRef.current = { t0: event.waveT0, t1: event.waveT1 }
+        const next = mergePreview(pictureRef.current, event)
+        setPicture(next)
+        pictureRef.current = next
+        if (event.lo.length > 0)
+          rangeRef.current = { t0: event.waveT0, t1: event.waveT1 }
         modelRef.current = viewModel()
         break
+      }
       case "capture":
         bus.show(event)
         break
@@ -713,9 +739,10 @@ export function App() {
               if (id === "file")
                 return (
                   <FileList
+                    ref={fileListRef}
                     folder={folder}
                     names={names}
-                    selected={wheelName ?? fileName}
+                    selected={fileName}
                     onSelect={chooseFile}
                   />
                 )

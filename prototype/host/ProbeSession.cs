@@ -42,6 +42,11 @@ sealed class ProbeSession : IDisposable
     bool _ready;
     bool _disposed;
     int _previewGen;
+    int _fileGen;
+    readonly object _frqGate = new();
+    List<string> _listedNames = [];
+    Task<ProbeWave.Audio?>? _waveLoad;
+    string? _waveLoadPath;
     int _countGen;
     bool _counting;
     string? _recordStem;
@@ -314,6 +319,7 @@ sealed class ProbeSession : IDisposable
         _previewGen++;
         PostFiles();
         Post(new { type = "opened", name = file.Name });
+        BeginFile(file.Path);
         if (!string.IsNullOrEmpty(_folder))
         {
             _oto.Open(_folder);
@@ -322,7 +328,6 @@ sealed class ProbeSession : IDisposable
             PostOto();
             PostRec();
             PostFrqCount();
-            Post(_frq.View(_wavPath));
             BeginAnalyze(false);
             RecentFolders.Remember(_folder);
             PostRecent();
@@ -476,27 +481,40 @@ sealed class ProbeSession : IDisposable
     void AdoptFolder(string folder)
     {
         _folder = folder;
-        if (!string.IsNullOrEmpty(_wavPath))
-            {
-                var current = Path.GetFileName(_wavPath);
-                var still = WavNames(folder).Any(name => string.Equals(name, current, StringComparison.OrdinalIgnoreCase));
-                if (!still)
-                {
-                    _wavPath = null;
-                    _previewGen++;
-                }
-            }
+        List<string> names;
+        try
+        {
+            names = WavNames(folder);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Post(new { type = "failed", message = ex.Message });
+            names = [];
+        }
 
-            Post(new { type = "files", folder = _folder, names = WavNames(_folder) });
-            _oto.Open(folder);
-            _rec.OpenFolder(folder);
-            OpenVoice(folder);
-            PostOto();
-            PostRec();
-            PostFrqCount();
-            BeginAnalyze(false);
-            RecentFolders.Remember(folder);
-            PostRecent();
+        _listedNames = names;
+        if (!string.IsNullOrEmpty(_wavPath))
+        {
+            var current = Path.GetFileName(_wavPath);
+            var still = names.Any(name => string.Equals(name, current, StringComparison.OrdinalIgnoreCase));
+            if (!still)
+            {
+                _wavPath = null;
+                _previewGen++;
+                _fileGen++;
+            }
+        }
+
+        Post(new { type = "files", folder = _folder, names });
+        _oto.Open(folder);
+        _rec.OpenFolder(folder);
+        OpenVoice(folder);
+        PostOto();
+        PostRec();
+        PostFrqCount();
+        BeginAnalyze(false);
+        RecentFolders.Remember(folder);
+        PostRecent();
     }
 
     void SelectFile(string? name)
@@ -515,28 +533,23 @@ sealed class ProbeSession : IDisposable
             return;
         }
 
-        List<string> names;
-        try
-        {
-            names = WavNames(_folder);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            Post(new { type = "failed", message = ex.Message });
-            return;
-        }
-
-        var match = names.FirstOrDefault(item => string.Equals(item, name, StringComparison.OrdinalIgnoreCase));
+        var match = _listedNames.FirstOrDefault(item => string.Equals(item, name, StringComparison.OrdinalIgnoreCase));
         if (match == null)
         {
             if (name!.EndsWith(".wav", StringComparison.OrdinalIgnoreCase))
             {
                 _wavPath = null;
                 _previewGen++;
-                _frq.Clear();
+                _fileGen++;
+                _waveLoad = null;
+                _waveLoadPath = null;
+                lock (_frqGate)
+                {
+                    _frq.Clear();
+                    Post(_frq.View(null));
+                }
                 Post(new { type = "opened", name, missing = true });
                 PostOto();
-                Post(_frq.View(null));
                 return;
             }
 
@@ -548,7 +561,32 @@ sealed class ProbeSession : IDisposable
         _previewGen++;
         Post(new { type = "opened", name = match });
         PostOto();
-        Post(_frq.View(_wavPath));
+        BeginFile(_wavPath);
+    }
+
+    void BeginFile(string path)
+    {
+        var fileGen = ++_fileGen;
+        _waveLoadPath = path;
+        _waveLoad = Task.Run(() =>
+        {
+            try
+            {
+                return (ProbeWave.Audio?)ProbeWave.Load(path);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or ArgumentException)
+            {
+                return null;
+            }
+        });
+        _ = Task.Run(() =>
+        {
+            object view;
+            lock (_frqGate)
+                view = _frq.View(path);
+            if (!_disposed && fileGen == _fileGen)
+                Post(view);
+        });
     }
 
     void PostFiles()
@@ -557,7 +595,9 @@ sealed class ProbeSession : IDisposable
             return;
         try
         {
-            Post(new { type = "files", folder = _folder, names = WavNames(_folder) });
+            var names = WavNames(_folder);
+            _listedNames = names;
+            Post(new { type = "files", folder = _folder, names });
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -617,16 +657,40 @@ sealed class ProbeSession : IDisposable
         }
 
         var generation = ++_previewGen;
+        var path = _wavPath;
         columns = Math.Clamp(columns, 32, 1024);
         rows = Math.Clamp(rows, 32, 256);
         try
         {
-            _python ??= new ProbePreview();
-            var picture = await _python.LoadAsync(_wavPath, t0, t1, columns, rows, wave =>
+            var audio = await WaveAsync(path).ConfigureAwait(true);
+            if (_disposed || generation != _previewGen || !string.Equals(path, _wavPath, StringComparison.OrdinalIgnoreCase))
+                return;
+            if (audio == null)
             {
-                if (!_disposed && generation == _previewGen)
-                    PostPreview(wave);
-            });
+                Post(new { type = "failed", message = "波形を読めませんでした。" });
+                return;
+            }
+
+            var (lo, hi, waveT0, waveT1) = ProbeWave.Peaks(audio, t0, t1, columns);
+            PostPreview(new PreviewPicture(
+                true,
+                null,
+                lo,
+                hi,
+                "",
+                "",
+                0,
+                0,
+                false,
+                waveT0,
+                waveT1,
+                waveT0,
+                waveT1,
+                audio.SampleRate,
+                audio.Duration,
+                []));
+            _python ??= new ProbePreview();
+            var picture = await _python.LoadAsync(path, t0, t1, columns, rows);
             if (_disposed || generation != _previewGen || picture.Skipped)
                 return;
             if (!picture.Ok)
@@ -641,6 +705,21 @@ sealed class ProbeSession : IDisposable
         {
             if (!_disposed && generation == _previewGen)
                 Post(new { type = "failed", message = ex.Message });
+        }
+    }
+
+    async Task<ProbeWave.Audio?> WaveAsync(string path)
+    {
+        var pending = _waveLoad;
+        if (pending != null && string.Equals(_waveLoadPath, path, StringComparison.OrdinalIgnoreCase))
+            return await pending.ConfigureAwait(true);
+        try
+        {
+            return await Task.Run(() => ProbeWave.Load(path)).ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or ArgumentException)
+        {
+            return null;
         }
     }
 
@@ -1377,13 +1456,16 @@ sealed class ProbeSession : IDisposable
                 _ = WriteFrqAsync(Text(root, "mode"), root.TryGetProperty("clear", out var clear) && clear.ValueKind == JsonValueKind.True);
                 break;
             case "stroke":
-                PostFrqEdit(_frq.Stroke(Property(root, "points")));
+                lock (_frqGate)
+                    PostFrqEdit(_frq.Stroke(Property(root, "points")));
                 break;
             case "octave":
-                PostFrqEdit(_frq.Shift(Property(root, "frames"), (int)Math.Round(Number(root, "octaves"))));
+                lock (_frqGate)
+                    PostFrqEdit(_frq.Shift(Property(root, "frames"), (int)Math.Round(Number(root, "octaves"))));
                 break;
             case "clear":
-                PostFrqEdit(_frq.ClearPitch(Property(root, "frames")));
+                lock (_frqGate)
+                    PostFrqEdit(_frq.ClearPitch(Property(root, "frames")));
                 break;
         }
     }
@@ -1437,7 +1519,12 @@ sealed class ProbeSession : IDisposable
             }
 
             if (!string.IsNullOrEmpty(_wavPath))
-                Post(_frq.View(_wavPath));
+            {
+                object view;
+                lock (_frqGate)
+                    view = _frq.View(_wavPath);
+                Post(view);
+            }
         }
         catch (Exception ex)
         {
@@ -1715,6 +1802,8 @@ sealed class ProbeSession : IDisposable
         }
 
         var folder = _folder;
+        _waveLoad = null;
+        _waveLoadPath = null;
         _applying = true;
         PostStatus("エフェクトを適用しています");
         try

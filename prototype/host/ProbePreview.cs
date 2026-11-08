@@ -69,6 +69,7 @@ sealed class ProbePreview : IDisposable
             id,
             cmd = "preview",
             spec = "index",
+            wave = false,
             path,
             t0,
             t1,

@@ -18,7 +18,9 @@ preview の t0/t1 は表示中の秒。columns/rows は画面のピクセル数�
 spec が無いスペクトラムは、同じ範囲をそのピクセル数へ最近傍で描いた PNG です。
 spec が "index" のときは、ファイルごとのメルを 1 回計算して範囲を切り出し、色番号を返す。
 その計算がまだ無いときは、先に {"event": "wave"} で波形だけ返す。横は 1024 列まで。
+wave が false のときは波形を返さず、色番号だけ返す。
 同じファイルの preview が続けて溜まっているときは、古い要求へ skipped を返してから最新だけ計算する。
+計算の途中で次の preview が来たときも、そのメルは残さず skipped を返す。
 要求: {"id": 3, "cmd": "save", "folder": "C:/音声フォルダ", "files": [...]}
 要求: {"id": 4, "cmd": "write", "folder": "C:/音声フォルダ", "files": [...], "config": {...}}
 config は offset_ms（ミリ秒。正は手前、負は後で、±100ms）、consonant_ms（ミリ秒）、blank（秒、-0.1 から 0.1）、overlap、mode。
@@ -69,7 +71,7 @@ from otoasobi.cache import file_from_mapping, file_to_mapping, read_cache, save_
 from otoasobi.frq import write_folder_frq
 from otoasobi.oto import adjustments_from, oto_settings_from
 from otoasobi.parser import FilenameError
-from otoasobi.preview import film_ready, index_wave, render_index, render_preview
+from otoasobi.preview import FilmSkipped, film_ready, index_wave, render_index, render_preview, spectrogram_only
 
 
 def _respond(payload: dict) -> None:
@@ -229,6 +231,18 @@ def _wave_fields(preview: object, duration: float) -> dict:
     return payload
 
 
+def _preview_waiting() -> bool:
+    with _lines_cv:
+        for line in _lines:
+            try:
+                request = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(request, dict) and request.get("cmd") == "preview":
+                return True
+    return False
+
+
 def _preview(path: str, request: dict, request_id: object) -> dict:
     y, sr = _load_cached(path)
     duration = len(y) / float(sr) if sr else 0.0
@@ -240,19 +254,27 @@ def _preview(path: str, request: dict, request_id: object) -> dict:
         t1 = duration
     columns = _optional_int(request.get("columns"), 1600, 32, 4096)
     rows = _optional_int(request.get("rows"), 320, 32, 1200)
-    if request.get("spec") == "index":
-        if not film_ready(y, sr):
-            early = index_wave(y, sr, t0, t1, columns)
-            _respond({"id": request_id, "event": "wave", **_wave_fields(early, duration)})
-        preview = render_index(y, sr, t0, t1, columns)
-        payload = _wave_fields(preview, duration)
-        payload["spec_index"] = base64.b64encode(preview.spec).decode("ascii")
-        payload["spec_columns"] = preview.spec_columns
-        payload["spec_rows"] = preview.spec_rows
-        payload["spec_t0"] = preview.spec_t0
-        payload["spec_t1"] = preview.spec_t1
-        return payload
-    preview = render_preview(y, sr, t0, t1, columns, rows)
+    want_wave = request.get("wave") is not False
+    try:
+        if request.get("spec") == "index":
+            if want_wave and not film_ready(y, sr):
+                early = index_wave(y, sr, t0, t1, columns)
+                _respond({"id": request_id, "event": "wave", **_wave_fields(early, duration)})
+            preview = (
+                render_index(y, sr, t0, t1, columns, _preview_waiting)
+                if want_wave
+                else spectrogram_only(y, sr, t0, t1, columns, _preview_waiting)
+            )
+            payload = _wave_fields(preview, duration)
+            payload["spec_index"] = base64.b64encode(preview.spec).decode("ascii")
+            payload["spec_columns"] = preview.spec_columns
+            payload["spec_rows"] = preview.spec_rows
+            payload["spec_t0"] = preview.spec_t0
+            payload["spec_t1"] = preview.spec_t1
+            return payload
+        preview = render_preview(y, sr, t0, t1, columns, rows)
+    except FilmSkipped:
+        return {"ok": True, "skipped": True}
     payload = _wave_fields(preview, duration)
     payload["spec_png"] = base64.b64encode(preview.png).decode("ascii")
     payload["spec_t0"] = preview.spec_t0
