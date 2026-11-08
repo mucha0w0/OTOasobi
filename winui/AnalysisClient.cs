@@ -66,6 +66,19 @@ sealed class AnalysisClient : IDisposable
         return ReadFolder(doc.RootElement);
     }
 
+    public async Task<FolderData> AnalyzeFilesAsync(
+        string folder,
+        IReadOnlyList<string> names,
+        Action<int, int>? onProgress = null,
+        Action<string, double, string>? onFile = null)
+    {
+        using var doc = await SendAsync(
+            id => JsonSerializer.Serialize(new { id, cmd = "analyze", path = folder, only = names }),
+            onProgress,
+            onFile).ConfigureAwait(true);
+        return ReadFolder(doc.RootElement);
+    }
+
     public async Task<FolderData> AnalyzeFileAsync(
         string folder,
         string name,
@@ -134,7 +147,7 @@ sealed class AnalysisClient : IDisposable
     public async Task<FrqResult> WriteFrqAsync(
         string folder,
         string mode,
-        string? only,
+        object? only,
         object? clear,
         Action<int, int>? onProgress = null,
         Action<string, double, string>? onFile = null)

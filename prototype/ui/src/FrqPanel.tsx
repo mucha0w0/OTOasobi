@@ -5,11 +5,13 @@ export function FrqPanel({
   wavs,
   busy,
   hasFile,
+  selectedNames,
   send,
 }: {
   wavs: number
   busy: boolean
   hasFile: boolean
+  selectedNames: string[]
   send: (command: PageCommand) => void
 }) {
   const [mode, setMode] = useState<"all" | "missing" | "selected">("all")
@@ -29,7 +31,7 @@ export function FrqPanel({
           </label>
           <label className="mt-2 flex gap-2">
             <input type="radio" name="frq-mode" checked={mode === "selected"} onChange={() => setMode("selected")} />
-            現在選択中のファイルだけ生成する
+            選択中のファイルだけ生成する
           </label>
         </section>
         <section className="grid gap-2">
@@ -53,7 +55,7 @@ export function FrqPanel({
           type="button"
           className="accent-button w-full"
           disabled={busy || wavs === 0 || (mode === "selected" && !hasFile)}
-          onClick={() => send({ type: "frq", op: "write", mode, clear: preutter !== "keep" })}
+          onClick={() => send({ type: "frq", op: "write", mode, clear: preutter !== "keep", names: mode === "selected" ? selectedNames : [] })}
         >
           .frqを生成
         </button>

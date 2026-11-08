@@ -21,6 +21,7 @@
   --danger: #dc2626;
   --success: #15803d;
   --accent-subtle: color-mix(in oklab, var(--panel) 84%, var(--accent));
+  --accent-current: color-mix(in oklab, var(--panel) 62%, var(--accent));
   --mark-offset: #374151;
   --mark-overlap: #c2570c;
   --mark-preutter: #dc2626;
@@ -352,8 +353,14 @@ section:first-child > .section-title {
   margin-top: 0;
 }
 
-.is-picked {
+.is-picked,
+.file-selected {
   background: var(--accent-subtle);
+  color: var(--text);
+}
+
+.file-current {
+  background: var(--accent-current);
   color: var(--text);
 }
 

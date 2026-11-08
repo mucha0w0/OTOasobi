@@ -216,7 +216,7 @@ def write_folder_frq(
     on_progress: Callable[[int, int], None] | None = None,
     on_file: Callable[[str, float, str], None] | None = None,
     mode: str = "all",
-    only: str | None = None,
+    only: str | list[str] | None = None,
     clear: dict[str, list[tuple[float, float]]] | None = None,
 ) -> FrqBatch:
     """直下の WAV に .frq を書く。mode は all、missing、selected。"""
@@ -270,14 +270,30 @@ def write_folder_frq(
     return FrqBatch(written, failed, notes)
 
 
-def _frq_targets(wavs: list[Path], mode: str, only: str | None) -> tuple[list[Path], list[str]]:
+def _frq_targets(wavs: list[Path], mode: str, only: str | list[str] | None) -> tuple[list[Path], list[str]]:
     if mode == "selected":
-        if not isinstance(only, str) or not only or Path(only).name != only:
+        if isinstance(only, str):
+            wanted = [only]
+        elif isinstance(only, list):
+            wanted = list(only)
+        else:
             raise RuntimeError("ファイルを選んでください。")
-        match = [wav for wav in wavs if wav.name.casefold() == only.casefold()]
-        if len(match) != 1:
+        names: list[str] = []
+        for name in wanted:
+            if not isinstance(name, str) or not name or Path(name).name != name:
+                raise RuntimeError("ファイルを選んでください。")
+            if name.casefold() not in {item.casefold() for item in names}:
+                names.append(name)
+        if not names:
+            raise RuntimeError("ファイルを選んでください。")
+        folded = {name.casefold() for name in names}
+        match = [wav for wav in wavs if wav.name.casefold() in folded]
+        if not match:
             raise RuntimeError("選んだ音声が見つかりません。")
-        return match, []
+        found = {wav.name.casefold() for wav in match}
+        missing = [name for name in names if name.casefold() not in found]
+        notes = ["見つからなかったファイルがあります。\n" + "\n".join(missing)] if missing else []
+        return match, notes
     if mode == "missing":
         targets: list[Path] = []
         skipped = 0

@@ -11,7 +11,7 @@ file の done は、いま解析しているファイルの 0 から 1。
 analyze は oto.ini を書かない。区間は OTOasibi_cache.json に残す。
 同じフォルダに保存データがあるときは再解析せず、そのファイルを返す。
 "force": true のときだけ解析し直し、保存データを上書きする。
-"only": "あ.wav" のときは、その 1 ファイルだけ解析し直す。応答の files はその 1 件で、保存データは書かない。
+"only" がファイル名、またはファイル名の配列のときは、そのファイルだけ解析し直す。応答の files はその件数で、保存データは書かない。
 要求: {"id": 2, "cmd": "preview", "path": "C:/音声フォルダ/あ.wav", "t0": 0, "t1": 1.2, "columns": 1600, "rows": 400}
 preview の t0/t1 は表示中の秒。columns/rows は画面のピクセル数。
 波形はその幅の最小最大で、サンプルの方が少なければ 1 点ずつ返す。
@@ -40,7 +40,7 @@ blank の 0 は音量の上辺の右端。正は減衰側、負は手前へ、�
 write の adjustments は、ドラッグで直した位置。file、index、alias と、直した点だけの秒。無い点は自動推定のまま。name は手で直したエイリアス。編集印の * は oto.ini に書かない。
 要求: {"id": 5, "cmd": "frq", "folder": "C:/音声フォルダ", "mode": "all", "only": null, "clear": null}
 frq はフォルダ直下の WAV に、同じ名前の .frq（FREQ0003）を書く。original は見ない。区間や oto.ini は変えない。
-mode は all（上書き）、missing（.frq が無いものだけ）、selected（only の 1 ファイルを上書き）。
+mode は all（上書き）、missing（.frq が無いものだけ）、selected（only のファイルを上書き）。only はファイル名か、その配列。
 clear は、ファイル名と [開始秒, 終了秒] の組。推定のあと、その範囲の周波数を 0 にしてから書く。null のときは触らない。
 応答: {"id": 5, "ok": true, "written": 12, "notice": "..."}
 書く対象が無く、失敗もないときは ok が true で written は 0。失敗だけで 1 件も書けないときは ok が false。
@@ -120,32 +120,81 @@ def _note_file(request_id: object, shown: dict, name: str, fraction: float, labe
     )
 
 
-def _analyze_one(request_id: object, folder: str, name: object) -> dict:
-    """表示中の 1 ファイルだけ解析する。保存データは画面側がまとめて書く。"""
-    wav = _wav_in_folder(folder, name)
+def _only_names(only: object) -> list[str]:
+    if isinstance(only, str):
+        values: list[object] = [only]
+    elif isinstance(only, list):
+        values = list(only)
+    else:
+        raise RuntimeError("ファイル名が不正です。")
+    names: list[str] = []
+    seen: set[str] = set()
+    for item in values:
+        if not isinstance(item, str) or not item:
+            raise RuntimeError("ファイル名が不正です。")
+        key = item.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        names.append(item)
+    if not names:
+        raise RuntimeError("ファイルを選んでください。")
+    return names
+
+
+def _analyze_only(request_id: object, folder: str, only: object) -> dict:
+    """選んだファイルだけ解析する。保存データは画面側がまとめて書く。"""
+    wavs: list[Path] = []
+    seen: set[str] = set()
+    for name in _only_names(only):
+        wav = _wav_in_folder(folder, name)
+        key = wav.name.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        wavs.append(wav)
 
     def on_progress(done: int, total: int) -> None:
         _respond({"id": request_id, "event": "progress", "done": done, "total": total})
 
     shown = {"name": "", "done": -1.0, "label": ""}
+    files: list[AnalyzedFile] = []
+    failed: list[str] = []
+    total = len(wavs)
+    for index, wav in enumerate(wavs):
+        on_progress(index, total)
 
-    def on_step(fraction: float, label: str) -> None:
-        _note_file(request_id, shown, wav.name, fraction, label)
+        def on_step(fraction: float, label: str, name: str = wav.name) -> None:
+            _note_file(request_id, shown, name, fraction, label)
 
-    on_progress(0, 1)
-    analysis = analyze_wav(wav, on_step)
-    on_progress(1, 1)
-    item = AnalyzedFile(
-        name=wav.name,
-        duration=analysis.duration,
-        spans=analysis.spans,
-        engine=analysis.engine,
-    )
-    return {
+        try:
+            analysis = analyze_wav(wav, on_step)
+        except Exception as exc:
+            failed.append(f"{wav.name}（{exc}）")
+            continue
+        files.append(
+            AnalyzedFile(
+                name=wav.name,
+                duration=analysis.duration,
+                spans=analysis.spans,
+                engine=analysis.engine,
+            )
+        )
+    on_progress(total, total)
+    if not files:
+        return {
+            "id": request_id,
+            "ok": False,
+            "error": "\n".join(failed) or "解析できませんでした。",
+        }
+    payload: dict = {
         "id": request_id,
         "ok": True,
-        "files": [file_to_mapping(item)],
+        "files": [file_to_mapping(item) for item in files],
     }
+    if failed:
+        payload["notice"] = f"{len(failed)}個のファイルをスキップしました。\n" + "\n".join(failed)
+    return payload
 
 
 def _analyze(request_id: object, path: str, force: bool) -> dict:
@@ -339,7 +388,7 @@ def _frq(request_id: object, folder: str, request: dict) -> dict:
     if not isinstance(mode, str) or not mode:
         mode = "all"
     only = request.get("only")
-    if only is not None and not isinstance(only, str):
+    if only is not None and not isinstance(only, (str, list)):
         raise RuntimeError("ファイル名が不正です。")
     batch = write_folder_frq(
         folder,
@@ -488,7 +537,7 @@ def _dispatch(request: dict) -> None:
                 raise RuntimeError("path がありません")
             only = request.get("only")
             if only is not None:
-                payload = _analyze_one(request_id, path, only)
+                payload = _analyze_only(request_id, path, only)
             else:
                 payload = _analyze(request_id, path, request.get("force") is True)
         elif command == "preview":

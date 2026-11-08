@@ -648,6 +648,26 @@ sealed class ProbeSession : IDisposable
         return names;
     }
 
+    List<string> ListedNames(JsonElement root)
+    {
+        var names = new List<string>();
+        if (!root.TryGetProperty("names", out var value) || value.ValueKind != JsonValueKind.Array)
+            return names;
+        foreach (var item in value.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.String)
+                continue;
+            var name = item.GetString();
+            if (!IsPlainFileName(name))
+                continue;
+            var match = _listedNames.FirstOrDefault(entry => string.Equals(entry, name, StringComparison.OrdinalIgnoreCase));
+            if (match != null && !names.Any(entry => string.Equals(entry, match, StringComparison.OrdinalIgnoreCase)))
+                names.Add(match);
+        }
+
+        return names;
+    }
+
     static bool IsPlainFileName(string? name)
     {
         if (string.IsNullOrWhiteSpace(name) || name is "." or "..")
@@ -1249,7 +1269,7 @@ sealed class ProbeSession : IDisposable
                 BeginAnalyze(root.TryGetProperty("force", out var forceValue) && forceValue.ValueKind == JsonValueKind.True);
                 break;
             case "analyzeFile":
-                BeginAnalyzeFile();
+                BeginAnalyzeFiles(ListedNames(root));
                 break;
             case "write":
                 _ = WriteOtoAsync();
@@ -1361,9 +1381,17 @@ sealed class ProbeSession : IDisposable
         _ = AnalyzeAsync(gen, force);
     }
 
-    void BeginAnalyzeFile()
+    void BeginAnalyzeFiles(IReadOnlyList<string> names)
     {
-        if (_disposed || string.IsNullOrEmpty(_folder) || string.IsNullOrEmpty(_wavPath))
+        var list = names.Count > 0 ? names.ToList() : new List<string>();
+        if (list.Count == 0 && !string.IsNullOrEmpty(_wavPath))
+        {
+            var current = Path.GetFileName(_wavPath);
+            if (_listedNames.Any(name => string.Equals(name, current, StringComparison.OrdinalIgnoreCase)))
+                list.Add(current);
+        }
+
+        if (_disposed || string.IsNullOrEmpty(_folder) || list.Count == 0)
         {
             Post(new { type = "failed", message = "ファイルを選んでください。" });
             return;
@@ -1375,10 +1403,8 @@ sealed class ProbeSession : IDisposable
             return;
         }
 
-        if (_oto.IsBusy)
-            return;
         var gen = ++_analyzeGen;
-        _ = AnalyzeFileAsync(gen, Path.GetFileName(_wavPath));
+        _ = AnalyzeFilesAsync(gen, list);
     }
 
     async Task AnalyzeAsync(int gen, bool force)
@@ -1417,19 +1443,19 @@ sealed class ProbeSession : IDisposable
         }
     }
 
-    async Task AnalyzeFileAsync(int gen, string name)
+    async Task AnalyzeFilesAsync(int gen, IReadOnlyList<string> names)
     {
         _oto.SetBusy(true);
         PostOto();
-        PostStatus($"{name} を解析しています");
+        PostStatus(names.Count == 1 ? $"{names[0]} を解析しています" : "解析しています");
         try
         {
             _analysis ??= new AnalysisClient();
-            var data = await _analysis.AnalyzeFileAsync(
+            var data = await _analysis.AnalyzeFilesAsync(
                 _folder!,
-                name,
-                (done, total) => PostStatus($"{name}　{done} / {total}"),
-                (_, _, label) => PostStatus(string.IsNullOrEmpty(label) ? name : $"{name}　{label}"));
+                names,
+                (done, total) => PostStatus($"解析しています　{done} / {total} ファイル"),
+                (name, _, label) => PostStatus(string.IsNullOrEmpty(label) ? name : $"{name}　{label}"));
             if (gen != _analyzeGen || _disposed)
                 return;
             if (!data.Ok)
@@ -1437,7 +1463,12 @@ sealed class ProbeSession : IDisposable
             else if (data.Files.Count == 0)
                 Post(new { type = "failed", message = "解析できませんでした。" });
             else
-                _oto.MergeFile(data.Files[0]);
+            {
+                foreach (var file in data.Files)
+                    _oto.MergeFile(file);
+                if (!string.IsNullOrWhiteSpace(data.Notice))
+                    Post(new { type = "notice", message = data.Notice });
+            }
         }
         catch (Exception ex)
         {
@@ -1504,7 +1535,7 @@ sealed class ProbeSession : IDisposable
         switch (Text(root, "op"))
         {
             case "write":
-                _ = WriteFrqAsync(Text(root, "mode"), root.TryGetProperty("clear", out var clear) && clear.ValueKind == JsonValueKind.True);
+                _ = WriteFrqAsync(Text(root, "mode"), root.TryGetProperty("clear", out var clear) && clear.ValueKind == JsonValueKind.True, ListedNames(root));
                 break;
             case "stroke":
                 lock (_frqGate)
@@ -1521,7 +1552,7 @@ sealed class ProbeSession : IDisposable
         }
     }
 
-    async Task WriteFrqAsync(string? mode, bool clear)
+    async Task WriteFrqAsync(string? mode, bool clear, IReadOnlyList<string> names)
     {
         if (_disposed || string.IsNullOrEmpty(_folder))
             return;
@@ -1532,16 +1563,24 @@ sealed class ProbeSession : IDisposable
         }
 
         mode = mode is "missing" or "selected" ? mode : "all";
-        string? only = null;
+        object? only = null;
         if (mode == "selected")
         {
-            if (string.IsNullOrEmpty(_wavPath))
+            var list = names.Count > 0 ? names.ToList() : new List<string>();
+            if (list.Count == 0 && !string.IsNullOrEmpty(_wavPath))
+            {
+                var current = Path.GetFileName(_wavPath);
+                if (!string.IsNullOrEmpty(current))
+                    list.Add(current);
+            }
+
+            if (list.Count == 0)
             {
                 Post(new { type = "failed", message = "ファイルを選んでください。" });
                 return;
             }
 
-            only = Path.GetFileName(_wavPath);
+            only = list.ToArray();
         }
 
         _oto.SetBusy(true);

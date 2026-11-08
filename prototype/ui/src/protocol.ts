@@ -19,7 +19,7 @@ export type PageCommand =
   | { type: "recordStop" }
   | { type: "recSettings"; note: string; semitones: number; speed: number; volume: number; countIn: boolean; bpm: number; guideWhile: boolean; advance: boolean }
   | { type: "recList"; op: "none" | "pick" | "open"; path?: string }
-  | { type: "frq"; op: "write"; mode: "all" | "missing" | "selected"; clear: boolean }
+  | { type: "frq"; op: "write"; mode: "all" | "missing" | "selected"; clear: boolean; names?: string[] }
   | { type: "frq"; op: "stroke"; points: { frame: number; midi: number; unvoiced: boolean }[] }
   | { type: "frq"; op: "octave"; frames: number[]; octaves: number }
   | { type: "frq"; op: "clear"; frames: number[] }
@@ -48,7 +48,7 @@ export type PageCommand =
   | { type: "oto"; op: "alias"; which: string; on: boolean }
   | { type: "oto"; op: "scope"; scope: string }
   | { type: "oto"; op: "analyze"; force: boolean }
-  | { type: "oto"; op: "analyzeFile" }
+  | { type: "oto"; op: "analyzeFile"; names: string[] }
   | { type: "oto"; op: "write" }
   | { type: "oto"; op: "tune"; file: string; index: number; point: number; time: number }
   | { type: "oto"; op: "spans"; file: string; spans: { start: number; end: number }[] }

@@ -3,6 +3,7 @@ import { BankPanel } from "./BankPanel"
 import { Dock } from "./Dock"
 import { EffectsPanel } from "./EffectsPanel"
 import { FileList, type FileListHandle } from "./FileList"
+import { applyFileClick, emptyFilePick, pruneFilePick, sameName, type FilePick } from "./filePick"
 import { nextFileIndex } from "./fileStep"
 import { FrqEditor } from "./FrqEditor"
 import { FrqPanel } from "./FrqPanel"
@@ -154,6 +155,8 @@ export function App() {
   const [folder, setFolder] = useState("")
   const [names, setNames] = useState<string[]>([])
   const [fileName, setFileName] = useState("")
+  const pickRef = useRef<FilePick>(emptyFilePick)
+  const [pick, setPick] = useState<FilePick>(emptyFilePick)
   const fileListRef = useRef<FileListHandle>(null)
   const [picture, setPicture] = useState<PreviewEvent | null>(null)
   const [notice, setNotice] = useState<{ message: string; tone: NoticeTone } | null>(null)
@@ -434,6 +437,11 @@ export function App() {
     redraw()
   }
 
+  function commitPick(next: FilePick) {
+    pickRef.current = next
+    setPick(next)
+  }
+
   function chooseFile(name: string) {
     window.clearTimeout(fileStepTimer.current)
     stepTarget.current = null
@@ -445,6 +453,37 @@ export function App() {
     } else if (wheeling.current)
       restoreWheelHold()
     sendRef.current({ type: "selectFile", name })
+  }
+
+  function focusFile(name: string) {
+    const listed = namesRef.current.some((item) => sameName(item, name))
+    commitPick(listed
+      ? { selected: [name], active: name, anchor: name }
+      : { selected: [], active: name, anchor: name })
+    chooseFile(name)
+  }
+
+  function clickFile(name: string, shift: boolean, ctrl: boolean) {
+    const next = applyFileClick(namesRef.current, pickRef.current, name, shift, ctrl)
+    const changed = !sameName(next.active, pickRef.current.active)
+    commitPick(next)
+    if (changed)
+      chooseFile(next.active)
+    else
+      fileListRef.current?.release()
+  }
+
+  function selectAllFiles() {
+    const list = namesRef.current
+    if (list.length === 0)
+      return
+    const active = list.find((name) => sameName(name, pickRef.current.active)) ?? ""
+    const anchor = list.find((name) => sameName(name, pickRef.current.anchor)) ?? active
+    commitPick({ selected: [...list], active: active || list[0] || "", anchor: anchor || list[0] || "" })
+    if (!active && list[0])
+      chooseFile(list[0])
+    else
+      fileListRef.current?.release()
   }
 
   function stepFile(direction: number) {
@@ -467,11 +506,8 @@ export function App() {
       const landed = stepTarget.current
       const chosen = landed == null ? "" : namesRef.current[landed] ?? ""
       wheeling.current = false
-      if (chosen && !sameName(chosen, fileNameRef.current)) {
-        wheelHold.current = null
-        showFilePending(chosen)
-        sendRef.current({ type: "selectFile", name: chosen })
-      }
+      if (chosen && !sameName(chosen, fileNameRef.current))
+        focusFile(chosen)
       else {
         stepTarget.current = null
         fileListRef.current?.release()
@@ -490,7 +526,8 @@ export function App() {
         const keep = missingRef.current || event.names.some((name) => sameName(name, fileNameRef.current))
         setCreateOpen(false)
         setCreating(false)
-        if (event.folder !== folderRef.current) {
+        const folderChanged = event.folder !== folderRef.current
+        if (folderChanged) {
           pictureCache.current.clear()
           otoGenRef.current = -1
           if (otoRef.current) {
@@ -501,6 +538,12 @@ export function App() {
         }
         setFolder(event.folder)
         setNames(event.names)
+        if (folderChanged)
+          commitPick(keep ? { selected: [fileNameRef.current], active: fileNameRef.current, anchor: fileNameRef.current } : emptyFilePick)
+        else if (!keep)
+          commitPick(emptyFilePick)
+        else
+          commitPick(pruneFilePick(event.names, pickRef.current))
         window.clearTimeout(fileStepTimer.current)
         if (wheeling.current)
           restoreWheelHold()
@@ -530,6 +573,12 @@ export function App() {
         fileNameRef.current = event.name
         missingRef.current = event.missing === true
         setFileName(event.name)
+        if (!sameName(pickRef.current.active, event.name)) {
+          const listed = namesRef.current.some((item) => sameName(item, event.name))
+          commitPick(listed
+            ? { selected: [event.name], active: event.name, anchor: event.name }
+            : { selected: [], active: event.name, anchor: event.name })
+        }
         stepTarget.current = null
         fileListRef.current?.release()
         if (event.missing) {
@@ -771,7 +820,7 @@ export function App() {
   function chooseRec(index: number | null, wav: string) {
     setRecIndex(index)
     if (wav)
-      chooseFile(wav)
+      focusFile(wav)
   }
 
   function syncRecIndex(wav: string) {
@@ -860,6 +909,7 @@ export function App() {
   }
 
   const recLine = recIndex == null ? null : recList?.lines[recIndex] ?? null
+  const selectedNames = names.filter((name) => pick.selected.some((item) => sameName(item, name)))
   useEffect(() => {
     if (recLine?.recorded)
       sendRef.current({ type: "take", op: "wave", name: recLine.wav })
@@ -878,7 +928,7 @@ export function App() {
         canEdit={folder.length > 0}
         canWrite={Boolean(oto?.analyzed && !oto.busy)}
         canAnalyze={folder.length > 0 && !oto?.busy}
-        canAnalyzeOne={folder.length > 0 && fileName.length > 0 && !missingRef.current && !oto?.busy}
+        canAnalyzeOne={folder.length > 0 && selectedNames.length > 0 && !oto?.busy}
         onOpenFolder={() => sendRef.current({ type: "openFolder" })}
         onSaveSettings={() => {
           setSaveName("")
@@ -922,8 +972,10 @@ export function App() {
                     ref={fileListRef}
                     folder={folder}
                     names={names}
-                    selected={fileName}
-                    onSelect={chooseFile}
+                    selected={pick.selected}
+                    current={pick.active}
+                    onSelect={clickFile}
+                    onSelectAll={selectAllFiles}
                   />
                 )
               if (id in graphKinds)
@@ -1028,7 +1080,8 @@ export function App() {
                   <FrqPanel
                     wavs={frqCount.wavs}
                     busy={Boolean(oto?.busy) || frqCount.busy}
-                    hasFile={fileName.length > 0 && !missingRef.current}
+                    hasFile={selectedNames.length > 0}
+                    selectedNames={selectedNames}
                     send={(command) => sendRef.current(command)}
                   />
                 )
@@ -1263,14 +1316,22 @@ export function App() {
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-6">
           <div className="w-full max-w-md rounded-md border border-[var(--line)] bg-[var(--panel)] p-4">
             <h2 className="text-base font-semibold">選択した音声だけを解析します</h2>
-            <p className="mt-2 text-sm">{fileName} を解析し、いまの結果へ足します。</p>
+            <p className="mt-2 text-sm">
+              {selectedNames.length > 1
+                ? `${selectedNames.length} 件を解析し、いまの結果へ足します。`
+                : `${selectedNames[0] ?? fileName} を解析し、いまの結果へ足します。`}
+            </p>
             <div className="mt-4 flex gap-2">
               <button type="button" className="ghost-button flex-1" onClick={() => setOneOpen(false)}>いいえ</button>
               <button
                 type="button"
                 className="accent-button flex-1"
                 onClick={() => {
-                  sendRef.current({ type: "oto", op: "analyzeFile" })
+                  sendRef.current({
+                    type: "oto",
+                    op: "analyzeFile",
+                    names: selectedNames,
+                  })
                   setOneOpen(false)
                 }}
               >
@@ -1363,6 +1424,3 @@ export function App() {
   )
 }
 
-function sameName(left: string, right: string) {
-  return left.localeCompare(right, undefined, { sensitivity: "accent" }) === 0
-}

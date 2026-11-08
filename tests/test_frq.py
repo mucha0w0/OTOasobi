@@ -146,3 +146,6 @@ class FrqTests(unittest.TestCase):
             loaded = read_frq(root / "b.frq")
             self.assertEqual(float(np.max(loaded.frequency[:8])), 0.0)
             self.assertGreater(float(np.median(loaded.frequency[12:])), 300)
+            both = write_folder_frq(root, mode="selected", only=["a.wav", "gone.wav", "b.wav"])
+            self.assertEqual(both.written, 2)
+            self.assertTrue(any("gone.wav" in note for note in both.notes))
