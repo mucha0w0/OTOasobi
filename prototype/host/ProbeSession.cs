@@ -158,6 +158,12 @@ sealed class ProbeSession : IDisposable
                 case "openFolder":
                     _ = OpenFolderAsync();
                     break;
+                case "pickProjectPlace":
+                    _ = PickProjectPlaceAsync();
+                    break;
+                case "createProject":
+                    _ = CreateProjectAsync(Text(root, "parent"), Text(root, "name"));
+                    break;
                 case "selectFile":
                     SelectFile(Text(root, "name"));
                     break;
@@ -343,6 +349,98 @@ sealed class ProbeSession : IDisposable
         {
             Post(new { type = "failed", message = ex.Message });
         }
+    }
+
+    async Task PickProjectPlaceAsync()
+    {
+        if (_disposed)
+            return;
+        string? folder;
+        try
+        {
+            folder = await WavPicker.PickAsync(WindowNative.GetWindowHandle(_window), "作成する場所");
+        }
+        catch (Exception ex)
+        {
+            Post(new { type = "failed", message = ex.Message });
+            return;
+        }
+
+        if (string.IsNullOrEmpty(folder) || _disposed)
+            return;
+        Post(new { type = "projectPlace", path = folder });
+    }
+
+    async Task CreateProjectAsync(string? parent, string? rawName)
+    {
+        if (_disposed)
+            return;
+        var error = ProjectFolder.CheckName(rawName, out var name);
+        if (error != null)
+        {
+            Post(new { type = "failed", message = error });
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(parent) || !Directory.Exists(parent))
+        {
+            Post(new { type = "failed", message = "作成する場所を選んでください。" });
+            return;
+        }
+
+        string? path;
+        try
+        {
+            path = ProjectFolder.Combine(parent, name);
+        }
+        catch (Exception ex) when (ex is IOException or ArgumentException or NotSupportedException)
+        {
+            Post(new { type = "failed", message = "この場所には作成できません。" });
+            return;
+        }
+
+        if (path == null)
+        {
+            Post(new { type = "failed", message = "この場所には作成できません。" });
+            return;
+        }
+
+        if (Directory.Exists(path) || File.Exists(path))
+        {
+            Post(new { type = "failed", message = "同じ名前のフォルダが既にあります。" });
+            return;
+        }
+
+        try
+        {
+            Directory.CreateDirectory(path);
+            ProjectFolder.Write(path, name);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            try
+            {
+                if (Directory.Exists(path))
+                    Directory.Delete(path, true);
+            }
+            catch (Exception)
+            {
+            }
+
+            Post(new { type = "failed", message = ex.Message });
+            return;
+        }
+
+        try
+        {
+            AdoptFolder(path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Post(new { type = "failed", message = ex.Message });
+        }
+
+        await Task.CompletedTask;
     }
 
     async Task OpenRecentAsync(string? path)

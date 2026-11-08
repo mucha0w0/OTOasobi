@@ -54,6 +54,7 @@
     <Compile Include="..\..\winui\EffectRackPreset.cs" Link="Winui\EffectRackPreset.cs" />
     <Compile Include="..\..\winui\EditorLayout.cs" Link="Winui\EditorLayout.cs" />
     <Compile Include="..\..\winui\RecentFolders.cs" Link="Winui\RecentFolders.cs" />
+    <Compile Include="..\..\winui\ProjectFolder.cs" Link="Winui\ProjectFolder.cs" />
     <Compile Include="..\..\winui\AppAppearance.cs" Link="Winui\AppAppearance.cs" />
     <Compile Include="..\..\winui\UpdatePrompt.cs" Link="Winui\UpdatePrompt.cs" />
     <Compile Include="..\..\winui\EngineInstaller.cs" Link="Winui\EngineInstaller.cs" />

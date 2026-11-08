@@ -97,6 +97,12 @@ export function App() {
   const [takeWave, setTakeWave] = useState<{ name: string; lo: number[]; hi: number[]; duration: number } | null>(null)
   const [takePlay, setTakePlay] = useState({ playing: false, position: 0, duration: 0 })
   const [recentFolders, setRecentFolders] = useState<{ path: string; name: string }[]>([])
+  const [createOpen, setCreateOpen] = useState(false)
+  const [createName, setCreateName] = useState("")
+  const [createPlace, setCreatePlace] = useState("")
+  const [createError, setCreateError] = useState("")
+  const [creating, setCreating] = useState(false)
+  const createOpenRef = useRef(false)
   const [templates, setTemplates] = useState<string[]>([])
   const [updatePrompt, setUpdatePrompt] = useState<{ phase: string; title: string; body: string } | null>(null)
   const layoutTouched = useRef(false)
@@ -116,6 +122,7 @@ export function App() {
   recListRef.current = recList
   recIndexRef.current = recIndex
   advanceRef.current = advance
+  createOpenRef.current = createOpen
   modelRef.current = viewModel()
 
   const register = useCallback((handle: BandHandle) => {
@@ -278,6 +285,8 @@ export function App() {
         break
       case "files": {
         const keep = missingRef.current || event.names.some((name) => sameName(name, fileNameRef.current))
+        setCreateOpen(false)
+        setCreating(false)
         setFolder(event.folder)
         setNames(event.names)
         if (!keep) {
@@ -334,6 +343,10 @@ export function App() {
       case "recent":
         setRecentFolders(event.folders)
         break
+      case "projectPlace":
+        setCreatePlace(event.path)
+        setCreateError("")
+        break
       case "templates":
         setTemplates(event.names)
         break
@@ -355,6 +368,13 @@ export function App() {
         advanceAfterSave()
         break
       case "failed":
+        setCreating(false)
+        if (createOpenRef.current) {
+          setCreateError(event.message)
+          break
+        }
+        setNotice(event.message)
+        break
       case "notice":
         setNotice(event.message)
         break
@@ -762,9 +782,23 @@ export function App() {
           <p className="max-w-md text-sm leading-6 text-[var(--muted)]">
             フォルダを開くと編集画面に入ります。保存データがあるときは、その区間を読み込みます。無いときは、解析してから区間を直せます。
           </p>
-          <button type="button" className="accent-button mt-2 min-w-52" onClick={() => sendRef.current({ type: "openFolder" })}>
-            既存のフォルダを選ぶ
-          </button>
+          <div className="mt-2 flex flex-col gap-2">
+            <button
+              type="button"
+              className="accent-button min-w-52"
+              onClick={() => {
+                setCreateName("")
+                setCreateError("")
+                setCreating(false)
+                setCreateOpen(true)
+              }}
+            >
+              新しいプロジェクトを作成する
+            </button>
+            <button type="button" className="accent-button min-w-52" onClick={() => sendRef.current({ type: "openFolder" })}>
+              既存のフォルダを選ぶ
+            </button>
+          </div>
           {recentFolders.length > 0 && (
             <div className="mt-4 w-full max-w-md text-left text-sm">
               <p className="mb-1 text-[var(--muted)]">最近使ったフォルダ</p>
@@ -782,6 +816,61 @@ export function App() {
           )}
           {!connected && <p className="text-sm text-[var(--muted)]">ホストに接続していません</p>}
         </main>
+      )}
+      {createOpen && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-6">
+          <form
+            className="w-full max-w-md rounded-lg border border-[var(--line)] bg-[var(--panel)] p-4 text-left"
+            onSubmit={(event) => {
+              event.preventDefault()
+              if (creating || createName.trim().length === 0 || createPlace.length === 0)
+                return
+              if (!connected) {
+                setCreateError("ホストに接続していません")
+                return
+              }
+              setCreateError("")
+              setCreating(true)
+              sendRef.current({ type: "createProject", parent: createPlace, name: createName.trim() })
+            }}
+          >
+            <h2 className="text-base font-semibold">新しいプロジェクト</h2>
+            <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
+              空の音源フォルダを作り、編集画面で開きます。名前は character.txt と character.yaml に書きます。
+            </p>
+            <label className="mt-3 block text-sm" htmlFor="project-name">名前</label>
+            <input
+              id="project-name"
+              className="field mt-1 w-full"
+              value={createName}
+              placeholder="音源の名前"
+              onChange={(event) => setCreateName(event.target.value)}
+            />
+            <label className="mt-3 block text-sm" htmlFor="project-place">場所</label>
+            <div className="mt-1 flex gap-2">
+              <input id="project-place" className="field min-w-0 flex-1" readOnly value={createPlace} placeholder="フォルダを選んでください" />
+              <button type="button" className="ghost-button shrink-0" onClick={() => sendRef.current({ type: "pickProjectPlace" })}>
+                場所を選ぶ
+              </button>
+            </div>
+            {createError && <p className="mt-2 text-sm">{createError}</p>}
+            <div className="mt-4 flex gap-2">
+              <button
+                type="button"
+                className="ghost-button flex-1"
+                onClick={() => {
+                  setCreating(false)
+                  setCreateOpen(false)
+                }}
+              >
+                キャンセル
+              </button>
+              <button type="submit" className="accent-button flex-1" disabled={creating || createName.trim().length === 0 || createPlace.length === 0}>
+                作成
+              </button>
+            </div>
+          </form>
+        </div>
       )}
       {saveOpen && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-6">

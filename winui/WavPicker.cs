@@ -12,7 +12,9 @@ static class WavPicker
     const uint SigdnFileSystemPath = 0x80058000;
     const int ErrorCancelled = unchecked((int)0x800704C7);
 
-    public static async Task<string?> PickAsync(IntPtr hwnd)
+    public static Task<string?> PickAsync(IntPtr hwnd) => PickAsync(hwnd, "音声フォルダを選択");
+
+    public static async Task<string?> PickAsync(IntPtr hwnd, string title)
     {
         try
         {
@@ -24,16 +26,16 @@ static class WavPicker
         }
         catch (COMException)
         {
-            return PickWin32(hwnd);
+            return PickWin32(hwnd, title);
         }
     }
 
-    static string? PickWin32(IntPtr hwnd)
+    static string? PickWin32(IntPtr hwnd, string title)
     {
         var dialog = (IFileOpenDialog)new FileOpenDialog();
         dialog.GetOptions(out var options);
         dialog.SetOptions(options | FosPickFolders | FosForceFileSystem | FosPathMustExist);
-        dialog.SetTitle("音声フォルダを選択");
+        dialog.SetTitle(title);
         var hr = dialog.Show(hwnd);
         if (hr == ErrorCancelled)
             return null;

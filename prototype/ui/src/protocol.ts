@@ -7,6 +7,8 @@ export type PageCommand =
   | { type: "hello" }
   | { type: "openWav" }
   | { type: "openFolder" }
+  | { type: "pickProjectPlace" }
+  | { type: "createProject"; parent: string; name: string }
   | { type: "selectFile"; name: string }
   | { type: "preview"; t0: number; t1: number; columns: number; rows: number }
   | { type: "setDevices"; inputId: string; outputId: string }
@@ -112,6 +114,7 @@ export type HostEvent =
   | { type: "take"; playing: boolean; position: number; duration: number }
   | { type: "takeWave"; name: string; lo: number[]; hi: number[]; duration: number }
   | { type: "recent"; folders: { path: string; name: string }[] }
+  | { type: "projectPlace"; path: string }
   | { type: "templates"; names: string[] }
   | { type: "appearance"; theme: "light" | "dark" | "system"; accent: string | null }
   | { type: "update"; phase: "prompt" | "current" | "unavailable" | "progress" | "done" | "failed"; title: string; body: string }
@@ -449,6 +452,8 @@ export function parseHostEvent(value: unknown): HostEvent | null {
             : [])
           : [],
       }
+    case "projectPlace":
+      return typeof value.path === "string" ? { type: "projectPlace", path: value.path } : null
     case "templates":
       return { type: "templates", names: strings(value.names) }
     case "appearance":

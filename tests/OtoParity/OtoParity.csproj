@@ -40,6 +40,7 @@
     <Compile Include="..\..\winui\RecTone.cs" Link="Winui\RecTone.cs" />
     <Compile Include="..\..\winui\WavAudio.cs" Link="Winui\WavAudio.cs" />
     <Compile Include="..\..\winui\RecMonitor.cs" Link="Winui\RecMonitor.cs" />
+    <Compile Include="..\..\winui\ProjectFolder.cs" Link="Winui\ProjectFolder.cs" />
   </ItemGroup>
 
 </Project>

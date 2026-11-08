@@ -112,6 +112,10 @@ describe("ホストのメッセージ", () => {
       sampleRate: 44100,
       frequency: [440, 0],
     })).toMatchObject({ type: "frqView", frequency: [440, 0], error: null })
+    expect(parseHostEvent({ type: "projectPlace", path: "C:/voice" })).toEqual({
+      type: "projectPlace",
+      path: "C:/voice",
+    })
     expect(parseHostEvent({ type: "opened", name: "あ.wav", missing: true })).toEqual({
       type: "opened",
       name: "あ.wav",
