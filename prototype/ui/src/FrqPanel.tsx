@@ -21,16 +21,16 @@ export function FrqPanel({
     : `WAV ${wavs} 件のうち、.frq は ${frqs} 件あります。`
   return (
     <div className="flex h-full min-h-0 flex-col text-sm">
-      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto p-3">
-        <section className="rounded-lg border border-[var(--line)] p-3">
-          <h2 className="font-semibold">周波数表</h2>
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-3">
+        <section className="grid gap-2">
+          <h2 className="section-title">周波数表</h2>
           <p className="mt-1 leading-6 text-[var(--muted)]">
             フォルダ直下の各 WAV と同じ名前で、UTAU 用の .frq を書きます。256 サンプルごとの高さと、有声部分の平均です。
           </p>
           <p className="mt-2 text-[var(--muted)]">{summary}</p>
         </section>
-        <section className="rounded-lg border border-[var(--line)] p-3">
-          <h2 className="font-semibold">対象</h2>
+        <section className="grid gap-2">
+          <h2 className="section-title">対象</h2>
           <label className="mt-2 flex gap-2">
             <input type="radio" name="frq-mode" checked={mode === "all"} onChange={() => setMode("all")} />
             全てのfrqファイルを上書きして生成する
@@ -44,7 +44,7 @@ export function FrqPanel({
             現在選択中のファイルだけ生成する
           </label>
         </section>
-        <section className="rounded-lg border border-[var(--line)] p-3">
+        <section className="grid gap-2">
           <label className="flex gap-2">
             <input type="checkbox" checked={clear} onChange={(event) => setClear(event.target.checked)} />
             先行発声までを０に統一する

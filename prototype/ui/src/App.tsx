@@ -7,17 +7,19 @@ import { FrqEditor } from "./FrqEditor"
 import { FrqPanel } from "./FrqPanel"
 import { GraphBand, type BandHandle, type BandKind, type GraphModel, type LiveTune } from "./GraphBand"
 import { connectHost } from "./host"
-import { contains, createDefault, hidePane, showPane, type LayoutNode, type PaneBox } from "./layout"
+import { contains, createDefault, hidePane, rulerPaneIds, showPane, type LayoutNode, type PaneBox } from "./layout"
 import { createLiveBus, type LiveBus } from "./live"
 import { MenuBar } from "./MenuBar"
 import { OtoTable } from "./OtoTable"
 import { OtoIni, OtoSettings } from "./OtoPanels"
 import { requestsPreviewAfter, type BankEvent, type DeviceInfo, type EffectsEvent, type FrqViewEvent, type HostEvent, type OtoMark, type OtoState, type PageCommand, type PreviewEvent, type RecListEvent, type SavedEvent } from "./protocol"
 import { RecListPanel, RecScriptPanel } from "./RecPanels"
+import { noticeTone, ToneIcon, ToneRow, type NoticeTone } from "./notice"
+import { createPointerBus } from "./ruler"
 import { SettingsDialog, settingsTabs } from "./settings"
 import { GuidePanel, MicPanel, RecPanel, type GuideFileState } from "./SidePanels"
 import type { PhoneSpan } from "./spans"
-import { buttonColors, resolveTheme, type ThemeChoice } from "./theme"
+import { buttonColors, correctAccent, defaultAccent, resolveTheme, type ThemeChoice } from "./theme"
 import type { Range } from "./viewport"
 
 const graphKinds: Record<string, BandKind> = {
@@ -53,7 +55,11 @@ export function App() {
   const [connected, setConnected] = useState(false)
   const [theme, setTheme] = useState<ThemeChoice>("system")
   const [systemDark, setSystemDark] = useState(() => window.matchMedia("(prefers-color-scheme: dark)").matches)
-  const [accent, setAccent] = useState("#0f766e")
+  const [accent, setAccent] = useState<string | null>(null)
+  const pointerState = useRef<ReturnType<typeof createPointerBus> | null>(null)
+  if (!pointerState.current)
+    pointerState.current = createPointerBus()
+  const pointerBus = pointerState.current
   const [inputs, setInputs] = useState<DeviceInfo[]>([])
   const [outputs, setOutputs] = useState<DeviceInfo[]>([])
   const [inputId, setInputId] = useState("")
@@ -72,7 +78,7 @@ export function App() {
   const [names, setNames] = useState<string[]>([])
   const [fileName, setFileName] = useState("")
   const [picture, setPicture] = useState<PreviewEvent | null>(null)
-  const [notice, setNotice] = useState("")
+  const [notice, setNotice] = useState<{ message: string; tone: NoticeTone } | null>(null)
   const [saved, setSaved] = useState<SavedEvent | null>(null)
   const [settings, setSettings] = useState(false)
   const [layout, setLayout] = useState<LayoutNode | null>(() => createDefault())
@@ -150,7 +156,7 @@ export function App() {
 
   useEffect(() => {
     document.documentElement.dataset.theme = resolved
-    const colors = buttonColors(accent)
+    const colors = buttonColors(correctAccent(accent ?? defaultAccent(resolved), resolved))
     document.documentElement.style.setProperty("--accent", colors.fill)
     document.documentElement.style.setProperty("--on-accent", colors.ink)
     sendRef.current({ type: "caption", theme: resolved })
@@ -357,6 +363,7 @@ export function App() {
           setAccent(event.accent)
         } else {
           accentCustom.current = false
+          setAccent(null)
         }
         break
       case "update":
@@ -364,7 +371,7 @@ export function App() {
         break
       case "saved":
         setSaved(event)
-        setNotice(`${event.path} を書きました。入力 ${event.inputRate} Hz、ヘッダ ${event.headerRate} Hz / ${event.bits} bit / ${event.channels} ch。`)
+        setNotice({ message: `${event.path} を書きました。入力 ${event.inputRate} Hz、ヘッダ ${event.headerRate} Hz / ${event.bits} bit / ${event.channels} ch。`, tone: "success" })
         advanceAfterSave()
         break
       case "failed":
@@ -373,10 +380,10 @@ export function App() {
           setCreateError(event.message)
           break
         }
-        setNotice(event.message)
+        setNotice({ message: event.message, tone: "error" })
         break
       case "notice":
-        setNotice(event.message)
+        setNotice({ message: event.message, tone: noticeTone(event.message) })
         break
       case "status":
         setStatus(event.message)
@@ -565,7 +572,7 @@ export function App() {
     }
     const line = recIndexRef.current == null ? null : recListRef.current?.lines[recIndexRef.current] ?? null
     if (line?.error) {
-      setNotice(line.error)
+      setNotice({ message: line.error, tone: "error" })
       return
     }
     if (line?.recorded) {
@@ -585,7 +592,8 @@ export function App() {
   const recNext = recLine && recIndex != null ? recList?.lines[recIndex + 1]?.sing ?? "" : ""
   const recOutside = !recLine && (recList?.outside.some((name) => sameName(name, fileName)) ?? false) ? fileName : ""
   const recStatus = recLine?.error ?? (recLine ? (recLine.recorded ? "録音済み" : "未録音") : recOutside ? "リスト外" : "")
-  const appearance = `${resolved}-${accent}`
+  const appearance = `${resolved}-${buttonColors(correctAccent(accent ?? defaultAccent(resolved), resolved)).fill}`
+  const rulers = rulerPaneIds(layout)
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-[var(--bg)] text-[var(--text)]">
@@ -615,12 +623,16 @@ export function App() {
         onCheckUpdate={() => sendRef.current({ type: "update", op: "check" })}
       />
       {status && (
-        <div className="border-b border-[var(--line)] bg-[var(--panel)] px-4 py-2 text-sm">{status}</div>
+        <div role="status" className="flex items-center gap-2 border-b border-l-[3px] border-[var(--line)] bg-[var(--panel)] px-4 py-2 text-sm" style={{ borderLeftColor: "var(--muted)" }}>
+          <ToneIcon tone="info" />
+          <span className="min-w-0 flex-1">{status}</span>
+        </div>
       )}
       {notice && (
-        <div className="flex items-center justify-between border-b border-[var(--line)] bg-[var(--panel)] px-4 py-2 text-sm">
-          <span>{notice}</span>
-          <button type="button" className="ghost-button" onClick={() => setNotice("")}>閉じる</button>
+        <div role={notice.tone === "error" ? "alert" : "status"} className="flex items-center gap-2 border-b border-l-[3px] border-[var(--line)] bg-[var(--panel)] px-4 py-2 text-sm" style={{ borderLeftColor: notice.tone === "success" ? "var(--success)" : notice.tone === "error" ? "var(--danger)" : "var(--muted)" }}>
+          <ToneIcon tone={notice.tone} />
+          <span className="min-w-0 flex-1">{notice.message}</span>
+          <button type="button" className="ghost-button" onClick={() => setNotice(null)}>閉じる</button>
         </div>
       )}
       {folder ? (
@@ -658,6 +670,8 @@ export function App() {
                     picture={picture}
                     model={modelRef}
                     appearance={appearance}
+                    showRuler={rulers.includes(id)}
+                    pointerBus={pointerBus}
                     register={register}
                     onRange={onRange}
                     onFileStep={stepFile}
@@ -745,7 +759,7 @@ export function App() {
                   />
                 )
               if (id === "frqEdit")
-                return <FrqEditor view={frqView} send={(command) => sendRef.current(command)} />
+                return <FrqEditor view={frqView} appearance={appearance} send={(command) => sendRef.current(command)} />
               if (id === "otoParams")
                 return <OtoTable rows={oto?.rows?.length ? oto.rows : oto?.marks ?? []} send={(command) => sendRef.current(command)} />
               if (id === "mic")
@@ -820,7 +834,7 @@ export function App() {
       {createOpen && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-6">
           <form
-            className="w-full max-w-md rounded-lg border border-[var(--line)] bg-[var(--panel)] p-4 text-left"
+            className="w-full max-w-md rounded-md border border-[var(--line)] bg-[var(--panel)] p-4 text-left"
             onSubmit={(event) => {
               event.preventDefault()
               if (creating || createName.trim().length === 0 || createPlace.length === 0)
@@ -853,7 +867,7 @@ export function App() {
                 場所を選ぶ
               </button>
             </div>
-            {createError && <p className="mt-2 text-sm">{createError}</p>}
+            {createError && <ToneRow tone="error">{createError}</ToneRow>}
             <div className="mt-4 flex gap-2">
               <button
                 type="button"
@@ -875,7 +889,7 @@ export function App() {
       {saveOpen && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-6">
           <form
-            className="w-full max-w-md rounded-lg border border-[var(--line)] bg-[var(--panel)] p-4"
+            className="w-full max-w-md rounded-md border border-[var(--line)] bg-[var(--panel)] p-4"
             onSubmit={(event) => {
               event.preventDefault()
               sendRef.current({ type: "saveSettings", name: saveName, replace: false })
@@ -896,7 +910,7 @@ export function App() {
       )}
       {replaceName && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-6">
-          <div className="w-full max-w-md rounded-lg border border-[var(--line)] bg-[var(--panel)] p-4">
+          <div className="w-full max-w-md rounded-md border border-[var(--line)] bg-[var(--panel)] p-4">
             <h2 className="text-base font-semibold">設定を上書きしますか？</h2>
             <p className="mt-2 text-sm">「{replaceName}」は既にあります。いまの設定で置き換えます。</p>
             <div className="mt-4 flex gap-2">
@@ -917,7 +931,7 @@ export function App() {
       )}
       {loadOpen && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-6">
-          <div className="w-full max-w-md rounded-lg border border-[var(--line)] bg-[var(--panel)] p-4">
+          <div className="w-full max-w-md rounded-md border border-[var(--line)] bg-[var(--panel)] p-4">
             <h2 className="text-base font-semibold">設定を読み込む</h2>
             {oto && oto.saves.length > 0 ? (
               <div className="mt-3 grid max-h-64 gap-1 overflow-auto">
@@ -944,7 +958,7 @@ export function App() {
       )}
       {reanalyzeOpen && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-6">
-          <div className="w-full max-w-md rounded-lg border border-[var(--line)] bg-[var(--panel)] p-4">
+          <div className="w-full max-w-md rounded-md border border-[var(--line)] bg-[var(--panel)] p-4">
             <h2 className="text-base font-semibold">すべてのデータを解析します</h2>
             <p className="mt-2 text-sm">フォルダ内の WAV をすべて解析します。</p>
             <div className="mt-4 flex gap-2">
@@ -965,7 +979,7 @@ export function App() {
       )}
       {oneOpen && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-6">
-          <div className="w-full max-w-md rounded-lg border border-[var(--line)] bg-[var(--panel)] p-4">
+          <div className="w-full max-w-md rounded-md border border-[var(--line)] bg-[var(--panel)] p-4">
             <h2 className="text-base font-semibold">選択した音声だけを解析します</h2>
             <p className="mt-2 text-sm">{fileName} を解析し、いまの結果へ足します。</p>
             <div className="mt-4 flex gap-2">
@@ -986,7 +1000,7 @@ export function App() {
       )}
       {overwriteWav && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-6">
-          <div className="w-full max-w-md rounded-lg border border-[var(--line)] bg-[var(--panel)] p-4">
+          <div className="w-full max-w-md rounded-md border border-[var(--line)] bg-[var(--panel)] p-4">
             <h2 className="text-base font-semibold">録音を上書きしますか？</h2>
             <p className="mt-2 text-sm">{overwriteWav} は既にあります。</p>
             <div className="mt-4 flex gap-2">
@@ -1013,11 +1027,12 @@ export function App() {
             {
               theme,
               themeLabel,
-              accent,
+              accent: accent ?? defaultAccent(resolved),
               onTheme: chooseTheme,
               onAccent: chooseAccent,
               onSystemAccent: () => {
                 accentCustom.current = false
+                setAccent(null)
                 sendRef.current({ type: "appearance", theme, accent: null })
               },
             },
@@ -1041,7 +1056,7 @@ export function App() {
       )}
       {updatePrompt && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-6">
-          <div className="w-full max-w-md rounded-lg border border-[var(--line)] bg-[var(--panel)] p-4">
+          <div className="w-full max-w-md rounded-md border border-[var(--line)] bg-[var(--panel)] p-4">
             <h2 className="text-base font-semibold">{updatePrompt.title}</h2>
             <p className="mt-2 whitespace-pre-wrap text-sm">{updatePrompt.body}</p>
             <div className="mt-4 flex gap-2">
@@ -1059,32 +1074,6 @@ export function App() {
           </div>
         </div>
       )}
-      <style>{`
-        .accent-button {
-          background: var(--accent);
-          color: var(--on-accent);
-          border-radius: 6px;
-          min-height: 32px;
-          padding: 6px 12px;
-        }
-        .ghost-button, .field {
-          background: var(--panel);
-          color: var(--text);
-          border: 1px solid var(--line);
-          border-radius: 6px;
-          min-height: 32px;
-          padding: 4px 8px;
-        }
-        .icon-button {
-          display: grid;
-          width: 32px;
-          height: 32px;
-          min-width: 32px;
-          min-height: 32px;
-          place-items: center;
-          padding: 0;
-        }
-      `}</style>
     </div>
   )
 }

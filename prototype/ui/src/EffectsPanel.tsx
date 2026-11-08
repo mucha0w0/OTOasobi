@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react"
+import { ToneRow } from "./notice"
 import { IconButton, IconDown, IconUp } from "./IconButton"
 import type { EffectsEvent, PageCommand } from "./protocol"
 
@@ -42,7 +43,7 @@ export function EffectsPanel({
 
   return (
     <div className="flex h-full min-h-0 flex-col text-sm">
-      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto p-3">
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-3">
         <label className="grid gap-1">
           プリセット
           <select className="field" value={form.preset} onChange={(event) => send({ type: "effects", op: "preset", name: event.target.value })}>
@@ -59,7 +60,11 @@ export function EffectsPanel({
               </div>
             )}
             {kind === "noise-suppressor" && (
-        <Card title="ノイズサプレッサー" on={form.noiseEnabled} setOn={(noiseEnabled) => push({ ...form, noiseEnabled })}>
+        <section className="grid gap-2">
+          <label className="section-title flex items-center gap-2">
+            <input type="checkbox" checked={form.noiseEnabled} onChange={(event) => push({ ...form, noiseEnabled: event.target.checked })} />
+            ノイズサプレッサー
+          </label>
           <Slider label="抑える量" min={0} max={16} step={0.5} value={form.noiseReduction} suffix=" dB" onChange={(noiseReduction) => push({ ...form, noiseReduction })} />
           <label className="mt-2 grid gap-1">
             原音
@@ -78,8 +83,8 @@ export function EffectsPanel({
               <input className="field" value={form.noiseEnd} onChange={(event) => { const end = Number(event.target.value); setForm({ ...form, noiseEnd: end }); pushNoise(form, send, form.noiseStart, end) }} />
             </label>
           </div>
-          <p className="mt-1 text-[var(--muted)]">{form.noiseReady ? "無音の範囲を使います。" : "オンにするときは、無音の範囲を選んでください。"}</p>
-        </Card>
+          <p className="text-[var(--muted)]">{form.noiseReady ? "無音の範囲を使います。" : "オンにするときは、無音の範囲を選んでください。"}</p>
+        </section>
             )}
             {kind === "highpass" && (
         <Card title="ハイパス" on={form.highpassEnabled} setOn={(highpassEnabled) => push({ ...form, highpassEnabled })}>
@@ -127,7 +132,7 @@ export function EffectsPanel({
         ))}
       </div>
       <div className="border-t border-[var(--line)] p-3">
-        {blocked && <p className="mb-2">無音の範囲を選んでください。{blocked}</p>}
+        {blocked && <ToneRow tone="error" className="mb-2">{`無音の範囲を選んでください。${blocked}`}</ToneRow>}
         <button type="button" className="accent-button w-full" disabled={busy} onClick={() => {
           if (form.noiseEnabled && !form.noiseReady) {
             setBlocked("ノイズサプレッサーがオンです。原音から無音の範囲を選んでから、適用してください。")
@@ -139,7 +144,7 @@ export function EffectsPanel({
       </div>
       {confirm && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-6">
-          <div className="w-full max-w-md rounded-lg border border-[var(--line)] bg-[var(--panel)] p-4">
+          <div className="w-full max-w-md rounded-md border border-[var(--line)] bg-[var(--panel)] p-4">
             <h2 className="text-base font-semibold">解析データはリセットされますがよろしいですか？</h2>
             <p className="mt-2 text-sm">original の音声に、オンのエフェクトをかけて、フォルダ直下の音声を上書きします。そのあと解析します。</p>
             {form.noiseNote && <p className="mt-2 text-sm">{form.noiseNote}</p>}
@@ -184,7 +189,7 @@ function Card({
   children: ReactNode
 }) {
   return (
-    <section className="rounded-lg border border-[var(--line)] p-3">
+    <section className="rounded border border-[var(--line)] p-3">
       <label className="flex gap-2 font-semibold">
         <input type="checkbox" checked={on} onChange={(event) => setOn(event.target.checked)} />
         {title}
@@ -213,7 +218,10 @@ function Slider({
 }) {
   return (
     <label className="mt-2 grid gap-1">
-      {label} {Number.isFinite(value) ? value.toFixed(step < 1 ? 1 : 0) : ""}{suffix}
+      <span className="flex justify-between">
+        {label}
+        <span className="num text-[var(--muted)]">{Number.isFinite(value) ? value.toFixed(step < 1 ? 1 : 0) : ""}{suffix}</span>
+      </span>
       <input type="range" min={min} max={max} step={step} value={value} onChange={(event) => onChange(Number(event.target.value))} />
     </label>
   )

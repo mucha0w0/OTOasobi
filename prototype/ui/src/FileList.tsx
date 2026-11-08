@@ -20,7 +20,7 @@ export function FileList({ folder, names, selected, onSelect }: Props) {
             <button
               type="button"
               title={name}
-              className={`block w-full truncate px-3 py-1 text-left text-sm ${current ? "bg-[var(--accent)] text-[var(--on-accent)]" : "text-[var(--text)]"}`}
+              className={`block w-full truncate px-3 py-1 text-left text-sm ${current ? "is-picked" : "text-[var(--text)]"}`}
               onClick={() => onSelect(name)}
             >
               {name}

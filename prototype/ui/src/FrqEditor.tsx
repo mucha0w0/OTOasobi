@@ -21,9 +21,11 @@ function noteName(midi: number): string {
 export function FrqEditor({
   view,
   send,
+  appearance,
 }: {
   view: FrqViewEvent | null
   send: (command: PageCommand) => void
+  appearance: string
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [pen, setPen] = useState(false)
@@ -73,10 +75,10 @@ export function FrqEditor({
       const x = keyWidth + frame * pixels
       const voiced = hz > 0 && Number.isFinite(hz)
       const y = voiced ? ruler + (midiHigh - midiOf(hz)) * row : ruler + 128 * row
-      ctx.fillStyle = chosen.has(frame) ? "#0f766e" : (voiced ? "#fb923c" : "#9ca3af")
+      ctx.fillStyle = chosen.has(frame) ? (getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#0f766e") : (voiced ? "#fb923c" : "#9ca3af")
       ctx.fillRect(x, y + 4, Math.max(2, pixels - 1), 6)
     })
-  }, [frequency, height, pixels, selected, width])
+  }, [appearance, frequency, height, pixels, selected, width])
 
   function at(event: ReactPointerEvent<HTMLCanvasElement>) {
     const rect = event.currentTarget.getBoundingClientRect()
@@ -127,7 +129,7 @@ export function FrqEditor({
         <button type="button" className="ghost-button" disabled={selected.length === 0} onClick={() => send({ type: "frq", op: "clear", frames: selected })}>
           −
         </button>
-        {hop > 0 && <span className="text-[var(--muted)]">{(hop / rate).toFixed(4)} 秒 / 点</span>}
+        {hop > 0 && <span className="num text-[var(--muted)]">{(hop / rate).toFixed(4)} 秒 / 点</span>}
       </div>
       <div className="relative min-h-0 flex-1 overflow-auto">
         {message && <p className="p-3 text-[var(--muted)]">{message}</p>}

@@ -183,7 +183,7 @@ function Node({ layout, node, path, boxes, onRatio, onResizing, render, onTitleD
         }}
       >
         <div
-          className="drag-handle relative z-10 flex h-5 shrink-0 items-center border-b border-[var(--line)] bg-[var(--title)] select-none"
+          className="drag-handle relative z-10 flex h-6 shrink-0 items-center border-b border-[var(--line)] bg-[var(--title)] select-none"
           onPointerMove={(event) => hoverTitle(event.currentTarget, event.clientX, event.clientY, event.target)}
           onPointerLeave={(event) => {
             clearSplitHot(event.currentTarget)
@@ -203,7 +203,7 @@ function Node({ layout, node, path, boxes, onRatio, onResizing, render, onTitleD
           <span className="min-w-0 flex-1 truncate px-2 text-xs text-[var(--muted)]">{title}</span>
           <button
             type="button"
-            className="mr-0.5 grid h-4 w-4 place-items-center rounded text-xs leading-none text-[var(--muted)] hover:bg-[var(--line)]"
+            className="mr-0.5 grid h-6 w-6 place-items-center rounded text-base leading-none text-[var(--muted)] hover:bg-[var(--line)]"
             aria-label={`${title}を閉じる`}
             title="閉じます"
             onPointerDown={(event) => event.stopPropagation()}
@@ -232,6 +232,7 @@ function Node({ layout, node, path, boxes, onRatio, onResizing, render, onTitleD
       </div>
       <div
         role="separator"
+        tabIndex={0}
         aria-orientation={horizontal ? "vertical" : "horizontal"}
         aria-label="パネルの境界"
         data-axis={node.axis}

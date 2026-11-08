@@ -129,7 +129,10 @@ export function GuidePanel({
           自分で設定する
         </label>
         <label className="grid gap-1">
-          ガイドの大きさ {Math.round(volume * 100)}%
+          <span className="flex justify-between">
+            ガイドの大きさ
+            <span className="num text-[var(--muted)]">{Math.round(volume * 100)}%</span>
+          </span>
           <input type="range" min={0} max={1} step={0.01} value={volume} onChange={(event) => setVolume(Number(event.target.value))} />
         </label>
         {guide.manual ? (
@@ -147,7 +150,10 @@ export function GuidePanel({
               カウント
             </label>
             <label className="grid gap-1">
-              テンポ {bpm}
+              <span className="flex justify-between">
+                テンポ
+                <span className="num text-[var(--muted)]">{bpm}</span>
+              </span>
               <input type="range" min={40} max={240} step={1} value={bpm} onChange={(event) => setBpm(Number(event.target.value))} />
             </label>
             <label className="flex gap-2">
@@ -175,11 +181,17 @@ export function GuidePanel({
             </label>
             <button type="button" className="ghost-button" onClick={() => send({ type: "guideFile", pick: true })}>ファイルから選ぶ</button>
             <label className="grid gap-1">
-              再生速度 {Math.round(speed * 100)}%
+              <span className="flex justify-between">
+                再生速度
+                <span className="num text-[var(--muted)]">{Math.round(speed * 100)}%</span>
+              </span>
               <input type="range" min={0.5} max={2} step={0.05} value={speed} onChange={(event) => setSpeed(Number(event.target.value))} />
             </label>
             <label className="grid gap-1">
-              音程 {semitones} 半音
+              <span className="flex justify-between">
+                音程
+                <span className="num text-[var(--muted)]">{semitones} 半音</span>
+              </span>
               <input type="range" min={-12} max={12} step={1} value={semitones} onChange={(event) => setSemitones(Number(event.target.value))} />
             </label>
           </>

@@ -1,7 +1,13 @@
 @import "tailwindcss";
 
+@theme {
+  --text-sm: 13px;
+  --text-sm--line-height: 20px;
+}
+
 :root {
   color-scheme: light;
+  accent-color: var(--accent);
   --bg: #f4f4f5;
   --text: #1f2937;
   --muted: #4b5563;
@@ -9,23 +15,37 @@
   --title: #e4e4e7;
   --line: #d4d4d8;
   --canvas: #f4f4f5;
-  --wave: #202024;
-  --boundary: #b45309;
+  --wave: #2b3038;
   --accent: #0f766e;
   --on-accent: #ffffff;
+  --danger: #dc2626;
+  --success: #15803d;
+  --accent-subtle: color-mix(in oklab, var(--panel) 84%, var(--accent));
+  --mark-offset: #374151;
+  --mark-overlap: #c2570c;
+  --mark-preutter: #dc2626;
+  --mark-consonant: #2563eb;
+  --mark-blank: #7c3aed;
 }
 
 :root[data-theme="dark"] {
   color-scheme: dark;
   --bg: #161616;
-  --text: #f9fafb;
-  --muted: #d1d5db;
+  --text: #e4e7eb;
+  --muted: #9aa3ae;
   --panel: #222226;
   --title: #3a3a40;
   --line: #3f3f46;
   --canvas: #161616;
-  --wave: #ececec;
-  --boundary: #fbbf24;
+  --wave: #cfd4da;
+  --danger: #f87171;
+  --success: #4ade80;
+  --accent-subtle: color-mix(in oklab, var(--panel) 80%, var(--accent));
+  --mark-offset: #ececec;
+  --mark-overlap: #fb923c;
+  --mark-preutter: #f87171;
+  --mark-consonant: #60a5fa;
+  --mark-blank: #c4b5fd;
 }
 
 html,
@@ -38,7 +58,8 @@ body,
 body {
   background: var(--bg);
   color: var(--text);
-  font-family: "Segoe UI", sans-serif;
+  font-family: "Segoe UI Variable", "Segoe UI", "Yu Gothic UI", "Meiryo UI", sans-serif;
+  font-size: 13px;
 }
 
 button:not(:disabled),
@@ -279,4 +300,116 @@ html.resizing-y * {
 .sheet td.is-num .sheet-editor {
   font-family: Consolas, "Cascadia Mono", monospace;
   text-align: right;
+}
+
+.num {
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.section-title {
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.is-picked {
+  background: var(--accent-subtle);
+  color: var(--text);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.accent-button,
+.ghost-button,
+.field {
+  border-radius: 4px;
+  font: inherit;
+}
+
+.accent-button {
+  background: var(--accent);
+  color: var(--on-accent);
+  border: 0;
+  min-height: 28px;
+  padding: 4px 10px;
+}
+
+.ghost-button {
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--line);
+  min-height: 28px;
+  padding: 2px 8px;
+}
+
+input.field,
+select.field,
+textarea.field {
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--line);
+  padding: 2px 8px;
+}
+
+input.field,
+select.field {
+  min-height: 24px;
+}
+
+.ghost-button:hover:not(:disabled),
+.field:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--panel), var(--text) 8%);
+}
+
+.ghost-button:active:not(:disabled),
+.field:active:not(:disabled) {
+  background: color-mix(in oklab, var(--panel), var(--text) 14%);
+}
+
+.accent-button:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--accent), var(--on-accent) 12%);
+}
+
+.accent-button:active:not(:disabled) {
+  background: color-mix(in oklab, var(--accent), var(--on-accent) 22%);
+}
+
+.accent-button:disabled,
+.ghost-button:disabled,
+.field:disabled {
+  opacity: 0.45;
+}
+
+.icon-button {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  place-items: center;
+  padding: 0;
+}
+
+button:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+input:focus-visible,
+[role="tab"]:focus-visible,
+[role="separator"]:focus-visible,
+canvas:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.accent-button:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+}
+
+.sheet-wrap:focus-visible,
+.sheet-wrap :focus-visible {
+  outline: none;
 }

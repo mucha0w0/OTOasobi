@@ -4,6 +4,7 @@ import { drawPeaks } from "./drawPeaks"
 import { cycleOtoFocus, focusedOwnsTime, hitOtoPoint } from "./otoHit"
 import { timeAt, type OtoMark, type PreviewEvent } from "./protocol"
 import { hitBoundary, moveBoundary, spanBoundaries, spanCaption, spanFill, spanTimesChanged, type PhoneSpan } from "./spans"
+import { formatTick, niceStep, rulerTicks, xForTime, type PointerBus } from "./ruler"
 import { imagePlacement, panRange, zoomRange, type Range } from "./viewport"
 
 export type BandKind = "wave" | "spec" | "loud" | "oto"
@@ -41,10 +42,18 @@ type Props = {
   onLive?: (live: LiveTune | null) => void
   onDraft?: (spans: PhoneSpan[] | null) => void
   onSpans?: (spans: PhoneSpan[]) => void
+  showRuler?: boolean
+  pointerBus: PointerBus
 }
 
-export function GraphBand({ kind, picture, model, appearance, register, onRange, onFileStep, onTune, onFocus, onLive, onDraft, onSpans }: Props) {
+const markColors = ["--mark-offset", "--mark-overlap", "--mark-preutter", "--mark-consonant", "--mark-blank"]
+const markLabels = ["フ", "オ", "先", "子", "ブ"]
+
+export function GraphBand({ kind, picture, model, appearance, register, onRange, onFileStep, onTune, onFocus, onLive, onDraft, onSpans, showRuler = false, pointerBus }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const rulerRef = useRef<HTMLCanvasElement>(null)
+  const lineRef = useRef<HTMLDivElement>(null)
+  const labelRef = useRef<HTMLSpanElement>(null)
   const imageRef = useRef<HTMLImageElement | null>(null)
   const holdRef = useRef(false)
   const dragRef = useRef<{ x: number; range: Range } | null>(null)
@@ -103,7 +112,11 @@ export function GraphBand({ kind, picture, model, appearance, register, onRange,
 
   useEffect(() => {
     draw()
-  }, [picture, appearance])
+  }, [picture, appearance, showRuler])
+
+  useEffect(() => {
+    return pointerBus.watch((time) => placePointer(lineRef.current, labelRef.current, canvasRef.current, model.current.range, time))
+  }, [pointerBus, model])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -178,6 +191,8 @@ export function GraphBand({ kind, picture, model, appearance, register, onRange,
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0)
     ctx.fillStyle = getCss("--canvas")
     ctx.fillRect(0, 0, width, height)
+    paintRuler(rulerRef.current, current.range)
+    placePointer(lineRef.current, labelRef.current, canvas, current.range, pointerBus.get())
     const pictureNow = current.picture
     if (!pictureNow) {
       drawNote(ctx, width, height, current.note ?? "")
@@ -232,11 +247,35 @@ export function GraphBand({ kind, picture, model, appearance, register, onRange,
     onRangeRef.current(model.current.range, true)
   }
 
+  function publishPointer(clientX: number, width: number, left: number) {
+    const range = model.current.range
+    if (!(range.t1 > range.t0) || width <= 0)
+      return
+    pointerBus.set(range.t0 + ((clientX - left) / width) * (range.t1 - range.t0))
+  }
+
   return (
+    <div
+      data-graph=""
+      className="relative flex h-full min-h-0 flex-col"
+      onPointerMove={(event) => {
+        const rect = event.currentTarget.getBoundingClientRect()
+        publishPointer(event.clientX, rect.width, rect.left)
+      }}
+      onPointerLeave={(event) => {
+        const next = event.relatedTarget
+        if (next instanceof Element && next.closest("[data-graph]"))
+          return
+        pointerBus.set(null)
+      }}
+    >
+      {showRuler && <canvas ref={rulerRef} className="pointer-events-none h-5 w-full shrink-0" />}
+      {showRuler && <span ref={labelRef} className="num pointer-events-none absolute top-0.5 z-10 hidden -translate-x-1/2 text-[11px] text-[var(--muted)]" />}
+      <div ref={lineRef} className="pointer-events-none absolute bottom-0 z-10 hidden w-px bg-[color-mix(in_srgb,var(--muted)_60%,transparent)]" style={{ top: 0 }} />
     <canvas
       ref={canvasRef}
       tabIndex={0}
-      className="h-full w-full touch-none outline-none"
+      className="min-h-0 w-full flex-1 touch-none"
       onContextMenu={(event) => event.preventDefault()}
       onPointerDown={(event) => {
         const current = model.current
@@ -321,7 +360,72 @@ export function GraphBand({ kind, picture, model, appearance, register, onRange,
       onPointerUp={() => endPointer()}
       onLostPointerCapture={() => endPointer()}
     />
+    </div>
   )
+}
+
+function paintRuler(canvas: HTMLCanvasElement | null, range: Range) {
+  if (!canvas)
+    return
+  const width = canvas.clientWidth
+  const height = canvas.clientHeight
+  if (width <= 0 || height <= 0)
+    return
+  const ratio = window.devicePixelRatio || 1
+  const nextWidth = Math.max(1, Math.floor(width * ratio))
+  const nextHeight = Math.max(1, Math.floor(height * ratio))
+  if (canvas.width !== nextWidth || canvas.height !== nextHeight) {
+    canvas.width = nextWidth
+    canvas.height = nextHeight
+  }
+  const ctx = canvas.getContext("2d")
+  if (!ctx)
+    return
+  ctx.setTransform(ratio, 0, 0, ratio, 0, 0)
+  ctx.clearRect(0, 0, width, height)
+  ctx.fillStyle = getCss("--panel")
+  ctx.fillRect(0, 0, width, height)
+  ctx.strokeStyle = getCss("--line")
+  ctx.beginPath()
+  ctx.moveTo(0, height - 0.5)
+  ctx.lineTo(width, height - 0.5)
+  ctx.stroke()
+  ctx.fillStyle = getCss("--muted")
+  ctx.font = "11px Consolas, Cascadia Mono, monospace"
+  ctx.textAlign = "center"
+  ctx.textBaseline = "middle"
+  for (const tick of rulerTicks(range.t0, range.t1, width)) {
+    const x = xForTime(tick.time, range.t0, range.t1, width)
+    if (x == null)
+      continue
+    ctx.fillText(tick.label, x, height / 2)
+  }
+}
+
+function placePointer(
+  line: HTMLDivElement | null,
+  label: HTMLSpanElement | null,
+  canvas: HTMLCanvasElement | null,
+  range: Range,
+  time: number | null,
+) {
+  if (!line)
+    return
+  const width = canvas?.clientWidth ?? 0
+  const x = time == null ? null : xForTime(time, range.t0, range.t1, width)
+  if (x == null) {
+    line.style.display = "none"
+    if (label)
+      label.style.display = "none"
+    return
+  }
+  line.style.display = "block"
+  line.style.left = `${x}px`
+  if (!label)
+    return
+  label.style.display = "block"
+  label.style.left = `${x}px`
+  label.textContent = formatTick(time!, niceStep(range.t1 - range.t0, width))
 }
 
 function tunableMarks(kind: BandKind, model: GraphModel): OtoMark[] {
@@ -399,7 +503,7 @@ function drawBoundaries(
     return
   const dark = document.documentElement.dataset.theme === "dark"
   ctx.strokeStyle = wave
-    ? (dark ? "rgb(236, 236, 236)" : "rgb(32, 32, 36)")
+    ? getCss("--wave")
     : (dark ? "rgba(255, 255, 255, 0.9)" : "rgba(17, 24, 39, 0.9)")
   ctx.lineWidth = 1
   for (const time of spanBoundaries(spans)) {
@@ -468,18 +572,25 @@ function strokePoints(
   live: LiveTune | null,
   chosen: boolean,
 ) {
-  const dark = document.documentElement.dataset.theme === "dark"
-  const colors = [dark ? "#ececec" : "#374151", "#fb923c", "#f87171", "#60a5fa", "#c4b5fd"]
   const points = [mark.offset, mark.overlap, mark.preutter, mark.consonant, mark.blank]
+  ctx.font = "11px Consolas, Cascadia Mono, monospace"
+  ctx.textAlign = "center"
+  ctx.textBaseline = "top"
   points.forEach((time, index) => {
     const dragging = live?.moved === true && live.index === mark.index && live.point === index
     const x = xAtTime(time)
-    ctx.strokeStyle = colors[index] ?? colors[0]!
+    const color = getCss(markColors[index] ?? "--mark-offset")
+    ctx.strokeStyle = color
     ctx.lineWidth = dragging ? 4 : chosen ? 3 : 2
     ctx.beginPath()
     ctx.moveTo(x, 0)
     ctx.lineTo(x, height)
     ctx.stroke()
+    const width = ctx.canvas.clientWidth
+    if (x < 8 || x > width - 8)
+      return
+    ctx.fillStyle = color
+    ctx.fillText(markLabels[index] ?? "", x, 2)
   })
 }
 

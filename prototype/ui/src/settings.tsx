@@ -63,7 +63,7 @@ export function SettingsDialog({ tabs, onClose }: { tabs: SettingsTab[]; onClose
 
   return (
     <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/40 p-6">
-      <div className="flex h-[min(32rem,100%)] w-full max-w-3xl flex-col rounded-lg border border-[var(--line)] bg-[var(--panel)] text-[var(--text)]">
+      <div className="flex h-[min(32rem,100%)] w-full max-w-3xl flex-col rounded-md border border-[var(--line)] bg-[var(--panel)] text-[var(--text)]">
         <h2 className="border-b border-[var(--line)] px-5 py-4 text-lg font-semibold">環境設定</h2>
         <div className="flex min-h-0 flex-1">
           <div role="tablist" aria-orientation="vertical" className="flex w-40 shrink-0 flex-col gap-1 border-r border-[var(--line)] p-3" onKeyDown={move}>
@@ -78,7 +78,7 @@ export function SettingsDialog({ tabs, onClose }: { tabs: SettingsTab[]; onClose
                   aria-selected={selected}
                   aria-controls={selected ? panelId : undefined}
                   tabIndex={selected ? 0 : -1}
-                  className={`min-h-8 rounded-md px-3 py-1.5 text-left text-sm ${selected ? "bg-[var(--accent)] font-semibold text-[var(--on-accent)]" : "text-[var(--text)] hover:bg-[color-mix(in_srgb,var(--text)_8%,transparent)]"}`}
+                  className={`min-h-7 rounded px-3 py-1 text-left text-sm ${selected ? "is-picked" : "text-[var(--text)] hover:bg-[color-mix(in_srgb,var(--text)_8%,transparent)]"}`}
                   onClick={() => setPicked(tab.id)}
                 >
                   {tab.title}

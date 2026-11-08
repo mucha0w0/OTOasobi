@@ -11,7 +11,7 @@ export function OtoSettings({ oto, send }: { oto: OtoState | null; send: Send })
   const which = oto.mode === "cvvc" ? "cvvc" : "mono"
   return (
     <div className="h-full overflow-auto p-3">
-      <div className="grid grid-cols-3 gap-1 rounded-lg bg-[var(--line)] p-1 text-sm">
+      <div className="grid grid-cols-3 gap-1 rounded bg-[var(--line)] p-1 text-sm">
         {(["mono", "renzoku", "cvvc"] as const).map((mode) => (
           <button
             key={mode}
@@ -25,7 +25,7 @@ export function OtoSettings({ oto, send }: { oto: OtoState | null; send: Send })
       </div>
       {oto.busy && <p className="mt-3 text-sm text-[var(--muted)]">解析しています。</p>}
       {oto.mode === "mono" && (
-        <div className="mt-3 grid gap-3">
+        <div className="mt-3 grid gap-4">
           <Card title="プリセット">
             <PresetSelect
               names={oto.presets}
@@ -51,7 +51,7 @@ export function OtoSettings({ oto, send }: { oto: OtoState | null; send: Send })
         </div>
       )}
       {oto.mode === "renzoku" && (
-        <div className="mt-3 grid gap-3">
+        <div className="mt-3 grid gap-4">
           <Card title="無音の直後" note="アンダーバーの無音の直後の音素は、選んだ単独音のプリセットで計算します。">
             <PresetSelect
               names={oto.presets}
@@ -71,7 +71,7 @@ export function OtoSettings({ oto, send }: { oto: OtoState | null; send: Send })
         </div>
       )}
       {oto.mode === "cvvc" && (
-        <div className="mt-3 grid gap-3">
+        <div className="mt-3 grid gap-4">
           <Card title="先頭音素" note="ファイルの先頭と、アンダーバーの無音の直後は、選んだ単独音のプリセットで計算します。">
             <PresetSelect
               names={oto.presets}
@@ -129,7 +129,7 @@ export function OtoIni({ oto, send }: { oto: OtoState | null; send: Send }) {
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="min-h-0 flex-1 overflow-auto p-3">
-        <div className="grid gap-3">
+        <div className="grid gap-4">
           <Card title="oto.ini" note="選んだエイリアスを、直した区間から計算してフォルダに保存します。位置は oto推定設定のスライダーを使います。" />
           <Card title="生成するエイリアス">
             <label className="flex items-center gap-2 text-sm">
@@ -202,8 +202,8 @@ function slider(send: Send, group: string, key: string, value: number) {
 
 function Card({ title, note, children }: { title: string; note?: string; children?: ReactNode }) {
   return (
-    <section className="grid gap-2 rounded-lg border border-[var(--line)] p-3">
-      <h3 className="text-sm font-semibold">{title}</h3>
+    <section className="grid gap-2">
+      <h3 className="section-title">{title}</h3>
       {note && <p className="text-xs leading-5 text-[var(--muted)]">{note}</p>}
       {children}
     </section>
@@ -236,7 +236,7 @@ function Seconds({ label, value, min, max, onChange }: { label: string; value: n
     <label className="grid gap-1 text-sm">
       <span className="flex justify-between">
         {label}
-        <span className="text-[var(--muted)]">{value.toFixed(3)} s</span>
+        <span className="num text-[var(--muted)]">{value.toFixed(3)} s</span>
       </span>
       <input
         type="range"
@@ -256,7 +256,7 @@ function Percent({ label, value, onChange }: { label: string; value: number; onC
     <label className="grid gap-1 text-sm">
       <span className="flex justify-between">
         {label}
-        <span className="text-[var(--muted)]">{Math.round(value)}%</span>
+        <span className="num text-[var(--muted)]">{Math.round(value)}%</span>
       </span>
       <input
         type="range"
@@ -296,7 +296,7 @@ function OverlapGroups({
             <label className="grid gap-1 text-sm">
               <span className="flex justify-between">
                 {kind.caption}
-                <span className="text-[var(--muted)]">{seconds ? `${value.toFixed(3)} s` : `${Math.round(value)}%`}</span>
+                <span className="num text-[var(--muted)]">{seconds ? `${value.toFixed(3)} s` : `${Math.round(value)}%`}</span>
               </span>
               <input
                 type="range"
@@ -340,7 +340,7 @@ function NameDialog({
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-6">
       <form
-        className="w-full max-w-sm rounded-lg border border-[var(--line)] bg-[var(--panel)] p-4"
+        className="w-full max-w-sm rounded-md border border-[var(--line)] bg-[var(--panel)] p-4"
         onSubmit={(event) => {
           event.preventDefault()
           onSave()

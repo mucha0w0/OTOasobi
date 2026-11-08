@@ -86,7 +86,7 @@ export function RecListPanel({
           <button
             key={`${line.wav}-${index}`}
             type="button"
-            className={`block w-full px-3 py-2 text-left hover:bg-[var(--line)] ${selected === index ? "bg-[var(--line)]" : ""}`}
+            className={`block w-full px-3 py-2 text-left ${selected === index ? "is-picked" : "hover:bg-[var(--line)]"}`}
             onClick={() => onSelect(index, line.wav)}
           >
             <span className="block truncate">{line.sing}</span>
