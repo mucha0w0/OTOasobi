@@ -181,7 +181,13 @@ sealed class ProbePreview : IDisposable
                             Pending? waiting;
                             lock (_pending)
                                 _pending.TryGetValue(id, out waiting);
-                            waiting?.OnWave?.Invoke(Read(root));
+                            try
+                            {
+                                waiting?.OnWave?.Invoke(Read(root));
+                            }
+                            catch (Exception)
+                            {
+                            }
                         }
 
                         continue;

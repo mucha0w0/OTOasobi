@@ -1967,17 +1967,20 @@ sealed class ProbeSession : IDisposable
 
     void Post(object payload)
     {
-        if (_disposed || !_ready || _view.CoreWebView2 == null)
+        if (_disposed)
             return;
         var json = JsonSerializer.Serialize(payload, Json);
         if (_queue.HasThreadAccess)
-            _view.CoreWebView2.PostWebMessageAsJson(json);
+            Deliver(json);
         else
-            _queue.TryEnqueue(() =>
-            {
-                if (!_disposed && _view.CoreWebView2 != null)
-                    _view.CoreWebView2.PostWebMessageAsJson(json);
-            });
+            _queue.TryEnqueue(() => Deliver(json));
+    }
+
+    void Deliver(string json)
+    {
+        if (_disposed || !_ready || _view.CoreWebView2 == null)
+            return;
+        _view.CoreWebView2.PostWebMessageAsJson(json);
     }
 
     static double Number(JsonElement root, string name) =>
