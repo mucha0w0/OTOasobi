@@ -93,24 +93,24 @@ html.dragging * {
   width: 8px;
   margin-right: -3px;
   margin-left: -3px;
-  cursor: col-resize;
+  cursor: ew-resize;
 }
 
 .split-y {
   height: 8px;
   margin-top: -3px;
   margin-bottom: -3px;
-  cursor: row-resize;
+  cursor: ns-resize;
 }
 
 .split-x:hover,
 html.resizing-x .split-x {
-  cursor: col-resize;
+  cursor: ew-resize;
 }
 
 .split-y:hover,
 html.resizing-y .split-y {
-  cursor: row-resize;
+  cursor: ns-resize;
 }
 
 .split-line {
@@ -142,12 +142,12 @@ html.resizing-y .split-y {
 
 html.resizing-x,
 html.resizing-x * {
-  cursor: col-resize !important;
+  cursor: ew-resize !important;
 }
 
 html.resizing-y,
 html.resizing-y * {
-  cursor: row-resize !important;
+  cursor: ns-resize !important;
 }
 
 .frq-pen {

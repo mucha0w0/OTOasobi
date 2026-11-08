@@ -307,7 +307,7 @@ function hoverTitle(title: HTMLDivElement, clientX: number, clientY: number, tar
     return
   }
   split.classList.add("is-hot")
-  title.style.cursor = split.classList.contains("split-x") ? "col-resize" : "row-resize"
+  title.style.cursor = split.classList.contains("split-x") ? "ew-resize" : "ns-resize"
 }
 
 function titleSplit(title: HTMLDivElement, clientX: number, clientY: number, target: EventTarget | null) {
