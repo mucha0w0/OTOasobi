@@ -341,10 +341,15 @@ html[data-panels-locked="1"] .split-y.is-hot > .split-line {
 
 .section-title {
   border-bottom: 1px solid var(--line);
+  margin-top: 16px;
   padding-bottom: 4px;
-  color: var(--muted);
+  color: var(--text);
   font-size: 12px;
   font-weight: 600;
+}
+
+section:first-child > .section-title {
+  margin-top: 0;
 }
 
 .is-picked {
