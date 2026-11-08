@@ -7,7 +7,7 @@ import { FrqEditor } from "./FrqEditor"
 import { FrqPanel } from "./FrqPanel"
 import { GraphBand, type BandHandle, type BandKind, type GraphModel, type LiveTune } from "./GraphBand"
 import { connectHost } from "./host"
-import { contains, createDefault, hidePane, idsOf, rulerPaneIds, showPane, type LayoutNode, type PaneBox } from "./layout"
+import { contains, createDefault, hidePane, idsOf, showPane, type LayoutNode, type PaneBox } from "./layout"
 import { createLiveBus, type LiveBus } from "./live"
 import { MenuBar } from "./MenuBar"
 import { OtoTable } from "./OtoTable"
@@ -593,7 +593,6 @@ export function App() {
   const recOutside = !recLine && (recList?.outside.some((name) => sameName(name, fileName)) ?? false) ? fileName : ""
   const recStatus = recLine?.error ?? (recLine ? (recLine.recorded ? "録音済み" : "未録音") : recOutside ? "リスト外" : "")
   const appearance = `${resolved}-${buttonColors(correctAccent(accent ?? defaultAccent(resolved), resolved)).fill}`
-  const rulers = rulerPaneIds(layout)
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-[var(--bg)] text-[var(--text)]">
@@ -656,7 +655,6 @@ export function App() {
                     picture={picture}
                     model={modelRef}
                     appearance={appearance}
-                    showRuler={rulers.includes(id)}
                     pointerBus={pointerBus}
                     register={register}
                     onRange={onRange}

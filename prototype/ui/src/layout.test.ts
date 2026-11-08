@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { commitMove, contains, createDefault, createRecording, hidePane, leaf, movePane, paneTitles, parseLayout, rulerPaneIds, showPane, viewFolders, type LayoutNode } from "./layout"
+import { commitMove, contains, createDefault, createRecording, hidePane, movePane, paneTitles, parseLayout, showPane, viewFolders, type LayoutNode } from "./layout"
 
 describe("表示メニュー", () => {
   it("フォルダは既知のパネルだけで、どのパネルも一度は出る", () => {
@@ -36,28 +36,6 @@ describe("初期配置", () => {
     const shown = showPane(hidden, "mic", { oto: { width: 400, height: 200 } })
     expect(contains(shown, "mic")).toBe(true)
     expect(contains(shown, "file")).toBe(true)
-  })
-})
-
-describe("時間ルーラーの位置", () => {
-  function h(ratio: number, first: LayoutNode, second: LayoutNode): LayoutNode {
-    return { axis: "h", ratio, first, second }
-  }
-  function v(ratio: number, first: LayoutNode, second: LayoutNode): LayoutNode {
-    return { axis: "v", ratio, first, second }
-  }
-
-  it("縦に積んだグラフは上の 1 枚だけ", () => {
-    expect(rulerPaneIds(createDefault())).toEqual(["wave"])
-  })
-
-  it("左右に分かれたグラフは列ごとに出す", () => {
-    expect(rulerPaneIds(h(0.5, leaf("wave"), leaf("spec")))).toEqual(["wave", "spec"])
-    expect(rulerPaneIds(h(0.5, v(0.5, leaf("wave"), leaf("spec")), leaf("loud")))).toEqual(["wave", "loud"])
-  })
-
-  it("上に別のパネルがあっても、その列のグラフの先頭に出す", () => {
-    expect(rulerPaneIds(v(0.4, leaf("file"), leaf("otoBand")))).toEqual(["otoBand"])
   })
 })
 

@@ -47,42 +47,6 @@ export function createDefault(): LayoutNode {
   )
 }
 
-const graphPaneIds = new Set(["wave", "spec", "loud", "otoBand"])
-
-type PlacedPane = { id: string; x: number; y: number; w: number; h: number }
-
-/** 各列でいちばん上にあるグラフ面。縦積みは 1 本、左右に分かれた列は列ごと。 */
-export function rulerPaneIds(root: LayoutNode | null): string[] {
-  if (!root)
-    return []
-  const placed: PlacedPane[] = []
-  placeLayout(root, 0, 0, 1, 1, placed)
-  const graphs = placed.filter((pane) => graphPaneIds.has(pane.id))
-  return graphs
-    .filter((pane) => !graphs.some((other) => other.id !== pane.id && sharesColumn(pane, other) && other.y + other.h <= pane.y + 1e-6))
-    .map((pane) => pane.id)
-}
-
-function sharesColumn(pane: PlacedPane, other: PlacedPane) {
-  const left = Math.max(pane.x, other.x)
-  const right = Math.min(pane.x + pane.w, other.x + other.w)
-  return right - left > Math.min(pane.w, other.w) * 0.5
-}
-
-function placeLayout(node: LayoutNode, x: number, y: number, w: number, h: number, out: PlacedPane[]) {
-  if ("id" in node) {
-    out.push({ id: node.id, x, y, w, h })
-    return
-  }
-  if (node.axis === "h") {
-    placeLayout(node.first, x, y, w * node.ratio, h, out)
-    placeLayout(node.second, x + w * node.ratio, y, w * (1 - node.ratio), h, out)
-    return
-  }
-  placeLayout(node.first, x, y, w, h * node.ratio, out)
-  placeLayout(node.second, x, y + h * node.ratio, w, h * (1 - node.ratio), out)
-}
-
 export function createRecording(): LayoutNode {
   return h(
     0.22,
