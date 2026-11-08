@@ -187,7 +187,7 @@ function Node({ layout, node, path, boxes, onRatio, onResizing, onTitleDown, onC
         }}
       >
         <div
-          className="drag-handle relative z-10 flex h-6 shrink-0 items-center border-b border-[var(--line)] bg-[var(--title)] select-none"
+          className="drag-handle relative z-10 flex h-[18px] shrink-0 items-center border-b border-[var(--line)] bg-[var(--title)] select-none"
           onPointerMove={(event) => hoverTitle(event.currentTarget, event.clientX, event.clientY, event.target)}
           onPointerLeave={(event) => {
             clearSplitHot(event.currentTarget)
@@ -204,10 +204,10 @@ function Node({ layout, node, path, boxes, onRatio, onResizing, onTitleDown, onC
             beginResize(event, split, layout, onRatio, onResizing)
           }}
         >
-          <span className="min-w-0 flex-1 truncate px-2 text-xs text-[var(--muted)]">{title}</span>
+          <span className="min-w-0 flex-1 truncate px-2 text-xs leading-none text-[var(--muted)]">{title}</span>
           <button
             type="button"
-            className="mr-0.5 grid h-6 w-6 place-items-center rounded text-base leading-none text-[var(--muted)] hover:bg-[var(--line)]"
+            className="mr-0.5 grid h-full w-[18px] place-items-center rounded text-sm leading-none text-[var(--muted)] hover:bg-[var(--line)]"
             aria-label={`${title}を閉じる`}
             title="閉じます"
             onPointerDown={(event) => event.stopPropagation()}
