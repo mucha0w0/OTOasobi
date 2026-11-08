@@ -4,10 +4,16 @@ import { IconButton, IconPen } from "./IconButton"
 import { frqRuler, frqRow, frqUnvoiced, isBlack, midiOf, noteName, pitchSpan } from "./frqRoll"
 import type { FrqViewEvent, PageCommand } from "./protocol"
 
-function localFrame(scroller: HTMLDivElement, clientX: number, pixels: number, length: number) {
-  const rect = scroller.getBoundingClientRect()
-  const x = clientX - rect.left + scroller.scrollLeft
+function localFrame(origin: HTMLDivElement, clientX: number, scrollLeft: number, pixels: number, length: number) {
+  const rect = origin.getBoundingClientRect()
+  const x = clientX - rect.left + scrollLeft
   return Math.max(0, Math.min(length - 1, Math.floor(x / pixels)))
+}
+
+function keyColor(midi: number, dark: boolean) {
+  if (dark)
+    return isBlack(midi) ? "#141416" : "#3a3a40"
+  return isBlack(midi) ? "#e5e7eb" : "#fafafa"
 }
 
 export function FrqEditor({
@@ -21,8 +27,10 @@ export function FrqEditor({
 }) {
   const pianoRef = useRef<HTMLCanvasElement>(null)
   const laneRef = useRef<HTMLCanvasElement>(null)
-  const scrollRef = useRef<HTMLDivElement>(null)
+  const xScrollRef = useRef<HTMLDivElement>(null)
+  const yScrollRef = useRef<HTMLDivElement>(null)
   const laneBoxRef = useRef<HTMLDivElement>(null)
+  const scrollXRef = useRef(0)
   const bindPiano = useCallback((node: HTMLCanvasElement | null) => {
     pianoRef.current = node
     if (node)
@@ -37,6 +45,7 @@ export function FrqEditor({
   const [selected, setSelected] = useState<number[]>([])
   const [scrollX, setScrollX] = useState(0)
   const [scrollY, setScrollY] = useState(0)
+  const [trackWidth, setTrackWidth] = useState(0)
   const dragRef = useRef<{ x: number; y: number; points: { frame: number; midi: number; unvoiced: boolean }[] } | null>(null)
   const spanRef = useRef({ name: "", high: 0 })
   const frequency = view?.frequency ?? []
@@ -55,17 +64,20 @@ export function FrqEditor({
   }, [view?.name])
 
   useEffect(() => {
-    const scroller = scrollRef.current
-    if (!scroller || !view?.name || frequency.length === 0)
+    const yScroll = yScrollRef.current
+    const xScroll = xScrollRef.current
+    if (!yScroll || !view?.name || frequency.length === 0)
       return
     if (spanRef.current.name !== view.name) {
       spanRef.current = { name: view.name, high: span.high }
       const y = frqRuler + (span.high - span.center) * frqRow + frqRow / 2
       const align = () => {
-        scroller.scrollTop = Math.max(0, y - scroller.clientHeight / 2)
-        scroller.scrollLeft = 0
+        yScroll.scrollTop = Math.max(0, y - yScroll.clientHeight / 2)
+        if (xScroll)
+          xScroll.scrollLeft = 0
+        scrollXRef.current = 0
         setScrollX(0)
-        setScrollY(scroller.scrollTop)
+        setScrollY(yScroll.scrollTop)
       }
       align()
       requestAnimationFrame(align)
@@ -75,9 +87,25 @@ export function FrqEditor({
     spanRef.current.high = span.high
     if (grown === 0)
       return
-    scroller.scrollTop += grown * frqRow
-    setScrollY(scroller.scrollTop)
+    yScroll.scrollTop += grown * frqRow
+    setScrollY(yScroll.scrollTop)
   }, [frequency.length, span.center, span.high, view?.name])
+
+  useEffect(() => {
+    const yScroll = yScrollRef.current
+    const xScroll = xScrollRef.current
+    if (!yScroll || !xScroll)
+      return
+    const sync = () => {
+      const pad = Math.max(0, xScroll.clientWidth - yScroll.clientWidth)
+      setTrackWidth(width + pad)
+    }
+    sync()
+    const observer = new ResizeObserver(sync)
+    observer.observe(yScroll)
+    observer.observe(xScroll)
+    return () => observer.disconnect()
+  }, [width])
 
   useEffect(() => {
     const canvas = pianoRef.current
@@ -96,7 +124,7 @@ export function FrqEditor({
     const chosen = new Set(selected)
     for (let midi = span.low; midi <= span.high; midi++) {
       const y = frqRuler + (span.high - midi) * frqRow
-      ctx.fillStyle = isBlack(midi) ? (dark ? "#2a2a2a" : "#e5e7eb") : (dark ? "#1c1c1c" : "#fafafa")
+      ctx.fillStyle = keyColor(midi, dark)
       ctx.fillRect(0, y, width, frqRow)
     }
     const accent = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#0f766e"
@@ -135,27 +163,27 @@ export function FrqEditor({
   }, [appearance, frequency, pixels, selected, width])
 
   function at(clientX: number, clientY: number) {
-    const scroller = scrollRef.current
+    const yScroll = yScrollRef.current
     const lane = laneBoxRef.current
-    if (!scroller || frequency.length === 0)
+    if (!yScroll || frequency.length === 0)
       return { frame: 0, midi: span.low, unvoiced: false }
-    const frame = localFrame(scroller, clientX, pixels, frequency.length)
+    const frame = localFrame(yScroll, clientX, scrollXRef.current, pixels, frequency.length)
     if (lane) {
       const box = lane.getBoundingClientRect()
       if (clientY >= box.top && clientY <= box.bottom)
         return { frame, midi: 0, unvoiced: true }
     }
-    const rect = scroller.getBoundingClientRect()
-    const y = clientY - rect.top + scroller.scrollTop
+    const rect = yScroll.getBoundingClientRect()
+    const y = clientY - rect.top + yScroll.scrollTop
     const midi = Math.max(span.low, Math.min(span.high, span.high - (y - frqRuler) / frqRow))
     return { frame, midi, unvoiced: false }
   }
 
   function framesIn(x0: number, y0: number, x1: number, y1: number) {
-    const scroller = scrollRef.current
-    if (!scroller)
+    const yScroll = yScrollRef.current
+    if (!yScroll)
       return []
-    const rect = scroller.getBoundingClientRect()
+    const yRect = yScroll.getBoundingClientRect()
     const lane = laneBoxRef.current?.getBoundingClientRect()
     const left = Math.min(x0, x1)
     const right = Math.max(x0, x1)
@@ -163,10 +191,10 @@ export function FrqEditor({
     const bottom = Math.max(y0, y1)
     const frames: number[] = []
     frequency.forEach((hz, frame) => {
-      const x = rect.left - scroller.scrollLeft + (frame + 0.5) * pixels
+      const x = yRect.left - scrollXRef.current + (frame + 0.5) * pixels
       const voiced = hz > 0 && Number.isFinite(hz)
       const y = voiced
-        ? rect.top - scroller.scrollTop + frqRuler + (span.high - midiOf(hz) + 0.5) * frqRow
+        ? yRect.top - yScroll.scrollTop + frqRuler + (span.high - midiOf(hz) + 0.5) * frqRow
         : lane
           ? (lane.top + lane.bottom) / 2
           : -1
@@ -177,7 +205,7 @@ export function FrqEditor({
   }
 
   function onPointerDown(event: ReactPointerEvent<HTMLDivElement>) {
-    if (event.button !== 0 || event.target === scrollRef.current)
+    if (event.button !== 0 || event.target === xScrollRef.current || event.target === yScrollRef.current)
       return
     const point = at(event.clientX, event.clientY)
     dragRef.current = { x: event.clientX, y: event.clientY, points: [point] }
@@ -241,27 +269,28 @@ export function FrqEditor({
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
         >
-          <div
-            ref={scrollRef}
-            className="min-h-0 flex-1 overflow-auto"
-            onScroll={(event) => {
-              setScrollX(event.currentTarget.scrollLeft)
-              setScrollY(event.currentTarget.scrollTop)
-            }}
-          >
-            <canvas ref={bindPiano} style={{ width, height: pianoHeight }} />
-          </div>
-          <div className="pointer-events-none absolute top-0 right-0 left-0 overflow-hidden" style={{ bottom: frqUnvoiced }}>
-            <div className="relative" style={{ height: pianoHeight, transform: `translateY(${-scrollY}px)` }}>
-              {cNotes.map((midi) => (
-                <span
-                  key={midi}
-                  className="absolute left-1.5 text-[11px] leading-[14px] text-[var(--text)]"
-                  style={{ top: frqRuler + (span.high - midi) * frqRow }}
-                >
-                  {noteName(midi)}
-                </span>
-              ))}
+          <div className="relative min-h-0 flex-1">
+            <div
+              ref={yScrollRef}
+              className="h-full overflow-x-hidden overflow-y-auto"
+              onScroll={(event) => setScrollY(event.currentTarget.scrollTop)}
+            >
+              <div style={{ width, height: pianoHeight, transform: `translateX(${-scrollX}px)` }}>
+                <canvas ref={bindPiano} style={{ width, height: pianoHeight }} />
+              </div>
+            </div>
+            <div className="pointer-events-none absolute inset-0 overflow-hidden">
+              <div className="relative" style={{ height: pianoHeight, transform: `translateY(${-scrollY}px)` }}>
+                {cNotes.map((midi) => (
+                  <span
+                    key={midi}
+                    className="absolute left-1.5 text-[11px] leading-[14px] text-[var(--text)]"
+                    style={{ top: frqRuler + (span.high - midi) * frqRow }}
+                  >
+                    {noteName(midi)}
+                  </span>
+                ))}
+              </div>
             </div>
           </div>
           <div ref={laneBoxRef} className="relative shrink-0 overflow-hidden border-t border-[var(--line)]" style={{ height: frqUnvoiced, background: laneColor }}>
@@ -276,6 +305,16 @@ export function FrqEditor({
             >
               なし
             </span>
+          </div>
+          <div
+            ref={xScrollRef}
+            className="shrink-0 overflow-x-auto overflow-y-hidden"
+            onScroll={(event) => {
+              scrollXRef.current = event.currentTarget.scrollLeft
+              setScrollX(event.currentTarget.scrollLeft)
+            }}
+          >
+            <div style={{ width: trackWidth, height: 1 }} />
           </div>
         </div>
       )}

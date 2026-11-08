@@ -1,7 +1,7 @@
 export const frqRow = 14
 export const frqRuler = 20
 export const frqUnvoiced = 22
-export const frqOctaves = 3
+export const frqOctaves = 2
 
 const names = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 
@@ -20,7 +20,7 @@ export function isBlack(midi: number): boolean {
   return degree === 1 || degree === 3 || degree === 6 || degree === 8 || degree === 10
 }
 
-// 有声の中央から上下 3 オクターブ。中央より外の点は、その高さまで広げる。
+// 有声の中央から上下 2 オクターブ。中央より外の点は、その高さまで広げる。
 // 有声が無いときは C4 を中央にする。
 export function pitchSpan(frequency: number[]): { low: number; high: number; center: number } {
   const midis: number[] = []
