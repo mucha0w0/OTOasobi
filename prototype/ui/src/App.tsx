@@ -88,6 +88,8 @@ export function App() {
   const pictureRef = useRef<PreviewEvent | null>(null)
   const pictureName = useRef("")
   const loadingFile = useRef<string | null>(null)
+  const wheeling = useRef(false)
+  const wheelHold = useRef<{ picture: PreviewEvent | null; note: string; range: Range; pictureName: string } | null>(null)
   const pictureCache = useRef(new Map<string, PreviewEvent>())
   const folderRef = useRef("")
   const rangeRef = useRef<Range>({ t0: 0, t1: 0 })
@@ -346,6 +348,45 @@ export function App() {
     schedulePreview()
   }
 
+  function showWheelLoading() {
+    if (!wheeling.current) {
+      wheeling.current = true
+      wheelHold.current = {
+        picture: pictureRef.current,
+        note: noteRef.current,
+        range: { ...rangeRef.current },
+        pictureName: pictureName.current,
+      }
+    }
+    if (pictureRef.current == null && noteRef.current === "読み込み中")
+      return
+    pictureName.current = ""
+    noteRef.current = "読み込み中"
+    setPicture(null)
+    pictureRef.current = null
+    rangeRef.current = { t0: 0, t1: 0 }
+    focusRef.current = -1
+    liveRef.current = null
+    draftRef.current = null
+    modelRef.current = viewModel()
+    redraw()
+  }
+
+  function restoreWheelHold() {
+    const held = wheelHold.current
+    wheeling.current = false
+    wheelHold.current = null
+    if (!held)
+      return
+    pictureName.current = held.pictureName
+    noteRef.current = held.note
+    pictureRef.current = held.picture
+    rangeRef.current = held.range
+    setPicture(held.picture)
+    modelRef.current = viewModel()
+    redraw()
+  }
+
   function showFilePending(name: string) {
     loadingFile.current = name
     const cached = pictureCache.current.get(name)
@@ -373,8 +414,12 @@ export function App() {
     window.clearTimeout(fileStepTimer.current)
     stepTarget.current = null
     fileListRef.current?.highlight(name)
-    if (!sameName(name, fileNameRef.current))
+    if (!sameName(name, fileNameRef.current)) {
+      wheeling.current = false
+      wheelHold.current = null
       showFilePending(name)
+    } else if (wheeling.current)
+      restoreWheelHold()
     sendRef.current({ type: "selectFile", name })
   }
 
@@ -392,17 +437,21 @@ export function App() {
       return
     stepTarget.current = next
     fileListRef.current?.highlight(name)
+    showWheelLoading()
     window.clearTimeout(fileStepTimer.current)
     fileStepTimer.current = window.setTimeout(() => {
       const landed = stepTarget.current
       const chosen = landed == null ? "" : namesRef.current[landed] ?? ""
+      wheeling.current = false
       if (chosen && !sameName(chosen, fileNameRef.current)) {
+        wheelHold.current = null
         showFilePending(chosen)
         sendRef.current({ type: "selectFile", name: chosen })
       }
       else {
         stepTarget.current = null
         fileListRef.current?.release()
+        restoreWheelHold()
       }
     }, 200)
   }
@@ -422,6 +471,8 @@ export function App() {
         setFolder(event.folder)
         setNames(event.names)
         window.clearTimeout(fileStepTimer.current)
+        if (wheeling.current)
+          restoreWheelHold()
         stepTarget.current = null
         fileListRef.current?.release()
         if (!keep) {
@@ -469,7 +520,7 @@ export function App() {
         break
       }
       case "preview": {
-        if (stepTarget.current != null)
+        if (stepTarget.current != null || wheeling.current)
           break
         if (loadingFile.current != null && !sameName(loadingFile.current, fileNameRef.current))
           break
