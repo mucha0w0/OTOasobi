@@ -165,6 +165,10 @@ WinUI のコマンド領域は **左が Primary、右が Close**。Accent（プ�
 6. 確認モーダルは **肯定を Primary（左・Accent・`DefaultButton`）**、**否定を Close（右・通常ボタン）**。ボタン列は入れ替えない。
 7. 文字やアイコンのあるボタンは、後ろが透けない不透明な面にする。描画面の上では `ControlFill` や `CardBackground` を使わない。
 
+## oto数値表
+
+配布画面の oto数値表は、枠線で区切った表です。上は列名、左は行番号で、どちらも面より少し濃い色です。選んだ範囲はアクセントを面に混ぜた不透明な色で塗り、範囲の外側にアクセントの枠を付けます。いま入力するマスは面の色のままです。その上に、マス番地と中身を出す欄があります。数値は等幅で右揃えです。手で直した欄は太字で、横に * を出します。* はコピーしません。ファイル名の列は選択できても書き換えません。
+
 ## 参照ファイル
 
 | 内容 | 場所 |
@@ -176,4 +180,5 @@ WinUI のコマンド領域は **左が Primary、右が Close**。Accent（プ�
 | 波形・色・インタラクション | `winui/SpanEditor.cs` |
 | frqエディター | `winui/FrqPianoRoll.cs`, `winui/FrqFile.cs` |
 | 録音 | `winui/MainPage.Rec.cs`, `winui/MainPage.Mic.cs`, `winui/RecList.cs`, `winui/RecTone.cs`, `winui/RecCapture.cs`, `winui/RecTrace.cs` |
+| oto数値表 | `prototype/ui/src/OtoTable.tsx`, `prototype/ui/src/otoSheet.ts` |
 | ウィンドウサイズ・ドロップ | `winui/MainWindow.xaml.cs` |

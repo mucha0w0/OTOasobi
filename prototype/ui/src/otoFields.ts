@@ -1,6 +1,6 @@
 import type { OtoMark } from "./protocol"
 
-function round3(value: number): number {
+export function round3(value: number): number {
   const sign = value < 0 ? -1 : 1
   const scaled = Math.abs(value) * 1000
   const floor = Math.floor(scaled)
