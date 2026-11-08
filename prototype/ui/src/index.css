@@ -379,8 +379,59 @@ select.field {
 
 .accent-button:disabled,
 .ghost-button:disabled,
-.field:disabled {
+.field:disabled,
+.segment-item:disabled {
   opacity: 0.45;
+}
+
+.segment {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 4px;
+  background: color-mix(in oklab, var(--panel), var(--text) 8%);
+}
+
+.segment-item {
+  min-width: 0;
+  flex: 1 1 0;
+  min-height: 28px;
+  padding: 4px;
+  border: 0;
+  border-radius: 2px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-weight: 400;
+  line-height: 20px;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.segment-item.is-on {
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 600;
+}
+
+.segment-item:hover:not(:disabled):not(.is-on) {
+  background: color-mix(in oklab, transparent, var(--text) 10%);
+  color: var(--text);
+}
+
+.segment-item:active:not(:disabled):not(.is-on) {
+  background: color-mix(in oklab, transparent, var(--text) 16%);
+  color: var(--text);
+}
+
+.segment-item.is-on:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--accent), var(--on-accent) 12%);
+}
+
+.segment-item.is-on:active:not(:disabled) {
+  background: color-mix(in oklab, var(--accent), var(--on-accent) 22%);
 }
 
 .icon-button {
@@ -404,7 +455,8 @@ canvas:focus-visible {
   outline-offset: 1px;
 }
 
-.accent-button:focus-visible {
+.accent-button:focus-visible,
+.segment-item.is-on:focus-visible {
   outline: 2px solid var(--text);
   outline-offset: 2px;
 }

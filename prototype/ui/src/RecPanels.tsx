@@ -1,4 +1,5 @@
 import type { RecLineInfo, RecListEvent } from "./protocol"
+import { Segmented } from "./Segmented"
 
 export function RecListPanel({
   list,
@@ -56,18 +57,17 @@ export function RecListPanel({
           ))}
         </select>
         <p className="text-[var(--muted)]">録音済み {recorded} / {lines.length}</p>
-        <div className="grid grid-cols-4 gap-1">
-          {([
+        <Segmented
+          label="絞り込み"
+          value={filter}
+          onChange={setFilter}
+          options={[
             ["all", "すべて"],
             ["todo", "未録音"],
             ["done", "録音済み"],
             ["extra", "リスト外"],
-          ] as const).map(([id, label]) => (
-            <button key={id} type="button" className={filter === id ? "accent-button" : "ghost-button"} onClick={() => setFilter(id)}>
-              {label}
-            </button>
-          ))}
-        </div>
+          ]}
+        />
       </div>
       <div className="min-h-0 flex-1 overflow-auto border-t border-[var(--line)]">
         {filter === "extra" ? (

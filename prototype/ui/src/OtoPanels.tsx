@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react"
 import type { OtoKind, OtoState, PageCommand } from "./protocol"
+import { Segmented } from "./Segmented"
 
 type Send = (command: PageCommand) => void
 
@@ -11,18 +12,16 @@ export function OtoSettings({ oto, send }: { oto: OtoState | null; send: Send })
   const which = oto.mode === "cvvc" ? "cvvc" : "mono"
   return (
     <div className="h-full overflow-auto p-3">
-      <div className="grid grid-cols-3 gap-1 rounded bg-[var(--line)] p-1 text-sm">
-        {(["mono", "renzoku", "cvvc"] as const).map((mode) => (
-          <button
-            key={mode}
-            type="button"
-            className={oto.mode === mode ? "accent-button" : "ghost-button"}
-            onClick={() => send({ type: "oto", op: "mode", mode })}
-          >
-            {mode === "mono" ? "単独音" : mode === "renzoku" ? "連続音" : "CVVC"}
-          </button>
-        ))}
-      </div>
+      <Segmented
+        label="モード"
+        value={oto.mode}
+        onChange={(mode) => send({ type: "oto", op: "mode", mode })}
+        options={[
+          ["mono", "単独音"],
+          ["renzoku", "連続音"],
+          ["cvvc", "CVVC"],
+        ]}
+      />
       {oto.busy && <p className="mt-3 text-sm text-[var(--muted)]">解析しています。</p>}
       {oto.mode === "mono" && (
         <div className="mt-3 grid gap-4">
