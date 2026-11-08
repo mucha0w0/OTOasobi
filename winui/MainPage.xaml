@@ -973,16 +973,20 @@
                                 <Border Style="{StaticResource PanelCardStyle}">
                                     <StackPanel Spacing="8">
                                         <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="先行発声" />
-                                        <CheckBox
-                                            x:Name="FrqClearPreutterBox"
+                                        <RadioButton
+                                            x:Name="FrqClearPreutter"
                                             AutomationProperties.Name="先行発声までを０に統一する"
-                                            Content="先行発声までを０に統一する"
-                                            IsChecked="False" />
-                                        <CheckBox
-                                            x:Name="FrqNonePreutterBox"
+                                            Click="FrqPreutter_Click"
+                                            GroupName="FrqPreutter">
+                                            <TextBlock Text="先行発声までを０に統一する" TextWrapping="Wrap" />
+                                        </RadioButton>
+                                        <RadioButton
+                                            x:Name="FrqNonePreutter"
                                             AutomationProperties.Name="先行発声までを「なし」にする"
-                                            Content="先行発声までを「なし」にする"
-                                            IsChecked="False" />
+                                            Click="FrqPreutter_Click"
+                                            GroupName="FrqPreutter">
+                                            <TextBlock Text="先行発声までを「なし」にする" TextWrapping="Wrap" />
+                                        </RadioButton>
                                         <TextBlock
                                             Margin="28,0,0,0"
                                             Foreground="{ThemeResource TextFillColorSecondaryBrush}"

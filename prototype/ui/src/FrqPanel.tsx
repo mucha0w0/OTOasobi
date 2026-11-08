@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useRef, useState } from "react"
 import type { PageCommand } from "./protocol"
 
 export function FrqPanel({
@@ -13,8 +13,15 @@ export function FrqPanel({
   send: (command: PageCommand) => void
 }) {
   const [mode, setMode] = useState<"all" | "missing" | "selected">("all")
-  const [clear, setClear] = useState(false)
-  const [none, setNone] = useState(false)
+  const [preutter, setPreutter] = useState<"zero" | "none" | null>(null)
+  const skipPreutter = useRef(false)
+  const choosePreutter = (next: "zero" | "none") => {
+    if (skipPreutter.current) {
+      skipPreutter.current = false
+      return
+    }
+    setPreutter(next)
+  }
   return (
     <div className="flex h-full min-h-0 flex-col text-sm">
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-3">
@@ -36,11 +43,35 @@ export function FrqPanel({
         <section className="grid gap-2">
           <h2 className="section-title">先行発声</h2>
           <label className="mt-2 flex gap-2">
-            <input type="checkbox" checked={clear} onChange={(event) => setClear(event.target.checked)} />
+            <input
+              type="radio"
+              name="frq-preutter"
+              checked={preutter === "zero"}
+              onClick={(event) => {
+                if (preutter === "zero") {
+                  event.preventDefault()
+                  skipPreutter.current = true
+                  setPreutter(null)
+                }
+              }}
+              onChange={() => choosePreutter("zero")}
+            />
             先行発声までを０に統一する
           </label>
           <label className="mt-2 flex gap-2">
-            <input type="checkbox" checked={none} onChange={(event) => setNone(event.target.checked)} />
+            <input
+              type="radio"
+              name="frq-preutter"
+              checked={preutter === "none"}
+              onClick={(event) => {
+                if (preutter === "none") {
+                  event.preventDefault()
+                  skipPreutter.current = true
+                  setPreutter(null)
+                }
+              }}
+              onChange={() => choosePreutter("none")}
+            />
             先行発声までを「なし」にする
           </label>
         </section>
@@ -50,7 +81,7 @@ export function FrqPanel({
           type="button"
           className="accent-button w-full"
           disabled={busy || wavs === 0 || (mode === "selected" && !hasFile)}
-          onClick={() => send({ type: "frq", op: "write", mode, clear: clear || none })}
+          onClick={() => send({ type: "frq", op: "write", mode, clear: preutter != null })}
         >
           .frqを生成
         </button>

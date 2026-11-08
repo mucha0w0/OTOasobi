@@ -1,9 +1,26 @@
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 
 namespace Otoasobi;
 
 public sealed partial class MainPage
 {
+    RadioButton? _frqPreutter;
+
+    void FrqPreutter_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not RadioButton radio)
+            return;
+        if (ReferenceEquals(_frqPreutter, radio))
+        {
+            _frqPreutter = null;
+            radio.IsChecked = false;
+            return;
+        }
+
+        _frqPreutter = radio;
+    }
+
     void WriteFrq_Click(object sender, RoutedEventArgs e)
     {
         _ = WriteFrqAsync();
@@ -31,7 +48,7 @@ public sealed partial class MainPage
         }
 
         object? clear = null;
-        if (FrqClearPreutterBox.IsChecked == true || FrqNonePreutterBox.IsChecked == true)
+        if (FrqClearPreutter.IsChecked == true || FrqNonePreutter.IsChecked == true)
             clear = PreutterClears();
 
         _busy = true;
