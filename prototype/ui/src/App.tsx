@@ -3,6 +3,7 @@ import { BankPanel } from "./BankPanel"
 import { Dock } from "./Dock"
 import { EffectsPanel } from "./EffectsPanel"
 import { FileList } from "./FileList"
+import { nextFileIndex } from "./fileStep"
 import { FrqEditor } from "./FrqEditor"
 import { FrqPanel } from "./FrqPanel"
 import { GraphBand, type BandHandle, type BandKind, type GraphModel, type LiveTune } from "./GraphBand"
@@ -52,6 +53,8 @@ export function App() {
   const fileNameRef = useRef("")
   const namesRef = useRef<string[]>([])
   const previewTimer = useRef<number | undefined>(undefined)
+  const fileStepTimer = useRef<number | undefined>(undefined)
+  const stepTarget = useRef<number | null>(null)
   const busRef = useRef<LiveBus | null>(null)
   if (!busRef.current)
     busRef.current = createLiveBus()
@@ -83,6 +86,7 @@ export function App() {
   const [folder, setFolder] = useState("")
   const [names, setNames] = useState<string[]>([])
   const [fileName, setFileName] = useState("")
+  const [wheelName, setWheelName] = useState<string | null>(null)
   const [picture, setPicture] = useState<PreviewEvent | null>(null)
   const [notice, setNotice] = useState<{ message: string; tone: NoticeTone } | null>(null)
   const [saved, setSaved] = useState<SavedEvent | null>(null)
@@ -207,7 +211,7 @@ export function App() {
   }, [layout])
 
   useEffect(() => {
-    if (!fileName || missingRef.current)
+    if (!fileName || missingRef.current || stepTarget.current != null)
       return
     const frame = window.requestAnimationFrame(() => sendPreview(rangeRef.current))
     return () => window.cancelAnimationFrame(frame)
@@ -292,15 +296,38 @@ export function App() {
     schedulePreview()
   }
 
+  function chooseFile(name: string) {
+    window.clearTimeout(fileStepTimer.current)
+    stepTarget.current = null
+    setWheelName(null)
+    sendRef.current({ type: "selectFile", name })
+  }
+
   function stepFile(direction: number) {
     const list = namesRef.current
-    if (list.length === 0)
+    if (list.length === 0 || direction === 0)
       return
-    const index = list.findIndex((name) => sameName(name, fileNameRef.current))
-    const next = Math.min(list.length - 1, Math.max(0, (index < 0 ? 0 : index) + direction))
+    const shown = stepTarget.current == null ? fileNameRef.current : list[stepTarget.current] ?? ""
+    const index = list.findIndex((name) => sameName(name, shown))
+    const next = nextFileIndex(stepTarget.current ?? index, list.length, direction)
+    if (next < 0 || next === (stepTarget.current ?? index))
+      return
     const name = list[next]
-    if (name && !sameName(name, fileNameRef.current))
-      sendRef.current({ type: "selectFile", name })
+    if (!name)
+      return
+    stepTarget.current = next
+    setWheelName(name)
+    window.clearTimeout(fileStepTimer.current)
+    fileStepTimer.current = window.setTimeout(() => {
+      const landed = stepTarget.current
+      const chosen = landed == null ? "" : namesRef.current[landed] ?? ""
+      if (chosen && !sameName(chosen, fileNameRef.current))
+        sendRef.current({ type: "selectFile", name: chosen })
+      else {
+        stepTarget.current = null
+        setWheelName(null)
+      }
+    }, 60)
   }
 
   function applyHost(event: HostEvent) {
@@ -315,6 +342,9 @@ export function App() {
         setCreating(false)
         setFolder(event.folder)
         setNames(event.names)
+        window.clearTimeout(fileStepTimer.current)
+        stepTarget.current = null
+        setWheelName(null)
         if (!keep) {
           fileNameRef.current = ""
           setFileName("")
@@ -327,11 +357,16 @@ export function App() {
         }
         break
       }
-      case "opened":
+      case "opened": {
         fileNameRef.current = event.name
         missingRef.current = event.missing === true
         noteRef.current = event.missing ? "このファイルは存在しません" : ""
         setFileName(event.name)
+        const pending = stepTarget.current == null ? null : namesRef.current[stepTarget.current]
+        if (pending == null || sameName(pending, event.name)) {
+          stepTarget.current = null
+          setWheelName(null)
+        }
         setPicture(null)
         pictureRef.current = null
         rangeRef.current = { t0: 0, t1: 0 }
@@ -343,7 +378,10 @@ export function App() {
         redraw()
         syncRecIndex(event.name)
         break
+      }
       case "preview":
+        if (stepTarget.current != null)
+          break
         missingRef.current = false
         noteRef.current = ""
         setPicture(event)
@@ -527,7 +565,7 @@ export function App() {
   function chooseRec(index: number | null, wav: string) {
     setRecIndex(index)
     if (wav)
-      sendRef.current({ type: "selectFile", name: wav })
+      chooseFile(wav)
   }
 
   function syncRecIndex(wav: string) {
@@ -677,8 +715,8 @@ export function App() {
                   <FileList
                     folder={folder}
                     names={names}
-                    selected={fileName}
-                    onSelect={(name) => sendRef.current({ type: "selectFile", name })}
+                    selected={wheelName ?? fileName}
+                    onSelect={chooseFile}
                   />
                 )
               if (id in graphKinds)
@@ -692,7 +730,15 @@ export function App() {
                     register={register}
                     onRange={onRange}
                     onFileStep={stepFile}
-                    onTune={(index, point, time) => sendRef.current({ type: "oto", op: "tune", file: fileNameRef.current, index, point, time })}
+                    onTune={(index, point, time) => {
+                      const key = (["offset", "overlap", "preutter", "consonant", "blank"] as const)[point]
+                      if (key)
+                        marksRef.current = marksRef.current.map((mark) => mark.index === index ? { ...mark, [key]: time } : mark)
+                      liveRef.current = null
+                      modelRef.current = viewModel()
+                      redraw()
+                      sendRef.current({ type: "oto", op: "tune", file: fileNameRef.current, index, point, time })
+                    }}
                     onFocus={setFocus}
                     onLive={(live) => {
                       liveRef.current = live
@@ -704,12 +750,18 @@ export function App() {
                       modelRef.current = viewModel()
                       redraw()
                     }}
-                    onSpans={(spans) => sendRef.current({
-                      type: "oto",
-                      op: "spans",
-                      file: fileNameRef.current,
-                      spans: spans.map((span) => ({ start: span.start, end: span.end })),
-                    })}
+                    onSpans={(spans) => {
+                      spansRef.current = spans
+                      draftRef.current = null
+                      modelRef.current = viewModel()
+                      redraw()
+                      sendRef.current({
+                        type: "oto",
+                        op: "spans",
+                        file: fileNameRef.current,
+                        spans: spans.map((span) => ({ start: span.start, end: span.end })),
+                      })
+                    }}
                   />
                 )
               if (id === "rec")

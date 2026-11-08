@@ -1,3 +1,5 @@
+import { useEffect, useRef } from "react"
+
 type Props = {
   folder: string
   names: string[]
@@ -6,6 +8,10 @@ type Props = {
 }
 
 export function FileList({ folder, names, selected, onSelect }: Props) {
+  const currentRef = useRef<HTMLButtonElement>(null)
+  useEffect(() => {
+    currentRef.current?.scrollIntoView({ block: "nearest" })
+  }, [selected])
   return (
     <ul className="h-full overflow-auto py-1">
       {names.length === 0 && folder && (
@@ -16,6 +22,7 @@ export function FileList({ folder, names, selected, onSelect }: Props) {
         return (
           <li key={name}>
             <button
+              ref={current ? currentRef : undefined}
               type="button"
               title={name}
               className={`block w-full truncate px-3 py-1 text-left text-sm ${current ? "is-picked" : "text-[var(--text)]"}`}

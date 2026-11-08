@@ -154,7 +154,7 @@ export function GraphBand({ kind, picture, model, appearance, register, onRange,
       const notches = Math.trunc(wheelRef.current / 120)
       wheelRef.current -= notches * 120
       if (notches !== 0)
-        onFileStepRef.current(Math.sign(notches))
+        onFileStepRef.current(notches)
     }
     const keys = (event: KeyboardEvent) => {
       const current = model.current
@@ -324,17 +324,19 @@ export function GraphBand({ kind, picture, model, appearance, register, onRange,
     if (press) {
       pressRef.current = null
       const live = model.current.live
-      onLiveRef.current?.(null)
       if (live?.moved && live.index === press.index && live.point === press.point)
         onTuneRef.current?.(live.index, live.point, live.time)
+      else
+        onLiveRef.current?.(null)
     }
     const boundary = boundaryRef.current
     if (boundary) {
       boundaryRef.current = null
       const draft = model.current.draft
-      onDraftRef.current?.(null)
       if (draft && spanTimesChanged(boundary.origin, draft))
         onSpansRef.current?.(draft)
+      else
+        onDraftRef.current?.(null)
     }
     if (!dragRef.current)
       return
