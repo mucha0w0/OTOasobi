@@ -61,7 +61,7 @@ export function MenuBar({
   }, [])
 
   return (
-    <nav ref={barRef} className="flex h-9 shrink-0 items-center gap-1 border-b border-[var(--line)] bg-[var(--panel)] px-2 text-sm">
+    <nav ref={barRef} className="relative z-30 flex h-9 shrink-0 items-center gap-1 border-b border-[var(--line)] bg-[var(--panel)] px-2 text-sm">
       <Menu title="ファイル" open={open} setOpen={setOpen}>
         <Item onClick={onOpenFolder}>フォルダを開く</Item>
         <Item disabled={!canEdit} onClick={onSaveSettings}>設定を保存</Item>
