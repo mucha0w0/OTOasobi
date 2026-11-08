@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { imagePlacement, panRange, zoomRange } from "./viewport"
+import { imagePlacement, loudnessLevel, loudnessX, panRange, zoomRange } from "./viewport"
 
 describe("表示範囲", () => {
   it("拡大してもポインタの時刻は同じ割合に残る", () => {
@@ -18,5 +18,14 @@ describe("表示範囲", () => {
     const placed = imagePlacement({ t0: 0, t1: 4 }, { t0: 1, t1: 3 }, 200)
     expect(placed.x).toBeCloseTo(-100)
     expect(placed.width).toBeCloseTo(400)
+  })
+
+  it("音量はファイル全体の時刻を表示範囲へ載せる", () => {
+    const full = loudnessX(1, 4, 4, { t0: 0, t1: 4 }, 200)
+    const zoomed = loudnessX(1, 4, 4, { t0: 1, t1: 2 }, 200)
+    expect(full).toBeCloseTo(75)
+    expect(zoomed).toBeCloseTo(100)
+    expect(loudnessLevel(0, 0)).toBe(1)
+    expect(loudnessLevel(-40, 0)).toBe(0)
   })
 })

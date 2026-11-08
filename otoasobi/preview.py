@@ -222,12 +222,10 @@ def render_preview(
         t1 = duration
     lo, hi, wt0, wt1, samples = waveform_view(y, sr, t0, t1, columns)
     png, spec_t0, spec_t1 = spectrogram_png(y, sr, t0, t1, columns, rows)
-    full = duration <= 0 or (t1 - t0) >= duration * 0.999
-    loud = loudness_db(y, sr) if full else np.zeros(0)
     return Preview(
         wave_lo=_nums(lo),
         wave_hi=_nums(hi),
-        loudness=_nums(loud),
+        loudness=_nums(loudness_db(y, sr)),
         png=png,
         spec_t0=spec_t0,
         spec_t1=spec_t1,
@@ -411,13 +409,12 @@ def index_wave(
     t1: float,
     columns: int,
 ) -> IndexPreview:
-    """メルを計算せず、波形と、全体を見ているときの音量だけ返す。"""
+    """メルを計算せず、波形とファイル全体の音量を返す。"""
     n = int(np.asarray(y).reshape(-1).shape[0])
     duration = n / float(sr) if sr > 0 and n else 0.0
     columns = max(1, min(int(columns), INDEX_COLUMNS))
     lo, hi, wt0, wt1, samples = waveform_view(y, sr, t0, t1, columns)
-    full = duration <= 0 or (t1 - t0) >= duration * 0.999
-    loud = loudness_db(y, sr) if full else np.zeros(0)
+    loud = loudness_db(y, sr)
     return IndexPreview(
         wave_lo=_nums(lo),
         wave_hi=_nums(hi),
@@ -453,8 +450,7 @@ def render_index(
     columns = max(1, min(int(columns), INDEX_COLUMNS))
     lo, hi, wt0, wt1, samples = waveform_view(y, sr, t0, t1, columns)
     spec, spec_columns, spec_rows, spec_t0, spec_t1 = spectrogram_index(y, sr, t0, t1, columns, stop, key)
-    full = duration <= 0 or (t1 - t0) >= duration * 0.999
-    loud = _loudness(y, sr, key) if full else np.zeros(0)
+    loud = _loudness(y, sr, key)
     return IndexPreview(
         wave_lo=_nums(lo),
         wave_hi=_nums(hi),
@@ -481,12 +477,11 @@ def spectrogram_only(
     stop=None,
     key: object = None,
 ) -> IndexPreview:
-    """波形は呼ばない。色番号と、全体を見ているときの音量だけ返す。"""
+    """波形は呼ばない。色番号と、ファイル全体の音量を返す。"""
     n = int(np.asarray(y).reshape(-1).shape[0])
     duration = n / float(sr) if sr > 0 and n else 0.0
     spec, spec_columns, spec_rows, spec_t0, spec_t1 = spectrogram_index(y, sr, t0, t1, columns, stop, key)
-    full = duration <= 0 or (t1 - t0) >= duration * 0.999
-    loud = _loudness(y, sr, key) if full else np.zeros(0)
+    loud = _loudness(y, sr, key)
     return IndexPreview(
         wave_lo=[],
         wave_hi=[],

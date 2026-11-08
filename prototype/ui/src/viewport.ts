@@ -13,6 +13,27 @@ export function panRange(range: Range, fraction: number, duration: number): Rang
   return clampRange(range.t0 + span * fraction, span, duration)
 }
 
+const loudnessRangeDb = 40
+
+export function loudnessX(
+  index: number,
+  count: number,
+  duration: number,
+  view: Range,
+  width: number,
+): number {
+  const shown = view.t1 > view.t0 ? view : { t0: 0, t1: duration }
+  const span = shown.t1 - shown.t0
+  if (count < 1 || !(duration > 0) || !(span > 0) || !(width > 0))
+    return 0
+  const time = duration * (index + 0.5) / count
+  return ((time - shown.t0) / span) * width
+}
+
+export function loudnessLevel(value: number, peak: number): number {
+  return Math.min(1, Math.max(0, (value - (peak - loudnessRangeDb)) / loudnessRangeDb))
+}
+
 export function imagePlacement(
   source: Range,
   view: Range,

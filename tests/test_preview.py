@@ -64,6 +64,9 @@ class PreviewTests(unittest.TestCase):
         self.assertLessEqual(zoomed.spec_columns, 80)
         self.assertEqual(zoomed.spec_rows, first.spec_rows)
         self.assertTrue(zoomed.spec_t0 < zoomed.spec_t1)
+        self.assertEqual(zoomed.loudness, first.loudness)
+        window = spectrogram_only(y, sr, 0.25, 0.5, 80)
+        self.assertEqual(window.loudness, first.loudness)
 
     def test_png_preview_still_encodes(self) -> None:
         y = np.zeros(1600, dtype=np.float64)

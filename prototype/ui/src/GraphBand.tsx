@@ -6,7 +6,7 @@ import { previewColumnLimit, previewRowLimit, timeAt, type OtoMark, type Preview
 import { decodeBase64, paintIndices } from "./specTone"
 import { hitBoundary, moveBoundary, spanBoundaries, spanCaption, spanFill, spanTimesChanged, type PhoneSpan } from "./spans"
 import { xForTime, type PointerBus } from "./ruler"
-import { imagePlacement, panRange, zoomRange, type Range } from "./viewport"
+import { imagePlacement, loudnessLevel, loudnessX, panRange, zoomRange, type Range } from "./viewport"
 
 export type BandKind = "wave" | "spec" | "loud" | "oto"
 
@@ -224,7 +224,7 @@ export function GraphBand({ kind, picture, model, appearance, register, onRange,
     const source = pictureNow
       ? { t0: pictureNow.waveT0, t1: pictureNow.waveT1 }
       : { t0: 0, t1: 1 }
-    const placed = pictureNow ? imagePlacement(source, model.current.range, width) : { x: 0, width }
+    const placed = pictureNow && kind !== "loud" ? imagePlacement(source, model.current.range, width) : { x: 0, width }
     canvas.style.left = `${placed.x}px`
     canvas.style.width = `${Math.max(1, placed.width)}px`
     canvas.style.height = `${height}px`
@@ -235,7 +235,7 @@ export function GraphBand({ kind, picture, model, appearance, register, onRange,
       && paintedRef.current === pictureNow
       && paintedSizeRef.current.color === color
       && (kind === "spec" || (paintedSizeRef.current.width === width && paintedSizeRef.current.height === height))
-    if (same && canvas.width > 0)
+    if (kind !== "loud" && same && canvas.width > 0)
       return
     const ctx = canvasContext(canvas)
     if (!ctx)
@@ -265,11 +265,14 @@ export function GraphBand({ kind, picture, model, appearance, register, onRange,
       ctx.fillRect(0, 0, canvas.width, canvas.height)
       drawPeaks(ctx, canvas.width, canvas.height, pictureNow.lo, pictureNow.hi, color)
     } else if (kind === "loud") {
-      canvas.width = Math.max(1, Math.floor(width))
-      canvas.height = Math.max(1, Math.floor(height))
+      const nextWidth = Math.max(1, Math.floor(width))
+      const nextHeight = Math.max(1, Math.floor(height))
+      if (canvas.width !== nextWidth || canvas.height !== nextHeight) {
+        canvas.width = nextWidth
+        canvas.height = nextHeight
+      }
       ctx.fillStyle = getCss("--canvas")
       ctx.fillRect(0, 0, canvas.width, canvas.height)
-      drawLoud(ctx, { x: 0, width: canvas.width }, pictureNow.loudness, color)
     } else {
       canvas.width = Math.max(1, Math.floor(width))
       canvas.height = Math.max(1, Math.floor(height))
@@ -305,6 +308,8 @@ export function GraphBand({ kind, picture, model, appearance, register, onRange,
     const placed = imagePlacement(source, current.range, width)
     const spans = current.draft ?? current.spans ?? []
     const shown = tunedMarks(current.marks, current.live)
+    if (kind === "loud")
+      drawLoud(ctx, width, height, pictureNow.loudness, pictureNow.duration, current.range, getCss("--wave"))
     if (kind === "wave" || kind === "spec")
       drawSpans(ctx, placed, source, spans, height, kind === "wave")
     if (kind === "wave" || kind === "spec" || kind === "loud") {
@@ -659,25 +664,24 @@ function strokePoints(
 
 function drawLoud(
   ctx: CanvasRenderingContext2D,
-  placed: { x: number; width: number },
+  width: number,
+  height: number,
   values: number[],
+  duration: number,
+  range: Range,
   color: string,
 ) {
-  if (values.length < 2 || placed.width === 0)
+  if (values.length < 2 || !(duration > 0) || width <= 0 || height <= 0)
     return
-  let low = values[0] ?? 0
-  let high = low
-  for (const value of values) {
-    low = Math.min(low, value)
-    high = Math.max(high, value)
-  }
-  const span = Math.max(1e-6, high - low)
-  const height = ctx.canvas.height
+  let peak = values[0] ?? 0
+  for (const value of values)
+    peak = Math.max(peak, value)
   ctx.strokeStyle = color
+  ctx.lineWidth = 1
   ctx.beginPath()
   values.forEach((value, index) => {
-    const x = placed.x + (index / (values.length - 1)) * placed.width
-    const y = height - ((value - low) / span) * (height - 8) - 4
+    const x = loudnessX(index, values.length, duration, range, width)
+    const y = height - 4 - loudnessLevel(value, peak) * (height - 8)
     if (index === 0)
       ctx.moveTo(x, y)
     else

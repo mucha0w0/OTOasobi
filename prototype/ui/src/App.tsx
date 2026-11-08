@@ -42,6 +42,9 @@ function rememberPicture(cache: Map<string, PreviewEvent>, name: string, picture
 }
 
 function mergePreview(current: PreviewEvent | null, event: PreviewEvent, keepSpec: boolean): PreviewEvent {
+  const loudness = event.loudness.length > 0
+    ? event.loudness
+    : keepSpec && current ? current.loudness : []
   const hasWave = event.lo.length > 0
   const hasSpec = event.specColumns > 0 && event.spec.length > 0
   if (hasSpec && !hasWave && current)
@@ -54,7 +57,7 @@ function mergePreview(current: PreviewEvent | null, event: PreviewEvent, keepSpe
       specT0: event.specT0,
       specT1: event.specT1,
       png: "",
-      loudness: event.loudness.length > 0 ? event.loudness : current.loudness,
+      loudness,
       sampleRate: event.sampleRate || current.sampleRate,
     }
   if (hasWave && !hasSpec && keepSpec && current && current.spec.length > 0)
@@ -67,10 +70,11 @@ function mergePreview(current: PreviewEvent | null, event: PreviewEvent, keepSpe
       duration: event.duration || current.duration,
       sampleRate: event.sampleRate || current.sampleRate,
       png: "",
+      loudness,
     }
   if (hasWave && !hasSpec)
-    return { ...event, spec: "", specColumns: 0, specRows: 0, png: "" }
-  return event
+    return { ...event, spec: "", specColumns: 0, specRows: 0, png: "", loudness }
+  return { ...event, loudness }
 }
 
 const graphKinds: Record<string, BandKind> = {
@@ -539,6 +543,7 @@ export function App() {
         if (event.lo.length > 0)
           rangeRef.current = { t0: event.waveT0, t1: event.waveT1 }
         modelRef.current = viewModel()
+        redraw()
         break
       }
       case "capture":
