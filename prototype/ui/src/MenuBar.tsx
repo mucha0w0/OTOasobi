@@ -47,7 +47,7 @@ export function MenuBar({
   onCheckUpdate,
 }: Props) {
   const [open, setOpen] = useState<string | null>(null)
-  const [folders, setFolders] = useState<Record<string, boolean>>({})
+  const [folder, setFolder] = useState<string | null>(null)
   const barRef = useRef<HTMLElement>(null)
 
   useEffect(() => {
@@ -58,6 +58,11 @@ export function MenuBar({
     window.addEventListener("pointerdown", close)
     return () => window.removeEventListener("pointerdown", close)
   }, [])
+
+  useEffect(() => {
+    if (open !== "表示")
+      setFolder(null)
+  }, [open])
 
   return (
     <nav ref={barRef} className="relative z-30 flex h-9 shrink-0 items-center gap-1 border-b border-[var(--line)] bg-[var(--panel)] px-2 text-sm">
@@ -76,38 +81,30 @@ export function MenuBar({
         <Item disabled={!canAnalyze} onClick={onReanalyze}>再解析</Item>
         <Item disabled={!canAnalyzeOne} onClick={onReanalyzeOne}>選択した音声だけを再解析</Item>
       </Menu>
-      <Menu title="表示" open={open} setOpen={setOpen} scroll>
-        {viewFolders.map((folder) => {
-          const expanded = folders[folder.title] !== false
-          return (
-            <div key={folder.title}>
-              <button
-                type="button"
-                className="flex w-full items-center gap-1 px-3 py-1 text-left text-sm hover:bg-[var(--line)]"
-                aria-expanded={expanded}
-                onClick={(event) => {
-                  event.stopPropagation()
-                  setFolders((current) => ({ ...current, [folder.title]: !expanded }))
-                }}
-              >
-                <span className="inline-block w-3 shrink-0 text-[var(--muted)]">{expanded ? "▼" : "▶"}</span>
-                {folder.title}
-              </button>
-              {expanded && folder.ids.map((id) => (
-                <Item key={id} indent checked={contains(layout, id)} onClick={() => onToggle(id)}>
-                  {paneTitles[id]}
-                </Item>
-              ))}
-            </div>
-          )
-        })}
-        <div className="my-1 border-t border-[var(--line)]" />
-        <Item onClick={onReset}>初期配置</Item>
-        <Item onClick={onRecording}>録音</Item>
-        {templates.map((name) => (
-          <Item key={name} onClick={() => onTemplate(name)}>{name}</Item>
+      <Menu title="表示" open={open} setOpen={setOpen}>
+        {viewFolders.map((group) => (
+          <Flyout
+            key={group.title}
+            title={group.title}
+            open={folder === group.title}
+            onOpen={() => setFolder(group.title)}
+          >
+            {group.ids.map((id) => (
+              <Item key={id} checked={contains(layout, id)} onClick={() => onToggle(id)}>
+                {paneTitles[id]}
+              </Item>
+            ))}
+          </Flyout>
         ))}
-        <Item onClick={onSaveTemplate}>この配置をテンプレートとして保存</Item>
+        <div onMouseEnter={() => setFolder(null)}>
+          <div className="my-1 border-t border-[var(--line)]" />
+          <Item onClick={onReset}>初期配置</Item>
+          <Item onClick={onRecording}>録音</Item>
+          {templates.map((name) => (
+            <Item key={name} onClick={() => onTemplate(name)}>{name}</Item>
+          ))}
+          <Item onClick={onSaveTemplate}>この配置をテンプレートとして保存</Item>
+        </div>
       </Menu>
     </nav>
   )
@@ -117,13 +114,11 @@ function Menu({
   title,
   open,
   setOpen,
-  scroll,
   children,
 }: {
   title: string
   open: string | null
   setOpen: (title: string | null) => void
-  scroll?: boolean
   children: ReactNode
 }) {
   const shown = open === title
@@ -138,7 +133,7 @@ function Menu({
       </button>
       {shown && (
         <div
-          className={`absolute left-0 top-full z-20 mt-1 min-w-64 rounded border border-[var(--line)] bg-[var(--panel)] py-1 shadow ${scroll ? "max-h-[calc(100vh-4rem)] overflow-y-auto" : ""}`}
+          className="absolute left-0 top-full z-20 mt-1 min-w-64 rounded border border-[var(--line)] bg-[var(--panel)] py-1 shadow"
           onClick={() => setOpen(null)}
         >
           {children}
@@ -148,24 +143,75 @@ function Menu({
   )
 }
 
+function Flyout({
+  title,
+  open,
+  onOpen,
+  children,
+}: {
+  title: string
+  open: boolean
+  onOpen: () => void
+  children: ReactNode
+}) {
+  const rowRef = useRef<HTMLDivElement>(null)
+  const [side, setSide] = useState<"left" | "right">("right")
+
+  useEffect(() => {
+    if (!open || !rowRef.current)
+      return
+    const rect = rowRef.current.getBoundingClientRect()
+    setSide(rect.right + 240 > window.innerWidth ? "left" : "right")
+  }, [open])
+
+  return (
+    <div ref={rowRef} className="relative" onMouseEnter={onOpen}>
+      <button
+        type="button"
+        className={`flex w-full items-center px-3 py-1 text-left text-sm hover:bg-[var(--line)] ${open ? "bg-[var(--line)]" : ""}`}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={(event) => {
+          event.stopPropagation()
+          onOpen()
+        }}
+      >
+        <span className="min-w-0 flex-1">{title}</span>
+        <Chevron />
+      </button>
+      {open && (
+        <div className={`absolute top-0 z-30 min-w-56 rounded border border-[var(--line)] bg-[var(--panel)] py-1 shadow ${side === "left" ? "right-full -mr-px" : "left-full -ml-px"}`}>
+          {children}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function Chevron() {
+  return (
+    <svg className="shrink-0" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path d="M6 3.5 L10.5 8 L6 12.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
 function Item({
   children,
   onClick,
   disabled,
   checked,
-  indent,
 }: {
   children: ReactNode
   onClick?: () => void
   disabled?: boolean
   checked?: boolean
-  indent?: boolean
 }) {
   return (
     <button
       type="button"
       disabled={disabled}
-      className={`flex w-full items-center py-1 text-left text-sm enabled:hover:bg-[var(--line)] disabled:text-[var(--muted)] ${indent ? "pr-3 pl-7" : "px-3"}`}
+      className="flex w-full items-center px-3 py-1 text-left text-sm enabled:hover:bg-[var(--line)] disabled:text-[var(--muted)]"
       onClick={onClick}
     >
       {checked !== undefined && <span className="inline-block w-4 shrink-0">{checked ? "✓" : ""}</span>}
