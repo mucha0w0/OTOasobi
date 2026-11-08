@@ -104,7 +104,7 @@ id は `recList`、`recScript`、`rec`、`guide`、`mic`。初期配置には入
 
 ## 環境設定
 
-配布画面の環境設定はダイアログです。画面は `prototype/ui/src/settings.tsx`。左がタブ、右が選んだタブの中身で、開いたときは並びの先頭です。タブを足すときは `settingsTabs` に `{ id, title, content }` を足し、その中の項目は `Setting` で足します。いまは「見た目」（明暗とアクセント）と「入出力」（マイクと再生先）です。ページが `appearance` と `setDevices` を送り、ホストが保存します。
+配布画面の環境設定はダイアログです。画面は `prototype/ui/src/settings.tsx`。左がタブ、右が選んだタブの中身で、開いたときは並びの先頭です。タブを足すときは `settingsTabs` に `{ id, title, content }` を足し、その中の項目は `Setting` で足します。いまは「見た目」（明暗、アクセント、倍率）と「入出力」（マイクと再生先）です。ページが `appearance` と `setDevices` を送り、ホストが保存します。倍率は `appearance.json` の `scale` で、50% から 200% の 10% 刻みです。ページは `documentElement.style.zoom` に入れ、起動前のスクリプトでも同じ値を入れます。Ctrl＋ホイールと Ctrl＋± は `IsZoomControlEnabled` を切ってあり、画面全体の倍率には効きません。グラフ上の Ctrl＋ホイールは、その面の時間の拡大のままです。キャンバスの画素は、この倍率を `devicePixelRatio` に掛けて取ります。
 
 旧画面は、編集画面のパネルにしない別ウィンドウ `SettingsWindow`（`winui/SettingsWindow.xaml`）です。
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { parseHostEvent, requestsPreview, requestsPreviewAfter, shownInputRate, timeAt, xAt } from "./protocol"
+import { parseHostEvent, requestsPreview, requestsPreviewAfter, shownInputRate, timeAt, uiScale, xAt } from "./protocol"
 
 describe("プレビューを頼む操作", () => {
   it("境界のドラッグとリサイズの途中では頼まない", () => {
@@ -136,5 +136,22 @@ describe("ホストのメッセージ", () => {
       gains: [0, 0, 0, 0, 0, 0, 0, 0],
       noiseNote: "ノイズサプレッサーは、選んだ 0.50秒の無音で抑えます。",
     })).toMatchObject({ type: "effects", preset: "標準", noiseNote: "ノイズサプレッサーは、選んだ 0.50秒の無音で抑えます。" })
+    expect(parseHostEvent({ type: "appearance", theme: "dark", accent: "#112233", scale: 1.25 })).toEqual({
+      type: "appearance",
+      theme: "dark",
+      accent: "#112233",
+      scale: 1.3,
+    })
+    expect(parseHostEvent({ type: "appearance", theme: "system", accent: null })).toMatchObject({ scale: 1 })
+  })
+})
+
+describe("画面の倍率", () => {
+  it("50% から 200% の 10% 刻みに収める", () => {
+    expect(uiScale(1)).toBe(1)
+    expect(uiScale(1.25)).toBe(1.3)
+    expect(uiScale(0.1)).toBe(0.5)
+    expect(uiScale(4)).toBe(2)
+    expect(uiScale("150")).toBe(1)
   })
 })

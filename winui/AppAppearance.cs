@@ -32,7 +32,25 @@ readonly record struct RgbColor(byte R, byte G, byte B)
     public string ToHex() => FormattableString.Invariant($"#{R:X2}{G:X2}{B:X2}");
 }
 
-readonly record struct AppAppearanceState(AppThemeChoice Theme, RgbColor? Accent);
+readonly record struct AppAppearanceState(AppThemeChoice Theme, RgbColor? Accent, double Scale = 1);
+
+// 配布画面の全体倍率。50% から 200% まで、10% 刻み。
+static class UiScale
+{
+    public const double Default = 1;
+
+    public static double Clamp(double scale)
+    {
+        if (!double.IsFinite(scale))
+            return Default;
+        var stepped = Math.Round(scale * 10, MidpointRounding.AwayFromZero) / 10;
+        if (stepped < 0.5)
+            return 0.5;
+        if (stepped > 2)
+            return 2;
+        return stepped;
+    }
+}
 
 static class AppThemes
 {
@@ -183,7 +201,8 @@ static class AppAppearanceStore
     {
         var file = JsonFiles.Read<AppAppearanceFile>(path);
         RgbColor? accent = RgbColor.TryParse(file?.Accent, out var color) ? color : null;
-        return new AppAppearanceState(AppThemes.Parse(file?.Theme), accent);
+        var scale = file?.Scale is double value ? UiScale.Clamp(value) : UiScale.Default;
+        return new AppAppearanceState(AppThemes.Parse(file?.Theme), accent, scale);
     }
 
     public static void Write(string path, AppAppearanceState state)
@@ -192,6 +211,7 @@ static class AppAppearanceStore
         {
             Theme = AppThemes.FileName(state.Theme),
             Accent = state.Accent?.ToHex(),
+            Scale = UiScale.Clamp(state.Scale),
         }, JsonFiles.OptionsIgnoringNull);
     }
 
@@ -200,6 +220,8 @@ static class AppAppearanceStore
         public string Theme { get; set; } = "system";
 
         public string? Accent { get; set; }
+
+        public double? Scale { get; set; }
     }
 }
 
@@ -209,6 +231,8 @@ static class AppAppearance
 
     public static RgbColor? Accent { get; private set; }
 
+    public static double Scale { get; private set; } = UiScale.Default;
+
     public static event Action? Changed;
 
     public static void Load()
@@ -216,6 +240,7 @@ static class AppAppearance
         var state = AppAppearanceStore.Read(AppPaths.AppearanceFile);
         Theme = state.Theme;
         Accent = state.Accent;
+        Scale = state.Scale;
     }
 
     public static void SaveTheme(AppThemeChoice theme)
@@ -223,7 +248,7 @@ static class AppAppearance
         if (Theme == theme)
             return;
         Theme = theme;
-        AppAppearanceStore.Write(AppPaths.AppearanceFile, new AppAppearanceState(Theme, Accent));
+        AppAppearanceStore.Write(AppPaths.AppearanceFile, Current());
     }
 
     public static void SaveAccent(RgbColor? accent)
@@ -231,8 +256,19 @@ static class AppAppearance
         if (Accent == accent)
             return;
         Accent = accent;
-        AppAppearanceStore.Write(AppPaths.AppearanceFile, new AppAppearanceState(Theme, Accent));
+        AppAppearanceStore.Write(AppPaths.AppearanceFile, Current());
     }
+
+    public static void SaveScale(double scale)
+    {
+        scale = UiScale.Clamp(scale);
+        if (Scale == scale)
+            return;
+        Scale = scale;
+        AppAppearanceStore.Write(AppPaths.AppearanceFile, Current());
+    }
+
+    static AppAppearanceState Current() => new(Theme, Accent, Scale);
 
     public static void RaiseChanged() => Changed?.Invoke();
 }

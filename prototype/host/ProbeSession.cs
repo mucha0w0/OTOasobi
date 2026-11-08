@@ -98,6 +98,11 @@ sealed class ProbeSession : IDisposable
             return;
 
         _view.CoreWebView2.Settings.IsStatusBarEnabled = false;
+        // Ctrl+ホイールや Ctrl+± では画面全体の倍率を変えない。倍率は見た目のスライダー。
+        _view.CoreWebView2.Settings.IsZoomControlEnabled = false;
+        AppAppearance.Load();
+        await _view.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
+            "document.documentElement.style.zoom='" + AppAppearance.Scale.ToString(CultureInfo.InvariantCulture) + "';");
         _view.CoreWebView2.WebMessageReceived += OnMessage;
         var url = Environment.GetEnvironmentVariable("OTOASOBI_PROBE_URL");
         if (!string.IsNullOrWhiteSpace(url))
@@ -1887,6 +1892,7 @@ sealed class ProbeSession : IDisposable
                 _ => "system",
             },
             accent = AppAppearance.Accent?.ToHex(),
+            scale = AppAppearance.Scale,
         });
     }
 
@@ -1901,6 +1907,8 @@ sealed class ProbeSession : IDisposable
         AppAppearance.SaveTheme(theme);
         var accent = Text(root, "accent");
         AppAppearance.SaveAccent(RgbColor.TryParse(accent, out var color) ? color : null);
+        if (root.TryGetProperty("scale", out var scale) && scale.TryGetDouble(out var value))
+            AppAppearance.SaveScale(value);
     }
 
     async Task HandleUpdateAsync(string? op)

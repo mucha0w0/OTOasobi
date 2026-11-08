@@ -67,17 +67,25 @@ public class AppearanceTests
         try
         {
             var path = Path.Combine(directory, "appearance.json");
-            AppAppearanceStore.Write(path, new AppAppearanceState(AppThemeChoice.Dark, new RgbColor(0xE8, 0x5D, 0x04)));
+            AppAppearanceStore.Write(path, new AppAppearanceState(AppThemeChoice.Dark, new RgbColor(0xE8, 0x5D, 0x04), 1.5));
             var loaded = AppAppearanceStore.Read(path);
             Assert.Equal(AppThemeChoice.Dark, loaded.Theme);
             Assert.Equal(new RgbColor(0xE8, 0x5D, 0x04), loaded.Accent);
+            Assert.Equal(1.5, loaded.Scale);
 
             File.WriteAllText(path, """{ "theme": "nope", "accent": "red" }""");
             loaded = AppAppearanceStore.Read(path);
             Assert.Equal(AppThemeChoice.System, loaded.Theme);
             Assert.Null(loaded.Accent);
+            Assert.Equal(1, loaded.Scale);
+
+            File.WriteAllText(path, """{ "theme": "light", "scale": 9 }""");
+            Assert.Equal(2, AppAppearanceStore.Read(path).Scale);
+            File.WriteAllText(path, """{ "theme": "light", "scale": 0.1 }""");
+            Assert.Equal(0.5, AppAppearanceStore.Read(path).Scale);
 
             Assert.Equal(AppThemeChoice.System, AppAppearanceStore.Read(Path.Combine(directory, "missing.json")).Theme);
+            Assert.Equal(1, UiScale.Clamp(double.NaN));
         }
         finally
         {

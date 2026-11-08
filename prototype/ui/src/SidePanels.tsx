@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { canvasContext, shouldReplaceBitmap } from "./bitmap"
+import { bitmapRatio, canvasContext, shouldReplaceBitmap } from "./bitmap"
 import { IconButton, IconNext, IconPlay, IconPrev, IconRecord, IconSkip, IconStop } from "./IconButton"
 import { drawPeaks } from "./drawPeaks"
 import { shownInputRate, type CaptureEvent, type PageCommand, type SavedEvent } from "./protocol"
@@ -248,7 +248,7 @@ export function MicPanel({
     const height = canvas.clientHeight
     if (width <= 0 || height <= 0)
       return
-    const ratio = window.devicePixelRatio || 1
+    const ratio = bitmapRatio()
     const nextWidth = Math.max(1, Math.floor(width * ratio))
     const nextHeight = Math.max(1, Math.floor(height * ratio))
     if (shouldReplaceBitmap(false, canvas.width, canvas.height, nextWidth, nextHeight)) {

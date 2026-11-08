@@ -11,8 +11,10 @@ export type SettingsTab = {
 type LookModel = {
   theme: ThemeChoice
   accent: string
+  scale: number
   onTheme: (theme: ThemeChoice) => void
   onAccent: (hex: string) => void
+  onScale: (scale: number) => void
   onSystemAccent: () => void
 }
 
@@ -111,7 +113,7 @@ export function Setting({ label, children }: { label: string; children: ReactNod
   )
 }
 
-function LookSettings({ theme, accent, onTheme, onAccent, onSystemAccent }: LookModel) {
+function LookSettings({ theme, accent, scale, onTheme, onAccent, onScale, onSystemAccent }: LookModel) {
   return (
     <div className="grid gap-6">
       <Setting label="明暗">
@@ -129,6 +131,20 @@ function LookSettings({ theme, accent, onTheme, onAccent, onSystemAccent }: Look
           <input type="color" value={accent} aria-label="アクセント" onChange={(event) => onAccent(event.target.value)} />
           <button type="button" className="ghost-button" onClick={onSystemAccent}>端末に合わせる</button>
         </div>
+      </Setting>
+      <Setting label="倍率">
+        <label className="grid gap-1 text-sm">
+          <span className="num text-right text-[var(--muted)]">{Math.round(scale * 100)}%</span>
+          <input
+            type="range"
+            min={50}
+            max={200}
+            step={10}
+            aria-label="倍率"
+            value={Math.round(scale * 100)}
+            onChange={(event) => onScale(Number(event.target.value) / 100)}
+          />
+        </label>
       </Setting>
     </div>
   )

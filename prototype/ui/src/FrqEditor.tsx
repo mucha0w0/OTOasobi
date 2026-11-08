@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react"
-import { canvasContext } from "./bitmap"
+import { bitmapRatio, canvasContext } from "./bitmap"
 import { IconButton, IconPen } from "./IconButton"
 import type { FrqViewEvent, PageCommand } from "./protocol"
 
@@ -8,6 +8,16 @@ const keyWidth = 54
 const ruler = 20
 const unvoiced = 22
 const midiHigh = 127
+
+function localPoint(canvas: HTMLCanvasElement, clientX: number, clientY: number) {
+  const rect = canvas.getBoundingClientRect()
+  const sx = canvas.clientWidth > 0 ? rect.width / canvas.clientWidth : 1
+  const sy = canvas.clientHeight > 0 ? rect.height / canvas.clientHeight : 1
+  return {
+    x: (clientX - rect.left) / (sx || 1),
+    y: (clientY - rect.top) / (sy || 1),
+  }
+}
 
 function midiOf(hertz: number): number {
   return 69 + 12 * Math.log2(hertz / 440)
@@ -48,7 +58,7 @@ export function FrqEditor({
     const canvas = canvasRef.current
     if (!canvas)
       return
-    const ratio = window.devicePixelRatio || 1
+    const ratio = bitmapRatio()
     canvas.width = Math.floor(width * ratio)
     canvas.height = Math.floor(height * ratio)
     const ctx = canvasContext(canvas)
@@ -87,9 +97,7 @@ export function FrqEditor({
   }, [appearance, frequency, height, pixels, selected, width])
 
   function at(event: ReactPointerEvent<HTMLCanvasElement>) {
-    const rect = event.currentTarget.getBoundingClientRect()
-    const x = event.clientX - rect.left
-    const y = event.clientY - rect.top
+    const { x, y } = localPoint(event.currentTarget, event.clientX, event.clientY)
     const frame = Math.max(0, Math.min(frequency.length - 1, Math.floor((x - keyWidth) / pixels)))
     if (y >= ruler + 128 * row)
       return { frame, midi: 0, unvoiced: true }
@@ -148,7 +156,8 @@ export function FrqEditor({
               if (event.button !== 0)
                 return
               const point = at(event)
-              dragRef.current = { x: event.clientX, y: event.clientY, points: [point] }
+              const local = localPoint(event.currentTarget, event.clientX, event.clientY)
+              dragRef.current = { x: local.x, y: local.y, points: [point] }
               event.currentTarget.setPointerCapture(event.pointerId)
             }}
             onPointerMove={(event) => {
@@ -169,8 +178,8 @@ export function FrqEditor({
                 send({ type: "frq", op: "stroke", points: drag.points })
                 return
               }
-              const rect = event.currentTarget.getBoundingClientRect()
-              setSelected(framesIn(drag.x - rect.left, drag.y - rect.top, event.clientX - rect.left, event.clientY - rect.top))
+              const local = localPoint(event.currentTarget, event.clientX, event.clientY)
+              setSelected(framesIn(drag.x, drag.y, local.x, local.y))
             }}
           />
         )}

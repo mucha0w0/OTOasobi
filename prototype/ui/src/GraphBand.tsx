@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, type RefObject } from "react"
-import { canvasContext, shouldReplaceBitmap } from "./bitmap"
+import { bitmapRatio, canvasContext, shouldReplaceBitmap } from "./bitmap"
 import { drawPeaks } from "./drawPeaks"
 import { cycleOtoFocus, focusedOwnsTime, hitOtoPoint } from "./otoHit"
 import { timeAt, type OtoMark, type PreviewEvent } from "./protocol"
@@ -216,7 +216,7 @@ export function GraphBand({ kind, picture, model, appearance, register, onRange,
     const height = canvas.clientHeight
     if (width <= 0 || height <= 0)
       return
-    const ratio = window.devicePixelRatio || 1
+    const ratio = bitmapRatio()
     const nextWidth = Math.max(1, Math.floor(width * ratio))
     const nextHeight = Math.max(1, Math.floor(height * ratio))
     if (shouldReplaceBitmap(false, canvas.width, canvas.height, nextWidth, nextHeight)) {

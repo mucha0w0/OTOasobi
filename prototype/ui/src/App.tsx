@@ -12,7 +12,7 @@ import { createLiveBus, type LiveBus } from "./live"
 import { MenuBar } from "./MenuBar"
 import { OtoTable } from "./OtoTable"
 import { OtoIni, OtoSettings } from "./OtoPanels"
-import { requestsPreviewAfter, type BankEvent, type DeviceInfo, type EffectsEvent, type FrqViewEvent, type HostEvent, type OtoMark, type OtoState, type PageCommand, type PreviewEvent, type RecListEvent, type SavedEvent } from "./protocol"
+import { requestsPreviewAfter, uiScale, type BankEvent, type DeviceInfo, type EffectsEvent, type FrqViewEvent, type HostEvent, type OtoMark, type OtoState, type PageCommand, type PreviewEvent, type RecListEvent, type SavedEvent } from "./protocol"
 import { RecListPanel, RecScriptPanel } from "./RecPanels"
 import { noticeTone, ToneIcon, ToneRow, type NoticeTone } from "./notice"
 import { createPointerBus } from "./ruler"
@@ -22,6 +22,10 @@ import { GuidePanel, MicPanel, RecPanel, type GuideFileState } from "./SidePanel
 import type { PhoneSpan } from "./spans"
 import { buttonColors, correctAccent, defaultAccent, resolveTheme, type ThemeChoice } from "./theme"
 import type { Range } from "./viewport"
+
+function applyPageScale(scale: number) {
+  document.documentElement.style.zoom = String(scale)
+}
 
 const graphKinds: Record<string, BandKind> = {
   wave: "wave",
@@ -55,6 +59,7 @@ export function App() {
 
   const [connected, setConnected] = useState(false)
   const [theme, setTheme] = useState<ThemeChoice>("system")
+  const [scale, setScale] = useState(() => uiScale(Number.parseFloat(document.documentElement.style.zoom)))
   const [systemDark, setSystemDark] = useState(() => window.matchMedia("(prefers-color-scheme: dark)").matches)
   const [accent, setAccent] = useState<string | null>(null)
   const pointerState = useRef<ReturnType<typeof createPointerBus> | null>(null)
@@ -161,6 +166,15 @@ export function App() {
     document.documentElement.style.setProperty("--on-accent", colors.ink)
     sendRef.current({ type: "caption", theme: resolved })
   }, [resolved, accent])
+
+  useEffect(() => {
+    const blockZoom = (event: WheelEvent) => {
+      if (event.ctrlKey)
+        event.preventDefault()
+    }
+    window.addEventListener("wheel", blockZoom, { capture: true, passive: false })
+    return () => window.removeEventListener("wheel", blockZoom, { capture: true })
+  }, [])
 
   useEffect(() => {
     const keys = (event: KeyboardEvent) => {
@@ -358,6 +372,8 @@ export function App() {
         break
       case "appearance":
         setTheme(event.theme)
+        setScale(event.scale)
+        applyPageScale(event.scale)
         if (event.accent) {
           accentCustom.current = true
           setAccent(event.accent)
@@ -469,15 +485,26 @@ export function App() {
     sendRef.current({ type: "template", op: "save", name: name.trim() })
   }
 
+  function sendAppearance(nextTheme: ThemeChoice, nextAccent: string | null, nextScale = scale) {
+    sendRef.current({ type: "appearance", theme: nextTheme, accent: nextAccent, scale: nextScale })
+  }
+
   function chooseTheme(choice: ThemeChoice) {
     setTheme(choice)
-    sendRef.current({ type: "appearance", theme: choice, accent: accentCustom.current ? accent : null })
+    sendAppearance(choice, accentCustom.current ? accent : null)
   }
 
   function chooseAccent(value: string) {
     accentCustom.current = true
     setAccent(value)
-    sendRef.current({ type: "appearance", theme, accent: value })
+    sendAppearance(theme, value)
+  }
+
+  function chooseScale(value: number) {
+    const next = uiScale(value)
+    setScale(next)
+    applyPageScale(next)
+    sendAppearance(theme, accentCustom.current ? accent : null, next)
   }
 
   function togglePane(id: string) {
@@ -592,7 +619,7 @@ export function App() {
   const recNext = recLine && recIndex != null ? recList?.lines[recIndex + 1]?.sing ?? "" : ""
   const recOutside = !recLine && (recList?.outside.some((name) => sameName(name, fileName)) ?? false) ? fileName : ""
   const recStatus = recLine?.error ?? (recLine ? (recLine.recorded ? "録音済み" : "未録音") : recOutside ? "リスト外" : "")
-  const appearance = `${resolved}-${buttonColors(correctAccent(accent ?? defaultAccent(resolved), resolved)).fill}`
+  const appearance = `${resolved}-${buttonColors(correctAccent(accent ?? defaultAccent(resolved), resolved)).fill}-${scale}`
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-[var(--bg)] text-[var(--text)]">
@@ -1018,12 +1045,14 @@ export function App() {
             {
               theme,
               accent: accent ?? defaultAccent(resolved),
+              scale,
               onTheme: chooseTheme,
               onAccent: chooseAccent,
+              onScale: chooseScale,
               onSystemAccent: () => {
                 accentCustom.current = false
                 setAccent(null)
-                sendRef.current({ type: "appearance", theme, accent: null })
+                sendAppearance(theme, null)
               },
             },
             {
