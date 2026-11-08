@@ -1,7 +1,8 @@
-import { useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react"
+import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react"
 import { armBox, hitDrop, type DropAim, type HitLeaf, type HitRegion, type ScreenBox } from "./dockHit"
 import { pickTitleResize, type TitleEdge } from "./dockSplit"
 import { commitMove, hidePane, idsOf, paneTitles, type LayoutNode, type PaneBox } from "./layout"
+import { PaneHost } from "./paneSlots"
 import { measureFloors, measureSplitters, moveSplitter } from "./splitter"
 
 type Props = {
@@ -10,7 +11,6 @@ type Props = {
   onChange: (next: LayoutNode | null, persist: boolean) => void
   onRatio: (next: LayoutNode) => void
   onResizing: (holding: boolean) => void
-  render: (id: string) => ReactNode
 }
 
 type NodeProps = Omit<Props, "layout" | "onChange"> & {
@@ -23,7 +23,7 @@ type NodeProps = Omit<Props, "layout" | "onChange"> & {
 
 type Ghost = { x: number; y: number; title: string }
 
-export function Dock({ layout, boxes, onChange, onRatio, onResizing, render }: Props) {
+export function Dock({ layout, boxes, onChange, onRatio, onResizing }: Props) {
   const rootRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<{ id: string; title: string; origin: LayoutNode; startX: number; startY: number; moving: boolean } | null>(null)
   const [ghost, setGhost] = useState<Ghost | null>(null)
@@ -95,7 +95,6 @@ export function Dock({ layout, boxes, onChange, onRatio, onResizing, render }: P
           boxes={boxes}
           onRatio={onRatio}
           onResizing={onResizing}
-          render={render}
           onTitleDown={onTitleDown}
           onClose={(id) => onChange(hidePane(layout, id), true)}
         />
@@ -165,12 +164,17 @@ function readHits(root: HTMLElement): [HitLeaf[], HitRegion[]] {
   return [leaves, regions]
 }
 
-function Node({ layout, node, path, boxes, onRatio, onResizing, render, onTitleDown, onClose }: NodeProps) {
+function nodeKey(node: LayoutNode, path: number[]) {
+  return "id" in node ? node.id : path.join(".")
+}
+
+function Node({ layout, node, path, boxes, onRatio, onResizing, onTitleDown, onClose }: NodeProps) {
   const ids = idsOf(node).join(",")
   if ("id" in node) {
     const title = paneTitles[node.id] ?? node.id
     return (
       <section
+        key={node.id}
         data-dock-node=""
         data-ids={ids}
         data-pane={node.id}
@@ -212,7 +216,7 @@ function Node({ layout, node, path, boxes, onRatio, onResizing, render, onTitleD
             ×
           </button>
         </div>
-        <div className="min-h-0 flex-1">{render(node.id)}</div>
+        <PaneHost id={node.id} />
       </section>
     )
   }
@@ -228,7 +232,7 @@ function Node({ layout, node, path, boxes, onRatio, onResizing, render, onTitleD
         className="min-h-0 min-w-0"
         style={horizontal ? { width: `${node.ratio * 100}%` } : { height: `${node.ratio * 100}%` }}
       >
-        <Node key={path.join(".") + ".0"} layout={layout} node={node.first} path={[...path, 0]} boxes={boxes} onRatio={onRatio} onResizing={onResizing} render={render} onTitleDown={onTitleDown} onClose={onClose} />
+        <Node key={nodeKey(node.first, [...path, 0])} layout={layout} node={node.first} path={[...path, 0]} boxes={boxes} onRatio={onRatio} onResizing={onResizing} onTitleDown={onTitleDown} onClose={onClose} />
       </div>
       <div
         role="separator"
@@ -243,7 +247,7 @@ function Node({ layout, node, path, boxes, onRatio, onResizing, render, onTitleD
         <span className="split-line" />
       </div>
       <div className="min-h-0 min-w-0 flex-1">
-        <Node key={path.join(".") + ".1"} layout={layout} node={node.second} path={[...path, 1]} boxes={boxes} onRatio={onRatio} onResizing={onResizing} render={render} onTitleDown={onTitleDown} onClose={onClose} />
+        <Node key={nodeKey(node.second, [...path, 1])} layout={layout} node={node.second} path={[...path, 1]} boxes={boxes} onRatio={onRatio} onResizing={onResizing} onTitleDown={onTitleDown} onClose={onClose} />
       </div>
     </div>
   )

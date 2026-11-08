@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react"
-import { shouldReplaceBitmap } from "./bitmap"
+import { useCallback, useEffect, useRef, useState } from "react"
+import { canvasContext, shouldReplaceBitmap } from "./bitmap"
 import { IconButton, IconNext, IconPlay, IconPrev, IconRecord, IconSkip, IconStop } from "./IconButton"
 import { drawPeaks } from "./drawPeaks"
 import { shownInputRate, type CaptureEvent, type PageCommand, type SavedEvent } from "./protocol"
@@ -233,6 +233,11 @@ export function MicPanel({
 }) {
   const capture = useCapture(bus)
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const bindCanvas = useCallback((node: HTMLCanvasElement | null) => {
+    canvasRef.current = node
+    if (node)
+      canvasContext(node)
+  }, [])
   const shown = recorded ? wave : null
 
   useEffect(() => {
@@ -250,7 +255,7 @@ export function MicPanel({
       canvas.width = nextWidth
       canvas.height = nextHeight
     }
-    const ctx = canvas.getContext("2d")
+    const ctx = canvasContext(canvas)
     if (!ctx)
       return
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0)
@@ -281,7 +286,7 @@ export function MicPanel({
         </label>
         {capture?.listenError && <p>{capture.listenError}</p>}
         <div className="relative min-h-16 flex-1 rounded border border-[var(--line)] bg-[var(--canvas)]">
-          <canvas ref={canvasRef} className="h-full w-full" />
+          <canvas ref={bindCanvas} className="h-full w-full" />
         </div>
         <div className="h-2 overflow-hidden rounded bg-[var(--line)]">
           <div className="h-full bg-[var(--accent)]" style={{ width: `${Math.min(1, capture?.peak ?? 0) * 100}%` }} />

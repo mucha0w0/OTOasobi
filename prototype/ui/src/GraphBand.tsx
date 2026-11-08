@@ -1,5 +1,5 @@
-import { useEffect, useRef, type RefObject } from "react"
-import { shouldReplaceBitmap } from "./bitmap"
+import { useCallback, useEffect, useLayoutEffect, useRef, type RefObject } from "react"
+import { canvasContext, shouldReplaceBitmap } from "./bitmap"
 import { drawPeaks } from "./drawPeaks"
 import { cycleOtoFocus, focusedOwnsTime, hitOtoPoint } from "./otoHit"
 import { timeAt, type OtoMark, type PreviewEvent } from "./protocol"
@@ -51,7 +51,19 @@ const markLabels = ["フ", "オ", "先", "子", "ブ"]
 
 export function GraphBand({ kind, picture, model, appearance, register, onRange, onFileStep, onTune, onFocus, onLive, onDraft, onSpans, showRuler = false, pointerBus }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const bindCanvas = useCallback((node: HTMLCanvasElement | null) => {
+    canvasRef.current = node
+    if (node)
+      canvasContext(node)
+  }, [])
+  const outerRef = useRef<HTMLDivElement>(null)
+  const innerRef = useRef<HTMLDivElement>(null)
+  const frozenRef = useRef<{ width: number; height: number } | null>(null)
   const rulerRef = useRef<HTMLCanvasElement>(null)
+  const kindRef = useRef(kind)
+  const drawRef = useRef<() => void>(() => undefined)
+  const applyHoldRef = useRef<(holding: boolean) => void>(() => undefined)
+  kindRef.current = kind
   const lineRef = useRef<HTMLDivElement>(null)
   const labelRef = useRef<HTMLSpanElement>(null)
   const imageRef = useRef<HTMLImageElement | null>(null)
@@ -76,26 +88,21 @@ export function GraphBand({ kind, picture, model, appearance, register, onRange,
   onFileStepRef.current = onFileStep
 
   useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas)
-      return
     const handle: BandHandle = {
-      kind,
-      holdLayout: (holding) => {
-        holdRef.current = holding
-        if (!holding)
-          draw()
+      get kind() {
+        return kindRef.current
       },
-      redraw: () => draw(),
+      holdLayout: (holding) => applyHoldRef.current(holding),
+      redraw: () => drawRef.current(),
       pixelSize: () => ({
-        columns: clamp(Math.round(canvas.clientWidth), 32, 4096),
-        rows: clamp(Math.round(canvas.clientHeight), 32, 1200),
+        columns: clamp(Math.round(canvasRef.current?.clientWidth ?? 800), 32, 4096),
+        rows: clamp(Math.round(canvasRef.current?.clientHeight ?? 320), 32, 1200),
       }),
     }
     return register(handle)
   }, [register])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (kind !== "spec" || !picture?.png) {
       if (kind === "spec")
         imageRef.current = null
@@ -110,7 +117,7 @@ export function GraphBand({ kind, picture, model, appearance, register, onRange,
     image.src = `data:image/png;base64,${picture.png}`
   }, [kind, picture?.png])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     draw()
   }, [picture, appearance, showRuler])
 
@@ -122,8 +129,18 @@ export function GraphBand({ kind, picture, model, appearance, register, onRange,
     const canvas = canvasRef.current
     if (!canvas)
       return
-    const observer = new ResizeObserver(() => draw())
-    observer.observe(canvas)
+    const frame = outerRef.current ?? canvas
+    const observer = new ResizeObserver(() => {
+      const frozen = frozenRef.current
+      const outer = outerRef.current
+      const inner = innerRef.current
+      if (frozen && outer && inner) {
+        scaleHoldFrame(outer, inner, frozen.width, frozen.height)
+        return
+      }
+      drawRef.current()
+    })
+    observer.observe(frame)
     const wheel = (event: WheelEvent) => {
       const current = model.current
       if (!current.picture)
@@ -167,6 +184,30 @@ export function GraphBand({ kind, picture, model, appearance, register, onRange,
     }
   }, [model])
 
+  function applyHold(holding: boolean) {
+    const outer = outerRef.current
+    const inner = innerRef.current
+    if (!holding) {
+      holdRef.current = false
+      frozenRef.current = null
+      if (inner)
+        clearHoldFrame(inner)
+      if (outer)
+        void outer.offsetHeight
+      drawRef.current()
+      return
+    }
+    if (!outer || !inner || outer.clientWidth < 2 || outer.clientHeight < 2)
+      return
+    const width = outer.clientWidth
+    const height = outer.clientHeight
+    holdRef.current = true
+    frozenRef.current = { width, height }
+    pinHoldFrame(inner, width, height)
+    scaleHoldFrame(outer, inner, width, height)
+  }
+  applyHoldRef.current = applyHold
+
   function draw() {
     if (holdRef.current)
       return
@@ -185,7 +226,7 @@ export function GraphBand({ kind, picture, model, appearance, register, onRange,
       canvas.width = nextWidth
       canvas.height = nextHeight
     }
-    const ctx = canvas.getContext("2d")
+    const ctx = canvasContext(canvas)
     if (!ctx)
       return
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0)
@@ -223,6 +264,7 @@ export function GraphBand({ kind, picture, model, appearance, register, onRange,
     if (kind === "oto")
       drawMarks(ctx, placed, source, shown, height, current.focus, current.live)
   }
+  drawRef.current = draw
 
   function endPointer() {
     const press = pressRef.current
@@ -256,8 +298,9 @@ export function GraphBand({ kind, picture, model, appearance, register, onRange,
 
   return (
     <div
+      ref={outerRef}
       data-graph=""
-      className="relative flex h-full min-h-0 flex-col"
+      className="relative h-full min-h-0 overflow-hidden"
       onPointerMove={(event) => {
         const rect = event.currentTarget.getBoundingClientRect()
         publishPointer(event.clientX, rect.width, rect.left)
@@ -269,11 +312,12 @@ export function GraphBand({ kind, picture, model, appearance, register, onRange,
         pointerBus.set(null)
       }}
     >
+      <div ref={innerRef} className="flex h-full min-h-0 flex-col">
       {showRuler && <canvas ref={rulerRef} className="pointer-events-none h-5 w-full shrink-0" />}
       {showRuler && <span ref={labelRef} className="num pointer-events-none absolute top-0.5 z-10 hidden -translate-x-1/2 text-[11px] text-[var(--muted)]" />}
       <div ref={lineRef} className="pointer-events-none absolute bottom-0 z-10 hidden w-px bg-[color-mix(in_srgb,var(--muted)_60%,transparent)]" style={{ top: 0 }} />
-    <canvas
-      ref={canvasRef}
+      <canvas
+      ref={bindCanvas}
       tabIndex={0}
       className="min-h-0 w-full flex-1 touch-none"
       onContextMenu={(event) => event.preventDefault()}
@@ -352,7 +396,7 @@ export function GraphBand({ kind, picture, model, appearance, register, onRange,
         const drag = dragRef.current
         if (!drag || !current.picture)
           return
-        const width = event.currentTarget.clientWidth
+        const width = event.currentTarget.getBoundingClientRect().width
         const span = drag.range.t1 - drag.range.t0
         const fraction = -(event.clientX - drag.x) / Math.max(1, width)
         onRangeRef.current(panRange(drag.range, fraction * (span / Math.max(span, 1e-12)), current.picture.duration), false)
@@ -360,6 +404,7 @@ export function GraphBand({ kind, picture, model, appearance, register, onRange,
       onPointerUp={() => endPointer()}
       onLostPointerCapture={() => endPointer()}
     />
+      </div>
     </div>
   )
 }
@@ -378,7 +423,7 @@ function paintRuler(canvas: HTMLCanvasElement | null, range: Range) {
     canvas.width = nextWidth
     canvas.height = nextHeight
   }
-  const ctx = canvas.getContext("2d")
+  const ctx = canvasContext(canvas)
   if (!ctx)
     return
   ctx.setTransform(ratio, 0, 0, ratio, 0, 0)
@@ -621,6 +666,33 @@ function drawLoud(
       ctx.lineTo(x, y)
   })
   ctx.stroke()
+}
+
+function pinHoldFrame(inner: HTMLDivElement, width: number, height: number) {
+  inner.style.position = "absolute"
+  inner.style.left = "0"
+  inner.style.top = "0"
+  inner.style.width = `${width}px`
+  inner.style.height = `${height}px`
+  inner.style.transformOrigin = "0 0"
+}
+
+function scaleHoldFrame(outer: HTMLDivElement, inner: HTMLDivElement, width: number, height: number) {
+  const nextWidth = outer.clientWidth
+  const nextHeight = outer.clientHeight
+  if (nextWidth <= 0 || nextHeight <= 0 || width <= 0 || height <= 0)
+    return
+  inner.style.transform = `scale(${nextWidth / width}, ${nextHeight / height})`
+}
+
+function clearHoldFrame(inner: HTMLDivElement) {
+  inner.style.position = ""
+  inner.style.left = ""
+  inner.style.top = ""
+  inner.style.width = ""
+  inner.style.height = ""
+  inner.style.transform = ""
+  inner.style.transformOrigin = ""
 }
 
 function getCss(name: string): string {

@@ -7,7 +7,7 @@ import { FrqEditor } from "./FrqEditor"
 import { FrqPanel } from "./FrqPanel"
 import { GraphBand, type BandHandle, type BandKind, type GraphModel, type LiveTune } from "./GraphBand"
 import { connectHost } from "./host"
-import { contains, createDefault, hidePane, rulerPaneIds, showPane, type LayoutNode, type PaneBox } from "./layout"
+import { contains, createDefault, hidePane, idsOf, rulerPaneIds, showPane, type LayoutNode, type PaneBox } from "./layout"
 import { createLiveBus, type LiveBus } from "./live"
 import { MenuBar } from "./MenuBar"
 import { OtoTable } from "./OtoTable"
@@ -16,6 +16,7 @@ import { requestsPreviewAfter, type BankEvent, type DeviceInfo, type EffectsEven
 import { RecListPanel, RecScriptPanel } from "./RecPanels"
 import { noticeTone, ToneIcon, ToneRow, type NoticeTone } from "./notice"
 import { createPointerBus } from "./ruler"
+import { PaneSlots } from "./paneSlots"
 import { SettingsDialog, settingsTabs } from "./settings"
 import { GuidePanel, MicPanel, RecPanel, type GuideFileState } from "./SidePanels"
 import type { PhoneSpan } from "./spans"
@@ -636,22 +637,8 @@ export function App() {
       )}
       {folder ? (
         <div className="min-h-0 flex-1">
-          <Dock
-            layout={layout}
-            boxes={boxes}
-            onChange={(next, persist) => {
-              if (persist)
-                commitLayout(next)
-              else
-                setLayout(next)
-            }}
-            onRatio={(next) => commitLayout(next, true)}
-            onResizing={(holding) => {
-              for (const band of bands.current)
-                band.holdLayout(holding)
-              if (!holding)
-                sendPreview(rangeRef.current)
-            }}
+          <PaneSlots
+            ids={layout ? idsOf(layout) : []}
             render={(id) => {
               if (id === "file")
                 return (
@@ -786,7 +773,25 @@ export function App() {
                 return <OtoIni oto={oto} send={(command) => sendRef.current(command)} />
               return null
             }}
-          />
+          >
+            <Dock
+              layout={layout}
+              boxes={boxes}
+              onChange={(next, persist) => {
+                if (persist)
+                  commitLayout(next)
+                else
+                  setLayout(next)
+              }}
+              onRatio={(next) => commitLayout(next, true)}
+              onResizing={(holding) => {
+                for (const band of bands.current)
+                  band.holdLayout(holding)
+                if (!holding)
+                  sendPreview(rangeRef.current)
+              }}
+            />
+          </PaneSlots>
         </div>
       ) : (
         <main className="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center">

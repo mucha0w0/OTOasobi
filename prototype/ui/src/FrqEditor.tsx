@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react"
+import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react"
+import { canvasContext } from "./bitmap"
 import { IconButton, IconPen } from "./IconButton"
 import type { FrqViewEvent, PageCommand } from "./protocol"
 
@@ -28,6 +29,11 @@ export function FrqEditor({
   appearance: string
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const bindCanvas = useCallback((node: HTMLCanvasElement | null) => {
+    canvasRef.current = node
+    if (node)
+      canvasContext(node)
+  }, [])
   const [pen, setPen] = useState(false)
   const [selected, setSelected] = useState<number[]>([])
   const dragRef = useRef<{ x: number; y: number; points: { frame: number; midi: number; unvoiced: boolean }[] } | null>(null)
@@ -45,7 +51,7 @@ export function FrqEditor({
     const ratio = window.devicePixelRatio || 1
     canvas.width = Math.floor(width * ratio)
     canvas.height = Math.floor(height * ratio)
-    const ctx = canvas.getContext("2d")
+    const ctx = canvasContext(canvas)
     if (!ctx)
       return
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0)
@@ -135,7 +141,7 @@ export function FrqEditor({
         {message && <p className="p-3 text-[var(--muted)]">{message}</p>}
         {frequency.length > 0 && (
           <canvas
-            ref={canvasRef}
+            ref={bindCanvas}
             className={pen ? "frq-pen touch-none" : "frq-select touch-none"}
             style={{ width, height }}
             onPointerDown={(event) => {
