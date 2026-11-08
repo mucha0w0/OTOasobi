@@ -133,9 +133,17 @@ export function GraphBand({ kind, picture, model, appearance, register, onRange,
     observer.observe(frame)
     const wheel = (event: WheelEvent) => {
       const current = model.current
+      event.preventDefault()
+      if (!event.shiftKey && !event.ctrlKey) {
+        wheelRef.current += event.deltaY
+        const notches = Math.trunc(wheelRef.current / 120)
+        wheelRef.current -= notches * 120
+        if (notches !== 0)
+          onFileStepRef.current(notches)
+        return
+      }
       if (!current.picture)
         return
-      event.preventDefault()
       const rect = canvas.getBoundingClientRect()
       const x = event.clientX - rect.left
       const range = current.range
@@ -148,13 +156,7 @@ export function GraphBand({ kind, picture, model, appearance, register, onRange,
         const anchor = timeAt(x, rect.width, range.t0, range.t1)
         const factor = event.deltaY < 0 ? 0.8 : 1.25
         onRangeRef.current(zoomRange(range, anchor, factor, current.picture.duration), false)
-        return
       }
-      wheelRef.current += event.deltaY
-      const notches = Math.trunc(wheelRef.current / 120)
-      wheelRef.current -= notches * 120
-      if (notches !== 0)
-        onFileStepRef.current(notches)
     }
     const keys = (event: KeyboardEvent) => {
       const current = model.current
@@ -239,7 +241,7 @@ export function GraphBand({ kind, picture, model, appearance, register, onRange,
     if (!ctx)
       return
     ctx.setTransform(1, 0, 0, 1, 0, 0)
-    if (!pictureNow) {
+    if (!pictureNow || !paneReady(kind, pictureNow)) {
       canvas.width = Math.max(1, Math.floor(width))
       canvas.height = Math.max(1, Math.floor(height))
       ctx.fillStyle = getCss("--canvas")
@@ -297,7 +299,7 @@ export function GraphBand({ kind, picture, model, appearance, register, onRange,
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0)
     ctx.clearRect(0, 0, width, height)
     const pictureNow = current.picture
-    if (!pictureNow)
+    if (!pictureNow || !paneReady(kindRef.current, pictureNow))
       return
     const source = { t0: pictureNow.waveT0, t1: pictureNow.waveT1 }
     const placed = imagePlacement(source, current.range, width)
@@ -497,6 +499,14 @@ function tunedMarks(marks: OtoMark[], tune: LiveTune | null) {
   if (!key)
     return marks
   return marks.map((mark) => mark.index === tune.index ? { ...mark, [key]: tune.time } : mark)
+}
+
+function paneReady(kind: BandKind, picture: PreviewEvent) {
+  if (kind === "spec")
+    return picture.specColumns > 0 && picture.spec.length > 0
+  if (kind === "loud")
+    return picture.loudness.length > 0
+  return picture.lo.length > 0
 }
 
 function drawNote(ctx: CanvasRenderingContext2D, width: number, height: number, note: string) {

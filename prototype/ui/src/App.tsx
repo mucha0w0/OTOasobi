@@ -87,6 +87,7 @@ export function App() {
   const boxes = useRef<Record<string, PaneBox>>({})
   const pictureRef = useRef<PreviewEvent | null>(null)
   const pictureName = useRef("")
+  const loadingFile = useRef<string | null>(null)
   const pictureCache = useRef(new Map<string, PreviewEvent>())
   const folderRef = useRef("")
   const rangeRef = useRef<Range>({ t0: 0, t1: 0 })
@@ -345,10 +346,35 @@ export function App() {
     schedulePreview()
   }
 
+  function showFilePending(name: string) {
+    loadingFile.current = name
+    const cached = pictureCache.current.get(name)
+    if (cached) {
+      pictureName.current = name
+      noteRef.current = ""
+      setPicture(cached)
+      pictureRef.current = cached
+      rangeRef.current = { t0: cached.waveT0, t1: cached.waveT1 }
+    } else {
+      pictureName.current = ""
+      noteRef.current = "読み込み中"
+      setPicture(null)
+      pictureRef.current = null
+      rangeRef.current = { t0: 0, t1: 0 }
+    }
+    focusRef.current = -1
+    liveRef.current = null
+    draftRef.current = null
+    modelRef.current = viewModel()
+    redraw()
+  }
+
   function chooseFile(name: string) {
     window.clearTimeout(fileStepTimer.current)
     stepTarget.current = null
     fileListRef.current?.highlight(name)
+    if (!sameName(name, fileNameRef.current))
+      showFilePending(name)
     sendRef.current({ type: "selectFile", name })
   }
 
@@ -370,8 +396,10 @@ export function App() {
     fileStepTimer.current = window.setTimeout(() => {
       const landed = stepTarget.current
       const chosen = landed == null ? "" : namesRef.current[landed] ?? ""
-      if (chosen && !sameName(chosen, fileNameRef.current))
+      if (chosen && !sameName(chosen, fileNameRef.current)) {
+        showFilePending(chosen)
         sendRef.current({ type: "selectFile", name: chosen })
+      }
       else {
         stepTarget.current = null
         fileListRef.current?.release()
@@ -409,48 +437,49 @@ export function App() {
         break
       }
       case "opened": {
+        if (loadingFile.current != null && !sameName(loadingFile.current, event.name))
+          break
+        const pendingName = stepTarget.current == null ? null : namesRef.current[stepTarget.current]
+        if (pendingName != null && !sameName(pendingName, event.name))
+          break
         fileNameRef.current = event.name
         missingRef.current = event.missing === true
-        noteRef.current = event.missing ? "このファイルは存在しません" : ""
         setFileName(event.name)
-        const pending = stepTarget.current == null ? null : namesRef.current[stepTarget.current]
-        if (pending == null || sameName(pending, event.name)) {
-          stepTarget.current = null
-          fileListRef.current?.release()
-        }
+        stepTarget.current = null
+        fileListRef.current?.release()
         if (event.missing) {
+          loadingFile.current = null
           pictureCache.current.delete(event.name)
           pictureName.current = ""
+          noteRef.current = "このファイルは存在しません"
           setPicture(null)
           pictureRef.current = null
           rangeRef.current = { t0: 0, t1: 0 }
+          focusRef.current = -1
+          liveRef.current = null
+          draftRef.current = null
+          modelRef.current = viewModel()
+          redraw()
         } else {
-          const cached = pictureCache.current.get(event.name)
-          pictureName.current = cached ? event.name : ""
-          if (cached) {
-            setPicture(cached)
-            pictureRef.current = cached
-            rangeRef.current = { t0: cached.waveT0, t1: cached.waveT1 }
-          }
+          showFilePending(event.name)
+          loadingFile.current = null
         }
-        focusRef.current = -1
-        liveRef.current = null
-        draftRef.current = null
-        modelRef.current = viewModel()
         window.clearTimeout(previewTimer.current)
-        redraw()
         syncRecIndex(event.name)
         break
       }
       case "preview": {
         if (stepTarget.current != null)
           break
+        if (loadingFile.current != null && !sameName(loadingFile.current, fileNameRef.current))
+          break
         missingRef.current = false
-        noteRef.current = ""
         const sameFile = pictureName.current !== "" && pictureName.current === fileNameRef.current
         const sameLength = pictureRef.current == null || event.duration === 0 || event.duration === pictureRef.current.duration
         const keepSpec = sameFile && sameLength
         const next = mergePreview(pictureRef.current, event, keepSpec)
+        if (next.specColumns > 0 && next.spec.length > 0)
+          noteRef.current = ""
         pictureName.current = fileNameRef.current
         if (fileNameRef.current)
           rememberPicture(pictureCache.current, fileNameRef.current, next)
