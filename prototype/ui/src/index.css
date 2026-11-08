@@ -172,48 +172,6 @@ html.resizing-y * {
   outline: none;
 }
 
-.sheet-bar {
-  display: flex;
-  flex-shrink: 0;
-  height: 28px;
-  border-bottom: 1px solid var(--line);
-  background: var(--panel);
-}
-
-.sheet-name {
-  display: grid;
-  flex: 0 0 72px;
-  place-items: center;
-  border-right: 1px solid var(--line);
-  color: var(--muted);
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-}
-
-.sheet-formula,
-.sheet-formula-text {
-  min-width: 0;
-  height: 28px;
-  flex: 1;
-  border: 0;
-  margin: 0;
-  padding: 0 8px;
-  appearance: none;
-  background: var(--panel);
-  color: var(--text);
-  font: inherit;
-  font-size: 12px;
-  line-height: 28px;
-  text-align: left;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.sheet-formula-text {
-  cursor: text;
-}
-
 .sheet-scroll {
   min-height: 0;
   flex: 1;
@@ -222,7 +180,7 @@ html.resizing-y * {
 
 .sheet {
   width: 100%;
-  min-width: 980px;
+  min-width: 900px;
   table-layout: fixed;
   border-collapse: separate;
   border-spacing: 0;
@@ -231,7 +189,6 @@ html.resizing-y * {
   user-select: none;
 }
 
-.sheet-col-index { width: 40px; }
 .sheet-col-file { width: 168px; }
 .sheet-col-alias { width: 128px; }
 .sheet-col-num { width: 112px; }
@@ -261,30 +218,11 @@ html.resizing-y * {
   cursor: default;
 }
 
-.sheet tbody th,
-.sheet-corner {
-  position: sticky;
-  left: 0;
-  z-index: 1;
-  width: 40px;
-  min-width: 40px;
-  background: color-mix(in srgb, var(--text) 8%, var(--panel));
-  color: var(--muted);
-  font-weight: 600;
-  text-align: center;
-  cursor: default;
-}
-
 .sheet td.is-tuned {
   font-weight: 600;
 }
 
-.sheet thead .sheet-corner {
-  z-index: 3;
-}
-
-.sheet thead th.is-hot,
-.sheet tbody th.is-hot {
+.sheet thead th.is-hot {
   background: color-mix(in srgb, var(--accent) 18%, var(--panel));
   color: var(--text);
 }

@@ -20,7 +20,7 @@ const maxMs = 86_400_000
 
 export const sheetColumns: SheetColumn[] = [
   { id: "file", header: "ファイル", title: "WAV の名前", kind: "file", point: null, align: "left" },
-  { id: "alias", header: "エイリアス", title: "oto.ini に書く名前。編集印の * はコピーされません", kind: "alias", point: null, align: "left" },
+  { id: "alias", header: "エイリアス", title: "oto.ini に書く名前。同じ名前の 2 回目以降には 2、3、… が付く。子音音素は、CVVC を出すとき、子音があるモーラの前に入る。編集印の * はコピーされません", kind: "alias", point: null, align: "left" },
   { id: "offset", header: "オフセット", title: "ファイル先頭からのミリ秒。0 未満にはしない", kind: "number", point: 0, align: "right" },
   { id: "overlap", header: "オーバーラップ", title: "オフセットからのミリ秒。前にあるときは負の数", kind: "number", point: 1, align: "right" },
   { id: "preutter", header: "先行発声", title: "オフセットからのミリ秒。0 未満にはしない", kind: "number", point: 2, align: "right" },
@@ -92,7 +92,7 @@ export function cellText(mark: OtoMark, col: number): string {
   if (column.kind === "file")
     return mark.file
   if (column.kind === "alias")
-    return mark.name || mark.autoAlias
+    return aliasText(mark)
   if (column.kind === "comment")
     return mark.comment
   return formatMs(otoField(mark, column.point ?? 0))
@@ -107,6 +107,10 @@ export function cellStar(mark: OtoMark, col: number): boolean {
   if (column.kind === "number")
     return mark.tuned[column.point ?? 0] === true
   return false
+}
+
+export function aliasText(mark: OtoMark): string {
+  return mark.alias.replace(/ \*$/u, "")
 }
 
 export function copyText(rows: OtoMark[], rect: CellRect): string {
@@ -228,6 +232,7 @@ function commandsOf(drafts: Map<number, RowDraft>): PageCommand[] {
         file: mark.file,
         index: mark.index,
         alias: mark.autoAlias,
+        mode: mark.mode ?? "",
         offset: draft.fields[0] ?? 0,
         overlap: draft.fields[1] ?? 0,
         preutter: draft.fields[2] ?? 0,
@@ -235,7 +240,7 @@ function commandsOf(drafts: Map<number, RowDraft>): PageCommand[] {
         blank: draft.fields[4] ?? 0,
       })
     }
-    const shown = mark.name || mark.autoAlias
+    const shown = aliasText(mark)
     if (draft.alias != null && draft.alias !== shown) {
       commands.push({
         type: "oto",
@@ -243,6 +248,7 @@ function commandsOf(drafts: Map<number, RowDraft>): PageCommand[] {
         file: mark.file,
         index: mark.index,
         alias: mark.autoAlias,
+        mode: mark.mode ?? "",
         name: draft.alias,
       })
     }
@@ -253,6 +259,7 @@ function commandsOf(drafts: Map<number, RowDraft>): PageCommand[] {
         file: mark.file,
         index: mark.index,
         alias: mark.autoAlias,
+        mode: mark.mode ?? "",
         comment: draft.comment,
       })
     }

@@ -403,7 +403,7 @@ sealed class ProbeOto
         stack[point] = true;
         var next = (double?[])points.Clone();
         next[point] = OtoTune.ClampGroup(current, stack, time, duration);
-        return StorePlaced(file, index, auto[index], OtoTune.Apply(auto[index], next, duration));
+        return StorePlaced(file, index, auto[index], OtoTune.Apply(auto[index], next, duration), _mode);
     }
 
     public bool MoveSpans(string? fileName, IReadOnlyList<(double Start, double End)> times)
@@ -431,12 +431,13 @@ sealed class ProbeOto
         return true;
     }
 
-    public bool TuneFields(string? fileName, int index, string? alias, double offset, double overlap, double preutter, double consonant, double blank)
+    public bool TuneFields(string? fileName, int index, string? alias, double offset, double overlap, double preutter, double consonant, double blank, string? mode = null)
     {
         var file = FindFile(fileName);
         if (file == null)
             return false;
-        var auto = AutoMarks(file);
+        var which = Which(mode);
+        var auto = MarksFor(file, which);
         if (index < 0 || index >= auto.Count || !string.Equals(auto[index].Alias, alias, StringComparison.Ordinal))
             return false;
         var desired = OtoIni.FromFields(auto[index], offset, overlap, preutter, consonant, blank);
@@ -449,47 +450,50 @@ sealed class ProbeOto
             desired.Blank,
             [true, true, true, true, true],
             Math.Max(file.Duration, 0));
-        return StorePlaced(file, index, auto[index], placed);
+        return StorePlaced(file, index, auto[index], placed, which);
     }
 
-    public bool TuneAlias(string? fileName, int index, string? alias, string? name)
+    public bool TuneAlias(string? fileName, int index, string? alias, string? name, string? mode = null)
     {
         var file = FindFile(fileName);
         if (file == null)
             return false;
-        var rows = CollectRows();
-        var row = rows.FirstOrDefault(item =>
+        var which = Which(mode);
+        var drafts = TableDrafts();
+        var at = drafts.FindIndex(item =>
             item.File.Equals(file.Name, StringComparison.OrdinalIgnoreCase)
             && item.Index == index
-            && item.AutoAlias == alias);
-        if (row == null)
+            && item.AutoAlias == alias
+            && item.Mode == which);
+        if (at < 0)
             return false;
         var cleaned = OtoIni.CleanAlias(name);
         if (cleaned == null && !string.IsNullOrWhiteSpace(name))
             return false;
-        var aliases = rows.Select(item => item.AutoAlias).ToArray();
-        var names = rows.Select(item => item.Name).ToArray();
-        var at = rows.IndexOf(row);
+        var aliases = drafts.Select(item => item.AutoAlias).ToArray();
+        var names = drafts.Select(item => item.Name).ToArray();
         names[at] = null;
         var natural = OtoIni.ResolveAliases(aliases, names)[at];
         var stored = cleaned != null && string.Equals(cleaned, natural, StringComparison.Ordinal) ? null : cleaned;
-        _adjust.RememberName(_mode, row.File, row.Index, row.AutoAlias, stored);
+        var row = drafts[at];
+        _adjust.RememberName(which, row.File, row.Index, row.AutoAlias, stored);
         return true;
     }
 
-    public bool TuneComment(string? fileName, int index, string? alias, string? comment)
+    public bool TuneComment(string? fileName, int index, string? alias, string? comment, string? mode = null)
     {
         var file = FindFile(fileName);
         if (file == null)
             return false;
-        var auto = AutoMarks(file);
+        var which = Which(mode);
+        var auto = MarksFor(file, which);
         if (index < 0 || index >= auto.Count || !string.Equals(auto[index].Alias, alias, StringComparison.Ordinal))
             return false;
-        _adjust.RememberComment(_mode, file.Name, index, auto[index].Alias, OtoIni.CleanComment(comment));
+        _adjust.RememberComment(which, file.Name, index, auto[index].Alias, OtoIni.CleanComment(comment));
         return true;
     }
 
-    bool StorePlaced(WavFile file, int index, OtoMark auto, OtoMark placed)
+    bool StorePlaced(WavFile file, int index, OtoMark auto, OtoMark placed, string mode)
     {
         var stored = new OtoAdjustedEntry
         {
@@ -503,11 +507,90 @@ sealed class ProbeOto
             stored.SetPoint(point, Math.Abs(at - auto.At(point)) <= OtoTune.MagnetSeconds ? null : at);
         }
 
-        _adjust.Remember(_mode, stored);
+        _adjust.Remember(mode, stored);
         return true;
     }
 
-    object[] Rows() => CollectRows().Select(row => (object)row.View).ToArray();
+    object[] Rows()
+    {
+        var drafts = TableDrafts();
+        var aliases = new string[drafts.Count];
+        var names = new string?[drafts.Count];
+        for (var i = 0; i < drafts.Count; i++)
+        {
+            aliases[i] = drafts[i].AutoAlias;
+            names[i] = drafts[i].Name;
+        }
+
+        var numbered = OtoIni.ResolveAliases(aliases, names);
+        var views = new object[drafts.Count];
+        for (var i = 0; i < drafts.Count; i++)
+        {
+            var draft = drafts[i];
+            views[i] = new
+            {
+                file = draft.File,
+                index = draft.Index,
+                mode = draft.Mode,
+                alias = numbered[i],
+                autoAlias = draft.AutoAlias,
+                name = draft.Name ?? "",
+                comment = draft.Comment,
+                tuned = draft.Tuned,
+                offset = draft.Shown.Offset,
+                overlap = draft.Shown.Overlap,
+                preutter = draft.Shown.Preutter,
+                consonant = draft.Shown.Consonant,
+                blank = draft.Shown.Blank,
+            };
+        }
+
+        return views;
+    }
+
+    List<TableDraft> TableDrafts()
+    {
+        var drafts = new List<TableDraft>();
+        if (string.IsNullOrEmpty(_folder))
+            return drafts;
+        foreach (var file in _files)
+        {
+            foreach (var mode in AliasModes())
+            {
+                var auto = MarksFor(file, mode);
+                for (var i = 0; i < auto.Count; i++)
+                    drafts.Add(Draft(file, mode, i, auto[i]));
+            }
+        }
+
+        return drafts;
+    }
+
+    TableDraft Draft(WavFile file, string mode, int index, OtoMark auto)
+    {
+        var entry = Match(_adjust.For(mode), file.Name, index, auto.Alias);
+        var points = entry?.Points();
+        var shown = OtoTune.Apply(auto, points, Math.Max(file.Duration, 0));
+        var tuned = new bool[OtoTune.PointCount];
+        if (points != null)
+        {
+            for (var point = 0; point < tuned.Length; point++)
+                tuned[point] = points[point] != null;
+        }
+
+        var custom = string.IsNullOrEmpty(entry?.Name) ? null : entry!.Name;
+        return new TableDraft(file.Name, mode, index, auto.Alias, custom, entry?.Comment ?? "", shown, tuned);
+    }
+
+    string Which(string? mode) => mode is "mono" or "renzoku" or "cvvc" ? mode : _mode;
+
+    List<OtoMark> MarksFor(WavFile file, string mode)
+    {
+        var marks = new List<OtoMark>();
+        if (!string.IsNullOrEmpty(_folder))
+            OtoMarks.Fill(file, ExportFor(mode), marks, Loudness(Path.Combine(_folder, file.Name)));
+        return marks;
+    }
 
     List<ShownRow> CollectRows()
     {
@@ -562,13 +645,7 @@ sealed class ProbeOto
             ? null
             : _files.FirstOrDefault(item => string.Equals(item.Name, fileName, StringComparison.OrdinalIgnoreCase));
 
-    List<OtoMark> AutoMarks(WavFile file)
-    {
-        var marks = new List<OtoMark>();
-        if (!string.IsNullOrEmpty(_folder))
-            OtoMarks.Fill(file, ExportFor(_mode), marks, Loudness(Path.Combine(_folder, file.Name)));
-        return marks;
-    }
+    List<OtoMark> AutoMarks(WavFile file) => MarksFor(file, _mode);
 
     static OtoAdjustedEntry? Match(List<OtoAdjustedEntry> list, string file, int index, string alias)
     {
@@ -582,6 +659,8 @@ sealed class ProbeOto
     }
 
     sealed record ShownRow(string File, int Index, string AutoAlias, string? Name, object View);
+
+    sealed record TableDraft(string File, string Mode, int Index, string AutoAlias, string? Name, string Comment, OtoMark Shown, bool[] Tuned);
 
     object[] SpansOf(string? fileName)
     {

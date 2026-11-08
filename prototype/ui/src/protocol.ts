@@ -49,9 +49,9 @@ export type PageCommand =
   | { type: "oto"; op: "write" }
   | { type: "oto"; op: "tune"; file: string; index: number; point: number; time: number }
   | { type: "oto"; op: "spans"; file: string; spans: { start: number; end: number }[] }
-  | { type: "oto"; op: "fields"; file: string; index: number; alias: string; offset: number; overlap: number; preutter: number; consonant: number; blank: number }
-  | { type: "oto"; op: "aliasName"; file: string; index: number; alias: string; name: string }
-  | { type: "oto"; op: "comment"; file: string; index: number; alias: string; comment: string }
+  | { type: "oto"; op: "fields"; file: string; index: number; alias: string; mode?: string; offset: number; overlap: number; preutter: number; consonant: number; blank: number }
+  | { type: "oto"; op: "aliasName"; file: string; index: number; alias: string; mode?: string; name: string }
+  | { type: "oto"; op: "comment"; file: string; index: number; alias: string; mode?: string; comment: string }
   | { type: "saveSettings"; name: string; replace: boolean }
   | { type: "loadSettings"; name: string }
 
@@ -226,6 +226,7 @@ export type OtoMark = {
   name: string
   comment: string
   tuned: boolean[]
+  mode?: string
 }
 
 export type OtoKind = { group: string; key: string; caption: string }
@@ -547,6 +548,7 @@ function parseMarks(value: unknown): OtoMark[] {
       name: typeof item.name === "string" ? item.name : "",
       comment: typeof item.comment === "string" ? item.comment : "",
       tuned,
+      mode: typeof item.mode === "string" ? item.mode : "",
     }]
   })
 }

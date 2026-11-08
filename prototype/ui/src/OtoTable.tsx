@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react"
 import {
-  cellAddress,
   cellStar,
   cellText,
   clampPos,
@@ -28,7 +27,7 @@ export function OtoTable({
   const [active, setActive] = useState<CellPos>({ row: 0, col: 0 })
   const [extent, setExtent] = useState<CellPos>({ row: 0, col: 0 })
   const [draft, setDraft] = useState("")
-  const [editAt, setEditAt] = useState<"cell" | "bar" | null>(null)
+  const [editAt, setEditAt] = useState<"cell" | null>(null)
   const rowsRef = useRef(rows)
   const activeRef = useRef(active)
   const extentRef = useRef(extent)
@@ -36,7 +35,7 @@ export function OtoTable({
   const editRef = useRef(editAt)
   const gridRef = useRef<HTMLDivElement>(null)
   const editorRef = useRef<HTMLInputElement>(null)
-  const dragRef = useRef<"cell" | "row" | "col" | null>(null)
+  const dragRef = useRef<"cell" | "col" | null>(null)
   const scrollRef = useRef(false)
   const skipCommit = useRef(false)
   const caretRef = useRef(false)
@@ -81,9 +80,7 @@ export function OtoTable({
       const col = Number(hit.dataset.col)
       if (!Number.isInteger(row) || !Number.isInteger(col))
         return
-      if (kind === "row")
-        setExtent({ row, col: sheetColumns.length - 1 })
-      else if (kind === "col")
+      if (kind === "col")
         setExtent({ row: rowsRef.current.length - 1, col })
       else
         setExtent({ row, col })
@@ -103,9 +100,8 @@ export function OtoTable({
     return <p className="p-3 text-sm text-[var(--muted)]">解析が終わると、計算した oto.ini の数値がここに出ます。</p>
 
   const rect = normalizeRect(active, extent)
-  const column = sheetColumns[active.col]
   const current = rows[active.row]
-  const shown = current && column ? cellText(current, active.col) : ""
+  const shown = current ? cellText(current, active.col) : ""
 
   function focusGrid() {
     gridRef.current?.focus({ preventScroll: true })
@@ -127,14 +123,14 @@ export function OtoTable({
       send(command)
   }
 
-  function beginEdit(at: "cell" | "bar", initial: string, caret: boolean) {
+  function beginEdit(initial: string, caret: boolean) {
     const col = sheetColumns[activeRef.current.col]
     if (!col || col.kind === "file")
       return
     caretRef.current = caret
     draftRef.current = initial
     setDraft(initial)
-    setEditAt(at)
+    setEditAt("cell")
   }
 
   function moveActive(next: CellPos, extend: boolean) {
@@ -200,7 +196,7 @@ export function OtoTable({
           return
         if (event.key === "F2") {
           event.preventDefault()
-          beginEdit("cell", shown, false)
+          beginEdit(shown, false)
           return
         }
         if (event.key === "Escape") {
@@ -227,77 +223,13 @@ export function OtoTable({
         }
         if (event.key.length === 1 && !meta && !event.altKey) {
           event.preventDefault()
-          beginEdit("cell", event.key, true)
+          beginEdit(event.key, true)
         }
       }}
     >
-      <div className="sheet-bar">
-        <div className="sheet-name" title={column?.header ?? ""}>{cellAddress(active)}</div>
-        {editAt === "bar" ? (
-          <input
-            ref={editorRef}
-            className="sheet-formula"
-            aria-label="数式バー"
-            spellCheck={false}
-            autoComplete="off"
-            value={draft}
-            onChange={(event) => {
-              draftRef.current = event.target.value
-              setDraft(event.target.value)
-            }}
-            onBlur={() => {
-              if (skipCommit.current) {
-                skipCommit.current = false
-                return
-              }
-              commitEdit()
-              focusGrid()
-            }}
-            onPaste={(event) => {
-              const text = event.clipboardData.getData("text/plain")
-              if (!isBlock(text))
-                return
-              event.preventDefault()
-              skipCommit.current = true
-              editRef.current = null
-              setEditAt(null)
-              sendText(text, active, normalizeRect(active, active))
-              focusGrid()
-            }}
-            onKeyDown={(event) => onEditorKey(event, commitEdit, () => {
-              skipCommit.current = true
-              editRef.current = null
-              setEditAt(null)
-              focusGrid()
-            }, (next) => {
-              skipCommit.current = true
-              commitEdit()
-              moveActive(next, false)
-              focusGrid()
-            }, active, rows.length)}
-          />
-        ) : (
-          <button
-            type="button"
-            className="sheet-formula sheet-formula-text"
-            title={editAt === "cell" ? draft : shown}
-            onMouseDown={(event) => {
-              if (column?.kind === "file")
-                return
-              event.preventDefault()
-              if (editAt === "cell")
-                skipCommit.current = true
-              beginEdit("bar", editAt === "cell" ? draft : shown, false)
-            }}
-          >
-            {editAt === "cell" ? draft : shown}
-          </button>
-        )}
-      </div>
       <div className="sheet-scroll">
         <table className="sheet">
           <colgroup>
-            <col className="sheet-col-index" />
             <col className="sheet-col-file" />
             <col className="sheet-col-alias" />
             <col className="sheet-col-num" />
@@ -309,16 +241,6 @@ export function OtoTable({
           </colgroup>
           <thead>
             <tr>
-              <th
-                className="sheet-corner"
-                title="すべて選択"
-                onPointerDown={(event) => {
-                  if (event.button !== 0)
-                    return
-                  selectCell({ row: 0, col: 0 }, false)
-                  setExtent({ row: rows.length - 1, col: sheetColumns.length - 1 })
-                }}
-              />
               {sheetColumns.map((item, col) => (
                 <th
                   key={item.id}
@@ -341,21 +263,7 @@ export function OtoTable({
           </thead>
           <tbody>
             {rows.map((mark, row) => (
-              <tr key={`${mark.file}:${mark.index}:${mark.autoAlias}`}>
-                <th
-                  data-row={row}
-                  data-col={0}
-                  className={rect.r0 <= row && row <= rect.r1 ? "is-hot" : ""}
-                  onPointerDown={(event) => {
-                    if (event.button !== 0)
-                      return
-                    selectCell({ row, col: 0 }, false)
-                    setExtent({ row, col: sheetColumns.length - 1 })
-                    dragRef.current = "row"
-                  }}
-                >
-                  {row + 1}
-                </th>
+              <tr key={`${mark.file}:${mark.mode ?? ""}:${mark.index}:${mark.autoAlias}`}>
                 {sheetColumns.map((item, col) => {
                   const here = active.row === row && active.col === col
                   const inside = rectContains(rect, row, col)
@@ -384,7 +292,7 @@ export function OtoTable({
                       }}
                       onDoubleClick={() => {
                         if (here)
-                          beginEdit("cell", text, false)
+                          beginEdit(text, false)
                       }}
                     >
                       {here && editAt === "cell" ? (

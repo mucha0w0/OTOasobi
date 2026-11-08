@@ -33,11 +33,11 @@ describe("oto数値表", () => {
     comment: "次",
   })
 
-  it("コピーはタブ区切りで、編集印は入れない", () => {
-    const tuned = mark({ name: "あ*", tuned: [true, false, false, false, false] })
+  it("コピーは番号付きのエイリアスで、編集印は入れない", () => {
+    const tuned = mark({ alias: "あ2", autoAlias: "あ", tuned: [true, false, false, false, false] })
     const text = copyText([tuned], normalizeRect({ row: 0, col: 0 }, { row: 0, col: 3 }))
-    expect(text).toBe("あ.wav\tあ*\t200.000\t50.000")
-    expect(cellText(tuned, 1)).toBe("あ*")
+    expect(text).toBe("あ.wav\tあ2\t200.000\t50.000")
+    expect(cellText(tuned, 1)).toBe("あ2")
   })
 
   it("数値の貼り付けは、その欄だけをミリ秒で書き、0 未満のオフセットは 0 にする", () => {
@@ -48,6 +48,7 @@ describe("oto数値表", () => {
       file: "あ.wav",
       index: 0,
       alias: "あ",
+      mode: "",
       offset: 0,
       overlap: 50,
       preutter: 100,
@@ -55,7 +56,7 @@ describe("oto数値表", () => {
       blank: -600,
     }])
     const overlap = pasteCommands([left], { row: 0, col: 3 }, normalizeRect({ row: 0, col: 3 }, { row: 0, col: 3 }), "-12,5")
-    expect(overlap[0]).toMatchObject({ op: "fields", overlap: -12.5, offset: 200 })
+    expect(overlap[0]).toMatchObject({ op: "fields", mode: "", overlap: -12.5, offset: 200 })
   })
 
   it("1 マスを範囲へ貼ると、その範囲を同じ値で埋める", () => {
@@ -66,8 +67,8 @@ describe("oto数値表", () => {
       "メモ",
     )
     expect(commands).toEqual([
-      { type: "oto", op: "comment", file: "あ.wav", index: 0, alias: "あ", comment: "メモ" },
-      { type: "oto", op: "comment", file: "い.wav", index: 1, alias: "い", comment: "メモ" },
+      { type: "oto", op: "comment", file: "あ.wav", index: 0, alias: "あ", mode: "", comment: "メモ" },
+      { type: "oto", op: "comment", file: "い.wav", index: 1, alias: "い", mode: "", comment: "メモ" },
     ])
   })
 
@@ -84,6 +85,7 @@ describe("oto数値表", () => {
       file: "あ.wav",
       index: 0,
       alias: "あ",
+      mode: "",
       offset: 10,
       overlap: -3,
       preutter: 20,
@@ -106,14 +108,15 @@ describe("oto数値表", () => {
         file: "あ.wav",
         index: 0,
         alias: "あ",
+        mode: "",
         offset: 10,
         overlap: 50,
         preutter: 100,
         consonant: 200,
         blank: -600,
       },
-      { type: "oto", op: "aliasName", file: "あ.wav", index: 0, alias: "あ", name: "か" },
-      { type: "oto", op: "aliasName", file: "い.wav", index: 1, alias: "い", name: "き" },
+      { type: "oto", op: "aliasName", file: "あ.wav", index: 0, alias: "あ", mode: "", name: "か" },
+      { type: "oto", op: "aliasName", file: "い.wav", index: 1, alias: "い", mode: "", name: "き" },
     ])
   })
 

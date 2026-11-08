@@ -1026,15 +1026,15 @@ sealed class ProbeSession : IDisposable
                 }
                 break;
             case "fields":
-                if (_oto.TuneFields(Text(root, "file"), (int)Math.Round(Number(root, "index")), Text(root, "alias"), Number(root, "offset"), Number(root, "overlap"), Number(root, "preutter"), Number(root, "consonant"), Number(root, "blank")))
+                if (_oto.TuneFields(Text(root, "file"), (int)Math.Round(Number(root, "index")), Text(root, "alias"), Number(root, "offset"), Number(root, "overlap"), Number(root, "preutter"), Number(root, "consonant"), Number(root, "blank"), Text(root, "mode")))
                     RememberOto();
                 break;
             case "aliasName":
-                if (_oto.TuneAlias(Text(root, "file"), (int)Math.Round(Number(root, "index")), Text(root, "alias"), Text(root, "name")))
+                if (_oto.TuneAlias(Text(root, "file"), (int)Math.Round(Number(root, "index")), Text(root, "alias"), Text(root, "name"), Text(root, "mode")))
                     RememberOto();
                 break;
             case "comment":
-                if (_oto.TuneComment(Text(root, "file"), (int)Math.Round(Number(root, "index")), Text(root, "alias"), Text(root, "comment")))
+                if (_oto.TuneComment(Text(root, "file"), (int)Math.Round(Number(root, "index")), Text(root, "alias"), Text(root, "comment"), Text(root, "mode")))
                     RememberOto();
                 break;
         }
