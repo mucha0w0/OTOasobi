@@ -355,7 +355,6 @@ section:first-child > .section-title {
 .is-picked {
   background: var(--accent-subtle);
   color: var(--text);
-  box-shadow: inset 2px 0 0 var(--accent);
 }
 
 .accent-button,
