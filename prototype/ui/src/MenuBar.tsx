@@ -1,7 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react"
-import { contains, paneTitles, type LayoutNode } from "./layout"
-
-const viewOrder = Object.keys(paneTitles)
+import { contains, paneTitles, viewFolders, type LayoutNode } from "./layout"
 
 type Props = {
   layout: LayoutNode | null
@@ -49,6 +47,7 @@ export function MenuBar({
   onCheckUpdate,
 }: Props) {
   const [open, setOpen] = useState<string | null>(null)
+  const [folders, setFolders] = useState<Record<string, boolean>>({})
   const barRef = useRef<HTMLElement>(null)
 
   useEffect(() => {
@@ -77,12 +76,32 @@ export function MenuBar({
         <Item disabled={!canAnalyze} onClick={onReanalyze}>再解析</Item>
         <Item disabled={!canAnalyzeOne} onClick={onReanalyzeOne}>選択した音声だけを再解析</Item>
       </Menu>
-      <Menu title="表示" open={open} setOpen={setOpen}>
-        {viewOrder.map((id) => (
-          <Item key={id} checked={contains(layout, id)} onClick={() => onToggle(id)}>
-            {paneTitles[id]}
-          </Item>
-        ))}
+      <Menu title="表示" open={open} setOpen={setOpen} scroll>
+        {viewFolders.map((folder) => {
+          const expanded = folders[folder.title] !== false
+          return (
+            <div key={folder.title}>
+              <button
+                type="button"
+                className="flex w-full items-center gap-1 px-3 py-1 text-left text-sm hover:bg-[var(--line)]"
+                aria-expanded={expanded}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  setFolders((current) => ({ ...current, [folder.title]: !expanded }))
+                }}
+              >
+                <span className="inline-block w-3 shrink-0 text-[var(--muted)]">{expanded ? "▼" : "▶"}</span>
+                {folder.title}
+              </button>
+              {expanded && folder.ids.map((id) => (
+                <Item key={id} indent checked={contains(layout, id)} onClick={() => onToggle(id)}>
+                  {paneTitles[id]}
+                </Item>
+              ))}
+            </div>
+          )
+        })}
+        <div className="my-1 border-t border-[var(--line)]" />
         <Item onClick={onReset}>初期配置</Item>
         <Item onClick={onRecording}>録音</Item>
         {templates.map((name) => (
@@ -98,11 +117,13 @@ function Menu({
   title,
   open,
   setOpen,
+  scroll,
   children,
 }: {
   title: string
   open: string | null
   setOpen: (title: string | null) => void
+  scroll?: boolean
   children: ReactNode
 }) {
   const shown = open === title
@@ -117,7 +138,7 @@ function Menu({
       </button>
       {shown && (
         <div
-          className="absolute left-0 top-full z-20 mt-1 min-w-64 rounded border border-[var(--line)] bg-[var(--panel)] py-1 shadow"
+          className={`absolute left-0 top-full z-20 mt-1 min-w-64 rounded border border-[var(--line)] bg-[var(--panel)] py-1 shadow ${scroll ? "max-h-[calc(100vh-4rem)] overflow-y-auto" : ""}`}
           onClick={() => setOpen(null)}
         >
           {children}
@@ -132,20 +153,23 @@ function Item({
   onClick,
   disabled,
   checked,
+  indent,
 }: {
   children: ReactNode
   onClick?: () => void
   disabled?: boolean
   checked?: boolean
+  indent?: boolean
 }) {
   return (
     <button
       type="button"
       disabled={disabled}
-      className="block w-full px-3 py-1 text-left text-sm enabled:hover:bg-[var(--line)] disabled:text-[var(--muted)]"
+      className={`flex w-full items-center py-1 text-left text-sm enabled:hover:bg-[var(--line)] disabled:text-[var(--muted)] ${indent ? "pr-3 pl-7" : "px-3"}`}
       onClick={onClick}
     >
-      {checked ? "✓ " : ""}{children}
+      {checked !== undefined && <span className="inline-block w-4 shrink-0">{checked ? "✓" : ""}</span>}
+      {children}
     </button>
   )
 }

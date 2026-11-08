@@ -1,5 +1,23 @@
 import { describe, expect, it } from "vitest"
-import { commitMove, contains, createDefault, createRecording, hidePane, movePane, parseLayout, showPane, type LayoutNode } from "./layout"
+import { commitMove, contains, createDefault, createRecording, hidePane, movePane, paneTitles, parseLayout, showPane, viewFolders, type LayoutNode } from "./layout"
+
+describe("表示メニュー", () => {
+  it("フォルダは既知のパネルだけで、どのパネルも一度は出る", () => {
+    const ids = viewFolders.flatMap((folder) => folder.ids)
+    for (const id of ids)
+      expect(paneTitles[id], id).toBeTruthy()
+    for (const id of Object.keys(paneTitles))
+      expect(ids, id).toContain(id)
+    for (const folder of viewFolders)
+      expect(new Set(folder.ids).size, folder.title).toBe(folder.ids.length)
+  })
+
+  it("スペクトログラムは推定と原音設定にあり、id は一つ", () => {
+    const titles = viewFolders.filter((folder) => folder.ids.includes("spec")).map((folder) => folder.title)
+    expect(titles).toEqual(["原音設定の推定", "原音設定"])
+    expect(paneTitles.spec).toBe("スペクトログラム")
+  })
+})
 
 describe("初期配置", () => {
   const root = createDefault()

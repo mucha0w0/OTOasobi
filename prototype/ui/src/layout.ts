@@ -24,6 +24,15 @@ export const paneTitles: Record<string, string> = {
   mic: "マイクモニター",
 }
 
+// 表示メニューのフォルダ。同じ id は複数に置いてよく、開閉は id で揃う。
+export const viewFolders: { title: string; ids: string[] }[] = [
+  { title: "録音", ids: ["file", "recList", "recScript", "rec", "guide", "mic"] },
+  { title: "原音設定の推定", ids: ["file", "source", "wave", "spec", "loud", "oto"] },
+  { title: "原音設定", ids: ["file", "wave", "spec", "loud", "otoBand", "otoParams", "otoIni"] },
+  { title: "frq", ids: ["file", "frq", "frqEdit"] },
+  { title: "パッケージ化", ids: ["bank"] },
+]
+
 const paneIds = Object.keys(paneTitles)
 
 export function createDefault(): LayoutNode {
