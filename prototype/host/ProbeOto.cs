@@ -336,11 +336,12 @@ sealed class ProbeOto
         }
     }
 
-    public object Snapshot(string? fileName)
+    public object Snapshot(string? fileName, bool includeRows, int generation)
     {
         return new
         {
             type = "oto",
+            generation,
             mode = _mode,
             busy = _busy,
             analyzed = _files.Count > 0,
@@ -376,11 +377,8 @@ sealed class ProbeOto
             vcBlank = Shown(_cvvc.VcBlank, DefaultVcBlank),
             kinds = ConsonantOverlap.Kinds.Select(kind => new { group = kind.Group, key = kind.Key, caption = kind.Caption }).ToArray(),
             spans = SpansOf(fileName),
-            marks = CollectRows()
-                .Where(row => string.Equals(row.File, fileName, StringComparison.OrdinalIgnoreCase))
-                .Select(row => row.View)
-                .ToArray(),
-            rows = Rows(),
+            marks = FileMarks(fileName),
+            rows = includeRows ? Rows() : null,
         };
     }
 
@@ -592,17 +590,16 @@ sealed class ProbeOto
         return marks;
     }
 
-    List<ShownRow> CollectRows()
+    object[] FileMarks(string? fileName)
     {
-        var rows = new List<ShownRow>();
-        foreach (var file in _files)
-        {
-            var auto = AutoMarks(file);
-            for (var i = 0; i < auto.Count; i++)
-                rows.Add(Shown(file, i, auto[i]));
-        }
-
-        return rows;
+        var file = FindFile(fileName);
+        if (file == null)
+            return [];
+        var auto = AutoMarks(file);
+        var views = new object[auto.Count];
+        for (var i = 0; i < auto.Count; i++)
+            views[i] = Shown(file, i, auto[i]).View;
+        return views;
     }
 
     ShownRow Shown(WavFile file, int index, OtoMark auto)

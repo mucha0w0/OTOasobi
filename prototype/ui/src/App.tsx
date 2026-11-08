@@ -13,7 +13,7 @@ import { createLiveBus, type LiveBus } from "./live"
 import { MenuBar } from "./MenuBar"
 import { OtoTable } from "./OtoTable"
 import { OtoIni, OtoSettings } from "./OtoPanels"
-import { previewColumnLimit, previewRowLimit, requestsPreviewAfter, uiScale, type BankEvent, type DeviceInfo, type EffectsEvent, type FrqViewEvent, type HostEvent, type OtoMark, type OtoState, type PageCommand, type PreviewEvent, type RecListEvent, type SavedEvent } from "./protocol"
+import { previewColumnLimit, previewRowLimit, previewStillCovers, requestsPreviewAfter, uiScale, type BankEvent, type DeviceInfo, type EffectsEvent, type FrqViewEvent, type HostEvent, type OtoMark, type OtoState, type PageCommand, type PreviewEvent, type RecListEvent, type SavedEvent } from "./protocol"
 import { RecListPanel, RecScriptPanel } from "./RecPanels"
 import { noticeTone, ToneIcon, ToneRow, type NoticeTone } from "./notice"
 import { createPointerBus } from "./ruler"
@@ -37,9 +37,11 @@ function applyPanelsLocked(locked: boolean) {
 
 const pictureKeep = 12
 
-function rememberPicture(cache: Map<string, PreviewEvent>, name: string, picture: PreviewEvent) {
+type KeptPicture = { picture: PreviewEvent; columns: number }
+
+function rememberPicture(cache: Map<string, KeptPicture>, name: string, picture: PreviewEvent, columns: number) {
   cache.delete(name)
-  cache.set(name, picture)
+  cache.set(name, { picture, columns })
   while (cache.size > pictureKeep) {
     const oldest = cache.keys().next().value
     if (oldest === undefined)
@@ -101,7 +103,10 @@ export function App() {
   const loadingFile = useRef<string | null>(null)
   const wheeling = useRef(false)
   const wheelHold = useRef<{ picture: PreviewEvent | null; note: string; range: Range; pictureName: string } | null>(null)
-  const pictureCache = useRef(new Map<string, PreviewEvent>())
+  const pictureCache = useRef(new Map<string, KeptPicture>())
+  const previewAsk = useRef({ t0: 0, t1: 0, columns: 0 })
+  const otoRef = useRef<OtoState | null>(null)
+  const otoGenRef = useRef(-1)
   const folderRef = useRef("")
   const rangeRef = useRef<Range>({ t0: 0, t1: 0 })
   const marksRef = useRef<OtoMark[]>([])
@@ -195,6 +200,7 @@ export function App() {
   const recordNameRef = useRef<string | null>(null)
   const resolved = resolveTheme(theme, systemDark)
   pictureRef.current = picture
+  otoRef.current = oto
   fileNameRef.current = fileName
   folderRef.current = folder
   namesRef.current = names
@@ -272,6 +278,7 @@ export function App() {
 
   useEffect(() => {
     sendRef.current({ type: "watchMic", on: contains(layout, "rec") || contains(layout, "mic") })
+    sendRef.current({ type: "watchPanels", frq: contains(layout, "frqEdit"), oto: contains(layout, "otoParams") })
   }, [layout])
 
   useEffect(() => {
@@ -332,11 +339,16 @@ export function App() {
       return
     const spec = [...bands.current].find((band) => band.kind === "spec")
     const measured = spec?.pixelSize() ?? { columns: 800, rows: 256 }
+    const columns = Math.min(previewColumnLimit, Math.max(32, measured.columns))
+    const kept = pictureCache.current.get(fileNameRef.current)
+    if (kept && previewStillCovers(kept.picture, kept.columns, range, columns))
+      return
+    previewAsk.current = { t0: range.t0, t1: range.t1, columns }
     sendRef.current({
       type: "preview",
       t0: range.t0,
       t1: range.t1,
-      columns: Math.min(previewColumnLimit, Math.max(32, measured.columns)),
+      columns,
       rows: Math.min(previewRowLimit, Math.max(32, measured.rows)),
     })
   }
@@ -405,9 +417,9 @@ export function App() {
     if (cached) {
       pictureName.current = name
       noteRef.current = ""
-      setPicture(cached)
-      pictureRef.current = cached
-      rangeRef.current = { t0: cached.waveT0, t1: cached.waveT1 }
+      setPicture(cached.picture)
+      pictureRef.current = cached.picture
+      rangeRef.current = { t0: cached.picture.waveT0, t1: cached.picture.waveT1 }
     } else {
       pictureName.current = ""
       noteRef.current = "読み込み中"
@@ -478,8 +490,15 @@ export function App() {
         const keep = missingRef.current || event.names.some((name) => sameName(name, fileNameRef.current))
         setCreateOpen(false)
         setCreating(false)
-        if (event.folder !== folderRef.current)
+        if (event.folder !== folderRef.current) {
           pictureCache.current.clear()
+          otoGenRef.current = -1
+          if (otoRef.current) {
+            const cleared = { ...otoRef.current, rows: [], marks: [], spans: [] }
+            otoRef.current = cleared
+            setOto(cleared)
+          }
+        }
         setFolder(event.folder)
         setNames(event.names)
         window.clearTimeout(fileStepTimer.current)
@@ -491,11 +510,14 @@ export function App() {
           fileNameRef.current = ""
           setFileName("")
           setPicture(null)
+          pictureRef.current = null
           rangeRef.current = { t0: 0, t1: 0 }
           noteRef.current = ""
           focusRef.current = -1
           liveRef.current = null
           draftRef.current = null
+          modelRef.current = viewModel()
+          redraw()
         }
         break
       }
@@ -524,7 +546,8 @@ export function App() {
           modelRef.current = viewModel()
           redraw()
         } else {
-          showFilePending(event.name)
+          if (!sameName(pictureName.current, event.name) || pictureRef.current == null)
+            showFilePending(event.name)
           loadingFile.current = null
         }
         window.clearTimeout(previewTimer.current)
@@ -532,6 +555,8 @@ export function App() {
         break
       }
       case "preview": {
+        if (event.name !== "" && !sameName(event.name, fileNameRef.current))
+          break
         if (stepTarget.current != null || wheeling.current)
           break
         if (loadingFile.current != null && !sameName(loadingFile.current, fileNameRef.current))
@@ -544,8 +569,9 @@ export function App() {
         if (next.specColumns > 0 && next.spec.length > 0)
           noteRef.current = ""
         pictureName.current = fileNameRef.current
-        if (fileNameRef.current)
-          rememberPicture(pictureCache.current, fileNameRef.current, next)
+        const cacheName = event.name || fileNameRef.current
+        if (cacheName)
+          rememberPicture(pictureCache.current, cacheName, next, previewAsk.current.columns)
         setPicture(next)
         pictureRef.current = next
         if (event.lo.length > 0)
@@ -621,16 +647,23 @@ export function App() {
       case "otoExists":
         setReplaceName(event.name)
         break
-      case "oto":
-        marksRef.current = event.marks
-        spansRef.current = event.spans
-        if (focusRef.current >= 0 && !event.marks.some((mark) => mark.index === focusRef.current))
+      case "oto": {
+        if (event.generation < otoGenRef.current)
+          break
+        otoGenRef.current = event.generation
+        const rows = event.rows ?? otoRef.current?.rows ?? []
+        const next = { ...event, rows }
+        otoRef.current = next
+        marksRef.current = next.marks
+        spansRef.current = next.spans
+        if (focusRef.current >= 0 && !next.marks.some((mark) => mark.index === focusRef.current))
           focusRef.current = -1
         modelRef.current = viewModel()
-        setOto(event)
+        setOto(next)
         for (const band of bands.current)
           band.redraw()
         break
+      }
       case "frq":
         setFrqCount({ wavs: event.wavs, frqs: event.frqs, busy: event.busy })
         break
@@ -897,7 +930,6 @@ export function App() {
                 return (
                   <GraphBand
                     kind={graphKinds[id]!}
-                    picture={picture}
                     model={modelRef}
                     appearance={appearance}
                     pointerBus={pointerBus}

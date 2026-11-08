@@ -31,6 +31,7 @@ export type PageCommand =
   | { type: "effects"; op: "apply" }
   | { type: "effects"; op: "move"; from: number; to: number }
   | { type: "watchMic"; on: boolean }
+  | { type: "watchPanels"; frq: boolean; oto: boolean }
   | { type: "close" }
   | { type: "caption"; theme: "light" | "dark" }
   | { type: "layout"; root: LayoutNode | null; keepRatios?: boolean }
@@ -64,6 +65,7 @@ export const previewRowLimit = 256
 
 export type PreviewEvent = {
   type: "preview"
+  name: string
   duration: number
   lo: number[]
   hi: number[]
@@ -242,6 +244,7 @@ export type OtoKind = { group: string; key: string; caption: string }
 
 export type OtoState = {
   type: "oto"
+  generation: number
   mode: "mono" | "renzoku" | "cvvc"
   busy: boolean
   analyzed: boolean
@@ -277,8 +280,23 @@ export type OtoState = {
   vcBlank: Record<string, number>
   kinds: OtoKind[]
   marks: OtoMark[]
-  rows: OtoMark[]
+  rows: OtoMark[] | null
   spans: PhoneSpan[]
+}
+
+export function previewStillCovers(
+  picture: Pick<PreviewEvent, "spec" | "specT0" | "specT1" | "waveT0" | "waveT1"> | null,
+  askedColumns: number,
+  range: { t0: number; t1: number },
+  columns: number,
+): boolean {
+  if (!picture || picture.spec.length === 0 || askedColumns !== columns)
+    return false
+  const near = (left: number, right: number) => Math.abs(left - right) <= 1e-4
+  return near(picture.waveT0, range.t0)
+    && near(picture.waveT1, range.t1)
+    && near(picture.specT0, range.t0)
+    && near(picture.specT1, range.t1)
 }
 
 export function requestsPreview(gesture: PreviewGesture): boolean {
@@ -371,6 +389,7 @@ export function parseHostEvent(value: unknown): HostEvent | null {
         return null
       return {
         type: "preview",
+        name: typeof value.name === "string" ? value.name : "",
         duration: numberOr(value.duration, 0),
         lo: value.lo.filter((item): item is number => typeof item === "number"),
         hi: value.hi.filter((item): item is number => typeof item === "number"),
@@ -492,6 +511,7 @@ function parseOto(value: Record<string, unknown>): OtoState | null {
     return null
   return {
     type: "oto",
+    generation: numberOr(value.generation, 0),
     mode: value.mode,
     busy: value.busy === true,
     analyzed: value.analyzed === true,
@@ -539,7 +559,7 @@ function parseOto(value: Record<string, unknown>): OtoState | null {
         })
       : [],
     marks: parseMarks(value.marks),
-    rows: parseMarks(value.rows),
+    rows: Array.isArray(value.rows) ? parseMarks(value.rows) : null,
     spans: parseSpans(value.spans),
   }
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { parseHostEvent, requestsPreview, requestsPreviewAfter, shownInputRate, timeAt, uiScale, xAt } from "./protocol"
+import { parseHostEvent, previewStillCovers, requestsPreview, requestsPreviewAfter, shownInputRate, timeAt, uiScale, xAt } from "./protocol"
 
 describe("プレビューを頼む操作", () => {
   it("境界のドラッグとリサイズの途中では頼まない", () => {
@@ -60,7 +60,7 @@ describe("ホストのメッセージ", () => {
       waveT1: 2,
       sampleRate: 44100,
     })
-    expect(preview).toMatchObject({ type: "preview", png: "abc", spec: "", sampleRate: 44100, loudness: [] })
+    expect(preview).toMatchObject({ type: "preview", name: "", png: "abc", spec: "", sampleRate: 44100, loudness: [] })
 
     expect(parseHostEvent({
       type: "preview",
@@ -72,7 +72,7 @@ describe("ホストのメッセージ", () => {
       specRows: 1,
       waveT0: 0,
       waveT1: 2,
-    })).toMatchObject({ type: "preview", png: "", spec: "qqo=", specColumns: 2, specRows: 1 })
+    })).toMatchObject({ type: "preview", name: "", png: "", spec: "qqo=", specColumns: 2, specRows: 1 })
     expect(preview && "names" in preview).toBe(false)
 
     expect(parseHostEvent({
@@ -109,6 +109,32 @@ describe("ホストのメッセージ", () => {
       marks: [{ alias: "あ", offset: 0.1, blank: 0.5 }],
       spans: [{ label: "a", token: "あ", start: 0.2, end: 0.4 }],
     })
+    expect(parseHostEvent({ type: "oto", mode: "mono", scope: "all", generation: 4 })).toMatchObject({
+      generation: 4,
+      rows: null,
+    })
+    expect(parseHostEvent({
+      type: "preview",
+      name: "あ.wav",
+      duration: 1,
+      lo: [0],
+      hi: [1],
+      spec: "qqo=",
+      specColumns: 2,
+      specRows: 1,
+      specT0: 0,
+      specT1: 1,
+      waveT0: 0,
+      waveT1: 1,
+    })).toMatchObject({ name: "あ.wav", spec: "qqo=" })
+  })
+
+  it("同じ範囲と列数の絵は取り直さない", () => {
+    const picture = { spec: "qqo=", specColumns: 2, specRows: 1, specT0: 0, specT1: 1, waveT0: 0, waveT1: 1 }
+    expect(previewStillCovers(picture, 800, { t0: 0, t1: 1 }, 800)).toBe(true)
+    expect(previewStillCovers(picture, 800, { t0: 0, t1: 1 }, 900)).toBe(false)
+    expect(previewStillCovers(picture, 800, { t0: 0.2, t1: 0.4 }, 800)).toBe(false)
+    expect(previewStillCovers({ ...picture, spec: "" }, 800, { t0: 0, t1: 1 }, 800)).toBe(false)
   })
 
   it("解析の進み具合と .frq と録音リストを読む", () => {

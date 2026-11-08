@@ -32,7 +32,6 @@ export type GraphModel = {
 
 type Props = {
   kind: BandKind
-  picture: PreviewEvent | null
   model: RefObject<GraphModel>
   appearance: string
   register: (handle: BandHandle) => () => void
@@ -49,10 +48,11 @@ type Props = {
 const markColors = ["--mark-offset", "--mark-overlap", "--mark-preutter", "--mark-consonant", "--mark-blank"]
 const markLabels = ["フ", "オ", "先", "子", "ブ"]
 
-export function GraphBand({ kind, picture, model, appearance, register, onRange, onFileStep, onTune, onFocus, onLive, onDraft, onSpans, pointerBus }: Props) {
+export function GraphBand({ kind, model, appearance, register, onRange, onFileStep, onTune, onFocus, onLive, onDraft, onSpans, pointerBus }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const pictureRef = useRef<HTMLCanvasElement>(null)
   const paintedRef = useRef<PreviewEvent | null>(null)
+  const paintedSpecRef = useRef("")
   const paintedSizeRef = useRef({ width: 0, height: 0, color: "" })
   const bindPicture = useCallback((node: HTMLCanvasElement | null) => {
     pictureRef.current = node
@@ -109,7 +109,7 @@ export function GraphBand({ kind, picture, model, appearance, register, onRange,
 
   useLayoutEffect(() => {
     draw()
-  }, [picture, appearance])
+  }, [appearance])
 
   useEffect(() => {
     return pointerBus.watch((time) => placePointer(lineRef.current, canvasRef.current, model.current.range, time))
@@ -231,10 +231,20 @@ export function GraphBand({ kind, picture, model, appearance, register, onRange,
     canvas.style.maxWidth = "none"
     const color = getCss("--wave")
     canvas.style.imageRendering = "pixelated"
+    if (
+      kind === "spec"
+      && pictureNow !== null
+      && pictureNow.spec.length > 0
+      && paintedSpecRef.current === pictureNow.spec
+      && canvas.width > 0
+    )
+      return
     const same = pictureNow !== null
+      && kind !== "spec"
       && paintedRef.current === pictureNow
       && paintedSizeRef.current.color === color
-      && (kind === "spec" || (paintedSizeRef.current.width === width && paintedSizeRef.current.height === height))
+      && paintedSizeRef.current.width === width
+      && paintedSizeRef.current.height === height
     if (kind !== "loud" && same && canvas.width > 0)
       return
     const ctx = canvasContext(canvas)
@@ -248,6 +258,7 @@ export function GraphBand({ kind, picture, model, appearance, register, onRange,
       ctx.fillRect(0, 0, canvas.width, canvas.height)
       drawNote(ctx, canvas.width, canvas.height, note)
       paintedRef.current = null
+      paintedSpecRef.current = ""
       paintedSizeRef.current = { width, height, color }
       return
     }
@@ -257,6 +268,9 @@ export function GraphBand({ kind, picture, model, appearance, register, onRange,
       if (!paintIndices(ctx, decodeBase64(pictureNow.spec), pictureNow.specColumns, pictureNow.specRows)) {
         ctx.fillStyle = getCss("--canvas")
         ctx.fillRect(0, 0, canvas.width, canvas.height)
+        paintedSpecRef.current = ""
+      } else {
+        paintedSpecRef.current = pictureNow.spec
       }
     } else if (kind === "wave" || kind === "oto") {
       canvas.width = Math.max(1, Math.floor(width))
