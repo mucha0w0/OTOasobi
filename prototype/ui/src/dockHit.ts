@@ -74,11 +74,13 @@ export function hitDrop(leaves: HitLeaf[], regions: HitRegion[], draggedId: stri
     best = { region, edge: found.edge, distance: found.distance }
   }
   if (best) {
+    const targetIds = best.region.ids.filter((id) => id !== draggedId)
+    const onThatPane = leaf != null && targetIds.length === 1 && targetIds[0] === leaf.id
     return {
       edge: best.edge,
-      targetIds: best.region.ids.filter((id) => id !== draggedId),
+      targetIds,
       highlight: halfBox(best.region.rect, best.edge),
-      arms: leaf?.rect ?? null,
+      arms: onThatPane ? leaf.rect : null,
       hot: false,
     }
   }

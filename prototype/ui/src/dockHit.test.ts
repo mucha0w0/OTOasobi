@@ -18,6 +18,14 @@ describe("ドロップ先", () => {
     expect(aim?.edge).toBe("left")
     expect(aim?.targetIds).toEqual(["wave", "spec"])
     expect(aim?.hot).toBe(false)
+    expect(aim?.arms).toBeNull()
+  })
+
+  it("1枚の端では、そのパネルの印を残す", () => {
+    const aim = hitDrop([leaf], [inner], "file", 10, 100)
+    expect(aim?.edge).toBe("left")
+    expect(aim?.targetIds).toEqual(["wave"])
+    expect(aim?.arms).toEqual(leaf.rect)
   })
 
   it("右へ入れる予告は、対象の右端から幅だけ戻る", () => {
