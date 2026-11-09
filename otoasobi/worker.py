@@ -385,6 +385,15 @@ def _scope_name(raw: object) -> str:
     return "all"
 
 
+def _sync(folder: str, files: object, parts: object) -> dict:
+    parsed = _parsed_files(files)
+    built = _write_parts(parts)
+    if not built:
+        raise RuntimeError("書き出すエイリアスがありません。")
+    out = export_folder(folder, parsed, parts=built, scope="all", logs=False)
+    return {"ok": True, "txt": str(out)}
+
+
 def _write(
     folder: str,
     files: object,
@@ -508,6 +517,11 @@ def _dispatch(request: dict) -> None:
             if not isinstance(folder, str) or not folder:
                 raise RuntimeError("folder がありません")
             payload = _frq(request_id, folder, request)
+        elif command == "sync":
+            folder = request.get("folder")
+            if not isinstance(folder, str) or not folder:
+                raise RuntimeError("folder がありません")
+            payload = _sync(folder, request.get("files"), request.get("parts"))
         elif command == "write":
             folder = request.get("folder")
             if not isinstance(folder, str) or not folder:

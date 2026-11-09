@@ -272,6 +272,8 @@ def export_folder(
     adjustments: list[dict] | None = None,
     parts: list[tuple[OtoSettings | None, list[dict] | None]] | None = None,
     scope: str = "all",
+    *,
+    logs: bool = True,
 ) -> Path:
     """直した区間から oto.ini とラベルを書く。settings が無いときはいまの初期値。
 
@@ -327,10 +329,11 @@ def export_folder(
                 leading_index=leading_index,
             )
     out = folder / OTO_INI_NAME
-    log = folder / BATCH_LOG_NAME
-    onset = folder / BATCH_TXT_NAME
-    log.write_text(format_batch_log(span_entries), encoding="utf-8")
-    onset.write_text(format_batch_txt(span_entries), encoding="utf-8")
+    if logs:
+        log = folder / BATCH_LOG_NAME
+        onset = folder / BATCH_TXT_NAME
+        log.write_text(format_batch_log(span_entries), encoding="utf-8")
+        onset.write_text(format_batch_txt(span_entries), encoding="utf-8")
     if scope not in ("missing", "overlap"):
         scope = "all"
     if scope != "all" and out.is_file():

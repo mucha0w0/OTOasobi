@@ -36,6 +36,8 @@ sealed class ProbeOto
 
     public bool Busy => _busy;
 
+    public bool SessionLocked => _locked;
+
     public bool Analyzed => _files.Count > 0;
 
     public bool IsBusy => _busy;

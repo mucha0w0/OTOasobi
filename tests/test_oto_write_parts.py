@@ -63,6 +63,16 @@ class WritePartsTests(unittest.TestCase):
         )
         self.assertEqual(merge_existing_aliases(existing, generated, "all"), generated)
 
+    def test_sync_skips_batch_logs(self) -> None:
+        spans = [Span(0.0, 0.2, "k", "k"), Span(0.2, 0.6, "a", "あ")]
+        item = AnalyzedFile("a.wav", 0.8, spans)
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            export_folder(folder, [item], OtoSettings(mode="mono"), logs=False)
+            self.assertTrue((folder / "oto.ini").is_file())
+            self.assertFalse((folder / "OTOasibi_log.txt").exists())
+            self.assertFalse((folder / "OTOasibi_out.txt").exists())
+
     def test_export_missing_keeps_the_previous_line(self) -> None:
         spans = [Span(0.0, 0.2, "k", "k"), Span(0.2, 0.6, "a", "あ")]
         item = AnalyzedFile("a.wav", 0.8, spans)

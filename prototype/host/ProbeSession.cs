@@ -33,6 +33,7 @@ sealed class ProbeSession : IDisposable
     PluginCatalog _plugins = PluginCatalog.Empty;
     bool _applying;
     readonly DispatcherQueueTimer _otoSave;
+    readonly DispatcherQueueTimer _otoIniSync;
     readonly DispatcherQueueTimer _otoRows;
     readonly object _postGate = new();
     readonly Queue<Outbound> _outbound = new();
@@ -52,6 +53,9 @@ sealed class ProbeSession : IDisposable
     int _previewGen;
     int _otoGen;
     int _otoRowGen;
+    int _otoIniSyncGen;
+    int _otoIniSyncBusy;
+    bool _otoIniSyncPending;
     int _fileToken;
     readonly object _previewLock = new();
     PreviewJob? _previewQueued;
@@ -100,6 +104,14 @@ sealed class ProbeSession : IDisposable
         _otoSave.Interval = TimeSpan.FromMilliseconds(400);
         _otoSave.IsRepeating = false;
         _otoSave.Tick += (_, _) => _oto.FlushSession();
+        _otoIniSync = _queue.CreateTimer();
+        _otoIniSync.Interval = TimeSpan.FromMilliseconds(400);
+        _otoIniSync.IsRepeating = false;
+        _otoIniSync.Tick += (_, _) =>
+        {
+            _otoIniSyncPending = false;
+            _ = SyncOtoIniAsync();
+        };
         _otoRows = _queue.CreateTimer();
         _otoRows.Interval = TimeSpan.FromMilliseconds(80);
         _otoRows.IsRepeating = false;
@@ -184,6 +196,7 @@ sealed class ProbeSession : IDisposable
         _player.Dispose();
         _take.Dispose();
         _otoSave.Stop();
+        _otoIniSync.Stop();
         _otoRows.Stop();
         _oto.FlushSession();
         _python?.Dispose();
@@ -1626,7 +1639,7 @@ sealed class ProbeSession : IDisposable
                 break;
             case "scope":
                 _oto.SetScope(Text(root, "scope"));
-                RememberOto(true);
+                RememberOto(true, syncIni: false);
                 break;
             case "analyze":
                 BeginAnalyze(root.TryGetProperty("force", out var forceValue) && forceValue.ValueKind == JsonValueKind.True);
@@ -1646,6 +1659,8 @@ sealed class ProbeSession : IDisposable
                 {
                     PostOtoView();
                     _ = SaveSpanCacheAsync();
+                    ScheduleOtoIniSync();
+                    ScheduleOtoRows();
                 }
                 break;
             case "fields":
@@ -1695,16 +1710,63 @@ sealed class ProbeSession : IDisposable
         return times;
     }
 
-    void RememberOto(bool rowsNow)
+    void RememberOto(bool rowsNow, bool syncIni = true)
     {
         _otoSave.Stop();
         _otoSave.Start();
+        if (syncIni)
+            ScheduleOtoIniSync();
         if (rowsNow)
             PostOto();
         else
         {
             PostOtoView();
             ScheduleOtoRows();
+        }
+    }
+
+    void ScheduleOtoIniSync()
+    {
+        if (_disposed)
+            return;
+        _otoIniSyncPending = true;
+        _otoIniSync.Stop();
+        _otoIniSync.Start();
+    }
+
+    async Task SyncOtoIniAsync()
+    {
+        if (_disposed || string.IsNullOrEmpty(_folder) || _oto.Files.Count == 0 || _oto.Busy || _oto.SessionLocked)
+            return;
+        var modes = _oto.AliasModes();
+        if (modes.Count == 0)
+            return;
+        if (Interlocked.CompareExchange(ref _otoIniSyncBusy, 1, 0) != 0)
+        {
+            ScheduleOtoIniSync();
+            return;
+        }
+
+        var gen = Interlocked.Increment(ref _otoIniSyncGen);
+        try
+        {
+            var parts = modes.Select(mode => new OtoWritePart(_oto.ExportFor(mode), _oto.Adjustments(mode))).ToList();
+            var result = await Analysis().SyncOtoAsync(_folder, _oto.Files, parts).ConfigureAwait(true);
+            if (_disposed || gen != _otoIniSyncGen)
+                return;
+            if (!result.Ok)
+                Post(new { type = "failed", message = string.IsNullOrEmpty(result.Error) ? "oto.iniを書き込めませんでした。" : result.Error });
+        }
+        catch (Exception ex)
+        {
+            if (!_disposed && gen == _otoIniSyncGen)
+                Post(new { type = "failed", message = ex.Message });
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _otoIniSyncBusy, 0);
+            if (_otoIniSyncPending)
+                ScheduleOtoIniSync();
         }
     }
 
@@ -1876,12 +1938,15 @@ sealed class ProbeSession : IDisposable
             return;
         }
 
+        _otoIniSync.Stop();
+        _otoIniSyncPending = false;
+        Interlocked.Increment(ref _otoIniSyncGen);
         _oto.SetBusy(true);
         PostOto();
         try
         {
             var analysis = Analysis();
-            var parts = modes.Select(mode => new OtoWritePart(_oto.ExportFor(mode), _oto.Adjustments(mode))).ToList();
+            var parts = modes.Select(mode => new OtoWritePart(_oto.ExportFor(mode), Array.Empty<OtoAdjustedEntry>())).ToList();
             var result = await analysis.WriteAsync(_folder, _oto.Files, parts, _oto.ScopeForWrite());
             if (_disposed)
                 return;

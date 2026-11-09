@@ -97,6 +97,29 @@ sealed class AnalysisClient : IDisposable
         throw new IOException(string.IsNullOrEmpty(error) ? "保存データを書けませんでした。" : error);
     }
 
+    public async Task<AnalyzeResult> SyncOtoAsync(
+        string folder,
+        IReadOnlyList<WavFile> files,
+        IReadOnlyList<OtoWritePart> parts)
+    {
+        using var doc = await SendAsync(id => JsonSerializer.Serialize(new
+        {
+            id,
+            cmd = "sync",
+            folder,
+            files = FilePayload(files),
+            parts = parts.Select(part => new
+            {
+                config = ConfigPayload(part.Config),
+                adjustments = AdjustPayload(part.Adjustments),
+            }).ToArray(),
+        }), null).ConfigureAwait(true);
+        var root = doc.RootElement;
+        var ok = root.TryGetProperty("ok", out var okValue) && okValue.GetBoolean();
+        string? error = root.TryGetProperty("error", out var errorValue) ? errorValue.GetString() : null;
+        return new AnalyzeResult(ok, null, error, null);
+    }
+
     public async Task<AnalyzeResult> WriteAsync(
         string folder,
         IReadOnlyList<WavFile> files,
