@@ -1855,12 +1855,6 @@
                                             Value="120"
                                             ValueChanged="RecBpm_Changed" />
                                     </Grid>
-                                    <ToggleSwitch
-                                        x:Name="RecGuideWhileSwitch"
-                                        AutomationProperties.Name="録音中もガイドを鳴らす"
-                                        OffContent="録音前だけ鳴らす"
-                                        OnContent="録音中も鳴らす"
-                                        Toggled="RecGuideWhile_Toggled" />
                                 </StackPanel>
                             </StackPanel>
                         </ScrollViewer>

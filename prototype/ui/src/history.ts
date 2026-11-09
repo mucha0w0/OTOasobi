@@ -21,7 +21,6 @@ export type RecSnapshot = {
   countBeatsAfter: number
   bpm: number
   moras: number
-  guideWhile: boolean
   advance: boolean
   recStartAfter: number
   recEndBefore: number
@@ -108,7 +107,6 @@ export function emptySnapshot(): EditSnapshot {
       countBeatsAfter: 0,
       bpm: 120,
       moras: 5,
-      guideWhile: false,
       advance: false,
       recStartAfter: 0,
       recEndBefore: 0,
@@ -301,7 +299,6 @@ export function applySnapshot(snapshot: EditSnapshot, command: PageCommand): Edi
           countBeatsAfter: command.countBeatsAfter,
           bpm: command.bpm,
           moras: command.moras,
-          guideWhile: command.guideWhile,
           advance: command.advance,
           recStartAfter: command.recStartAfter,
           recEndBefore: command.recEndBefore,
@@ -917,7 +914,6 @@ function describeRec(command: Extract<PageCommand, { type: "recSettings" }>, sna
     command.countBeatsAfter !== current.countBeatsAfter ? "countBeatsAfter" : "",
     command.bpm !== current.bpm ? "bpm" : "",
     command.moras !== current.moras ? "moras" : "",
-    command.guideWhile !== current.guideWhile ? "guideWhile" : "",
     command.advance !== current.advance ? "advance" : "",
     !near(command.recStartAfter, current.recStartAfter) ? "recStartAfter" : "",
     !near(command.recEndBefore, current.recEndBefore) ? "recEndBefore" : "",

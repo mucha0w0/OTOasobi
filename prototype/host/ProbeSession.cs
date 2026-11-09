@@ -1256,9 +1256,7 @@ sealed class ProbeSession : IDisposable
         var schedule = ++_recordScheduleGen;
         var plan = BuildRecordGuidePlan(root, manualGuide, bpm, MorasOf(root), countIn, countBeats, CountBeatsAfterOf(root));
         var guideDuration = plan?.DurationSeconds ?? 0;
-        var wantPlay = plan?.Wav != null && (manualGuide
-            ? root.TryGetProperty("guideWhile", out var guideValue) && guideValue.ValueKind == JsonValueKind.True
-            : true);
+        var wantPlay = plan?.Wav != null;
 
         DateTime bgmAt = DateTime.UtcNow;
         if (wantPlay && plan?.Wav != null)
@@ -1918,7 +1916,6 @@ sealed class ProbeSession : IDisposable
             settings.CountBeatsAfter = CountBeatsAfterOf(root);
         else if (root.TryGetProperty("countWhileMoras", out var moraCount) && moraCount.ValueKind == JsonValueKind.True && settings.CountBeatsAfter == 0)
             settings.CountBeatsAfter = RecTone.DefaultCountBeats;
-        settings.GuideWhileRecording = root.TryGetProperty("guideWhile", out var guide) && guide.ValueKind == JsonValueKind.True;
         settings.AutoAdvance = root.TryGetProperty("advance", out var advance) && advance.ValueKind == JsonValueKind.True;
         if (root.TryGetProperty("recStartAfter", out _))
             settings.RecStartAfter = RecStartAfterOf(root);
@@ -1942,7 +1939,6 @@ sealed class ProbeSession : IDisposable
             countBeatsAfter = settings.CountBeatsAfter,
             bpm = settings.Bpm,
             moras = settings.Moras,
-            guideWhile = settings.GuideWhileRecording,
             advance = settings.AutoAdvance,
             recStartAfter = settings.RecStartAfter,
             recEndBefore = settings.RecEndBefore,

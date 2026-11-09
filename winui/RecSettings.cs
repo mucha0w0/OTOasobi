@@ -32,8 +32,6 @@ sealed class RecAppSettings
 
     public int Moras { get; set; } = RecTone.DefaultMoras;
 
-    public bool GuideWhileRecording { get; set; }
-
     public bool AutoAdvance { get; set; }
 
     // ガイド BGM の開始からの秒数でマイクをオンにする。

@@ -192,7 +192,6 @@ export function App() {
   const [countBeatsAfter, setCountBeatsAfter] = useState(0)
   const [bpm, setBpm] = useState(120)
   const [moras, setMoras] = useState(5)
-  const [guideWhile, setGuideWhile] = useState(false)
   const [recStartAfter, setRecStartAfter] = useState(0)
   const [recEndBefore, setRecEndBefore] = useState(0)
   const [advance, setAdvance] = useState(false)
@@ -275,7 +274,7 @@ export function App() {
       ...emptySnapshot(),
       appearance: { theme, accent: null, scale, lockPanels },
       monitor,
-      rec: { note, semitones, speed, volume, countIn, countBeats, countBeatsAfter, bpm, moras, guideWhile, advance, recStartAfter, recEndBefore },
+      rec: { note, semitones, speed, volume, countIn, countBeats, countBeatsAfter, bpm, moras, advance, recStartAfter, recEndBefore },
     }
   }
   const resolved = resolveTheme(theme, systemDark)
@@ -406,14 +405,13 @@ export function App() {
         countBeatsAfter,
         bpm,
         moras,
-        guideWhile,
         advance,
         recStartAfter,
         recEndBefore,
       })
     }, 300)
     return () => window.clearTimeout(timer)
-  }, [advance, bpm, countBeats, countBeatsAfter, countIn, guideWhile, moras, note, recEndBefore, recStartAfter, semitones, speed, volume])
+  }, [advance, bpm, countBeats, countBeatsAfter, countIn, moras, note, recEndBefore, recStartAfter, semitones, speed, volume])
 
   function viewModel(over: Partial<GraphModel> = {}): GraphModel {
     return {
@@ -1025,7 +1023,6 @@ export function App() {
             countBeatsAfter: event.countBeatsAfter,
             bpm: event.bpm,
             moras: event.moras,
-            guideWhile: event.guideWhile,
             advance: event.advance,
             recStartAfter: event.recStartAfter,
             recEndBefore: event.recEndBefore,
@@ -1040,7 +1037,6 @@ export function App() {
         setCountBeatsAfter(event.countBeatsAfter)
         setBpm(event.bpm)
         setMoras(event.moras)
-        setGuideWhile(event.guideWhile)
         setRecStartAfter(event.recStartAfter)
         setRecEndBefore(event.recEndBefore)
         setAdvance(event.advance)
@@ -1173,7 +1169,6 @@ export function App() {
       countBeatsAfter,
       bpm,
       moras,
-      guideWhile,
       volume,
       note,
       semitones,
@@ -1313,7 +1308,6 @@ export function App() {
         || countBeatsAfter !== rec.countBeatsAfter
         || bpm !== rec.bpm
         || moras !== rec.moras
-        || guideWhile !== rec.guideWhile
         || advance !== rec.advance
       if (changed) {
         suppressRec.current = true
@@ -1326,7 +1320,6 @@ export function App() {
         setCountBeatsAfter(rec.countBeatsAfter)
         setBpm(rec.bpm)
         setMoras(rec.moras)
-        setGuideWhile(rec.guideWhile)
         setAdvance(rec.advance)
       }
     }
@@ -1535,7 +1528,6 @@ export function App() {
                     countBeatsAfter={countBeatsAfter}
                     bpm={bpm}
                     moras={moras}
-                    guideWhile={guideWhile}
                     recStartAfter={recStartAfter}
                     recEndBefore={recEndBefore}
                     playing={guidePlaying}
@@ -1548,7 +1540,6 @@ export function App() {
                     setCountBeatsAfter={touchRec(setCountBeatsAfter)}
                     setBpm={touchRec(setBpm)}
                     setMoras={touchRec(setMoras)}
-                    setGuideWhile={touchRec(setGuideWhile)}
                     setRecStartAfter={touchRec(setRecStartAfter)}
                     setRecEndBefore={touchRec(setRecEndBefore)}
                     send={(command) => sendRef.current(command)}

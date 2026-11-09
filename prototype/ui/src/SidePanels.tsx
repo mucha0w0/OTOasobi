@@ -90,7 +90,6 @@ export function GuidePanel({
   countBeatsAfter,
   bpm,
   moras,
-  guideWhile,
   recStartAfter,
   recEndBefore,
   playing,
@@ -103,7 +102,6 @@ export function GuidePanel({
   setCountBeatsAfter,
   setBpm,
   setMoras,
-  setGuideWhile,
   setRecStartAfter,
   setRecEndBefore,
   send,
@@ -118,7 +116,6 @@ export function GuidePanel({
   countBeatsAfter: number
   bpm: number
   moras: number
-  guideWhile: boolean
   recStartAfter: number
   recEndBefore: number
   playing: boolean
@@ -131,7 +128,6 @@ export function GuidePanel({
   setCountBeatsAfter: (value: number) => void
   setBpm: (value: number) => void
   setMoras: (value: number) => void
-  setGuideWhile: (value: boolean) => void
   setRecStartAfter: (value: number) => void
   setRecEndBefore: (value: number) => void
   send: (command: PageCommand) => void
@@ -218,10 +214,6 @@ export function GuidePanel({
                 <span className="num text-[var(--muted)]">{bpm}</span>
               </span>
               <input type="range" min={40} max={240} step={1} value={bpm} onChange={(event) => setBpm(Number(event.target.value))} />
-            </label>
-            <label className="flex gap-2">
-              <input type="checkbox" checked={guideWhile} onChange={(event) => setGuideWhile(event.target.checked)} />
-              録音中のガイド
             </label>
             {timingSliders}
           </>

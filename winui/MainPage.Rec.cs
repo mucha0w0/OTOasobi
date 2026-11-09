@@ -61,7 +61,6 @@ public sealed partial class MainPage
         RecCountBeatsAfterBox.Value = _recSettings.CountBeatsAfter;
         RecBpmBox.Value = _recSettings.Bpm;
         RecMorasBox.Value = _recSettings.Moras;
-        RecGuideWhileSwitch.IsOn = _recSettings.GuideWhileRecording;
         RecAutoSwitch.IsOn = _recSettings.AutoAdvance;
         _recApplying = false;
 
@@ -505,14 +504,6 @@ public sealed partial class MainPage
         if (_recApplying || double.IsNaN(e.NewValue))
             return;
         _recSettings.Moras = (int)Math.Clamp(Math.Round(e.NewValue), RecTone.MinMoras, RecTone.MaxMoras);
-        _recSettings.Save();
-    }
-
-    void RecGuideWhile_Toggled(object sender, RoutedEventArgs e)
-    {
-        if (_recApplying)
-            return;
-        _recSettings.GuideWhileRecording = RecGuideWhileSwitch.IsOn;
         _recSettings.Save();
     }
 
@@ -1062,8 +1053,7 @@ public sealed partial class MainPage
             _recTaking = true;
             BeginMicTake();
             UpdateRecButtons();
-            if (_recGuideManual && _recSettings.GuideWhileRecording)
-                _ = PlayGuideAsync(loop: true);
+            _ = PlayGuideAsync(loop: false);
         }
         finally
         {
