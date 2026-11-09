@@ -100,12 +100,31 @@ public class RecTests
     public void ManualGuidePutsCountInBeforeMoras()
     {
         const int rate = 44100;
-        var plain = RecTone.ManualGuide(261.63, 120, 5, rate, countIn: false);
-        var withCount = RecTone.ManualGuide(261.63, 120, 5, rate, countIn: true);
+        var plain = RecTone.ManualGuide(261.63, 120, 5, rate, preCount: false, 4, countWhileMoras: false);
+        var withCount = RecTone.ManualGuide(261.63, 120, 5, rate, preCount: true, 4, countWhileMoras: false);
         Assert.Equal(rate * 5, plain.Length);
         Assert.Equal(rate * 2 + plain.Length, withCount.Length);
         Assert.True(withCount[rate / 50] > 0.1f);
         Assert.True(withCount[rate * 2 + rate / 50] > 0.05f);
+    }
+
+    [Fact]
+    public void ManualGuideMixesClicksIntoMoras()
+    {
+        const int rate = 44100;
+        var plain = RecTone.ManualGuide(261.63, 120, 2, rate, preCount: false, 4, countWhileMoras: false);
+        var mixed = RecTone.ManualGuide(261.63, 120, 2, rate, preCount: false, 4, countWhileMoras: true);
+        Assert.Equal(plain.Length, mixed.Length);
+        var beat = rate / 2;
+        Assert.True(Math.Abs(mixed[beat / 50]) > Math.Abs(plain[beat / 50]));
+    }
+
+    [Fact]
+    public void CountInLengthFollowsBeatCount()
+    {
+        const int rate = 44100;
+        Assert.Equal(rate, RecTone.CountIn(120, rate, 2).Length);
+        Assert.Equal(rate * 2, RecTone.CountIn(120, rate, 4).Length);
     }
 
     [Fact]

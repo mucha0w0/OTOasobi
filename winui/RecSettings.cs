@@ -21,6 +21,10 @@ sealed class RecAppSettings
 
     public bool CountIn { get; set; }
 
+    public int CountBeats { get; set; } = RecTone.DefaultCountBeats;
+
+    public bool CountWhileMoras { get; set; }
+
     public int Bpm { get; set; } = 120;
 
     public int Moras { get; set; } = RecTone.DefaultMoras;
@@ -45,6 +49,7 @@ sealed class RecAppSettings
         settings.GuidePitch = Math.Clamp(settings.GuidePitch, -12, 12);
         settings.Bpm = Math.Clamp(settings.Bpm, 40, 240);
         settings.Moras = Math.Clamp(settings.Moras, RecTone.MinMoras, RecTone.MaxMoras);
+        settings.CountBeats = Math.Clamp(settings.CountBeats, RecTone.MinCountBeats, RecTone.MaxCountBeats);
         settings.DeviceId = BlankToNull(settings.DeviceId);
         settings.OutputDeviceId = BlankToNull(settings.OutputDeviceId);
         return settings;

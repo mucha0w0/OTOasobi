@@ -52,6 +52,12 @@ static class RecTone
 
     public const int MaxMoras = 16;
 
+    public const int DefaultCountBeats = 4;
+
+    public const int MinCountBeats = 1;
+
+    public const int MaxCountBeats = 16;
+
     public static float[] Tone(double hz, int sampleRate, double seconds)
     {
         if (sampleRate <= 0 || seconds <= 0 || hz <= 0)
@@ -94,28 +100,43 @@ static class RecTone
         return samples;
     }
 
-    // カウントありなら、モーラの前に 4 拍のクリックを付ける。
-    public static float[] ManualGuide(double hz, int bpm, int moras, int sampleRate, bool countIn)
+    // 先頭カウントと、モーラ中へのクリック重ね。
+    public static float[] ManualGuide(double hz, int bpm, int moras, int sampleRate, bool preCount, int countBeats, bool countWhileMoras)
     {
         var mora = MoraGuide(hz, bpm, moras, sampleRate);
-        if (!countIn || mora.Length == 0)
+        if (mora.Length == 0)
             return mora;
-        var clicks = CountIn(bpm, sampleRate);
-        if (clicks.Length == 0)
-            return mora;
-        var samples = new float[clicks.Length + mora.Length];
-        Array.Copy(clicks, 0, samples, 0, clicks.Length);
-        Array.Copy(mora, 0, samples, clicks.Length, mora.Length);
+        countBeats = Math.Clamp(countBeats, MinCountBeats, MaxCountBeats);
+        float[] samples;
+        var moraStart = 0;
+        if (preCount)
+        {
+            var clicks = CountIn(bpm, sampleRate, countBeats);
+            if (clicks.Length == 0)
+                samples = mora;
+            else
+            {
+                samples = new float[clicks.Length + mora.Length];
+                Array.Copy(clicks, 0, samples, 0, clicks.Length);
+                Array.Copy(mora, 0, samples, clicks.Length, mora.Length);
+                moraStart = clicks.Length;
+            }
+        }
+        else
+            samples = mora;
+
+        if (countWhileMoras)
+            OverlayBeatClicks(samples, moraStart, mora.Length, bpm, sampleRate);
         return samples;
     }
 
     // 1 小節のクリック。長さは拍数そのものなので、終わった瞬間が録音の開始になる。
-    public static float[] CountIn(int bpm, int sampleRate, int beats = 4)
+    public static float[] CountIn(int bpm, int sampleRate, int beats = DefaultCountBeats)
     {
         if (sampleRate <= 0)
             return [];
         bpm = Math.Clamp(bpm, 40, 240);
-        beats = Math.Max(1, beats);
+        beats = Math.Clamp(beats, MinCountBeats, MaxCountBeats);
         var beat = sampleRate * 60.0 / bpm;
         var count = Math.Max(1, (int)Math.Round(beat * beats));
         var samples = new float[count];
@@ -124,16 +145,38 @@ static class RecTone
             var start = (int)Math.Round(beat * index);
             if (start >= count)
                 break;
-            var hz = index == 0 ? 1568.0 : 1046.0;
-            var length = Math.Min(count - start, (int)(sampleRate * 0.04));
-            for (var i = 0; i < length; i++)
-            {
-                var t = (double)i / sampleRate;
-                samples[start + i] += (float)(Math.Sin(2 * Math.PI * hz * t) * Math.Exp(-t / 0.012) * 0.8);
-            }
+            AddClick(samples, start, sampleRate, accent: index == 0);
         }
 
         return samples;
+    }
+
+    static void OverlayBeatClicks(float[] samples, int regionStart, int regionLength, int bpm, int sampleRate)
+    {
+        if (sampleRate <= 0 || regionLength <= 0)
+            return;
+        bpm = Math.Clamp(bpm, 40, 240);
+        var beat = sampleRate * 60.0 / bpm;
+        var beats = Math.Max(0, (int)Math.Floor(regionLength / beat));
+        for (var index = 0; index < beats; index++)
+        {
+            var start = regionStart + (int)Math.Round(beat * index);
+            if (start >= samples.Length)
+                break;
+            AddClick(samples, start, sampleRate, accent: index % 2 == 0);
+        }
+    }
+
+    static void AddClick(float[] samples, int start, int sampleRate, bool accent)
+    {
+        var hz = accent ? 1568.0 : 1046.0;
+        var length = Math.Min(samples.Length - start, (int)(sampleRate * 0.04));
+        for (var i = 0; i < length; i++)
+        {
+            var t = (double)i / sampleRate;
+            var sample = (float)(Math.Sin(2 * Math.PI * hz * t) * Math.Exp(-t / 0.012) * 0.8);
+            samples[start + i] = Math.Clamp(samples[start + i] + sample, -1f, 1f);
+        }
     }
 
     public static float[] Downmix(float[] interleaved, int channels)

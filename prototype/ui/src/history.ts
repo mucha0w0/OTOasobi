@@ -17,6 +17,8 @@ export type RecSnapshot = {
   speed: number
   volume: number
   countIn: boolean
+  countBeats: number
+  countWhileMoras: boolean
   bpm: number
   moras: number
   guideWhile: boolean
@@ -100,6 +102,8 @@ export function emptySnapshot(): EditSnapshot {
       speed: 1,
       volume: 0.7,
       countIn: false,
+      countBeats: 4,
+      countWhileMoras: false,
       bpm: 120,
       moras: 5,
       guideWhile: false,
@@ -289,6 +293,8 @@ export function applySnapshot(snapshot: EditSnapshot, command: PageCommand): Edi
           speed: command.speed,
           volume: command.volume,
           countIn: command.countIn,
+          countBeats: command.countBeats,
+          countWhileMoras: command.countWhileMoras,
           bpm: command.bpm,
           moras: command.moras,
           guideWhile: command.guideWhile,
@@ -901,6 +907,8 @@ function describeRec(command: Extract<PageCommand, { type: "recSettings" }>, sna
     !near(command.speed, current.speed) ? "speed" : "",
     !near(command.volume, current.volume) ? "volume" : "",
     command.countIn !== current.countIn ? "countIn" : "",
+    command.countBeats !== current.countBeats ? "countBeats" : "",
+    command.countWhileMoras !== current.countWhileMoras ? "countWhileMoras" : "",
     command.bpm !== current.bpm ? "bpm" : "",
     command.moras !== current.moras ? "moras" : "",
     command.guideWhile !== current.guideWhile ? "guideWhile" : "",
@@ -908,7 +916,7 @@ function describeRec(command: Extract<PageCommand, { type: "recSettings" }>, sna
   ].filter((item) => item.length > 0)
   if (changed.length === 0)
     return null
-  const numeric = changed.length === 1 && (changed[0] === "semitones" || changed[0] === "speed" || changed[0] === "volume" || changed[0] === "bpm" || changed[0] === "moras")
+  const numeric = changed.length === 1 && (changed[0] === "semitones" || changed[0] === "speed" || changed[0] === "volume" || changed[0] === "bpm" || changed[0] === "moras" || changed[0] === "countBeats")
   const key = changed.length === 1 ? `rec.${changed[0]}` : `rec.${changed.join("+")}`
   return edit(key, numeric, [{ type: "recSettings", ...current }], [command])
 }

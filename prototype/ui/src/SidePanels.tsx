@@ -86,6 +86,8 @@ export function GuidePanel({
   speed,
   volume,
   countIn,
+  countBeats,
+  countWhileMoras,
   bpm,
   moras,
   guideWhile,
@@ -95,6 +97,8 @@ export function GuidePanel({
   setSpeed,
   setVolume,
   setCountIn,
+  setCountBeats,
+  setCountWhileMoras,
   setBpm,
   setMoras,
   setGuideWhile,
@@ -106,6 +110,8 @@ export function GuidePanel({
   speed: number
   volume: number
   countIn: boolean
+  countBeats: number
+  countWhileMoras: boolean
   bpm: number
   moras: number
   guideWhile: boolean
@@ -115,6 +121,8 @@ export function GuidePanel({
   setSpeed: (value: number) => void
   setVolume: (value: number) => void
   setCountIn: (value: boolean) => void
+  setCountBeats: (value: number) => void
+  setCountWhileMoras: (value: boolean) => void
   setBpm: (value: number) => void
   setMoras: (value: number) => void
   setGuideWhile: (value: boolean) => void
@@ -160,6 +168,21 @@ export function GuidePanel({
               <input type="checkbox" checked={countIn} onChange={(event) => setCountIn(event.target.checked)} />
               カウント
             </label>
+            {countIn && (
+              <>
+                <label className="grid gap-1">
+                  <span className="flex justify-between">
+                    カウント数
+                    <span className="num text-[var(--muted)]">{countBeats}</span>
+                  </span>
+                  <input type="range" min={1} max={16} step={1} value={countBeats} onChange={(event) => setCountBeats(Number(event.target.value))} />
+                </label>
+                <label className="flex gap-2">
+                  <input type="checkbox" checked={countWhileMoras} onChange={(event) => setCountWhileMoras(event.target.checked)} />
+                  発声中もカウントを鳴らす
+                </label>
+              </>
+            )}
             <label className="grid gap-1">
               <span className="flex justify-between">
                 テンポ
@@ -212,7 +235,7 @@ export function GuidePanel({
         <IconButton
           label={playing ? "停止" : "ガイドを聴く"}
           accent
-          onClick={() => send(playing ? { type: "guideStop" } : { type: "guide", note, semitones, speed, volume, bpm, moras, countIn })}
+          onClick={() => send(playing ? { type: "guideStop" } : { type: "guide", note, semitones, speed, volume, bpm, moras, countIn, countBeats, countWhileMoras })}
         >
           {playing ? <IconStop /> : <IconPlay />}
         </IconButton>

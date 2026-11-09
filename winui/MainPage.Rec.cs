@@ -57,6 +57,8 @@ public sealed partial class MainPage
         RecGuidePitchSlider.Value = _recSettings.GuidePitch;
         RecGuidePitchValue.Text = FormatGuidePitch((int)Math.Round(RecGuidePitchSlider.Value));
         RecCountInSwitch.IsOn = _recSettings.CountIn;
+        RecCountBeatsBox.Value = _recSettings.CountBeats;
+        RecCountWhileSwitch.IsOn = _recSettings.CountWhileMoras;
         RecBpmBox.Value = _recSettings.Bpm;
         RecMorasBox.Value = _recSettings.Moras;
         RecGuideWhileSwitch.IsOn = _recSettings.GuideWhileRecording;
@@ -471,6 +473,22 @@ public sealed partial class MainPage
         if (_recApplying)
             return;
         _recSettings.CountIn = RecCountInSwitch.IsOn;
+        _recSettings.Save();
+    }
+
+    void RecCountBeats_Changed(NumberBox sender, NumberBoxValueChangedEventArgs e)
+    {
+        if (_recApplying || double.IsNaN(e.NewValue))
+            return;
+        _recSettings.CountBeats = (int)Math.Clamp(Math.Round(e.NewValue), RecTone.MinCountBeats, RecTone.MaxCountBeats);
+        _recSettings.Save();
+    }
+
+    void RecCountWhile_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_recApplying)
+            return;
+        _recSettings.CountWhileMoras = RecCountWhileSwitch.IsOn;
         _recSettings.Save();
     }
 
@@ -1002,7 +1020,7 @@ public sealed partial class MainPage
                 _recWaiting = true;
                 StopMicPlayback();
                 UpdateRecButtons();
-                var clicks = PreviewWav.Encode(RecTone.CountIn(_recSettings.Bpm, RecTone.TargetRate), 1, RecTone.TargetRate);
+                var clicks = PreviewWav.Encode(RecTone.CountIn(_recSettings.Bpm, RecTone.TargetRate, _recSettings.CountBeats), 1, RecTone.TargetRate);
                 var played = await PlayAndWaitAsync(clicks);
                 _recWaiting = false;
                 if (!played || _folder == null || !ReferenceEquals(CurrentLine(), line) || _recCapture == null)
@@ -1146,7 +1164,14 @@ public sealed partial class MainPage
                 hz = 261.6255653005986;
             // 録音中のループにはカウントを入れない。聴くときだけ前に 4 拍付ける。
             wav = PreviewWav.Encode(
-                RecTone.ManualGuide(hz, _recSettings.Bpm, _recSettings.Moras, RecTone.TargetRate, _recSettings.CountIn && !loop),
+                RecTone.ManualGuide(
+                    hz,
+                    _recSettings.Bpm,
+                    _recSettings.Moras,
+                    RecTone.TargetRate,
+                    _recSettings.CountIn && !loop,
+                    _recSettings.CountBeats,
+                    _recSettings.CountWhileMoras),
                 1,
                 RecTone.TargetRate);
         }

@@ -1799,8 +1799,32 @@
                                         x:Name="RecCountInSwitch"
                                         AutomationProperties.Name="カウント"
                                         OffContent="カウントなし"
-                                        OnContent="1 小節カウントする"
+                                        OnContent="カウントする"
                                         Toggled="RecCountIn_Toggled" />
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="120" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock VerticalAlignment="Center" Text="カウント数" />
+                                        <NumberBox
+                                            x:Name="RecCountBeatsBox"
+                                            Grid.Column="1"
+                                            AutomationProperties.Name="カウント数"
+                                            LargeChange="1"
+                                            Maximum="16"
+                                            Minimum="1"
+                                            SmallChange="1"
+                                            SpinButtonPlacementMode="Inline"
+                                            Value="4"
+                                            ValueChanged="RecCountBeats_Changed" />
+                                    </Grid>
+                                    <ToggleSwitch
+                                        x:Name="RecCountWhileSwitch"
+                                        AutomationProperties.Name="発声中もカウントを鳴らす"
+                                        OffContent="発声中はカウントなし"
+                                        OnContent="発声中もカウントする"
+                                        Toggled="RecCountWhile_Toggled" />
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
