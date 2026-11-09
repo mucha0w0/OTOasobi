@@ -1,5 +1,4 @@
 export const noisePlotHeight = 88
-export const noisePlotReserve = 46
 export const noiseMinView = 0.12
 export const noiseMaxZoom = 16
 export const noiseOpenView = 2
@@ -74,8 +73,13 @@ export function wavePeak(min: number, max: number, floor = noisePeakFloor) {
   return Math.max(Math.abs(min), Math.abs(max), floor)
 }
 
-export function fitNoiseHeight(available: number, min = noisePlotHeight) {
-  if (!Number.isFinite(available))
-    return min
-  return Math.max(min, Math.floor(available))
+export function filePeak(lo: number[], hi: number[]) {
+  const count = Math.min(lo.length, hi.length)
+  let min = 0
+  let max = 0
+  for (let index = 0; index < count; index++) {
+    min = Math.min(min, lo[index] ?? 0)
+    max = Math.max(max, hi[index] ?? 0)
+  }
+  return wavePeak(min, max)
 }

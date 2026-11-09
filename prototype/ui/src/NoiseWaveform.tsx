@@ -2,14 +2,12 @@ import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent } from 
 import { bitmapRatio, canvasContext, shouldReplaceBitmap } from "./bitmap"
 import {
   clampNoiseView,
-  fitNoiseHeight,
+  filePeak,
   noiseMaxZoom,
   noisePlotHeight,
-  noisePlotReserve,
   samplePeaks,
   shadeRect,
   timeAtNoise,
-  wavePeak,
   zoomNoiseView,
   type NoiseView,
 } from "./noiseWave"
@@ -37,40 +35,20 @@ export function NoiseWaveform({
   const viewRef = useRef<NoiseView>({ start: wave.viewStart, length: wave.viewLength })
   const barSync = useRef(false)
   const drag = useRef<{ anchor: number; pointer: number } | null>(null)
+  const scaleRef = useRef(filePeak(wave.lo, wave.hi))
+  const scaleFileRef = useRef(wave.file)
   const [view, setView] = useState<NoiseView>(() => clampNoiseView(wave.viewStart, wave.viewLength, wave.duration))
   viewRef.current = view
+  if (scaleFileRef.current !== wave.file) {
+    scaleFileRef.current = wave.file
+    scaleRef.current = filePeak(wave.lo, wave.hi)
+  }
 
   useEffect(() => {
     const next = clampNoiseView(wave.viewStart, wave.viewLength || wave.duration, wave.duration)
     viewRef.current = next
     setView(next)
   }, [wave.file, wave.duration, wave.viewStart, wave.viewLength])
-
-  useLayoutEffect(() => {
-    const frame = frameRef.current
-    if (!frame)
-      return
-    const scroller = frame.closest("[data-noise-scroll]")
-    const measure = () => {
-      if (!(scroller instanceof HTMLElement)) {
-        frame.style.height = `${noisePlotHeight}px`
-        return
-      }
-      const room = scroller.getBoundingClientRect().bottom - frame.getBoundingClientRect().top - noisePlotReserve
-      frame.style.height = `${fitNoiseHeight(room)}px`
-    }
-    const observer = new ResizeObserver(measure)
-    if (scroller instanceof HTMLElement) {
-      observer.observe(scroller)
-      for (const child of scroller.children)
-        observer.observe(child)
-    }
-    else {
-      observer.observe(frame)
-    }
-    measure()
-    return () => observer.disconnect()
-  }, [wave.file])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -79,9 +57,8 @@ export function NoiseWaveform({
       return
     const draw = () => {
       const width = frame.clientWidth
-      const height = frame.clientHeight
-      if (width < 2 || height < 2)
-        return
+      const height = noisePlotHeight
+      if (width < 2)
       const ratio = bitmapRatio()
       const nextWidth = Math.max(1, Math.floor(width * ratio))
       const nextHeight = Math.max(1, Math.floor(height * ratio))
@@ -100,8 +77,7 @@ export function NoiseWaveform({
       const shown = viewRef.current
       const columns = Math.max(1, Math.floor(width))
       const mid = height / 2
-      const span = samplePeaks(wave.lo, wave.hi, wave.duration, shown.start, shown.start + shown.length)
-      const scale = wavePeak(span.min, span.max)
+      const scale = scaleRef.current
       ctx.beginPath()
       const top: { x: number; y: number }[] = []
       const bottom: { x: number; y: number }[] = []
@@ -183,7 +159,7 @@ export function NoiseWaveform({
 
   return (
     <div className="min-w-0 overflow-hidden">
-      <div ref={frameRef} className="overflow-hidden rounded bg-[var(--canvas)]" style={{ height: noisePlotHeight, minHeight: noisePlotHeight }}>
+      <div ref={frameRef} className="overflow-hidden rounded bg-[var(--canvas)]" style={{ height: noisePlotHeight }}>
         <canvas
           ref={canvasRef}
           className="h-full w-full touch-none select-none"
