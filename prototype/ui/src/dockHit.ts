@@ -33,6 +33,14 @@ export function armBox(target: ScreenBox, edge: DockEdge): ScreenBox {
   return { x: cx - armSize / 2, y: cy + armGap, width: armSize, height: armSize }
 }
 
+// 左右の予告は、半分の箱を対象の幅に戻してから端へ寄せる。右は対象の右端が基準。
+export function previewBox(half: ScreenBox, edge: "left" | "right", fraction: number): ScreenBox {
+  const host = half.width * 2
+  const width = host * fraction
+  const x = edge === "left" ? half.x : half.x + half.width - width
+  return { ...half, x, width }
+}
+
 export function halfBox(target: ScreenBox, edge: DockEdge): ScreenBox {
   if (edge === "left")
     return { x: target.x, y: target.y, width: target.width / 2, height: target.height }

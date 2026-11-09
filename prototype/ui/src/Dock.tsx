@@ -1,5 +1,5 @@
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react"
-import { armBox, hitDrop, type DropAim, type HitLeaf, type HitRegion, type ScreenBox } from "./dockHit"
+import { armBox, hitDrop, previewBox, type DropAim, type HitLeaf, type HitRegion, type ScreenBox } from "./dockHit"
 import { pickTitleResize, type TitleEdge } from "./dockSplit"
 import { commitMove, dropWidthFraction, hidePane, idsOf, liftPane, paneTitles, type DockSpan, type LayoutNode, type PaneBox } from "./layout"
 import { PaneHost } from "./paneSlots"
@@ -158,10 +158,7 @@ function showInsertWidth(aim: DropAim, origin: LayoutNode, draggedId: string, sp
   if (!aim.highlight || !aim.edge || aim.edge === "top" || aim.edge === "bottom" || aim.targetIds.length === 0)
     return aim
   const fraction = dropWidthFraction(origin, draggedId, aim.targetIds, aim.edge, span)
-  const full = aim.highlight.width * 2
-  const width = full * fraction
-  const x = aim.edge === "left" ? aim.highlight.x : aim.highlight.x + full - width
-  return { ...aim, highlight: { ...aim.highlight, x, width } }
+  return { ...aim, highlight: previewBox(aim.highlight, aim.edge, fraction) }
 }
 
 function dockSpan(root: HTMLElement | null): DockSpan | undefined {

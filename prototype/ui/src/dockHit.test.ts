@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { hitDrop, type HitLeaf, type HitRegion } from "./dockHit"
+import { halfBox, hitDrop, previewBox, type HitLeaf, type HitRegion } from "./dockHit"
 
 const leaf: HitLeaf = { id: "wave", rect: { x: 0, y: 0, width: 400, height: 300 } }
 const outer: HitRegion = { ids: ["wave", "spec"], rect: { x: 0, y: 0, width: 400, height: 300 } }
@@ -18,6 +18,17 @@ describe("ドロップ先", () => {
     expect(aim?.edge).toBe("left")
     expect(aim?.targetIds).toEqual(["wave", "spec"])
     expect(aim?.hot).toBe(false)
+  })
+
+  it("右へ入れる予告は、対象の右端から幅だけ戻る", () => {
+    const half = halfBox({ x: 100, y: 40, width: 400, height: 200 }, "right")
+    expect(previewBox(half, "right", 0.5)).toEqual({ x: 300, y: 40, width: 200, height: 200 })
+    expect(previewBox(half, "right", 0.25)).toEqual({ x: 400, y: 40, width: 100, height: 200 })
+  })
+
+  it("左へ入れる予告は、対象の左端から始まる", () => {
+    const half = halfBox({ x: 100, y: 40, width: 400, height: 200 }, "left")
+    expect(previewBox(half, "left", 0.25)).toEqual({ x: 100, y: 40, width: 100, height: 200 })
   })
 
   it("印でも端でもない中央では入れない", () => {
