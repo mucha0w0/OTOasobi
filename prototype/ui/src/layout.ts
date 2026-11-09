@@ -148,7 +148,7 @@ export function movePane(
 }
 
 // 複数パネルを割るとき、入れたパネルは元の幅と高さより大きくせず、対象の半分も超えない。
-// 幅か高さが重なる列だけを割り、全体には広げない。
+// 割る範囲は、空白を埋めたあとの配置だけから決める。
 function fitGroupInsert(
   lifted: LayoutNode,
   dragged: LayoutNode,
@@ -161,24 +161,12 @@ function fitGroupInsert(
     return lifted
   const host = smallestContaining(lifted, stay) ?? lifted
   const liftedRects = measureRects(lifted, span.width, span.height)
-  const hostRect = unionRect(liftedRects, idsOf(host))
+  const slice = edgeSubtree(host, edge)
+  const sliceRect = unionRect(liftedRects, idsOf(slice))
   const drag = measureRects(origin, span.width, span.height).get(dragged.id)
-  if (!hostRect || !drag)
+  if (!sliceRect || !drag)
     return lifted
   const horizontal = edge === "left" || edge === "right"
-  const crossStart = horizontal
-    ? Math.max(drag.y, hostRect.y)
-    : Math.max(drag.x, hostRect.x)
-  const crossEnd = horizontal
-    ? Math.min(drag.y + drag.height, hostRect.y + hostRect.height)
-    : Math.min(drag.x + drag.width, hostRect.x + hostRect.width)
-  const edgeRoot = horizontal ? edgeSubtree(host, edge) : host
-  const slice = crossEnd - crossStart > 1
-    ? covering(edgeRoot, liftedRects, horizontal ? "y" : "x", crossStart, crossEnd) ?? edgeRoot
-    : edgeRoot
-  const sliceRect = unionRect(liftedRects, idsOf(slice))
-  if (!sliceRect)
-    return lifted
   const hostMain = horizontal ? sliceRect.width : sliceRect.height
   const originalMain = horizontal ? drag.width : drag.height
   if (!(hostMain > 1))
@@ -247,30 +235,30 @@ function preserveWidths(
   edge: DockEdge,
   span: DockSpan,
 ): LayoutNode {
-  const rects = measureRects(origin, span.width, span.height)
+  const lifted = liftPane(origin, draggedId, span)
+  const filled = lifted ? measureRects(lifted, span.width, span.height) : new Map<string, PaneRect>()
+  const previous = measureRects(origin, span.width, span.height)
   const desired = new Map<string, number>()
-  for (const [id, rect] of rects)
+  for (const [id, rect] of filled)
     desired.set(id, rect.width)
+  const dragged = previous.get(draggedId)
+  if (dragged)
+    desired.set(draggedId, dragged.width)
   const flex = new Set<string>()
   if (edge === "left" || edge === "right") {
     flex.add(draggedId)
     for (const id of edgeLeaves(target, edge))
       flex.add(id)
   }
-  else if (fillsHeight(rects.get(draggedId), span.height)) {
-    // 高さいっぱいの列を上か下に重ねるとき、重ねた列は元の幅のままにする。
-    // 空いた幅は、その列ではない隣の列が受け取る。
+  else if (fillsHeight(dragged, span.height)) {
+    // 高さいっぱいの列を上か下に重ねるとき、空白を埋めたあとの列幅を使う。
     const stay = idsOf(target)
-    const host = unionX(rects, stay)
+    const host = unionX(filled, stay)
     if (host)
       desired.set(draggedId, host.width)
-    const dragged = rects.get(draggedId)
-    if (dragged && host) {
-      const outside = [...rects].filter(([id, rect]) => id !== draggedId && !stay.includes(id) && !overlapsX(rect, host))
-      const beside = outside.filter(([, rect]) => sharesVerticalEdge(dragged, rect))
-      for (const [id] of beside.length > 0 ? beside : outside)
+    for (const [id] of filled)
+      if (!stay.includes(id))
         flex.add(id)
-    }
     if (flex.size === 0)
       flex.add(draggedId)
   }
@@ -295,17 +283,6 @@ function unionX(rects: Map<string, PaneRect>, ids: string[]) {
     x1 = Math.max(x1, rect.x + rect.width)
   }
   return x1 > x0 ? { x: x0, width: x1 - x0 } : null
-}
-
-function overlapsX(rect: PaneRect, host: { x: number; width: number }) {
-  return Math.min(rect.x + rect.width, host.x + host.width) - Math.max(rect.x, host.x) > 0.5
-}
-
-function sharesVerticalEdge(a: PaneRect, b: PaneRect) {
-  const overlap = Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y)
-  if (overlap <= 0.5)
-    return false
-  return Math.abs(a.x + a.width - b.x) <= 0.5 || Math.abs(b.x + b.width - a.x) <= 0.5
 }
 
 function edgeLeaves(node: LayoutNode, edge: "left" | "right"): string[] {
@@ -492,6 +469,27 @@ function unionRect(rects: Map<string, PaneRect>, ids: string[]): PaneRect | null
   return x1 > x0 && y1 > y0 ? { x: x0, y: y0, width: x1 - x0, height: y1 - y0 } : null
 }
 
+export function layoutHits(node: LayoutNode, span: DockSpan): { leaves: { id: string; rect: PaneRect }[]; regions: { ids: string[]; rect: PaneRect }[] } {
+  const rects = measureRects(node, span.width, span.height)
+  const leaves: { id: string; rect: PaneRect }[] = []
+  const regions: { ids: string[]; rect: PaneRect }[] = []
+  const walk = (current: LayoutNode) => {
+    const ids = idsOf(current)
+    const rect = unionRect(rects, ids)
+    if (!rect)
+      return
+    regions.push({ ids, rect })
+    if ("id" in current) {
+      leaves.push({ id: current.id, rect })
+      return
+    }
+    walk(current.first)
+    walk(current.second)
+  }
+  walk(node)
+  return { leaves, regions }
+}
+
 function edgeSubtree(node: LayoutNode, edge: DockEdge): LayoutNode {
   if ("id" in node)
     return node
@@ -503,19 +501,6 @@ function edgeSubtree(node: LayoutNode, edge: DockEdge): LayoutNode {
   if (node.axis === "h")
     return node
   return edgeSubtree(edge === "top" ? node.first : node.second, edge)
-}
-
-function covering(node: LayoutNode, rects: Map<string, PaneRect>, cross: "x" | "y", start: number, end: number): LayoutNode | null {
-  const ids: string[] = []
-  for (const [id, rect] of rects) {
-    if (!contains(node, id))
-      continue
-    const from = cross === "y" ? rect.y : rect.x
-    const to = from + (cross === "y" ? rect.height : rect.width)
-    if (Math.min(to, end) - Math.max(from, start) > 0.5)
-      ids.push(id)
-  }
-  return ids.length > 0 ? smallestContaining(node, ids) : null
 }
 
 function subtreeSize(node: LayoutNode, find: LayoutNode, width: number, height: number): { width: number; height: number } | null {

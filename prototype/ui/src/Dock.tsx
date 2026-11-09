@@ -1,7 +1,7 @@
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react"
 import { armBox, hitDrop, type DropAim, type HitLeaf, type HitRegion, type ScreenBox } from "./dockHit"
 import { pickTitleResize, type TitleEdge } from "./dockSplit"
-import { commitMove, hidePane, idsOf, insertedRect, liftPane, paneTitles, type DockSpan, type LayoutNode, type PaneBox } from "./layout"
+import { commitMove, hidePane, idsOf, insertedRect, layoutHits, liftPane, paneTitles, type DockSpan, type LayoutNode, type PaneBox } from "./layout"
 import { IconDown, IconNext, IconPrev, IconUp } from "./IconButton"
 import { PaneHost } from "./paneSlots"
 import { measureFloors, measureSplitters, moveSplitter } from "./splitter"
@@ -59,8 +59,9 @@ export function Dock({ layout, locked, boxes, onChange, onRatio, onResizing }: P
       }
       setGhost({ x: ev.clientX, y: ev.clientY, title: current.title })
       const root = rootRef.current
-      const hit = root ? hitDrop(...readHits(root), current.id, ev.clientX, ev.clientY) : null
       const dock = root?.getBoundingClientRect()
+      const lifted = dock ? liftPane(current.origin, current.id, { width: dock.width, height: dock.height }) : null
+      const hit = lifted && dock ? hitDrop(...filledHits(lifted, dock), current.id, ev.clientX, ev.clientY) : null
       setAim(hit && dock ? showInsertWidth(hit, current.origin, current.id, dock) : null)
     }
     const up = (ev: PointerEvent) => {
@@ -74,7 +75,9 @@ export function Dock({ layout, locked, boxes, onChange, onRatio, onResizing }: P
       if (!current?.moving)
         return
       const root = rootRef.current
-      const hit = root ? hitDrop(...readHits(root), current.id, ev.clientX, ev.clientY) : null
+      const dock = root?.getBoundingClientRect()
+      const lifted = dock ? liftPane(current.origin, current.id, { width: dock.width, height: dock.height }) : null
+      const hit = lifted && dock ? hitDrop(...filledHits(lifted, dock), current.id, ev.clientX, ev.clientY) : null
       const next = commitMove(
         current.origin,
         current.id,
@@ -172,18 +175,18 @@ function dockSpan(root: HTMLElement | null): DockSpan | undefined {
   return rect.width >= 1 && rect.height >= 1 ? { width: rect.width, height: rect.height } : undefined
 }
 
-function readHits(root: HTMLElement): [HitLeaf[], HitRegion[]] {
-  const leaves: HitLeaf[] = []
-  const regions: HitRegion[] = []
-  for (const element of root.querySelectorAll<HTMLElement>("[data-dock-node]")) {
-    const rect = element.getBoundingClientRect()
-    const box = { x: rect.left, y: rect.top, width: rect.width, height: rect.height }
-    const ids = (element.dataset.ids ?? "").split(",").filter(Boolean)
-    regions.push({ ids, rect: box })
-    if (element.dataset.pane)
-      leaves.push({ id: element.dataset.pane, rect: box })
-  }
-  return [leaves, regions]
+function filledHits(node: LayoutNode, dock: DOMRect): [HitLeaf[], HitRegion[]] {
+  const model = layoutHits(node, { width: dock.width, height: dock.height })
+  const shift = (rect: { x: number; y: number; width: number; height: number }) => ({
+    x: dock.left + rect.x,
+    y: dock.top + rect.y,
+    width: rect.width,
+    height: rect.height,
+  })
+  return [
+    model.leaves.map((leaf) => ({ id: leaf.id, rect: shift(leaf.rect) })),
+    model.regions.map((region) => ({ ids: region.ids, rect: shift(region.rect) })),
+  ]
 }
 
 function nodeKey(node: LayoutNode, path: number[]) {
