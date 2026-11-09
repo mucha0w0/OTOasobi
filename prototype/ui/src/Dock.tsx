@@ -89,7 +89,7 @@ export function Dock({ layout, locked, boxes, onChange, onRatio, onResizing }: P
 
   const origin = rootRef.current?.getBoundingClientRect()
   return (
-    <div ref={rootRef} data-dock-root="" className="relative h-full min-h-0 bg-[var(--bg)]">
+    <div ref={rootRef} data-dock-root="" className="relative h-full min-h-0 min-w-0 overflow-hidden bg-[var(--bg)]">
       {layout && (
         <Node
           layout={layout}
