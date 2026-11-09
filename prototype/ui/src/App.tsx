@@ -1392,6 +1392,7 @@ export function App() {
                     onPick={() => sendRef.current({ type: "recList", op: "pick" })}
                     onOpen={(path) => sendRef.current({ type: "recList", op: "open", path })}
                     onSelect={chooseRec}
+                    activeWav={fileName}
                   />
                 )
               if (id === "recScript")

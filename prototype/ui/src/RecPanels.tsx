@@ -1,3 +1,4 @@
+import { sameName } from "./filePick"
 import type { RecLineInfo, RecListEvent } from "./protocol"
 import { Segmented } from "./Segmented"
 
@@ -10,10 +11,12 @@ export function RecListPanel({
   onPick,
   onOpen,
   onSelect,
+  activeWav,
 }: {
   list: RecListEvent | null
   filter: "all" | "todo" | "done" | "extra"
   selected: number | null
+  activeWav: string
   setFilter: (filter: "all" | "todo" | "done" | "extra") => void
   onChoose: () => void
   onPick: () => void
@@ -74,7 +77,12 @@ export function RecListPanel({
           (list?.outside.length ?? 0) === 0
             ? <p className="p-3 text-[var(--muted)]">リストに無い WAV はありません。</p>
             : list?.outside.map((wav) => (
-              <button key={wav} type="button" className="block w-full px-3 py-2 text-left hover:bg-[var(--line)]" onClick={() => onSelect(null, wav)}>
+              <button
+                key={wav}
+                type="button"
+                className={`block w-full px-3 py-2 text-left ${sameName(wav, activeWav) ? "is-picked" : "hover:bg-[var(--line)]"}`}
+                onClick={() => onSelect(null, wav)}
+              >
                 <span className="flex w-full min-w-0 items-baseline justify-between gap-2">
                   <span className="min-w-0 truncate">{wav}</span>
                   <span className="shrink-0 text-right text-xs text-[var(--muted)]">リスト外</span>
