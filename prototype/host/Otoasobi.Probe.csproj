@@ -29,56 +29,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Include="..\..\winui\AppPaths.cs" Link="Winui\AppPaths.cs" />
-    <Compile Include="..\..\winui\PreviewPlayer.cs" Link="Winui\PreviewPlayer.cs" />
-    <Compile Include="..\..\winui\RecCapture.cs" Link="Winui\RecCapture.cs" />
-    <Compile Include="..\..\winui\RecMonitor.cs" Link="Winui\RecMonitor.cs" />
-    <Compile Include="..\..\winui\RecTone.cs" Link="Winui\RecTone.cs" />
-    <Compile Include="..\..\winui\WavAudio.cs" Link="Winui\WavAudio.cs" />
-    <Compile Include="..\..\winui\WavPicker.cs" Link="Winui\WavPicker.cs" />
-    <Compile Include="..\..\winui\AnalysisClient.cs" Link="Winui\AnalysisClient.cs" />
-    <Compile Include="..\..\winui\Session.cs" Link="Winui\Session.cs" />
-    <Compile Include="..\..\winui\OtoExport.cs" Link="Winui\OtoExport.cs" />
-    <Compile Include="..\..\winui\OtoSave.cs" Link="Winui\OtoSave.cs" />
-    <Compile Include="..\..\winui\OtoMarks.cs" Link="Winui\OtoMarks.cs" />
-    <Compile Include="..\..\winui\OtoTune.cs" Link="Winui\OtoTune.cs" />
-    <Compile Include="..\..\winui\OtoIni.cs" Link="Winui\OtoIni.cs" />
-    <Compile Include="..\..\winui\ConsonantOverlap.cs" Link="Winui\ConsonantOverlap.cs" />
-    <Compile Include="..\..\winui\OtoPreset.cs" Link="Winui\OtoPreset.cs" />
-    <Compile Include="..\..\winui\CvvcPreset.cs" Link="Winui\CvvcPreset.cs" />
-    <Compile Include="..\..\winui\JsonFiles.cs" Link="Winui\JsonFiles.cs" />
-    <Compile Include="..\..\winui\NamedList.cs" Link="Winui\NamedList.cs" />
-    <Compile Include="..\..\winui\BlankRelease.cs" Link="Winui\BlankRelease.cs" />
-    <Compile Include="..\..\winui\FileLoudness.cs" Link="Winui\FileLoudness.cs" />
-    <Compile Include="..\..\winui\AudioEffect.cs" Link="Winui\AudioEffect.cs" />
-    <Compile Include="..\..\winui\EffectRackPreset.cs" Link="Winui\EffectRackPreset.cs" />
-    <Compile Include="..\..\winui\EditorLayout.cs" Link="Winui\EditorLayout.cs" />
-    <Compile Include="..\..\winui\RecentFolders.cs" Link="Winui\RecentFolders.cs" />
-    <Compile Include="..\..\winui\ProjectFolder.cs" Link="Winui\ProjectFolder.cs" />
-    <Compile Include="..\..\winui\PluginPath.cs" Link="Winui\PluginPath.cs" />
-    <Compile Include="..\..\winui\AppAppearance.cs" Link="Winui\AppAppearance.cs" />
-    <Compile Include="..\..\winui\UpdatePrompt.cs" Link="Winui\UpdatePrompt.cs" />
-    <Compile Include="..\..\winui\EngineInstaller.cs" Link="Winui\EngineInstaller.cs" />
     <Content Include="..\ui\dist\**" Link="ui\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\ui\dist')" />
-    <Compile Include="..\..\winui\EqPreset.cs" Link="Winui\EqPreset.cs" />
-    <Compile Include="..\..\winui\NormalizePreset.cs" Link="Winui\NormalizePreset.cs" />
-    <Compile Include="..\..\winui\HighPassPreset.cs" Link="Winui\HighPassPreset.cs" />
-    <Compile Include="..\..\winui\NoisePreset.cs" Link="Winui\NoisePreset.cs" />
-    <Compile Include="..\..\winui\CompressorPreset.cs" Link="Winui\CompressorPreset.cs" />
-    <Compile Include="..\..\winui\Equalizer.cs" Link="Winui\Equalizer.cs" />
-    <Compile Include="..\..\winui\Normalize.cs" Link="Winui\Normalize.cs" />
-    <Compile Include="..\..\winui\HighPass.cs" Link="Winui\HighPass.cs" />
-    <Compile Include="..\..\winui\NoiseSuppressor.cs" Link="Winui\NoiseSuppressor.cs" />
-    <Compile Include="..\..\winui\OriginalLibrary.cs" Link="Winui\OriginalLibrary.cs" />
-    <Compile Include="..\..\winui\WavStandard.cs" Link="Winui\WavStandard.cs" />
-    <Compile Include="..\..\winui\Compressor.cs" Link="Winui\Compressor.cs" />
-    <Compile Include="..\..\winui\PresetUi.cs" Link="Winui\PresetUi.cs" />
-    <Compile Include="..\..\winui\FrqFile.cs" Link="Winui\FrqFile.cs" />
-    <Compile Include="..\..\winui\RecList.cs" Link="Winui\RecList.cs" />
-    <Compile Include="..\..\winui\VoicebankText.cs" Link="Winui\VoicebankText.cs" />
-    <Compile Include="..\..\winui\VoicebankImage.cs" Link="Winui\VoicebankImage.cs" />
-    <Compile Include="..\..\winui\RecSettings.cs" Link="Winui\RecSettings.cs" />
-    <Compile Include="..\..\winui\RecGuideScript.cs" Link="Winui\RecGuideScript.cs" />
   </ItemGroup>
 
   <ItemGroup>

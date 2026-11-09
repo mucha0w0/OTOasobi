@@ -116,7 +116,7 @@ def _checkpoint_sources() -> list[Path]:
 def ensure_mms_checkpoint() -> bool:
     """TORCH_HOME に完成した model.pt がなければ、既にあるコピーを置く。
 
-    WinUI は TORCH_HOME をアプリのデータフォルダにする。そこからは
+    ホストは TORCH_HOME をアプリのデータフォルダにする。そこからは
     ~/.cache/torch が見えないので、get_model が 1.2GB を取り直す。
     転送が止まると、音素対応の表示のまま戻ってこない。
     """

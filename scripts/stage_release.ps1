@@ -1,6 +1,6 @@
 ﻿# Stage the acoustic runtime into a dotnet publish folder, and the precision
 # engine (CPU torch, torchaudio 2.8, Praat, MMS weights) beside it.
-#   dotnet publish winui/Otoasobi.csproj -c Release -r win-x64 --self-contained true -o publish
+#   dotnet publish prototype/host/Otoasobi.Probe.csproj -c Release -r win-x64 --self-contained true -o publish
 #   powershell -File scripts/stage_release.ps1 -PublishDir publish -OutputDir engine-dist
 
 param(

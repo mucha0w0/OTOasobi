@@ -229,14 +229,6 @@ dotnet run --project prototype/host
 
 `run` は、manifest の `script` へ JSON を 1 行送り、1 行を受け取ります。行には `project`（音源フォルダのパス）と、パネルが渡した `body` が入ります。標準出力には、その応答の JSON 以外を書きません。プロセスはパネルごとに 1 つで、30 秒で打ち切ります。Python は解析と同じものを使います。インストールしたパネルの Python は、そのフォルダを信用したことになります。読み書きの制限は、パネルから親へ送る `list` / `read` / `write` だけです。Ctrl+Z では戻せません。
 
-## 旧画面
-
-公開しない WinUI の画面です。
-
-```powershell
-dotnet run --project winui
-```
-
 ## 設定の保存
 
 ファイルメニューの「設定を保存」は、いまの計算方法（単独音、連続音、CVVC）と、各モードのスライダーと、プリセットと、線で直した値を、開いているフォルダの直下に保存します。原音修正のプリセットと、かかっているエフェクトの値も含みます。ファイル名は `OTOasibi_` で始まります。「設定を読み込む」で、そのフォルダのファイルを選んで戻します。読み込むと、プリセット一覧と、線で直した値は、そのファイルの内容になります。
@@ -330,10 +322,10 @@ dotnet run --project winui
 
 | パス | 役割 |
 | --- | --- |
-| `prototype/host` | 配布する `Otoasobi.exe`。React を WebView2 に表示し、計算は `winui/` の C# を呼ぶ |
+| `prototype/host` | 配布する `Otoasobi.exe`。React を WebView2 に表示し、計算は `prototype/host/logic` の C# |
+| `prototype/host/logic` | 計算。名前空間は `Otoasobi` |
 | `prototype/ui` | 配布する画面。開発中は `npm run dev` と環境変数 `OTOASOBI_PROBE_URL` |
 | `prototype/plugins/sample` | 外部パネルの見本。配布物には入れない |
-| `winui/` | 計算と、公開しない旧画面。リリースの対象ではない |
 | `.github/workflows/release.yml` | タグ `v*` で Setup と高精度エンジンをリリースする |
 | `scripts/stage_release.ps1` | 音響用 Python、エンジン zip、`engine.json` を作る |
 | `otoasobi/worker.py` | 画面から呼ばれる解析プロセス |

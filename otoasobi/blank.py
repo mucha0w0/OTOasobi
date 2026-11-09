@@ -3,7 +3,7 @@
 0 秒がその角。正は減衰側、負は手前。
 右脚が取れないときは、母音の終了から同じ秒数だけずらす。
 
-画面の winui/BlankRelease.cs と揃える。
+画面の prototype/host/logic/BlankRelease.cs と揃える。
 """
 
 from __future__ import annotations

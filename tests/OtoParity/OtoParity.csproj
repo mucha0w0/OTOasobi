@@ -19,30 +19,30 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Include="..\..\winui\BlankRelease.cs" Link="Winui\BlankRelease.cs" />
-    <Compile Include="..\..\winui\EditorLayout.cs" Link="Winui\EditorLayout.cs" />
-    <Compile Include="..\..\winui\JsonFiles.cs" Link="Winui\JsonFiles.cs" />
-    <Compile Include="..\..\winui\NamedList.cs" Link="Winui\NamedList.cs" />
-    <Compile Include="..\..\winui\ConsonantOverlap.cs" Link="Winui\ConsonantOverlap.cs" />
-    <Compile Include="..\..\winui\OtoExport.cs" Link="Winui\OtoExport.cs" />
-    <Compile Include="..\..\winui\OtoIni.cs" Link="Winui\OtoIni.cs" />
-    <Compile Include="..\..\winui\OtoMarks.cs" Link="Winui\OtoMarks.cs" />
-    <Compile Include="..\..\winui\OtoTune.cs" Link="Winui\OtoTune.cs" />
-    <Compile Include="..\..\winui\Session.cs" Link="Winui\Session.cs" />
-    <Compile Include="..\..\winui\AppPaths.cs" Link="Winui\AppPaths.cs" />
-    <Compile Include="..\..\winui\AppAppearance.cs" Link="Winui\AppAppearance.cs" />
-    <Compile Include="..\..\winui\UpdatePrompt.cs" Link="Winui\UpdatePrompt.cs" />
-    <Compile Include="..\..\winui\EngineInstaller.cs" Link="Winui\EngineInstaller.cs" />
-    <Compile Include="..\..\winui\FrqFile.cs" Link="Winui\FrqFile.cs" />
-    <Compile Include="..\..\winui\VoicebankText.cs" Link="Winui\VoicebankText.cs" />
-    <Compile Include="..\..\winui\VoicebankImage.cs" Link="Winui\VoicebankImage.cs" />
-    <Compile Include="..\..\winui\RecList.cs" Link="Winui\RecList.cs" />
-    <Compile Include="..\..\winui\RecTone.cs" Link="Winui\RecTone.cs" />
-    <Compile Include="..\..\winui\RecGuideScript.cs" Link="Winui\RecGuideScript.cs" />
-    <Compile Include="..\..\winui\WavAudio.cs" Link="Winui\WavAudio.cs" />
-    <Compile Include="..\..\winui\RecMonitor.cs" Link="Winui\RecMonitor.cs" />
-    <Compile Include="..\..\winui\ProjectFolder.cs" Link="Winui\ProjectFolder.cs" />
-    <Compile Include="..\..\winui\PluginPath.cs" Link="Winui\PluginPath.cs" />
+    <Compile Include="..\..\prototype\host\logic\BlankRelease.cs" Link="Logic\BlankRelease.cs" />
+    <Compile Include="..\..\prototype\host\logic\EditorLayout.cs" Link="Logic\EditorLayout.cs" />
+    <Compile Include="..\..\prototype\host\logic\JsonFiles.cs" Link="Logic\JsonFiles.cs" />
+    <Compile Include="..\..\prototype\host\logic\NamedList.cs" Link="Logic\NamedList.cs" />
+    <Compile Include="..\..\prototype\host\logic\ConsonantOverlap.cs" Link="Logic\ConsonantOverlap.cs" />
+    <Compile Include="..\..\prototype\host\logic\OtoExport.cs" Link="Logic\OtoExport.cs" />
+    <Compile Include="..\..\prototype\host\logic\OtoIni.cs" Link="Logic\OtoIni.cs" />
+    <Compile Include="..\..\prototype\host\logic\OtoMarks.cs" Link="Logic\OtoMarks.cs" />
+    <Compile Include="..\..\prototype\host\logic\OtoTune.cs" Link="Logic\OtoTune.cs" />
+    <Compile Include="..\..\prototype\host\logic\Session.cs" Link="Logic\Session.cs" />
+    <Compile Include="..\..\prototype\host\logic\AppPaths.cs" Link="Logic\AppPaths.cs" />
+    <Compile Include="..\..\prototype\host\logic\AppAppearance.cs" Link="Logic\AppAppearance.cs" />
+    <Compile Include="..\..\prototype\host\logic\UpdatePrompt.cs" Link="Logic\UpdatePrompt.cs" />
+    <Compile Include="..\..\prototype\host\logic\EngineInstaller.cs" Link="Logic\EngineInstaller.cs" />
+    <Compile Include="..\..\prototype\host\logic\FrqFile.cs" Link="Logic\FrqFile.cs" />
+    <Compile Include="..\..\prototype\host\logic\VoicebankText.cs" Link="Logic\VoicebankText.cs" />
+    <Compile Include="..\..\prototype\host\logic\VoicebankImage.cs" Link="Logic\VoicebankImage.cs" />
+    <Compile Include="..\..\prototype\host\logic\RecList.cs" Link="Logic\RecList.cs" />
+    <Compile Include="..\..\prototype\host\logic\RecTone.cs" Link="Logic\RecTone.cs" />
+    <Compile Include="..\..\prototype\host\logic\RecGuideScript.cs" Link="Logic\RecGuideScript.cs" />
+    <Compile Include="..\..\prototype\host\logic\WavAudio.cs" Link="Logic\WavAudio.cs" />
+    <Compile Include="..\..\prototype\host\logic\RecMonitor.cs" Link="Logic\RecMonitor.cs" />
+    <Compile Include="..\..\prototype\host\logic\ProjectFolder.cs" Link="Logic\ProjectFolder.cs" />
+    <Compile Include="..\..\prototype\host\logic\PluginPath.cs" Link="Logic\PluginPath.cs" />
     <Compile Include="..\..\prototype\host\PluginCatalog.cs" Link="Host\PluginCatalog.cs" />
   </ItemGroup>
 
