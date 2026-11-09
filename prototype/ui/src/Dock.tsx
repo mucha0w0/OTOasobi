@@ -1,7 +1,7 @@
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react"
-import { armBox, hitDrop, previewBox, type DropAim, type HitLeaf, type HitRegion, type ScreenBox } from "./dockHit"
+import { armBox, hitDrop, type DropAim, type HitLeaf, type HitRegion, type ScreenBox } from "./dockHit"
 import { pickTitleResize, type TitleEdge } from "./dockSplit"
-import { commitMove, dropWidthFraction, hidePane, idsOf, liftPane, paneTitles, type DockSpan, type LayoutNode, type PaneBox } from "./layout"
+import { commitMove, hidePane, idsOf, insertedRect, liftPane, paneTitles, type DockSpan, type LayoutNode, type PaneBox } from "./layout"
 import { PaneHost } from "./paneSlots"
 import { measureFloors, measureSplitters, moveSplitter } from "./splitter"
 
@@ -59,7 +59,8 @@ export function Dock({ layout, locked, boxes, onChange, onRatio, onResizing }: P
       setGhost({ x: ev.clientX, y: ev.clientY, title: current.title })
       const root = rootRef.current
       const hit = root ? hitDrop(...readHits(root), current.id, ev.clientX, ev.clientY) : null
-      setAim(hit ? showInsertWidth(hit, current.origin, current.id, dockSpan(root)) : null)
+      const dock = root?.getBoundingClientRect()
+      setAim(hit && dock ? showInsertWidth(hit, current.origin, current.id, dock) : null)
     }
     const up = (ev: PointerEvent) => {
       window.removeEventListener("pointermove", move)
@@ -154,11 +155,13 @@ function placed(box: ScreenBox, origin: DOMRect) {
   }
 }
 
-function showInsertWidth(aim: DropAim, origin: LayoutNode, draggedId: string, span?: DockSpan): DropAim {
-  if (!aim.highlight || !aim.edge || aim.edge === "top" || aim.edge === "bottom" || aim.targetIds.length === 0)
+function showInsertWidth(aim: DropAim, origin: LayoutNode, draggedId: string, dock?: DOMRect): DropAim {
+  if (!aim.highlight || !aim.edge || !dock || dock.width < 1 || dock.height < 1)
     return aim
-  const fraction = dropWidthFraction(origin, draggedId, aim.targetIds, aim.edge, span)
-  return { ...aim, highlight: previewBox(aim.highlight, aim.edge, fraction) }
+  const rect = insertedRect(origin, draggedId, aim.targetIds, aim.edge, { width: dock.width, height: dock.height })
+  if (!rect)
+    return aim
+  return { ...aim, highlight: { x: dock.left + rect.x, y: dock.top + rect.y, width: rect.width, height: rect.height } }
 }
 
 function dockSpan(root: HTMLElement | null): DockSpan | undefined {

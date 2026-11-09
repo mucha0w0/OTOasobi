@@ -142,7 +142,59 @@ export function movePane(
   const placed = replaceNode(without, resolved, split)
   if (!span || span.width < 1 || span.height < 1)
     return placed
+  if (stay.length > 1)
+    return fitGroupInsert(without, dragged, stay, edge, span, root)
   return preserveWidths(placed, root, draggedId, resolved, edge, span)
+}
+
+// 複数パネルを割るとき、入れたパネルは元の幅と高さより大きくせず、対象の半分も超えない。
+// 幅か高さが重なる列だけを割り、全体には広げない。
+function fitGroupInsert(
+  lifted: LayoutNode,
+  dragged: LayoutNode,
+  stay: string[],
+  edge: DockEdge,
+  span: DockSpan,
+  origin: LayoutNode,
+): LayoutNode {
+  if (!("id" in dragged))
+    return lifted
+  const host = smallestContaining(lifted, stay) ?? lifted
+  const liftedRects = measureRects(lifted, span.width, span.height)
+  const hostRect = unionRect(liftedRects, idsOf(host))
+  const drag = measureRects(origin, span.width, span.height).get(dragged.id)
+  if (!hostRect || !drag)
+    return lifted
+  const horizontal = edge === "left" || edge === "right"
+  const crossStart = horizontal
+    ? Math.max(drag.y, hostRect.y)
+    : Math.max(drag.x, hostRect.x)
+  const crossEnd = horizontal
+    ? Math.min(drag.y + drag.height, hostRect.y + hostRect.height)
+    : Math.min(drag.x + drag.width, hostRect.x + hostRect.width)
+  const edgeRoot = horizontal ? edgeSubtree(host, edge) : host
+  const slice = crossEnd - crossStart > 1
+    ? covering(edgeRoot, liftedRects, horizontal ? "y" : "x", crossStart, crossEnd) ?? edgeRoot
+    : edgeRoot
+  const sliceRect = unionRect(liftedRects, idsOf(slice))
+  if (!sliceRect)
+    return lifted
+  const hostMain = horizontal ? sliceRect.width : sliceRect.height
+  const originalMain = horizontal ? drag.width : drag.height
+  if (!(hostMain > 1))
+    return lifted
+  const floor = Math.min(paneLimit(hostMain), hostMain / 2)
+  const size = Math.min(Math.max(Math.min(originalMain, hostMain / 2), floor), hostMain - floor)
+  const share = size / hostMain
+  const ratio = edge === "left" || edge === "top" ? share : 1 - share
+  const split = edge === "left"
+    ? h(ratio, dragged, slice)
+    : edge === "right"
+      ? h(ratio, slice, dragged)
+      : edge === "top"
+        ? v(ratio, dragged, slice)
+        : v(ratio, slice, dragged)
+  return replaceNode(lifted, slice, split)
 }
 
 // 挿入後も、入れたパネルと、その端に接するパネル以外は元の幅のままにする。
@@ -423,6 +475,49 @@ function measureRects(node: LayoutNode, width: number, height: number): Map<stri
   return found
 }
 
+function unionRect(rects: Map<string, PaneRect>, ids: string[]): PaneRect | null {
+  let x0 = Number.POSITIVE_INFINITY
+  let y0 = Number.POSITIVE_INFINITY
+  let x1 = Number.NEGATIVE_INFINITY
+  let y1 = Number.NEGATIVE_INFINITY
+  for (const id of ids) {
+    const rect = rects.get(id)
+    if (!rect)
+      continue
+    x0 = Math.min(x0, rect.x)
+    y0 = Math.min(y0, rect.y)
+    x1 = Math.max(x1, rect.x + rect.width)
+    y1 = Math.max(y1, rect.y + rect.height)
+  }
+  return x1 > x0 && y1 > y0 ? { x: x0, y: y0, width: x1 - x0, height: y1 - y0 } : null
+}
+
+function edgeSubtree(node: LayoutNode, edge: DockEdge): LayoutNode {
+  if ("id" in node)
+    return node
+  if (edge === "left" || edge === "right") {
+    if (node.axis === "v")
+      return node
+    return edgeSubtree(edge === "left" ? node.first : node.second, edge)
+  }
+  if (node.axis === "h")
+    return node
+  return edgeSubtree(edge === "top" ? node.first : node.second, edge)
+}
+
+function covering(node: LayoutNode, rects: Map<string, PaneRect>, cross: "x" | "y", start: number, end: number): LayoutNode | null {
+  const ids: string[] = []
+  for (const [id, rect] of rects) {
+    if (!contains(node, id))
+      continue
+    const from = cross === "y" ? rect.y : rect.x
+    const to = from + (cross === "y" ? rect.height : rect.width)
+    if (Math.min(to, end) - Math.max(from, start) > 0.5)
+      ids.push(id)
+  }
+  return ids.length > 0 ? smallestContaining(node, ids) : null
+}
+
 function subtreeSize(node: LayoutNode, find: LayoutNode, width: number, height: number): { width: number; height: number } | null {
   if (node === find)
     return { width, height }
@@ -471,6 +566,21 @@ function findPane(node: LayoutNode, id: string): LayoutNode | null {
   if ("id" in node)
     return node.id === id ? node : null
   return findPane(node.first, id) ?? findPane(node.second, id)
+}
+
+export function insertedRect(
+  root: LayoutNode | null,
+  draggedId: string,
+  targetIds: string[],
+  edge: DockEdge,
+  span?: DockSpan,
+): PaneRect | null {
+  if (!root || !span)
+    return null
+  const moved = movePane(root, draggedId, targetIds, edge, span)
+  if (!moved)
+    return null
+  return measureRects(moved, span.width, span.height).get(draggedId) ?? null
 }
 
 export function idsOf(node: LayoutNode): string[] {
