@@ -1169,6 +1169,7 @@ public sealed partial class MainPage
                     _recSettings.Bpm,
                     _recSettings.Moras,
                     RecTone.TargetRate,
+                    _recSettings.CountIn,
                     _recSettings.CountIn && !loop,
                     _recSettings.CountBeats,
                     _recSettings.CountBeatsAfter),

@@ -100,34 +100,45 @@ static class RecTone
         return samples;
     }
 
-    // 発声前のカウントと、発声中のクリック重ね。
-    public static float[] ManualGuide(double hz, int bpm, int moras, int sampleRate, bool preCount, int countBeatsBefore, int countBeatsAfter)
+    // 発声前のカウント、発声中のクリック重ね（カウントオン時は自動）、発声後の追加カウント。
+    public static float[] ManualGuide(double hz, int bpm, int moras, int sampleRate, bool countEnabled, bool preCount, int countBeatsBefore, int countBeatsAfter)
     {
         var mora = MoraGuide(hz, bpm, moras, sampleRate);
         if (mora.Length == 0)
             return mora;
         countBeatsBefore = Math.Clamp(countBeatsBefore, MinCountBeats, MaxCountBeats);
         countBeatsAfter = Math.Clamp(countBeatsAfter, 0, MaxCountBeats);
-        float[] samples;
-        var moraStart = 0;
-        if (preCount)
-        {
-            var clicks = CountIn(bpm, sampleRate, countBeatsBefore);
-            if (clicks.Length == 0)
-                samples = mora;
-            else
-            {
-                samples = new float[clicks.Length + mora.Length];
-                Array.Copy(clicks, 0, samples, 0, clicks.Length);
-                Array.Copy(mora, 0, samples, clicks.Length, mora.Length);
-                moraStart = clicks.Length;
-            }
-        }
-        else
-            samples = mora;
 
-        if (countBeatsAfter > 0)
-            OverlayBeatClicks(samples, moraStart, mora.Length, bpm, sampleRate, countBeatsAfter);
+        float[]? pre = null;
+        var preLength = 0;
+        if (countEnabled && preCount)
+        {
+            pre = CountIn(bpm, sampleRate, countBeatsBefore);
+            preLength = pre.Length;
+        }
+
+        float[]? post = null;
+        var postLength = 0;
+        if (countEnabled && countBeatsAfter > 0)
+        {
+            post = CountIn(bpm, sampleRate, countBeatsAfter);
+            postLength = post.Length;
+        }
+
+        var samples = new float[preLength + mora.Length + postLength];
+        var moraStart = 0;
+        if (preLength > 0)
+        {
+            Array.Copy(pre!, 0, samples, 0, preLength);
+            moraStart = preLength;
+        }
+
+        Array.Copy(mora, 0, samples, moraStart, mora.Length);
+        if (postLength > 0)
+            Array.Copy(post!, 0, samples, moraStart + mora.Length, postLength);
+
+        if (countEnabled)
+            OverlayBeatClicks(samples, moraStart, mora.Length, bpm, sampleRate);
         return samples;
     }
 
@@ -152,15 +163,13 @@ static class RecTone
         return samples;
     }
 
-    static void OverlayBeatClicks(float[] samples, int regionStart, int regionLength, int bpm, int sampleRate, int beatCount)
+    static void OverlayBeatClicks(float[] samples, int regionStart, int regionLength, int bpm, int sampleRate)
     {
-        if (sampleRate <= 0 || regionLength <= 0 || beatCount <= 0)
+        if (sampleRate <= 0 || regionLength <= 0)
             return;
         bpm = Math.Clamp(bpm, 40, 240);
-        beatCount = Math.Clamp(beatCount, 0, MaxCountBeats);
         var beat = sampleRate * 60.0 / bpm;
-        var regionBeats = Math.Max(0, (int)Math.Floor(regionLength / beat));
-        var beats = Math.Min(beatCount, regionBeats);
+        var beats = Math.Max(0, (int)Math.Floor(regionLength / beat));
         for (var index = 0; index < beats; index++)
         {
             var start = regionStart + (int)Math.Round(beat * index);

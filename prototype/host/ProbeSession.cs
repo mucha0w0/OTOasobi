@@ -984,7 +984,7 @@ sealed class ProbeSession : IDisposable
         }
 
         // 録音中のループには先頭カウントを入れない。発声中のクリックはループでも効く。
-        var tone = RecTone.ManualGuide(hz, bpm, moras, RecTone.TargetRate, countIn && !loop, countBeats, countBeatsAfter);
+        var tone = RecTone.ManualGuide(hz, bpm, moras, RecTone.TargetRate, countIn, countIn && !loop, countBeats, countBeatsAfter);
         var shaped = RecTone.ShapeGuide(tone, 1, RecTone.TargetRate, speed, semitones);
         var wav = PreviewWav.Encode(shaped, 1, RecTone.TargetRate);
         _player.Volume = volume;
