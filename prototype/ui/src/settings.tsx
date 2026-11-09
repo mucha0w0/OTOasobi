@@ -66,9 +66,8 @@ export function SettingsDialog({ tabs, onClose }: { tabs: SettingsTab[]; onClose
 
   return (
     <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/40 p-6">
-      <div className="flex h-[min(32rem,100%)] w-full max-w-3xl flex-col rounded-md border border-[var(--line)] bg-[var(--panel)] text-[var(--text)]">
-        <div className="flex items-center gap-2 border-b border-[var(--line)] py-3 pr-3 pl-5">
-          <h2 className="min-w-0 flex-1 text-lg font-semibold">環境設定</h2>
+      <div role="dialog" aria-modal="true" aria-label="環境設定" className="flex h-[min(32rem,100%)] w-full max-w-3xl flex-col rounded-md border border-[var(--line)] bg-[var(--panel)] text-[var(--text)]">
+        <div className="flex items-center justify-end border-b border-[var(--line)] py-2 pr-3 pl-5">
           <button
             type="button"
             className="grid size-7 shrink-0 place-items-center rounded text-[var(--muted)] hover:bg-[var(--line)]"
@@ -103,12 +102,7 @@ export function SettingsDialog({ tabs, onClose }: { tabs: SettingsTab[]; onClose
             })}
           </div>
           <div role="tabpanel" id={panelId} aria-labelledby={current ? `settings-tab-${current.id}` : undefined} className="min-h-0 flex-1 overflow-auto p-5">
-            {current && (
-              <>
-                <h3 className="text-base font-semibold">{current.title}</h3>
-                <div className="mt-4">{current.content}</div>
-              </>
-            )}
+            {current?.content}
           </div>
         </div>
       </div>
@@ -119,7 +113,7 @@ export function SettingsDialog({ tabs, onClose }: { tabs: SettingsTab[]; onClose
 export function Setting({ label, children }: { label: string; children: ReactNode }) {
   return (
     <section className="grid gap-2">
-      <h4 className="text-sm font-semibold">{label}</h4>
+      <h3 className="section-title">{label}</h3>
       {children}
     </section>
   )
@@ -127,9 +121,9 @@ export function Setting({ label, children }: { label: string; children: ReactNod
 
 function LookSettings({ theme, accent, scale, lockPanels, onTheme, onAccent, onScale, onLockPanels, onSystemAccent }: LookModel) {
   return (
-    <div className="grid gap-6">
+    <div className="flex flex-col gap-4 text-sm">
       <Setting label="明暗">
-        <fieldset className="flex flex-wrap gap-3 text-sm">
+        <fieldset className="flex flex-wrap gap-3">
           {themes.map((choice) => (
             <label key={choice.id} className="flex items-center gap-1">
               <input type="radio" name="theme" checked={theme === choice.id} onChange={() => onTheme(choice.id)} />
@@ -139,13 +133,13 @@ function LookSettings({ theme, accent, scale, lockPanels, onTheme, onAccent, onS
         </fieldset>
       </Setting>
       <Setting label="アクセント">
-        <div className="flex flex-wrap items-center gap-2 text-sm">
+        <div className="flex flex-wrap items-center gap-2">
           <input type="color" value={accent} aria-label="アクセント" onChange={(event) => onAccent(event.target.value)} />
           <button type="button" className="ghost-button" onClick={onSystemAccent}>端末に合わせる</button>
         </div>
       </Setting>
       <Setting label="倍率">
-        <label className="grid gap-1 text-sm">
+        <label className="grid gap-1">
           <span className="num text-right text-[var(--muted)]">{Math.round(scale * 100)}%</span>
           <input
             type="range"
@@ -158,17 +152,19 @@ function LookSettings({ theme, accent, scale, lockPanels, onTheme, onAccent, onS
           />
         </label>
       </Setting>
-      <label className="flex items-center gap-1 text-sm">
-        <input type="checkbox" checked={lockPanels} onChange={(event) => onLockPanels(event.target.checked)} />
-        パネルを固定
-      </label>
+      <section className="grid gap-2">
+        <label className="section-title flex items-center gap-2">
+          <input type="checkbox" checked={lockPanels} onChange={(event) => onLockPanels(event.target.checked)} />
+          パネルを固定
+        </label>
+      </section>
     </div>
   )
 }
 
 function IoSettings({ inputs, outputs, inputId, outputId, onInput, onOutput }: IoModel) {
   return (
-    <div className="grid gap-6">
+    <div className="flex flex-col gap-4 text-sm">
       <Setting label="入力">
         <DeviceSelect label="入力" devices={inputs} value={inputId} onChange={onInput} />
       </Setting>
