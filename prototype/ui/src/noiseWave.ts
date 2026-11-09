@@ -1,13 +1,21 @@
 export const noisePlotHeight = 88
 export const noiseMinView = 0.12
+export const noiseMaxZoom = 16
 export const noiseOpenView = 2
 
 export type NoiseView = { start: number; length: number }
 
+export function minNoiseView(duration: number) {
+  if (!(duration > 0))
+    return noiseMinView
+  return Math.min(duration, Math.max(noiseMinView, duration / noiseMaxZoom))
+}
+
 export function clampNoiseView(start: number, length: number, duration: number): NoiseView {
   if (!(duration > 0))
     return { start: 0, length: 1 }
-  const span = Math.min(Math.max(length, Math.min(duration, noiseMinView)), duration)
+  const floor = minNoiseView(duration)
+  const span = Math.min(Math.max(length, floor), duration)
   if (span >= duration)
     return { start: 0, length: duration }
   return { start: Math.min(Math.max(0, start), duration - span), length: span }

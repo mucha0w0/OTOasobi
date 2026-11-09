@@ -12,6 +12,11 @@ describe("無音波形の表示範囲", () => {
     expect(next.start).toBeCloseTo(0.5)
   })
 
+  it("拡大はファイル全体の16倍まで", () => {
+    const next = zoomNoiseView({ start: 0, length: 4 }, 2, 0.01, 4)
+    expect(next.length).toBeCloseTo(0.25)
+  })
+
   it("幅が変わっても同じ時刻は同じ位置の割合になる", () => {
     const view = { start: 0.5, length: 2 }
     const time = timeAtNoise(100, 400, view, 4)

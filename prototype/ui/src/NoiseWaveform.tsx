@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent } from 
 import { bitmapRatio, canvasContext, shouldReplaceBitmap } from "./bitmap"
 import {
   clampNoiseView,
+  noiseMaxZoom,
   noisePlotHeight,
   samplePeaks,
   shadeRect,
@@ -138,7 +139,7 @@ export function NoiseWaveform({
       return
     const span = Math.max(0, wave.duration - view.length)
     const width = bar.clientWidth
-    inner.style.width = span <= 0 || width <= 0 ? "100%" : `${Math.max(width + 1, width * wave.duration / view.length)}px`
+    inner.style.width = span <= 0 || width <= 0 ? "100%" : `${Math.min(width * noiseMaxZoom, Math.max(width + 1, width * wave.duration / view.length))}px`
     barSync.current = true
     bar.scrollLeft = span <= 0 || view.length <= 0 ? 0 : view.start * bar.clientWidth / view.length
     barSync.current = false
@@ -150,7 +151,7 @@ export function NoiseWaveform({
   }
 
   return (
-    <div>
+    <div className="min-w-0 overflow-hidden">
       <div ref={frameRef} className="overflow-hidden rounded bg-[var(--canvas)]" style={{ height: noisePlotHeight }}>
         <canvas
           ref={canvasRef}
@@ -190,7 +191,7 @@ export function NoiseWaveform({
       </div>
       <div
         ref={barRef}
-        className="mt-1 h-[18px] overflow-x-auto"
+        className="mt-1 h-[18px] w-full min-w-0 overflow-x-auto overflow-y-hidden"
         onScroll={(event) => {
           if (barSync.current || view.length <= 0)
             return

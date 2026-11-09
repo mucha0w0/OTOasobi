@@ -54,17 +54,17 @@ export function EffectsPanel({
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col text-sm">
-      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-3">
+    <div className="flex h-full min-h-0 min-w-0 flex-col text-sm">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto overflow-x-hidden p-3">
         <label className="grid gap-1">
           プリセット
-          <select className="field" value={form.preset} onChange={(event) => send({ type: "effects", op: "preset", name: event.target.value })}>
+          <select className="field min-w-0 w-full" value={form.preset} onChange={(event) => send({ type: "effects", op: "preset", name: event.target.value })}>
             <option value="カスタム">カスタム</option>
             {form.presets.filter((name) => name !== "カスタム").map((name) => <option key={name}>{name}</option>)}
           </select>
         </label>
         {orderOf(form).map((kind, index, order) => (
-          <div key={kind}>
+          <div key={kind} className="min-w-0">
             {kind !== "noise-suppressor" && (
               <div className="mb-1 flex justify-end gap-2">
                 <IconButton label="上へ" disabled={index <= 1} onClick={() => send({ type: "effects", op: "move", from: index, to: index - 1 })}><IconUp /></IconButton>
@@ -72,7 +72,7 @@ export function EffectsPanel({
               </div>
             )}
             {kind === "noise-suppressor" && (
-        <section className="grid gap-2">
+        <section className="grid min-w-0 gap-2">
           <label className="section-title flex items-center gap-2">
             <input type="checkbox" checked={form.noiseEnabled} onChange={(event) => push({ ...form, noiseEnabled: event.target.checked })} />
             ノイズサプレッサー
@@ -81,7 +81,7 @@ export function EffectsPanel({
           <label className="mt-2 grid gap-1">
             原音
             <select
-              className="field"
+              className="field min-w-0 w-full"
               value={form.noiseFile}
               disabled={noiseFiles(form).length === 0 && !form.noiseFile}
               onChange={(event) => {
@@ -211,7 +211,7 @@ function NoiseBody({
   const shown = wave && sameName(wave.file, form.noiseFile) ? wave : null
   const range = draft ?? (form.noiseReady ? { start: form.noiseStart, end: form.noiseEnd } : null)
   return (
-    <div className="mt-2 grid gap-1">
+    <div className="mt-2 grid min-w-0 gap-1">
       {shown && shown.lo.length > 0 ? (
         <NoiseWaveform
           wave={shown}
@@ -244,7 +244,7 @@ function Card({
   children: ReactNode
 }) {
   return (
-    <section className="rounded border border-[var(--line)] p-3">
+    <section className="min-w-0 rounded border border-[var(--line)] p-3">
       <label className="flex gap-2 font-semibold">
         <input type="checkbox" checked={on} onChange={(event) => setOn(event.target.checked)} />
         {title}
