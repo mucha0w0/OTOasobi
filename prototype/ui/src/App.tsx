@@ -580,6 +580,7 @@ export function App() {
     if (!name)
       return
     stepTarget.current = next
+    commitPick({ selected: [name], active: name, anchor: name })
     fileListRef.current?.highlight(name)
     showWheelLoading()
     window.clearTimeout(fileStepTimer.current)
