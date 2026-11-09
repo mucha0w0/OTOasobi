@@ -173,7 +173,25 @@ describe("ホストのメッセージ", () => {
       presets: ["標準"],
       gains: [0, 0, 0, 0, 0, 0, 0, 0],
       noiseNote: "ノイズサプレッサーは、選んだ 0.50秒の無音で抑えます。",
-    })).toMatchObject({ type: "effects", preset: "標準", noiseNote: "ノイズサプレッサーは、選んだ 0.50秒の無音で抑えます。" })
+      noiseMessage: "もう少し長く選んでください。",
+    })).toMatchObject({ type: "effects", preset: "標準", noiseNote: "ノイズサプレッサーは、選んだ 0.50秒の無音で抑えます。", noiseMessage: "もう少し長く選んでください。" })
+    expect(parseHostEvent({
+      type: "noiseWave",
+      file: "あ.wav",
+      lo: [0, -0.2],
+      hi: [0.1, 0.4],
+      duration: 1.5,
+      viewStart: 0.2,
+      viewLength: 1,
+    })).toEqual({
+      type: "noiseWave",
+      file: "あ.wav",
+      lo: [0, -0.2],
+      hi: [0.1, 0.4],
+      duration: 1.5,
+      viewStart: 0.2,
+      viewLength: 1,
+    })
     expect(parseHostEvent({ type: "appearance", theme: "dark", accent: "#112233", scale: 1.25, lockPanels: true })).toEqual({
       type: "appearance",
       theme: "dark",

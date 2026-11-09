@@ -384,7 +384,7 @@ sealed class ProbeSession : IDisposable
 
         PostCapture();
         PostRecSettings();
-        Post(_effects.Snapshot());
+        PostEffects(wave: true);
         PostRecent();
         PostTemplates();
         PostAppearance();
@@ -1832,7 +1832,7 @@ sealed class ProbeSession : IDisposable
         _bank.Open(folder);
         _effects.SetFolder(folder);
         _ = PostBankAsync();
-        Post(_effects.Snapshot());
+        PostEffects(wave: true);
     }
 
     void HandleBank(JsonElement root)
@@ -1918,20 +1918,18 @@ sealed class ProbeSession : IDisposable
                 break;
             case "preset":
                 _effects.ApplyPreset(Text(root, "name"));
-                Post(_effects.Snapshot());
+                PostEffects(wave: false);
                 break;
             case "noise":
-                var error = _effects.SetNoise(Text(root, "file"), Number(root, "start"), Number(root, "end"));
-                if (error != null)
-                    Post(new { type = "failed", message = error });
-                Post(_effects.Snapshot());
+                _effects.SetNoise(Text(root, "file"), OptionalNumber(root, "start"), OptionalNumber(root, "end"));
+                PostEffects(wave: true);
                 break;
             case "apply":
                 _ = ApplyEffectsAsync();
                 break;
             case "move":
                 _effects.Move((int)Math.Round(Number(root, "from")), (int)Math.Round(Number(root, "to")));
-                Post(_effects.Snapshot());
+                PostEffects(wave: false);
                 break;
         }
     }
@@ -2350,8 +2348,18 @@ sealed class ProbeSession : IDisposable
         _view.CoreWebView2.PostWebMessageAsJson(json);
     }
 
+    void PostEffects(bool wave)
+    {
+        if (wave)
+            Post(_effects.NoiseWave());
+        Post(_effects.Snapshot());
+    }
+
     static double Number(JsonElement root, string name) =>
         root.TryGetProperty(name, out var value) && value.TryGetDouble(out var parsed) ? parsed : 0;
+
+    static double? OptionalNumber(JsonElement root, string name) =>
+        root.TryGetProperty(name, out var value) && value.TryGetDouble(out var parsed) ? parsed : null;
 
     static int Count(JsonElement root, string name, int fallback)
     {

@@ -4,7 +4,7 @@ static class ProbePeaks
 {
     public static (double[] Lo, double[] Hi) Columns(ReadOnlySpan<float> samples, int columns)
     {
-        columns = Math.Clamp(columns, 1, 400);
+        columns = Math.Clamp(columns, 1, 2048);
         var lo = new double[columns];
         var hi = new double[columns];
         if (samples.Length == 0)

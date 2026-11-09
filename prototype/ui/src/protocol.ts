@@ -27,7 +27,7 @@ export type PageCommand =
   | { type: "bankPick"; which: "icon" | "portrait" }
   | { type: "effects"; op: "set"; noiseEnabled: boolean; noiseReduction: number; highpassEnabled: boolean; highpassHz: number; highpassSlope: number; eqEnabled: boolean; gains: number[]; compressorEnabled: boolean; compressorRatio: number; compressorReduction: number; normalizeEnabled: boolean; normalizeTarget: number }
   | { type: "effects"; op: "preset"; name: string }
-  | { type: "effects"; op: "noise"; file: string; start: number; end: number }
+  | { type: "effects"; op: "noise"; file: string; start?: number; end?: number }
   | { type: "effects"; op: "apply" }
   | { type: "effects"; op: "move"; from: number; to: number }
   | { type: "watchMic"; on: boolean }
@@ -122,6 +122,7 @@ export type HostEvent =
   | { type: "guideFile"; manual: boolean; path: string; label: string; recent: { path: string; label: string }[] }
   | { type: "take"; playing: boolean; position: number; duration: number }
   | { type: "takeWave"; name: string; lo: number[]; hi: number[]; duration: number }
+  | NoiseWaveEvent
   | { type: "recent"; folders: { path: string; name: string }[] }
   | { type: "projectPlace"; path: string }
   | { type: "templates"; names: string[] }
@@ -210,6 +211,16 @@ export type BankEvent = {
   portraitImage: string | null
 }
 
+export type NoiseWaveEvent = {
+  type: "noiseWave"
+  file: string
+  lo: number[]
+  hi: number[]
+  duration: number
+  viewStart: number
+  viewLength: number
+}
+
 export type EffectsEvent = {
   type: "effects"
   preset: string
@@ -221,6 +232,7 @@ export type EffectsEvent = {
   noiseStart: number
   noiseEnd: number
   noiseReady: boolean
+  noiseMessage: string | null
   highpassEnabled: boolean
   highpassHz: number
   highpassSlope: number
@@ -495,6 +507,16 @@ export function parseHostEvent(value: unknown): HostEvent | null {
         hi: Array.isArray(value.hi) ? value.hi.filter((item): item is number => typeof item === "number") : [],
         duration: numberOr(value.duration, 0),
       }
+    case "noiseWave":
+      return {
+        type: "noiseWave",
+        file: typeof value.file === "string" ? value.file : "",
+        lo: Array.isArray(value.lo) ? value.lo.filter((item): item is number => typeof item === "number") : [],
+        hi: Array.isArray(value.hi) ? value.hi.filter((item): item is number => typeof item === "number") : [],
+        duration: numberOr(value.duration, 0),
+        viewStart: numberOr(value.viewStart, 0),
+        viewLength: numberOr(value.viewLength, 0),
+      }
     case "recent":
       return {
         type: "recent",
@@ -679,6 +701,7 @@ function parseEffects(value: Record<string, unknown>): EffectsEvent | null {
     noiseStart: numberOr(value.noiseStart, 0),
     noiseEnd: numberOr(value.noiseEnd, 0),
     noiseReady: value.noiseReady === true,
+    noiseMessage: typeof value.noiseMessage === "string" ? value.noiseMessage : null,
     highpassEnabled: value.highpassEnabled === true,
     highpassHz: numberOr(value.highpassHz, 80),
     highpassSlope: numberOr(value.highpassSlope, 12),

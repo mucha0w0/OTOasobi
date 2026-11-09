@@ -36,7 +36,7 @@ import { MenuBar } from "./MenuBar"
 import { OtoTable } from "./OtoTable"
 import { AnalyzePanel, OtoIni, OtoSettings } from "./OtoPanels"
 import { PluginFrame, type PluginContext } from "./PluginFrame"
-import { previewColumnLimit, previewRowLimit, previewStillCovers, requestsPreviewAfter, uiScale, type BankEvent, type DeviceInfo, type EffectsEvent, type FrqViewEvent, type HostEvent, type OtoMark, type OtoState, type PageCommand, type PluginItem, type PluginReply, type PreviewEvent, type RecListEvent, type SavedEvent } from "./protocol"
+import { previewColumnLimit, previewRowLimit, previewStillCovers, requestsPreviewAfter, uiScale, type BankEvent, type DeviceInfo, type EffectsEvent, type FrqViewEvent, type HostEvent, type NoiseWaveEvent, type OtoMark, type OtoState, type PageCommand, type PluginItem, type PluginReply, type PreviewEvent, type RecListEvent, type SavedEvent } from "./protocol"
 import { RecListPanel, RecScriptPanel } from "./RecPanels"
 import { noticeTone, ToneIcon, ToneRow, type NoticeTone } from "./notice"
 import { createPointerBus } from "./ruler"
@@ -222,6 +222,7 @@ export function App() {
   const [overwriteWav, setOverwriteWav] = useState<string | null>(null)
   const [bank, setBank] = useState<BankEvent | null>(null)
   const [effects, setEffects] = useState<EffectsEvent | null>(null)
+  const [noiseWave, setNoiseWave] = useState<NoiseWaveEvent | null>(null)
   const [guideFile, setGuideFile] = useState<GuideFileState>({ manual: true, path: "", label: "", recent: [] })
   const [takeWave, setTakeWave] = useState<{ name: string; lo: number[]; hi: number[]; duration: number } | null>(null)
   const [takePlay, setTakePlay] = useState({ playing: false, position: 0, duration: 0 })
@@ -868,6 +869,9 @@ export function App() {
         break
       case "takeWave":
         setTakeWave(event)
+        break
+      case "noiseWave":
+        setNoiseWave(event.file ? event : null)
         break
       case "recent":
         setRecentFolders(event.folders)
@@ -1559,7 +1563,7 @@ export function App() {
                   />
                 )
               if (id === "source")
-                return <EffectsPanel effects={effects} busy={Boolean(oto?.busy)} send={(command) => sendRef.current(command)} />
+                return <EffectsPanel effects={effects} wave={noiseWave} appearance={appearance} busy={Boolean(oto?.busy)} send={(command) => sendRef.current(command)} />
               if (id === "bank")
                 return <BankPanel bank={bank} send={(command) => sendRef.current(command)} />
               if (id === "analyze")

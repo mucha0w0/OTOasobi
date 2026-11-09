@@ -95,6 +95,7 @@ function effects(partial: Partial<EffectsEvent> = {}): EffectsEvent {
     noiseStart: 0,
     noiseEnd: 0,
     noiseReady: false,
+    noiseMessage: null,
     highpassEnabled: false,
     highpassHz: 100,
     highpassSlope: 12,
@@ -273,6 +274,19 @@ describe("戻すコマンド", () => {
   it("並びの移動は逆方向になる", () => {
     const edit = describeEdit({ type: "effects", op: "move", from: 1, to: 3 }, snap())
     expect(edit?.undo[0]).toMatchObject({ op: "move", from: 3, to: 1 })
+  })
+
+  it("無音の原音を選ぶと、範囲なしで戻す", () => {
+    const edit = describeEdit({ type: "effects", op: "noise", file: "あ.wav" }, snap())
+    expect(edit?.undo[0]).toEqual({ type: "effects", op: "noise", file: "" })
+  })
+
+  it("無音の範囲は、選ぶ前の範囲なしに戻す", () => {
+    const edit = describeEdit(
+      { type: "effects", op: "noise", file: "あ.wav", start: 0.2, end: 0.8 },
+      snap({ effects: effects({ noiseFile: "あ.wav", noiseReady: false }) }),
+    )
+    expect(edit?.undo[0]).toEqual({ type: "effects", op: "noise", file: "あ.wav" })
   })
 })
 

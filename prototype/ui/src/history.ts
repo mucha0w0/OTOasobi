@@ -697,15 +697,9 @@ function describeEffects(command: Extract<PageCommand, { type: "effects" }>, sna
         return null
       return edit("effects.move", false, [{ type: "effects", op: "move", from: command.to, to: command.from }], [command])
     case "noise":
-      if (command.file === effects.noiseFile && near(command.start, effects.noiseStart) && near(command.end, effects.noiseEnd))
+      if (sameNoise(effects, command))
         return null
-      return edit(noiseKey(effects, command), noiseCoalesce(effects, command), [{
-        type: "effects",
-        op: "noise",
-        file: effects.noiseFile,
-        start: effects.noiseStart,
-        end: effects.noiseEnd,
-      }], [command])
+      return edit(noiseKey(effects, command), noiseCoalesce(effects, command), [noiseUndo(effects)], [command])
     default:
       return null
   }
@@ -742,19 +736,40 @@ function effectChanges(effects: EffectsEvent, command: Extract<PageCommand, { ty
   return changed
 }
 
+function noiseHasRange(command: Extract<PageCommand, { type: "effects"; op: "noise" }>) {
+  return command.start != null && command.end != null
+}
+
+function sameNoise(effects: EffectsEvent, command: Extract<PageCommand, { type: "effects"; op: "noise" }>) {
+  if (command.file !== effects.noiseFile)
+    return false
+  if (!noiseHasRange(command))
+    return !effects.noiseReady
+  return effects.noiseReady && near(command.start ?? 0, effects.noiseStart) && near(command.end ?? 0, effects.noiseEnd)
+}
+
+function noiseUndo(effects: EffectsEvent): Extract<PageCommand, { type: "effects"; op: "noise" }> {
+  if (!effects.noiseReady)
+    return { type: "effects", op: "noise", file: effects.noiseFile }
+  return { type: "effects", op: "noise", file: effects.noiseFile, start: effects.noiseStart, end: effects.noiseEnd }
+}
+
 function noiseKey(effects: EffectsEvent, command: Extract<PageCommand, { type: "effects"; op: "noise" }>) {
   const changed = [
     command.file !== effects.noiseFile ? "file" : "",
-    near(command.start, effects.noiseStart) ? "" : "start",
-    near(command.end, effects.noiseEnd) ? "" : "end",
+    noiseHasRange(command) && !near(command.start ?? 0, effects.noiseStart) ? "start" : "",
+    noiseHasRange(command) && !near(command.end ?? 0, effects.noiseEnd) ? "end" : "",
+    !noiseHasRange(command) && effects.noiseReady ? "range" : "",
   ].filter((item) => item.length > 0)
   return changed.length === 1 ? `effects.noise.${changed[0]}` : "effects.noise"
 }
 
 function noiseCoalesce(effects: EffectsEvent, command: Extract<PageCommand, { type: "effects"; op: "noise" }>) {
-  const start = !near(command.start, effects.noiseStart)
-  const end = !near(command.end, effects.noiseEnd)
-  return command.file === effects.noiseFile && start !== end
+  if (command.file !== effects.noiseFile || !noiseHasRange(command))
+    return false
+  const start = !near(command.start ?? 0, effects.noiseStart)
+  const end = !near(command.end ?? 0, effects.noiseEnd)
+  return start !== end
 }
 
 function applyEffects(snapshot: EditSnapshot, command: Extract<PageCommand, { type: "effects" }>): EditSnapshot {
@@ -787,7 +802,17 @@ function applyEffects(snapshot: EditSnapshot, command: Extract<PageCommand, { ty
     case "move":
       return { ...snapshot, effects: { ...effects, order: moveOrder(effects.order, command.from, command.to) } }
     case "noise":
-      return { ...snapshot, effects: { ...effects, noiseFile: command.file, noiseStart: command.start, noiseEnd: command.end } }
+      return {
+        ...snapshot,
+        effects: {
+          ...effects,
+          noiseFile: command.file,
+          noiseStart: command.start ?? 0,
+          noiseEnd: command.end ?? 0,
+          noiseReady: command.start != null && command.end != null,
+          noiseMessage: null,
+        },
+      }
     default:
       return snapshot
   }

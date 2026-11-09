@@ -1,23 +1,35 @@
 import { useEffect, useState, type ReactNode } from "react"
+import { sameName } from "./filePick"
 import { ToneRow } from "./notice"
 import { IconButton, IconDown, IconUp } from "./IconButton"
-import type { EffectsEvent, PageCommand } from "./protocol"
+import { formatNoiseSeconds } from "./noiseWave"
+import { NoiseWaveform } from "./NoiseWaveform"
+import type { EffectsEvent, NoiseWaveEvent, PageCommand } from "./protocol"
 
 const bands = [63, 125, 250, 500, 1000, 2000, 4000, 8000]
 
 export function EffectsPanel({
   effects,
+  wave,
+  appearance,
   busy,
   send,
 }: {
   effects: EffectsEvent | null
+  wave: NoiseWaveEvent | null
+  appearance: string
   busy: boolean
   send: (command: PageCommand) => void
 }) {
   const [form, setForm] = useState(effects)
   const [confirm, setConfirm] = useState(false)
   const [blocked, setBlocked] = useState("")
-  useEffect(() => setForm(effects), [effects])
+  const [draft, setDraft] = useState<{ start: number; end: number } | null>(null)
+  useEffect(() => {
+    setForm(effects)
+    if (!effects?.noiseMessage)
+      setDraft(null)
+  }, [effects])
   if (!form)
     return <p className="p-3 text-sm text-[var(--muted)]">エフェクトの設定を読み込んでいます。</p>
 
@@ -68,21 +80,32 @@ export function EffectsPanel({
           <Slider label="抑える量" min={0} max={16} step={0.5} value={form.noiseReduction} suffix=" dB" onChange={(noiseReduction) => push({ ...form, noiseReduction })} />
           <label className="mt-2 grid gap-1">
             原音
-            <select className="field" value={form.noiseFile} onChange={(event) => send({ type: "effects", op: "noise", file: event.target.value, start: form.noiseStart, end: form.noiseEnd })}>
-              <option value="">選択しない</option>
+            <select
+              className="field"
+              value={form.noiseFile}
+              disabled={noiseFiles(form).length === 0 && !form.noiseFile}
+              onChange={(event) => {
+                const file = event.target.value
+                setDraft(null)
+                setForm({ ...form, noiseFile: file, noiseStart: 0, noiseEnd: 0, noiseReady: false, noiseMessage: null })
+                send({ type: "effects", op: "noise", file })
+              }}
+            >
+              <option value="">{noiseFiles(form).length === 0 && !form.noiseFile ? "WAV がありません" : "選択しない"}</option>
               {noiseFiles(form).map((name) => <option key={name}>{name}</option>)}
             </select>
           </label>
-          <div className="mt-2 grid grid-cols-2 gap-2">
-            <label className="grid gap-1">
-              開始（秒）
-              <input className="field" value={form.noiseStart} onChange={(event) => { const start = Number(event.target.value); setForm({ ...form, noiseStart: start }); pushNoise(form, send, start, form.noiseEnd) }} />
-            </label>
-            <label className="grid gap-1">
-              終了（秒）
-              <input className="field" value={form.noiseEnd} onChange={(event) => { const end = Number(event.target.value); setForm({ ...form, noiseEnd: end }); pushNoise(form, send, form.noiseStart, end) }} />
-            </label>
-          </div>
+          {form.noiseFile && (
+            <NoiseBody
+              form={form}
+              wave={wave}
+              appearance={appearance}
+              draft={draft}
+              setDraft={setDraft}
+              send={send}
+            />
+          )}
+          {form.noiseMessage && <p className="text-[var(--danger)]">{form.noiseMessage}</p>}
         </section>
             )}
             {kind === "highpass" && (
@@ -131,7 +154,7 @@ export function EffectsPanel({
         ))}
       </div>
       <div className="border-t border-[var(--line)] p-3">
-        {blocked && <ToneRow tone="error" className="mb-2">{`無音の範囲を選んでください。${blocked}`}</ToneRow>}
+        {blocked && <ToneRow tone="error" className="mb-2">{blocked}</ToneRow>}
         <button type="button" className="accent-button w-full" disabled={busy} onClick={() => {
           if (form.noiseEnabled && !form.noiseReady) {
             setBlocked("ノイズサプレッサーがオンです。原音から無音の範囲を選んでから、適用してください。")
@@ -170,10 +193,43 @@ function noiseFiles(form: EffectsEvent) {
     : form.noiseFiles
 }
 
-function pushNoise(form: EffectsEvent, send: (command: PageCommand) => void, start: number, end: number) {
-  if (!form.noiseFile)
-    return
-  send({ type: "effects", op: "noise", file: form.noiseFile, start, end })
+function NoiseBody({
+  form,
+  wave,
+  appearance,
+  draft,
+  setDraft,
+  send,
+}: {
+  form: EffectsEvent
+  wave: NoiseWaveEvent | null
+  appearance: string
+  draft: { start: number; end: number } | null
+  setDraft: (draft: { start: number; end: number } | null) => void
+  send: (command: PageCommand) => void
+}) {
+  const shown = wave && sameName(wave.file, form.noiseFile) ? wave : null
+  const range = draft ?? (form.noiseReady ? { start: form.noiseStart, end: form.noiseEnd } : null)
+  return (
+    <div className="mt-2 grid gap-1">
+      {shown && shown.lo.length > 0 ? (
+        <NoiseWaveform
+          wave={shown}
+          start={range?.start ?? null}
+          end={range?.end ?? null}
+          appearance={appearance}
+          onChanging={(start, end) => setDraft({ start, end })}
+          onChosen={(start, end) => {
+            setDraft({ start, end })
+            send({ type: "effects", op: "noise", file: form.noiseFile, start, end })
+          }}
+        />
+      ) : (
+        <p className="text-[var(--muted)]">読み込み中</p>
+      )}
+      {range && <p className="num text-[var(--muted)]">{formatNoiseSeconds(range.start, range.end)}</p>}
+    </div>
+  )
 }
 
 function Card({
