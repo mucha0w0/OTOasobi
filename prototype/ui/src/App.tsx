@@ -8,6 +8,26 @@ import { nextFileIndex } from "./fileStep"
 import { FrqEditor } from "./FrqEditor"
 import { FrqPanel } from "./FrqPanel"
 import { GraphBand, type BandHandle, type BandKind, type GraphModel, type LiveTune } from "./GraphBand"
+import {
+  absorbBank,
+  absorbEffects,
+  absorbOto,
+  applySnapshot,
+  clearsHistory,
+  describeEdit,
+  emptyHistory,
+  emptySnapshot,
+  frqStep,
+  groupEdits,
+  pushStep,
+  redoHistory,
+  textFieldOwnsUndo,
+  undoHistory,
+  type EditSnapshot,
+  type FrqRadios,
+  type History,
+  type PendingEdit,
+} from "./history"
 import { connectHost } from "./host"
 import { contains, createDefault, hidePane, idsOf, showPane, type LayoutNode, type PaneBox } from "./layout"
 import { createLiveBus, type LiveBus } from "./live"
@@ -94,8 +114,24 @@ const graphKinds: Record<string, BandKind> = {
   otoBand: "oto",
 }
 
+function isTextControl(target: EventTarget | null): target is HTMLInputElement | HTMLTextAreaElement {
+  if (target instanceof HTMLTextAreaElement)
+    return true
+  if (!(target instanceof HTMLInputElement))
+    return false
+  return !["button", "checkbox", "color", "file", "radio", "range", "reset", "submit"].includes(target.type)
+}
+
+function stampActiveText() {
+  const target = document.activeElement
+  if (!isTextControl(target))
+    return
+  target.dataset.history = target.value
+}
+
 export function App() {
   const sendRef = useRef<(command: PageCommand) => void>(() => undefined)
+  const rawSend = useRef<(command: PageCommand) => void>(() => undefined)
   const applyRef = useRef<(event: HostEvent) => void>(() => undefined)
   const bands = useRef(new Set<BandHandle>())
   const boxes = useRef<Record<string, PaneBox>>({})
@@ -192,6 +228,10 @@ export function App() {
   const createOpenRef = useRef(false)
   const [templates, setTemplates] = useState<string[]>([])
   const [updatePrompt, setUpdatePrompt] = useState<{ phase: string; title: string; body: string } | null>(null)
+  const [frqMode, setFrqMode] = useState<FrqRadios["mode"]>("all")
+  const [frqPreutter, setFrqPreutter] = useState<FrqRadios["preutter"]>("keep")
+  const [canUndo, setCanUndo] = useState(false)
+  const [canRedo, setCanRedo] = useState(false)
   const layoutTouched = useRef(false)
   const acceptLayout = useRef(false)
   const keepRatios = useRef(false)
@@ -201,6 +241,23 @@ export function App() {
   const recIndexRef = useRef<number | null>(null)
   const advanceRef = useRef(false)
   const recordNameRef = useRef<string | null>(null)
+  const historyRef = useRef<History>(emptyHistory())
+  const batchRef = useRef<PendingEdit[]>([])
+  const batchQueued = useRef(false)
+  const replaying = useRef(false)
+  const suppressRec = useRef(false)
+  const guidePick = useRef(false)
+  const recPick = useRef(false)
+  const replayRef = useRef<(direction: "undo" | "redo") => void>(() => undefined)
+  const snapRef = useRef<EditSnapshot | null>(null)
+  if (!snapRef.current) {
+    snapRef.current = {
+      ...emptySnapshot(),
+      appearance: { theme, accent: null, scale, lockPanels },
+      monitor,
+      rec: { note, semitones, speed, volume, countIn, bpm, guideWhile, advance },
+    }
+  }
   const resolved = resolveTheme(theme, systemDark)
   pictureRef.current = picture
   otoRef.current = oto
@@ -220,13 +277,24 @@ export function App() {
 
   useEffect(() => {
     const connection = connectHost((event) => applyRef.current(event))
-    sendRef.current = connection.send
+    rawSend.current = connection.send
     setConnected(window.chrome?.webview != null)
     connection.send({ type: "hello" })
     return () => {
       window.clearTimeout(previewTimer.current)
       connection.close()
     }
+  }, [])
+
+  useEffect(() => {
+    const focus = (event: FocusEvent) => {
+      const target = event.target
+      if (!isTextControl(target) || target.dataset.history != null)
+        return
+      target.dataset.history = target.value
+    }
+    window.addEventListener("focusin", focus)
+    return () => window.removeEventListener("focusin", focus)
   }, [])
 
   useEffect(() => {
@@ -255,6 +323,15 @@ export function App() {
 
   useEffect(() => {
     const keys = (event: KeyboardEvent) => {
+      if (event.ctrlKey && !event.altKey && !event.shiftKey && (event.key.toLowerCase() === "z" || event.key.toLowerCase() === "y")) {
+        const target = event.target
+        const text = isTextControl(target)
+        if (textFieldOwnsUndo(text, text ? target.value : "", text ? target.dataset.history ?? null : null))
+          return
+        event.preventDefault()
+        replayRef.current(event.key.toLowerCase() === "z" ? "undo" : "redo")
+        return
+      }
       if (event.ctrlKey && event.key.toLowerCase() === "o") {
         event.preventDefault()
         sendRef.current({ type: "openFolder" })
@@ -292,6 +369,10 @@ export function App() {
   }, [fileName])
 
   useEffect(() => {
+    if (suppressRec.current) {
+      suppressRec.current = false
+      return
+    }
     if (!recTouched.current)
       return
     const timer = window.setTimeout(() => {
@@ -530,6 +611,21 @@ export function App() {
         if (folderChanged) {
           pictureCache.current.clear()
           otoGenRef.current = -1
+          batchRef.current = []
+          historyRef.current = emptyHistory()
+          guidePick.current = false
+          recPick.current = false
+          setCanUndo(false)
+          setCanRedo(false)
+          snapRef.current = {
+            ...(snapRef.current ?? emptySnapshot()),
+            oto: null,
+            marks: [],
+            spans: [],
+            bank: null,
+            guide: { manual: true, path: "" },
+            recListPath: "",
+          }
           if (otoRef.current) {
             const cleared = { ...otoRef.current, rows: [], marks: [], spans: [] }
             otoRef.current = cleared
@@ -635,9 +731,30 @@ export function App() {
       case "guide":
         setGuidePlaying(event.playing)
         break
-      case "guideFile":
+      case "guideFile": {
+        const snap = snapRef.current ?? emptySnapshot()
+        const previous = snap.guide
+        const picked = guidePick.current
+        guidePick.current = false
+        snapRef.current = { ...snap, guide: { manual: event.manual, path: event.path } }
+        if (picked && (previous.manual !== event.manual || previous.path !== event.path)) {
+          const undo: PageCommand[] = []
+          const redo: PageCommand[] = []
+          if (previous.manual !== event.manual) {
+            undo.push({ type: "guideFile", manual: previous.manual })
+            redo.push({ type: "guideFile", manual: event.manual })
+          }
+          if (previous.path !== event.path) {
+            undo.push({ type: "guideFile", path: previous.path })
+            redo.push({ type: "guideFile", path: event.path })
+          }
+          historyRef.current = pushStep(historyRef.current, { key: "guide.pick", coalesce: false, at: Date.now(), undo, redo })
+          setCanUndo(historyRef.current.undo.length > 0)
+          setCanRedo(historyRef.current.redo.length > 0)
+        }
         setGuideFile({ manual: event.manual, path: event.path, label: event.label, recent: event.recent })
         break
+      }
       case "take":
         setTakePlay({ playing: event.playing, position: event.position, duration: event.duration })
         break
@@ -655,6 +772,10 @@ export function App() {
         setTemplates(event.names)
         break
       case "appearance":
+        snapRef.current = {
+          ...(snapRef.current ?? emptySnapshot()),
+          appearance: { theme: event.theme, accent: event.accent, scale: event.scale, lockPanels: event.lockPanels },
+        }
         setTheme(event.theme)
         setScale(event.scale)
         applyPageScale(event.scale)
@@ -702,6 +823,7 @@ export function App() {
         otoGenRef.current = event.generation
         const rows = event.rows ?? otoRef.current?.rows ?? []
         const next = { ...event, rows }
+        snapRef.current = absorbOto(snapRef.current ?? emptySnapshot(), event)
         otoRef.current = next
         marksRef.current = next.marks
         spansRef.current = next.spans
@@ -719,7 +841,23 @@ export function App() {
       case "frqView":
         setFrqView(event)
         break
-      case "recList":
+      case "recList": {
+        const snap = snapRef.current ?? emptySnapshot()
+        const previous = snap.recListPath
+        const picked = recPick.current
+        recPick.current = false
+        snapRef.current = { ...snap, recListPath: event.path }
+        if (picked && previous !== event.path) {
+          const undo: PageCommand = previous.length === 0
+            ? { type: "recList", op: "none" }
+            : { type: "recList", op: "open", path: previous }
+          const redo: PageCommand = event.path.length === 0
+            ? { type: "recList", op: "none" }
+            : { type: "recList", op: "open", path: event.path }
+          historyRef.current = pushStep(historyRef.current, { key: "recList.pick", coalesce: false, at: Date.now(), undo: [undo], redo: [redo] })
+          setCanUndo(historyRef.current.undo.length > 0)
+          setCanRedo(historyRef.current.redo.length > 0)
+        }
         setRecList(event)
         setRecIndex((index) => {
           const previous = recListRef.current?.lines[index ?? -1]
@@ -729,15 +867,31 @@ export function App() {
           return next >= 0 ? next : null
         })
         break
+      }
       case "bank":
+        snapRef.current = absorbBank(snapRef.current ?? emptySnapshot(), event)
         setBank(event)
         break
       case "effects":
+        snapRef.current = absorbEffects(snapRef.current ?? emptySnapshot(), event)
         setEffects(event)
         break
       case "recSettings":
         if (recTouched.current)
           break
+        snapRef.current = {
+          ...(snapRef.current ?? emptySnapshot()),
+          rec: {
+            note: event.note,
+            semitones: event.semitones,
+            speed: event.speed,
+            volume: event.volume,
+            countIn: event.countIn,
+            bpm: event.bpm,
+            guideWhile: event.guideWhile,
+            advance: event.advance,
+          },
+        }
         setNote(event.note)
         setSemitones(event.semitones)
         setSpeed(event.speed)
@@ -908,6 +1062,154 @@ export function App() {
     sendRecord(line?.sing)
   }
 
+  function rememberFlags() {
+    setCanUndo(historyRef.current.undo.length > 0)
+    setCanRedo(historyRef.current.redo.length > 0)
+  }
+
+  function flushBatch() {
+    batchQueued.current = false
+    const edits = batchRef.current
+    batchRef.current = []
+    const step = groupEdits(edits, Date.now())
+    if (!step)
+      return
+    historyRef.current = pushStep(historyRef.current, step)
+    rememberFlags()
+    stampActiveText()
+  }
+
+  function queueBatch() {
+    if (batchQueued.current)
+      return
+    batchQueued.current = true
+    queueMicrotask(flushBatch)
+  }
+
+  function track(command: PageCommand) {
+    if (clearsHistory(command)) {
+      batchRef.current = []
+      batchQueued.current = false
+      historyRef.current = emptyHistory()
+      guidePick.current = false
+      recPick.current = false
+      rememberFlags()
+      rawSend.current(command)
+      return
+    }
+    if (command.type === "guideFile")
+      guidePick.current = command.pick === true
+    if (command.type === "recList")
+      recPick.current = command.op === "pick"
+    const snap = snapRef.current ?? emptySnapshot()
+    if (replaying.current)
+      snapRef.current = applySnapshot(snap, command)
+    else {
+      const edit = describeEdit(command, snap)
+      if (edit) {
+        batchRef.current.push(edit)
+        snapRef.current = applySnapshot(snap, command)
+        queueBatch()
+      }
+    }
+    rawSend.current(command)
+  }
+
+  function publishEdit(commands: PageCommand[]) {
+    const snap = snapRef.current ?? emptySnapshot()
+    if (commands.some((command) => command.type === "oto") && snap.oto) {
+      otoRef.current = snap.oto
+      marksRef.current = snap.marks
+      spansRef.current = snap.spans
+      setOto(snap.oto)
+      modelRef.current = viewModel()
+      redraw()
+    }
+    if (commands.some((command) => command.type === "effects") && snap.effects)
+      setEffects(snap.effects)
+    if (commands.some((command) => command.type === "bank") && snap.bank)
+      setBank((current) => current ? { ...current, ...snap.bank, type: "bank" } : current)
+    if (commands.some((command) => command.type === "appearance")) {
+      const next = snap.appearance
+      setTheme(next.theme)
+      setScale(next.scale)
+      applyPageScale(next.scale)
+      setLockPanels(next.lockPanels)
+      applyPanelsLocked(next.lockPanels)
+      accentCustom.current = next.accent != null
+      setAccent(next.accent)
+    }
+    if (commands.some((command) => command.type === "setDevices")) {
+      setInputId(snap.devices.inputId)
+      setOutputId(snap.devices.outputId)
+    }
+    if (commands.some((command) => command.type === "monitor"))
+      setMonitor(snap.monitor)
+    if (commands.some((command) => command.type === "recSettings")) {
+      const rec = snap.rec
+      const changed = note !== rec.note
+        || semitones !== rec.semitones
+        || speed !== rec.speed
+        || volume !== rec.volume
+        || countIn !== rec.countIn
+        || bpm !== rec.bpm
+        || guideWhile !== rec.guideWhile
+        || advance !== rec.advance
+      if (changed) {
+        suppressRec.current = true
+        setNote(rec.note)
+        setSemitones(rec.semitones)
+        setSpeed(rec.speed)
+        setVolume(rec.volume)
+        setCountIn(rec.countIn)
+        setBpm(rec.bpm)
+        setGuideWhile(rec.guideWhile)
+        setAdvance(rec.advance)
+      }
+    }
+    if (commands.some((command) => command.type === "guideFile"))
+      setGuideFile((current) => ({ ...current, manual: snap.guide.manual, path: snap.guide.path }))
+    if (commands.some((command) => command.type === "recList"))
+      setRecList((current) => current ? { ...current, path: snap.recListPath } : current)
+  }
+
+  function replay(direction: "undo" | "redo") {
+    if (batchQueued.current)
+      flushBatch()
+    const result = direction === "undo" ? undoHistory(historyRef.current) : redoHistory(historyRef.current)
+    if (!result)
+      return
+    historyRef.current = result.history
+    rememberFlags()
+    const commands = direction === "undo" ? result.step.undo : result.step.redo
+    const radios = direction === "undo" ? result.step.undoFrq : result.step.redoFrq
+    replaying.current = true
+    for (const command of commands)
+      track(command)
+    replaying.current = false
+    if (radios) {
+      setFrqMode(radios.mode)
+      setFrqPreutter(radios.preutter)
+    }
+    publishEdit(commands)
+    window.requestAnimationFrame(stampActiveText)
+  }
+
+  function changeFrq(next: FrqRadios) {
+    const step = frqStep({ mode: frqMode, preutter: frqPreutter }, next, Date.now())
+    if (!step)
+      return
+    setFrqMode(next.mode)
+    setFrqPreutter(next.preutter)
+    if (batchQueued.current)
+      flushBatch()
+    historyRef.current = pushStep(historyRef.current, step)
+    rememberFlags()
+  }
+
+  sendRef.current = track
+  replayRef.current = replay
+
   const recLine = recIndex == null ? null : recList?.lines[recIndex] ?? null
   const selectedNames = names.filter((name) => pick.selected.some((item) => sameName(item, name)))
   useEffect(() => {
@@ -938,6 +1240,10 @@ export function App() {
         onWrite={() => sendRef.current({ type: "oto", op: "write" })}
         onReanalyze={() => setReanalyzeOpen(true)}
         onReanalyzeOne={() => setOneOpen(true)}
+        canUndo={canUndo}
+        canRedo={canRedo}
+        onUndo={() => replay("undo")}
+        onRedo={() => replay("redo")}
         onSettings={() => setSettings(true)}
         onClose={() => sendRef.current({ type: "close" })}
         onToggle={togglePane}
@@ -1082,6 +1388,10 @@ export function App() {
                     busy={Boolean(oto?.busy) || frqCount.busy}
                     hasFile={selectedNames.length > 0}
                     selectedNames={selectedNames}
+                    mode={frqMode}
+                    preutter={frqPreutter}
+                    onMode={(mode) => changeFrq({ mode, preutter: frqPreutter })}
+                    onPreutter={(preutter) => changeFrq({ mode: frqMode, preutter })}
                     send={(command) => sendRef.current(command)}
                   />
                 )

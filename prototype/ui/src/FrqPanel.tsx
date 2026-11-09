@@ -1,4 +1,3 @@
-import { useState } from "react"
 import type { PageCommand } from "./protocol"
 
 export function FrqPanel({
@@ -6,46 +5,52 @@ export function FrqPanel({
   busy,
   hasFile,
   selectedNames,
+  mode,
+  preutter,
+  onMode,
+  onPreutter,
   send,
 }: {
   wavs: number
   busy: boolean
   hasFile: boolean
   selectedNames: string[]
+  mode: "all" | "missing" | "selected"
+  preutter: "keep" | "zero" | "none"
+  onMode: (mode: "all" | "missing" | "selected") => void
+  onPreutter: (preutter: "keep" | "zero" | "none") => void
   send: (command: PageCommand) => void
 }) {
-  const [mode, setMode] = useState<"all" | "missing" | "selected">("all")
-  const [preutter, setPreutter] = useState<"keep" | "zero" | "none">("keep")
   return (
     <div className="flex h-full min-h-0 flex-col text-sm">
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-3">
         <section className="grid gap-2">
           <h2 className="section-title">対象</h2>
           <label className="mt-2 flex gap-2">
-            <input type="radio" name="frq-mode" checked={mode === "all"} onChange={() => setMode("all")} />
+            <input type="radio" name="frq-mode" checked={mode === "all"} onChange={() => onMode("all")} />
             全てのfrqファイルを上書きして生成する
           </label>
           <label className="mt-2 flex gap-2">
-            <input type="radio" name="frq-mode" checked={mode === "missing"} onChange={() => setMode("missing")} />
+            <input type="radio" name="frq-mode" checked={mode === "missing"} onChange={() => onMode("missing")} />
             frqが存在しないファイルだけ生成する
           </label>
           <label className="mt-2 flex gap-2">
-            <input type="radio" name="frq-mode" checked={mode === "selected"} onChange={() => setMode("selected")} />
+            <input type="radio" name="frq-mode" checked={mode === "selected"} onChange={() => onMode("selected")} />
             選択中のファイルだけ生成する
           </label>
         </section>
         <section className="grid gap-2">
           <h2 className="section-title">先行発声</h2>
           <label className="mt-2 flex gap-2">
-            <input type="radio" name="frq-preutter" checked={preutter === "keep"} onChange={() => setPreutter("keep")} />
+            <input type="radio" name="frq-preutter" checked={preutter === "keep"} onChange={() => onPreutter("keep")} />
             なにもしない
           </label>
           <label className="mt-2 flex gap-2">
-            <input type="radio" name="frq-preutter" checked={preutter === "zero"} onChange={() => setPreutter("zero")} />
+            <input type="radio" name="frq-preutter" checked={preutter === "zero"} onChange={() => onPreutter("zero")} />
             先行発声までを０に統一する
           </label>
           <label className="mt-2 flex gap-2">
-            <input type="radio" name="frq-preutter" checked={preutter === "none"} onChange={() => setPreutter("none")} />
+            <input type="radio" name="frq-preutter" checked={preutter === "none"} onChange={() => onPreutter("none")} />
             先行発声までを「なし」にする
           </label>
         </section>

@@ -13,6 +13,10 @@ type Props = {
   onWrite: () => void
   onReanalyze: () => void
   onReanalyzeOne: () => void
+  canUndo: boolean
+  canRedo: boolean
+  onUndo: () => void
+  onRedo: () => void
   onSettings: () => void
   onClose: () => void
   onToggle: (id: string) => void
@@ -36,6 +40,10 @@ export function MenuBar({
   onWrite,
   onReanalyze,
   onReanalyzeOne,
+  canUndo,
+  canRedo,
+  onUndo,
+  onRedo,
   onSettings,
   onClose,
   onToggle,
@@ -75,6 +83,9 @@ export function MenuBar({
         <Item onClick={onClose}>終了</Item>
       </Menu>
       <Menu title="編集" open={open} setOpen={setOpen}>
+        <Item disabled={!canUndo} onClick={onUndo}>元に戻す</Item>
+        <Item disabled={!canRedo} onClick={onRedo}>やり直す</Item>
+        <div className="my-1 border-t border-[var(--line)]" />
         <Item onClick={onSettings}>環境設定</Item>
       </Menu>
       <Menu title="解析" open={open} setOpen={setOpen}>
