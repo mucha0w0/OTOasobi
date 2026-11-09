@@ -38,7 +38,7 @@ import { AnalyzePanel, OtoIni, OtoSettings } from "./OtoPanels"
 import { PluginFrame, type PluginContext } from "./PluginFrame"
 import { previewColumnLimit, previewRowLimit, previewStillCovers, requestsPreviewAfter, uiScale, type BankEvent, type DeviceInfo, type EffectsEvent, type FrqViewEvent, type HostEvent, type NoiseWaveEvent, type OtoMark, type OtoState, type PageCommand, type PluginItem, type PluginReply, type PreviewEvent, type RecListEvent, type SavedEvent } from "./protocol"
 import { RecListPanel, RecScriptPanel } from "./RecPanels"
-import { noticeTone, ToneIcon, ToneRow, type NoticeTone } from "./notice"
+import { LogBar, noticeTone, ToneRow, type NoticeTone } from "./notice"
 import { createPointerBus } from "./ruler"
 import { PaneSlots } from "./paneSlots"
 import { SettingsDialog, settingsTabs } from "./settings"
@@ -1446,19 +1446,6 @@ export function App() {
         onCheckUpdate={() => sendRef.current({ type: "update", op: "check" })}
         plugins={plugins}
       />
-      {status && (
-        <div role="status" className="flex items-center gap-2 border-b border-l-[3px] border-[var(--line)] bg-[var(--panel)] px-4 py-2 text-sm" style={{ borderLeftColor: "var(--muted)" }}>
-          <ToneIcon tone="info" />
-          <span className="min-w-0 flex-1">{status}</span>
-        </div>
-      )}
-      {notice && (
-        <div role={notice.tone === "error" ? "alert" : "status"} className="flex items-center gap-2 border-b border-l-[3px] border-[var(--line)] bg-[var(--panel)] px-4 py-2 text-sm" style={{ borderLeftColor: notice.tone === "success" ? "var(--success)" : notice.tone === "error" ? "var(--danger)" : "var(--muted)" }}>
-          <ToneIcon tone={notice.tone} />
-          <span className="min-w-0 flex-1">{notice.message}</span>
-          <button type="button" className="ghost-button" onClick={() => setNotice(null)}>閉じる</button>
-        </div>
-      )}
       {folder ? (
         <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
           <PaneSlots
@@ -1726,6 +1713,7 @@ export function App() {
           {!connected && <p className="text-sm text-[var(--muted)]">ホストに接続していません</p>}
         </main>
       )}
+      <LogBar message={notice?.message ?? status} tone={notice?.tone ?? "info"} />
       {createOpen && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-6">
           <form
