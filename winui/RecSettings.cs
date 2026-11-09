@@ -19,8 +19,6 @@ sealed class RecAppSettings
     // 半音。正が高い。ファイルのガイドだけに効く。
     public int GuidePitch { get; set; }
 
-    public bool CountIn { get; set; }
-
     public int CountBeats { get; set; } = RecTone.DefaultCountBeats;
 
     public int CountBeatsAfter { get; set; }

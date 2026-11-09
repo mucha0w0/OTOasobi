@@ -187,7 +187,6 @@ export function App() {
   const [semitones, setSemitones] = useState(0)
   const [speed, setSpeed] = useState(1)
   const [volume, setVolume] = useState(0.7)
-  const [countIn, setCountIn] = useState(false)
   const [countBeats, setCountBeats] = useState(4)
   const [countBeatsAfter, setCountBeatsAfter] = useState(0)
   const [bpm, setBpm] = useState(120)
@@ -275,7 +274,7 @@ export function App() {
       ...emptySnapshot(),
       appearance: { theme, accent: null, scale, lockPanels },
       monitor,
-      rec: { note, semitones, speed, volume, countIn, countBeats, countBeatsAfter, bpm, moras, moraBeats, advance, recStartAfter, recEndBefore },
+      rec: { note, semitones, speed, volume, countBeats, countBeatsAfter, bpm, moras, moraBeats, advance, recStartAfter, recEndBefore },
     }
   }
   const resolved = resolveTheme(theme, systemDark)
@@ -401,7 +400,6 @@ export function App() {
         semitones,
         speed,
         volume,
-        countIn,
         countBeats,
         countBeatsAfter,
         bpm,
@@ -413,7 +411,7 @@ export function App() {
       })
     }, 300)
     return () => window.clearTimeout(timer)
-  }, [advance, bpm, countBeats, countBeatsAfter, countIn, moraBeats, moras, note, recEndBefore, recStartAfter, semitones, speed, volume])
+  }, [advance, bpm, countBeats, countBeatsAfter, moraBeats, moras, note, recEndBefore, recStartAfter, semitones, speed, volume])
 
   function viewModel(over: Partial<GraphModel> = {}): GraphModel {
     return {
@@ -1020,7 +1018,6 @@ export function App() {
             semitones: event.semitones,
             speed: event.speed,
             volume: event.volume,
-            countIn: event.countIn,
             countBeats: event.countBeats,
             countBeatsAfter: event.countBeatsAfter,
             bpm: event.bpm,
@@ -1035,7 +1032,6 @@ export function App() {
         setSemitones(event.semitones)
         setSpeed(event.speed)
         setVolume(event.volume)
-        setCountIn(event.countIn)
         setCountBeats(event.countBeats)
         setCountBeatsAfter(event.countBeatsAfter)
         setBpm(event.bpm)
@@ -1168,7 +1164,6 @@ export function App() {
     sendRef.current({
       type: "record",
       name,
-      countIn,
       countBeats,
       countBeatsAfter,
       bpm,
@@ -1308,7 +1303,6 @@ export function App() {
         || semitones !== rec.semitones
         || speed !== rec.speed
         || volume !== rec.volume
-        || countIn !== rec.countIn
         || countBeats !== rec.countBeats
         || countBeatsAfter !== rec.countBeatsAfter
         || bpm !== rec.bpm
@@ -1321,7 +1315,6 @@ export function App() {
         setSemitones(rec.semitones)
         setSpeed(rec.speed)
         setVolume(rec.volume)
-        setCountIn(rec.countIn)
         setCountBeats(rec.countBeats)
         setCountBeatsAfter(rec.countBeatsAfter)
         setBpm(rec.bpm)
@@ -1530,7 +1523,6 @@ export function App() {
                     semitones={semitones}
                     speed={speed}
                     volume={volume}
-                    countIn={countIn}
                     countBeats={countBeats}
                     countBeatsAfter={countBeatsAfter}
                     bpm={bpm}
@@ -1543,7 +1535,6 @@ export function App() {
                     setSemitones={touchRec(setSemitones)}
                     setSpeed={touchRec(setSpeed)}
                     setVolume={touchRec(setVolume)}
-                    setCountIn={touchRec(setCountIn)}
                     setCountBeats={touchRec(setCountBeats)}
                     setCountBeatsAfter={touchRec(setCountBeatsAfter)}
                     setBpm={touchRec(setBpm)}

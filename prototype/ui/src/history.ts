@@ -16,7 +16,6 @@ export type RecSnapshot = {
   semitones: number
   speed: number
   volume: number
-  countIn: boolean
   countBeats: number
   countBeatsAfter: number
   bpm: number
@@ -103,7 +102,6 @@ export function emptySnapshot(): EditSnapshot {
       semitones: 0,
       speed: 1,
       volume: 0.7,
-      countIn: false,
       countBeats: 4,
       countBeatsAfter: 0,
       bpm: 120,
@@ -296,7 +294,6 @@ export function applySnapshot(snapshot: EditSnapshot, command: PageCommand): Edi
           semitones: command.semitones,
           speed: command.speed,
           volume: command.volume,
-          countIn: command.countIn,
           countBeats: command.countBeats,
           countBeatsAfter: command.countBeatsAfter,
           bpm: command.bpm,
@@ -912,7 +909,6 @@ function describeRec(command: Extract<PageCommand, { type: "recSettings" }>, sna
     command.semitones !== current.semitones ? "semitones" : "",
     !near(command.speed, current.speed) ? "speed" : "",
     !near(command.volume, current.volume) ? "volume" : "",
-    command.countIn !== current.countIn ? "countIn" : "",
     command.countBeats !== current.countBeats ? "countBeats" : "",
     command.countBeatsAfter !== current.countBeatsAfter ? "countBeatsAfter" : "",
     command.bpm !== current.bpm ? "bpm" : "",

@@ -56,7 +56,6 @@ public sealed partial class MainPage
         RecGuideSpeedValue.Text = $"{(int)Math.Round(RecGuideSpeedSlider.Value)}%";
         RecGuidePitchSlider.Value = _recSettings.GuidePitch;
         RecGuidePitchValue.Text = FormatGuidePitch((int)Math.Round(RecGuidePitchSlider.Value));
-        RecCountInSwitch.IsOn = _recSettings.CountIn;
         RecCountBeatsBox.Value = _recSettings.CountBeats;
         RecCountBeatsAfterBox.Value = _recSettings.CountBeatsAfter;
         RecBpmBox.Value = _recSettings.Bpm;
@@ -466,14 +465,6 @@ public sealed partial class MainPage
         if (token != _guideShapeToken || _recGuideManual || !_guideListening)
             return;
         await PlayGuideAsync(loop: false);
-    }
-
-    void RecCountIn_Toggled(object sender, RoutedEventArgs e)
-    {
-        if (_recApplying)
-            return;
-        _recSettings.CountIn = RecCountInSwitch.IsOn;
-        _recSettings.Save();
     }
 
     void RecCountBeats_Changed(NumberBox sender, NumberBoxValueChangedEventArgs e)
@@ -1041,7 +1032,7 @@ public sealed partial class MainPage
         _recAction = true;
         try
         {
-            if (_recGuideManual && _recSettings.CountIn)
+            if (_recGuideManual)
             {
                 _recWaiting = true;
                 StopMicPlayback();
@@ -1194,8 +1185,8 @@ public sealed partial class MainPage
                     _recSettings.Bpm,
                     _recSettings.Moras,
                     RecTone.TargetRate,
-                    _recSettings.CountIn,
-                    _recSettings.CountIn && !loop,
+                    countEnabled: true,
+                    preCount: !loop,
                     _recSettings.CountBeats,
                     _recSettings.CountBeatsAfter,
                     _recSettings.MoraBeats),

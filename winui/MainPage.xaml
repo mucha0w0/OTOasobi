@@ -1795,12 +1795,6 @@
                                             Value="5"
                                             ValueChanged="RecMoras_Changed" />
                                     </Grid>
-                                    <ToggleSwitch
-                                        x:Name="RecCountInSwitch"
-                                        AutomationProperties.Name="カウント"
-                                        OffContent="カウントなし"
-                                        OnContent="カウントする"
-                                        Toggled="RecCountIn_Toggled" />
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />

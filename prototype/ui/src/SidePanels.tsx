@@ -90,7 +90,6 @@ export function GuidePanel({
   semitones,
   speed,
   volume,
-  countIn,
   countBeats,
   countBeatsAfter,
   bpm,
@@ -103,7 +102,6 @@ export function GuidePanel({
   setSemitones,
   setSpeed,
   setVolume,
-  setCountIn,
   setCountBeats,
   setCountBeatsAfter,
   setBpm,
@@ -118,7 +116,6 @@ export function GuidePanel({
   semitones: number
   speed: number
   volume: number
-  countIn: boolean
   countBeats: number
   countBeatsAfter: number
   bpm: number
@@ -131,7 +128,6 @@ export function GuidePanel({
   setSemitones: (value: number) => void
   setSpeed: (value: number) => void
   setVolume: (value: number) => void
-  setCountIn: (value: boolean) => void
   setCountBeats: (value: number) => void
   setCountBeatsAfter: (value: number) => void
   setBpm: (value: number) => void
@@ -195,28 +191,20 @@ export function GuidePanel({
               </span>
               <input type="range" min={1} max={16} step={1} value={moras} onChange={(event) => setMoras(Number(event.target.value))} />
             </label>
-            <label className="flex gap-2">
-              <input type="checkbox" checked={countIn} onChange={(event) => setCountIn(event.target.checked)} />
-              カウント
+            <label className="grid gap-1">
+              <span className="flex justify-between">
+                発声前のカウント数
+                <span className="num text-[var(--muted)]">{countBeats}</span>
+              </span>
+              <input type="range" min={1} max={16} step={1} value={countBeats} onChange={(event) => setCountBeats(Number(event.target.value))} />
             </label>
-            {countIn && (
-              <>
-                <label className="grid gap-1">
-                  <span className="flex justify-between">
-                    発声前のカウント数
-                    <span className="num text-[var(--muted)]">{countBeats}</span>
-                  </span>
-                  <input type="range" min={1} max={16} step={1} value={countBeats} onChange={(event) => setCountBeats(Number(event.target.value))} />
-                </label>
-                <label className="grid gap-1">
-                  <span className="flex justify-between">
-                    発声後のカウント数
-                    <span className="num text-[var(--muted)]">{countBeatsAfter}</span>
-                  </span>
-                  <input type="range" min={0} max={16} step={1} value={countBeatsAfter} onChange={(event) => setCountBeatsAfter(Number(event.target.value))} />
-                </label>
-              </>
-            )}
+            <label className="grid gap-1">
+              <span className="flex justify-between">
+                発声後のカウント数
+                <span className="num text-[var(--muted)]">{countBeatsAfter}</span>
+              </span>
+              <input type="range" min={0} max={16} step={1} value={countBeatsAfter} onChange={(event) => setCountBeatsAfter(Number(event.target.value))} />
+            </label>
             <label className="grid gap-1">
               <span className="flex justify-between">
                 BPM
@@ -274,7 +262,7 @@ export function GuidePanel({
         <IconButton
           label={playing ? "停止" : "ガイドを聴く"}
           accent
-          onClick={() => send(playing ? { type: "guideStop" } : { type: "guide", note, semitones, speed, volume, bpm, moras, moraBeats, countIn, countBeats, countBeatsAfter })}
+          onClick={() => send(playing ? { type: "guideStop" } : { type: "guide", note, semitones, speed, volume, bpm, moras, moraBeats, countBeats, countBeatsAfter })}
         >
           {playing ? <IconStop /> : <IconPlay />}
         </IconButton>
