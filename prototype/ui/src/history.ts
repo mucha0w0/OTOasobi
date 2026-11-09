@@ -692,10 +692,6 @@ function describeEffects(command: Extract<PageCommand, { type: "effects" }>, sna
     }
     case "preset":
       return command.name === effects.preset ? null : edit("effects.preset", false, [effectsSet(effects)], [command])
-    case "move":
-      if (command.from === command.to)
-        return null
-      return edit("effects.move", false, [{ type: "effects", op: "move", from: command.to, to: command.from }], [command])
     case "noise":
       if (sameNoise(effects, command))
         return null
@@ -799,8 +795,6 @@ function applyEffects(snapshot: EditSnapshot, command: Extract<PageCommand, { ty
       }
     case "preset":
       return { ...snapshot, effects: { ...effects, preset: command.name } }
-    case "move":
-      return { ...snapshot, effects: { ...effects, order: moveOrder(effects.order, command.from, command.to) } }
     case "noise":
       return {
         ...snapshot,
@@ -816,17 +810,6 @@ function applyEffects(snapshot: EditSnapshot, command: Extract<PageCommand, { ty
     default:
       return snapshot
   }
-}
-
-function moveOrder(order: string[], from: number, to: number) {
-  if (from <= 0 || to < 1 || from >= order.length || to >= order.length || from === to)
-    return order
-  const next = [...order]
-  const [item] = next.splice(from, 1)
-  if (item == null)
-    return order
-  next.splice(to, 0, item)
-  return next
 }
 
 function bankCommand(bank: BankSnapshot): PageCommand {

@@ -1,7 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react"
 import { sameName } from "./filePick"
 import { ToneRow } from "./notice"
-import { IconButton, IconDown, IconUp } from "./IconButton"
 import { formatNoiseSeconds } from "./noiseWave"
 import { NoiseWaveform } from "./NoiseWaveform"
 import type { EffectsEvent, NoiseWaveEvent, PageCommand } from "./protocol"
@@ -56,27 +55,14 @@ export function EffectsPanel({
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col text-sm">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto overflow-x-hidden p-3">
-        <label className="grid gap-1">
+        <label className="grid min-w-0 gap-1">
           プリセット
           <select className="field min-w-0 w-full" value={form.preset} onChange={(event) => send({ type: "effects", op: "preset", name: event.target.value })}>
             <option value="カスタム">カスタム</option>
             {form.presets.filter((name) => name !== "カスタム").map((name) => <option key={name}>{name}</option>)}
           </select>
         </label>
-        {orderOf(form).map((kind, index, order) => (
-          <div key={kind} className="min-w-0">
-            {kind !== "noise-suppressor" && (
-              <div className="mb-1 flex justify-end gap-2">
-                <IconButton label="上へ" disabled={index <= 1} onClick={() => send({ type: "effects", op: "move", from: index, to: index - 1 })}><IconUp /></IconButton>
-                <IconButton label="下へ" disabled={index >= order.length - 1} onClick={() => send({ type: "effects", op: "move", from: index, to: index + 1 })}><IconDown /></IconButton>
-              </div>
-            )}
-            {kind === "noise-suppressor" && (
-        <section className="grid min-w-0 gap-2">
-          <label className="section-title flex items-center gap-2">
-            <input type="checkbox" checked={form.noiseEnabled} onChange={(event) => push({ ...form, noiseEnabled: event.target.checked })} />
-            ノイズサプレッサー
-          </label>
+        <Block title="ノイズサプレッサー" on={form.noiseEnabled} setOn={(noiseEnabled) => push({ ...form, noiseEnabled })}>
           <Slider label="抑える量" min={0} max={16} step={0.5} value={form.noiseReduction} suffix=" dB" onChange={(noiseReduction) => push({ ...form, noiseReduction })} />
           <label className="mt-2 grid gap-1">
             原音
@@ -106,19 +92,15 @@ export function EffectsPanel({
             />
           )}
           {form.noiseMessage && <p className="text-[var(--danger)]">{form.noiseMessage}</p>}
-        </section>
-            )}
-            {kind === "highpass" && (
-        <Card title="ハイパス" on={form.highpassEnabled} setOn={(highpassEnabled) => push({ ...form, highpassEnabled })}>
+        </Block>
+        <Block title="ハイパス" on={form.highpassEnabled} setOn={(highpassEnabled) => push({ ...form, highpassEnabled })}>
           <Slider label="周波数" min={20} max={200} step={1} value={form.highpassHz} suffix=" Hz" onChange={(highpassHz) => push({ ...form, highpassHz })} />
           <label className="mt-2 flex gap-3">
             <span><input type="radio" checked={form.highpassSlope === 12} onChange={() => push({ ...form, highpassSlope: 12 })} /> 12 dB/oct</span>
             <span><input type="radio" checked={form.highpassSlope === 24} onChange={() => push({ ...form, highpassSlope: 24 })} /> 24 dB/oct</span>
           </label>
-        </Card>
-            )}
-            {kind === "equalizer" && (
-        <Card title="イコライザー" on={form.eqEnabled} setOn={(eqEnabled) => push({ ...form, eqEnabled })}>
+        </Block>
+        <Block title="イコライザー" on={form.eqEnabled} setOn={(eqEnabled) => push({ ...form, eqEnabled })}>
           {bands.map((hz, index) => (
             <Slider
               key={hz}
@@ -137,21 +119,14 @@ export function EffectsPanel({
               }}
             />
           ))}
-        </Card>
-            )}
-            {kind === "compressor" && (
-        <Card title="コンプレッサー" on={form.compressorEnabled} setOn={(compressorEnabled) => push({ ...form, compressorEnabled })}>
+        </Block>
+        <Block title="コンプレッサー" on={form.compressorEnabled} setOn={(compressorEnabled) => push({ ...form, compressorEnabled })}>
           <Slider label="比" min={2} max={3} step={0.1} value={form.compressorRatio} suffix="" onChange={(compressorRatio) => push({ ...form, compressorRatio })} />
           <Slider label="下げ幅" min={0} max={6} step={0.1} value={form.compressorReduction} suffix=" dB" onChange={(compressorReduction) => push({ ...form, compressorReduction })} />
-        </Card>
-            )}
-            {kind === "normalize" && (
-        <Card title="ノーマライズ" on={form.normalizeEnabled} setOn={(normalizeEnabled) => push({ ...form, normalizeEnabled })}>
+        </Block>
+        <Block title="ノーマライズ" on={form.normalizeEnabled} setOn={(normalizeEnabled) => push({ ...form, normalizeEnabled })}>
           <Slider label="目標" min={-12} max={0} step={0.1} value={form.normalizeTarget} suffix=" dB" onChange={(normalizeTarget) => push({ ...form, normalizeTarget })} />
-        </Card>
-            )}
-          </div>
-        ))}
+        </Block>
       </div>
       <div className="border-t border-[var(--line)] p-3">
         {blocked && <ToneRow tone="error" className="mb-2">{blocked}</ToneRow>}
@@ -179,12 +154,6 @@ export function EffectsPanel({
       )}
     </div>
   )
-}
-
-function orderOf(form: EffectsEvent) {
-  const fallback = ["noise-suppressor", "highpass", "equalizer", "compressor", "normalize"]
-  const known = form.order.filter((kind) => fallback.includes(kind))
-  return known.length === fallback.length ? known : fallback
 }
 
 function noiseFiles(form: EffectsEvent) {
@@ -232,7 +201,7 @@ function NoiseBody({
   )
 }
 
-function Card({
+function Block({
   title,
   on,
   setOn,
@@ -244,12 +213,12 @@ function Card({
   children: ReactNode
 }) {
   return (
-    <section className="min-w-0 rounded border border-[var(--line)] p-3">
-      <label className="flex gap-2 font-semibold">
+    <section className="grid min-w-0 gap-2">
+      <label className="section-title flex items-center gap-2">
         <input type="checkbox" checked={on} onChange={(event) => setOn(event.target.checked)} />
         {title}
       </label>
-      <div className="mt-2">{children}</div>
+      <div>{children}</div>
     </section>
   )
 }

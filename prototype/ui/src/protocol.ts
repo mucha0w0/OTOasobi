@@ -29,7 +29,6 @@ export type PageCommand =
   | { type: "effects"; op: "preset"; name: string }
   | { type: "effects"; op: "noise"; file: string; start?: number; end?: number }
   | { type: "effects"; op: "apply" }
-  | { type: "effects"; op: "move"; from: number; to: number }
   | { type: "watchMic"; on: boolean }
   | { type: "watchPanels"; frq: boolean; oto: boolean }
   | { type: "close" }

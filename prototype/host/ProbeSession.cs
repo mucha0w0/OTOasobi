@@ -1927,10 +1927,6 @@ sealed class ProbeSession : IDisposable
             case "apply":
                 _ = ApplyEffectsAsync();
                 break;
-            case "move":
-                _effects.Move((int)Math.Round(Number(root, "from")), (int)Math.Round(Number(root, "to")));
-                PostEffects(wave: false);
-                break;
         }
     }
 

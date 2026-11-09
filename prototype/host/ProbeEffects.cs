@@ -81,15 +81,6 @@ sealed class ProbeEffects
         Save();
     }
 
-    public void Move(int from, int to)
-    {
-        if (from <= 0 || to < 1)
-            return;
-        _chain.Move(from, to);
-        Pin();
-        Save();
-    }
-
     public string? SetNoise(string? file, double? start, double? end)
     {
         if (string.IsNullOrEmpty(_folder))
@@ -434,45 +425,13 @@ sealed class ProbeEffects
             }
         }
 
-        var tail = new List<AudioEffect>();
-        foreach (var entry in effects)
-        {
-            var effect = EffectFor(entry.Kind);
-            if (effect == null || ReferenceEquals(effect, _noise) || tail.Contains(effect))
-                continue;
-            tail.Add(effect);
-        }
-
-        foreach (var effect in new AudioEffect[] { _highPass, _equalizer, _compressor, _normalize })
-        {
-            if (!tail.Contains(effect))
-                tail.Add(effect);
-        }
-
-        _chain.SetOrder(new[] { _noise }.Concat(tail));
+        Pin();
     }
 
     void Pin()
     {
-        var tail = _chain.Effects.Where(effect => !ReferenceEquals(effect, _noise)).ToList();
-        foreach (var effect in new AudioEffect[] { _highPass, _equalizer, _compressor, _normalize })
-        {
-            if (!tail.Contains(effect))
-                tail.Add(effect);
-        }
-
-        _chain.SetOrder(new[] { _noise }.Concat(tail));
+        _chain.SetOrder(new AudioEffect[] { _noise, _highPass, _equalizer, _compressor, _normalize });
     }
-
-    AudioEffect? EffectFor(string? kind) => kind switch
-    {
-        NoiseSuppressorEffect.KindId => _noise,
-        HighPassEffect.KindId => _highPass,
-        EqualizerEffect.KindId => _equalizer,
-        CompressorEffect.KindId => _compressor,
-        NormalizeEffect.KindId => _normalize,
-        _ => null,
-    };
 
     void Save()
     {

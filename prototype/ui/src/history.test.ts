@@ -271,11 +271,6 @@ describe("戻すコマンド", () => {
     expect(edit?.redo[0]).toMatchObject({ op: "preset", name: "強め" })
   })
 
-  it("並びの移動は逆方向になる", () => {
-    const edit = describeEdit({ type: "effects", op: "move", from: 1, to: 3 }, snap())
-    expect(edit?.undo[0]).toMatchObject({ op: "move", from: 3, to: 1 })
-  })
-
   it("無音の原音を選ぶと、範囲なしで戻す", () => {
     const edit = describeEdit({ type: "effects", op: "noise", file: "あ.wav" }, snap())
     expect(edit?.undo[0]).toEqual({ type: "effects", op: "noise", file: "" })
