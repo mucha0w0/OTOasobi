@@ -2,6 +2,10 @@ import { sameName } from "./filePick"
 import type { RecLineInfo, RecListEvent } from "./protocol"
 import { Segmented } from "./Segmented"
 
+function wavStem(name: string): string {
+  return /\.wav$/i.test(name) ? name.slice(0, -4) : name
+}
+
 export function RecListPanel({
   list,
   filter,
@@ -84,7 +88,7 @@ export function RecListPanel({
                 onClick={() => onSelect(null, wav)}
               >
                 <span className="flex w-full min-w-0 items-baseline justify-between gap-2">
-                  <span className="min-w-0 truncate">{wav}</span>
+                  <span className="min-w-0 truncate">{wavStem(wav)}</span>
                   <span className="shrink-0 text-right text-xs text-[var(--muted)]">リスト外</span>
                 </span>
               </button>
@@ -99,7 +103,7 @@ export function RecListPanel({
               onClick={() => onSelect(index, line.wav)}
             >
               <span className="flex w-full min-w-0 items-baseline justify-between gap-2">
-                <span className="min-w-0 truncate">{line.wav}</span>
+                <span className="min-w-0 truncate">{line.sing}</span>
                 <span className="shrink-0 text-right text-xs text-[var(--muted)]">{status}{line.comment ? `　${line.comment}` : ""}</span>
               </span>
             </button>
@@ -119,7 +123,7 @@ export function RecScriptPanel({
   next: string
   outside: string
 }) {
-  const title = line?.sing || outside || ""
+  const title = line?.sing || (outside ? wavStem(outside) : "")
   return (
     <div className="flex h-full flex-col justify-center gap-3 p-4">
       <p className="text-4xl leading-tight">{title}</p>
