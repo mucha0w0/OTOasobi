@@ -195,15 +195,65 @@ function preserveWidths(
   edge: DockEdge,
   span: DockSpan,
 ): LayoutNode {
+  const rects = measureRects(origin, span.width, span.height)
   const desired = new Map<string, number>()
-  for (const [id, rect] of measureRects(origin, span.width, span.height))
+  for (const [id, rect] of rects)
     desired.set(id, rect.width)
-  const flex = new Set<string>([draggedId])
+  const flex = new Set<string>()
   if (edge === "left" || edge === "right") {
+    flex.add(draggedId)
     for (const id of edgeLeaves(target, edge))
       flex.add(id)
   }
+  else if (fillsHeight(rects.get(draggedId), span.height)) {
+    // 高さいっぱいの列を上か下に重ねるとき、重ねた列は元の幅のままにする。
+    // 空いた幅は、その列ではない隣の列が受け取る。
+    const stay = idsOf(target)
+    const host = unionX(rects, stay)
+    if (host)
+      desired.set(draggedId, host.width)
+    const dragged = rects.get(draggedId)
+    if (dragged && host) {
+      const outside = [...rects].filter(([id, rect]) => id !== draggedId && !stay.includes(id) && !overlapsX(rect, host))
+      const beside = outside.filter(([, rect]) => sharesVerticalEdge(dragged, rect))
+      for (const [id] of beside.length > 0 ? beside : outside)
+        flex.add(id)
+    }
+    if (flex.size === 0)
+      flex.add(draggedId)
+  }
+  else {
+    flex.add(draggedId)
+  }
   return applyWidths(placed, span.width, desired, flex, draggedId, span.width)
+}
+
+function fillsHeight(rect: PaneRect | undefined, height: number) {
+  return rect != null && height > 1 && rect.height >= height - 1
+}
+
+function unionX(rects: Map<string, PaneRect>, ids: string[]) {
+  let x0 = Number.POSITIVE_INFINITY
+  let x1 = Number.NEGATIVE_INFINITY
+  for (const id of ids) {
+    const rect = rects.get(id)
+    if (!rect)
+      continue
+    x0 = Math.min(x0, rect.x)
+    x1 = Math.max(x1, rect.x + rect.width)
+  }
+  return x1 > x0 ? { x: x0, width: x1 - x0 } : null
+}
+
+function overlapsX(rect: PaneRect, host: { x: number; width: number }) {
+  return Math.min(rect.x + rect.width, host.x + host.width) - Math.max(rect.x, host.x) > 0.5
+}
+
+function sharesVerticalEdge(a: PaneRect, b: PaneRect) {
+  const overlap = Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y)
+  if (overlap <= 0.5)
+    return false
+  return Math.abs(a.x + a.width - b.x) <= 0.5 || Math.abs(b.x + b.width - a.x) <= 0.5
 }
 
 function edgeLeaves(node: LayoutNode, edge: "left" | "right"): string[] {

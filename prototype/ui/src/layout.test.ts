@@ -162,12 +162,24 @@ describe("パネルの移動", () => {
     expect(after.loud.width).toBeCloseTo(before.loud.width, 3)
   })
 
-  it("上に積んでも、隣の列の幅は残る", () => {
+  it("高さいっぱいのパネルを上に重ねても、重ねた列の幅は残る", () => {
     const tree = h(0.3, leaf("file"), h(0.5, leaf("wave"), leaf("spec")))
     const before = boxes(tree, 1000, 800)
     const moved = movePane(tree, "file", ["wave"], "top", { width: 1000, height: 800 })
     const after = boxes(moved!, 1000, 800)
+    expect(after.wave.width).toBeCloseTo(before.wave.width, 3)
+    expect(after.file.width).toBeCloseTo(before.wave.width, 3)
+    expect(after.spec.width).toBeCloseTo(before.spec.width + before.file.width, 3)
+  })
+
+  it("高さいっぱいのパネルを下に重ねても、重ねた列の幅は残る", () => {
+    const tree = h(0.2, leaf("file"), h(0.6, leaf("wave"), leaf("spec")))
+    const before = boxes(tree, 1000, 800)
+    const moved = movePane(tree, "file", ["spec"], "bottom", { width: 1000, height: 800 })
+    const after = boxes(moved!, 1000, 800)
     expect(after.spec.width).toBeCloseTo(before.spec.width, 3)
+    expect(after.file.width).toBeCloseTo(before.spec.width, 3)
+    expect(after.wave.width).toBeCloseTo(before.wave.width + before.file.width, 3)
   })
 
   it("離したあとも、接していないパネルの大きさを保つ", () => {
