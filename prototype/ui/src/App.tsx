@@ -33,7 +33,7 @@ import { contains, createDefault, hidePane, idsOf, showPane, type LayoutNode, ty
 import { createLiveBus, type LiveBus } from "./live"
 import { MenuBar } from "./MenuBar"
 import { OtoTable } from "./OtoTable"
-import { OtoIni, OtoSettings } from "./OtoPanels"
+import { AnalyzePanel, OtoIni, OtoSettings } from "./OtoPanels"
 import { previewColumnLimit, previewRowLimit, previewStillCovers, requestsPreviewAfter, uiScale, type BankEvent, type DeviceInfo, type EffectsEvent, type FrqViewEvent, type HostEvent, type OtoMark, type OtoState, type PageCommand, type PreviewEvent, type RecListEvent, type SavedEvent } from "./protocol"
 import { RecListPanel, RecScriptPanel } from "./RecPanels"
 import { noticeTone, ToneIcon, ToneRow, type NoticeTone } from "./notice"
@@ -1230,8 +1230,6 @@ export function App() {
         layout={layout}
         canEdit={folder.length > 0}
         canWrite={Boolean(oto?.analyzed && !oto.busy)}
-        canAnalyze={folder.length > 0 && !oto?.busy}
-        canAnalyzeOne={folder.length > 0 && selectedNames.length > 0 && !oto?.busy}
         onOpenFolder={() => sendRef.current({ type: "openFolder" })}
         onSaveSettings={() => {
           setSaveName("")
@@ -1239,8 +1237,6 @@ export function App() {
         }}
         onLoadSettings={() => setLoadOpen(true)}
         onWrite={() => sendRef.current({ type: "oto", op: "write" })}
-        onReanalyze={() => setReanalyzeOpen(true)}
-        onReanalyzeOne={() => setOneOpen(true)}
         canUndo={canUndo}
         canRedo={canRedo}
         onUndo={() => replay("undo")}
@@ -1419,6 +1415,15 @@ export function App() {
                 return <EffectsPanel effects={effects} busy={Boolean(oto?.busy)} send={(command) => sendRef.current(command)} />
               if (id === "bank")
                 return <BankPanel bank={bank} send={(command) => sendRef.current(command)} />
+              if (id === "analyze")
+                return (
+                  <AnalyzePanel
+                    busy={Boolean(oto?.busy)}
+                    hasSelection={selectedNames.length > 0}
+                    onAll={() => setReanalyzeOpen(true)}
+                    onSelected={() => setOneOpen(true)}
+                  />
+                )
               if (id === "oto")
                 return <OtoSettings oto={oto} send={(command) => sendRef.current(command)} />
               if (id === "otoIni")

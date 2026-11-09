@@ -21,6 +21,7 @@ export const paneTitles: Record<string, string> = {
   frq: ".frq生成",
   frqEdit: "frqエディター",
   bank: "音源の各種設定",
+  analyze: "音素解析",
   recList: "録音リスト",
   recScript: "録音スクリプト",
   rec: "録音コントローラ",
@@ -31,7 +32,7 @@ export const paneTitles: Record<string, string> = {
 // 表示メニューのフォルダ。同じ id は複数に置いてよく、開閉は id で揃う。
 export const viewFolders: { title: string; ids: string[] }[] = [
   { title: "録音", ids: ["file", "recList", "recScript", "rec", "guide", "mic"] },
-  { title: "原音設定の推定", ids: ["file", "source", "wave", "spec", "loud", "oto"] },
+  { title: "原音設定の推定", ids: ["file", "analyze", "source", "wave", "spec", "loud", "oto"] },
   { title: "原音設定", ids: ["file", "wave", "spec", "loud", "otoBand", "otoParams", "otoIni"] },
   { title: "frq", ids: ["file", "frq", "frqEdit"] },
   { title: "パッケージ化", ids: ["bank"] },

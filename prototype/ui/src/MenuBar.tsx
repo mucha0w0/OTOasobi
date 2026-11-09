@@ -5,14 +5,10 @@ type Props = {
   layout: LayoutNode | null
   canEdit: boolean
   canWrite: boolean
-  canAnalyze: boolean
-  canAnalyzeOne: boolean
   onOpenFolder: () => void
   onSaveSettings: () => void
   onLoadSettings: () => void
   onWrite: () => void
-  onReanalyze: () => void
-  onReanalyzeOne: () => void
   canUndo: boolean
   canRedo: boolean
   onUndo: () => void
@@ -32,14 +28,10 @@ export function MenuBar({
   layout,
   canEdit,
   canWrite,
-  canAnalyze,
-  canAnalyzeOne,
   onOpenFolder,
   onSaveSettings,
   onLoadSettings,
   onWrite,
-  onReanalyze,
-  onReanalyzeOne,
   canUndo,
   canRedo,
   onUndo,
@@ -87,10 +79,6 @@ export function MenuBar({
         <Item disabled={!canRedo} onClick={onRedo}>やり直す</Item>
         <div className="my-1 border-t border-[var(--line)]" />
         <Item onClick={onSettings}>環境設定</Item>
-      </Menu>
-      <Menu title="解析" open={open} setOpen={setOpen}>
-        <Item disabled={!canAnalyze} onClick={onReanalyze}>再解析</Item>
-        <Item disabled={!canAnalyzeOne} onClick={onReanalyzeOne}>選択した音声だけを再解析</Item>
       </Menu>
       <Menu title="表示" open={open} setOpen={setOpen}>
         {viewFolders.map((group) => (

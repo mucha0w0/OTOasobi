@@ -27,6 +27,7 @@ describe("初期配置", () => {
       expect(contains(root, id)).toBe(true)
     expect(contains(root, "rec")).toBe(false)
     expect(contains(root, "mic")).toBe(false)
+    expect(contains(root, "analyze")).toBe(false)
   })
 
   it("隠すと残り、足すと既存の葉を割る", () => {

@@ -118,6 +118,29 @@ export function OtoSettings({ oto, send }: { oto: OtoState | null; send: Send })
   )
 }
 
+export function AnalyzePanel({
+  busy,
+  hasSelection,
+  onAll,
+  onSelected,
+}: {
+  busy: boolean
+  hasSelection: boolean
+  onAll: () => void
+  onSelected: () => void
+}) {
+  return (
+    <div className="flex h-full min-h-0 flex-col gap-2 p-3">
+      <button type="button" className="accent-button w-full" disabled={busy} onClick={onAll}>
+        すべてのファイルを解析
+      </button>
+      <button type="button" className="accent-button w-full" disabled={busy || !hasSelection} onClick={onSelected}>
+        選択したファイルを解析
+      </button>
+    </div>
+  )
+}
+
 export function OtoIni({ oto, send }: { oto: OtoState | null; send: Send }) {
   if (!oto)
     return <p className="p-3 text-sm text-[var(--muted)]">設定を読み込んでいます。</p>
