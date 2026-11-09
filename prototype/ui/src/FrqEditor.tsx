@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react"
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react"
 import { bitmapRatio, canvasContext } from "./bitmap"
 import { IconButton, IconPen } from "./IconButton"
 import { frqRuler, frqRow, frqUnvoiced, isBlack, midiOf, noteName, pitchSpan } from "./frqRoll"
@@ -107,7 +107,7 @@ export function FrqEditor({
     return () => observer.disconnect()
   }, [width])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const canvas = pianoRef.current
     if (!canvas || frequency.length === 0)
       return
@@ -138,7 +138,7 @@ export function FrqEditor({
     })
   }, [appearance, frequency, pianoHeight, pixels, selected, span.high, span.low, width])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const canvas = laneRef.current
     if (!canvas || frequency.length === 0)
       return

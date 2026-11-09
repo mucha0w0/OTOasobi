@@ -259,6 +259,10 @@ export function App() {
     }
   }
   const resolved = resolveTheme(theme, systemDark)
+  const accentPaint = buttonColors(correctAccent(accent ?? defaultAccent(resolved), resolved))
+  document.documentElement.dataset.theme = resolved
+  document.documentElement.style.setProperty("--accent", accentPaint.fill)
+  document.documentElement.style.setProperty("--on-accent", accentPaint.ink)
   pictureRef.current = picture
   otoRef.current = oto
   fileNameRef.current = fileName
@@ -305,12 +309,8 @@ export function App() {
   }, [])
 
   useEffect(() => {
-    document.documentElement.dataset.theme = resolved
-    const colors = buttonColors(correctAccent(accent ?? defaultAccent(resolved), resolved))
-    document.documentElement.style.setProperty("--accent", colors.fill)
-    document.documentElement.style.setProperty("--on-accent", colors.ink)
     sendRef.current({ type: "caption", theme: resolved })
-  }, [resolved, accent])
+  }, [resolved])
 
   useEffect(() => {
     const blockZoom = (event: WheelEvent) => {
@@ -1222,7 +1222,7 @@ export function App() {
   const recNext = recLine && recIndex != null ? recList?.lines[recIndex + 1]?.sing ?? "" : ""
   const recOutside = !recLine && (recList?.outside.some((name) => sameName(name, fileName)) ?? false) ? fileName : ""
   const recStatus = recLine?.error ?? (recLine ? (recLine.recorded ? "録音済み" : "未録音") : recOutside ? "リスト外" : "")
-  const appearance = `${resolved}-${buttonColors(correctAccent(accent ?? defaultAccent(resolved), resolved)).fill}-${scale}`
+  const appearance = `${resolved}-${accentPaint.fill}-${scale}`
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-[var(--bg)] text-[var(--text)]">
