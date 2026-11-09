@@ -18,7 +18,7 @@ export const paneTitles: Record<string, string> = {
   source: "エフェクター",
   oto: "oto推定設定",
   otoParams: "oto数値表",
-  otoIni: "oto.ini生成",
+  otoIni: "推定oto.iniを出力",
   frq: ".frq生成",
   frqEdit: "frqエディター",
   bank: "音源の各種設定",
