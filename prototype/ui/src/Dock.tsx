@@ -1,7 +1,7 @@
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react"
 import { armBox, hitDrop, type DropAim, type HitLeaf, type HitRegion, type ScreenBox } from "./dockHit"
 import { pickTitleResize, type TitleEdge } from "./dockSplit"
-import { commitMove, hidePane, idsOf, liftPane, paneTitles, type DockSpan, type LayoutNode, type PaneBox } from "./layout"
+import { commitMove, dropWidthFraction, hidePane, idsOf, liftPane, paneTitles, type DockSpan, type LayoutNode, type PaneBox } from "./layout"
 import { PaneHost } from "./paneSlots"
 import { measureFloors, measureSplitters, moveSplitter } from "./splitter"
 
@@ -58,7 +58,8 @@ export function Dock({ layout, locked, boxes, onChange, onRatio, onResizing }: P
       }
       setGhost({ x: ev.clientX, y: ev.clientY, title: current.title })
       const root = rootRef.current
-      setAim(root ? hitDrop(...readHits(root), current.id, ev.clientX, ev.clientY) : null)
+      const hit = root ? hitDrop(...readHits(root), current.id, ev.clientX, ev.clientY) : null
+      setAim(hit ? showInsertWidth(hit, current.origin, current.id, dockSpan(root)) : null)
     }
     const up = (ev: PointerEvent) => {
       window.removeEventListener("pointermove", move)
@@ -151,6 +152,16 @@ function placed(box: ScreenBox, origin: DOMRect) {
     width: box.width,
     height: box.height,
   }
+}
+
+function showInsertWidth(aim: DropAim, origin: LayoutNode, draggedId: string, span?: DockSpan): DropAim {
+  if (!aim.highlight || !aim.edge || aim.edge === "top" || aim.edge === "bottom" || aim.targetIds.length === 0)
+    return aim
+  const fraction = dropWidthFraction(origin, draggedId, aim.targetIds, aim.edge, span)
+  const full = aim.highlight.width * 2
+  const width = full * fraction
+  const x = aim.edge === "left" ? aim.highlight.x : aim.highlight.x + full - width
+  return { ...aim, highlight: { ...aim.highlight, x, width } }
 }
 
 function dockSpan(root: HTMLElement | null): DockSpan | undefined {

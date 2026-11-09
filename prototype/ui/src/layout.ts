@@ -139,7 +139,35 @@ export function movePane(
       : edge === "top"
         ? v(0.5, dragged, resolved)
         : v(0.5, resolved, dragged)
-  return replaceNode(without, resolved, split)
+  const placed = replaceNode(without, resolved, split)
+  if (!span || span.width < 1 || span.height < 1)
+    return placed
+  return preserveWidths(placed, root, draggedId, resolved, edge, span)
+}
+
+// 挿入後も、入れたパネルと、その端に接するパネル以外は元の幅のままにする。
+export function dropWidthFraction(
+  root: LayoutNode | null,
+  draggedId: string,
+  targetIds: string[],
+  edge: DockEdge,
+  span?: DockSpan,
+): number {
+  if (!root || !span || edge === "top" || edge === "bottom")
+    return 0.5
+  const moved = movePane(root, draggedId, targetIds, edge, span)
+  if (!moved)
+    return 0.5
+  const dragged = measureRects(moved, span.width, span.height).get(draggedId)
+  const lifted = liftPane(root, draggedId, span)
+  const stay = targetIds.filter((id) => id !== draggedId)
+  if (!dragged || !lifted || stay.length === 0)
+    return 0.5
+  const host = smallestContaining(lifted, stay) ?? lifted
+  const hostWidth = subtreeSize(lifted, host, span.width, span.height)?.width ?? 0
+  if (!(hostWidth > 1))
+    return 0.5
+  return Math.min(0.9, Math.max(0.1, dragged.width / hostWidth))
 }
 
 export function commitMove(
@@ -157,6 +185,207 @@ export function commitMove(
   if (moved && contains(moved, draggedId))
     return moved
   return origin
+}
+
+function preserveWidths(
+  placed: LayoutNode,
+  origin: LayoutNode,
+  draggedId: string,
+  target: LayoutNode,
+  edge: DockEdge,
+  span: DockSpan,
+): LayoutNode {
+  const desired = new Map<string, number>()
+  for (const [id, rect] of measureRects(origin, span.width, span.height))
+    desired.set(id, rect.width)
+  const flex = new Set<string>([draggedId])
+  if (edge === "left" || edge === "right") {
+    for (const id of edgeLeaves(target, edge))
+      flex.add(id)
+  }
+  return applyWidths(placed, span.width, desired, flex, draggedId, span.width)
+}
+
+function edgeLeaves(node: LayoutNode, edge: "left" | "right"): string[] {
+  if ("id" in node)
+    return [node.id]
+  if (node.axis === "v")
+    return [...edgeLeaves(node.first, edge), ...edgeLeaves(node.second, edge)]
+  return edgeLeaves(edge === "left" ? node.first : node.second, edge)
+}
+
+function applyWidths(
+  node: LayoutNode,
+  available: number,
+  desired: Map<string, number>,
+  flex: Set<string>,
+  draggedId: string,
+  dock: number,
+): LayoutNode {
+  if ("id" in node || !(available > 0))
+    return node
+  if (node.axis === "v") {
+    return {
+      axis: "v",
+      ratio: node.ratio,
+      first: applyWidths(node.first, available, desired, flex, draggedId, dock),
+      second: applyWidths(node.second, available, desired, flex, draggedId, dock),
+    }
+  }
+  const pair = fitColumns(node.first, node.second, available, desired, flex, draggedId, dock)
+  const ratio = Math.min(1 - 1e-4, Math.max(1e-4, pair.first / available))
+  const firstWidth = ratio * available
+  return {
+    axis: "h",
+    ratio,
+    first: applyWidths(node.first, firstWidth, desired, flex, draggedId, dock),
+    second: applyWidths(node.second, available - firstWidth, desired, flex, draggedId, dock),
+  }
+}
+
+function fitColumns(
+  first: LayoutNode,
+  second: LayoutNode,
+  available: number,
+  desired: Map<string, number>,
+  flex: Set<string>,
+  draggedId: string,
+  dock: number,
+): { first: number; second: number } {
+  const aLock = lockWidth(first, desired, flex)
+  const bLock = lockWidth(second, desired, flex)
+  if (aLock != null && bLock == null)
+    return shareLocked(aLock, available, true)
+  if (bLock != null && aLock == null)
+    return shareLocked(bLock, available, false)
+  const aWant = aLock ?? wantWidth(first, desired, flex)
+  const bWant = bLock ?? wantWidth(second, desired, flex)
+  const sum = aWant + bWant
+  if (!(sum > 0))
+    return { first: available / 2, second: available / 2 }
+  if (sum <= available + 0.5) {
+    const extra = Math.max(0, available - sum)
+    const aFlex = hasFlex(first, flex)
+    const bFlex = hasFlex(second, flex)
+    if (bFlex && !aFlex)
+      return { first: aWant, second: bWant + extra }
+    if (aFlex && !bFlex)
+      return { first: aWant + extra, second: bWant }
+    const firstWidth = available * (aWant / sum)
+    return { first: firstWidth, second: available - firstWidth }
+  }
+  let a = aWant
+  let b = bWant
+  let need = sum - available
+  const shrinkEdgeFirst = contains(second, draggedId) && !contains(first, draggedId)
+  const cut = (which: "a" | "b", min: number, flexSide: boolean) => {
+    if (!flexSide || need <= 0)
+      return
+    const value = which === "a" ? a : b
+    const spare = Math.max(0, value - min)
+    const take = Math.min(spare, need)
+    need -= take
+    if (which === "a")
+      a = value - take
+    else
+      b = value - take
+  }
+  const aMin = minWidth(first, desired, flex, dock)
+  const bMin = minWidth(second, desired, flex, dock)
+  if (shrinkEdgeFirst) {
+    cut("a", aMin, hasFlex(first, flex))
+    cut("b", bMin, hasFlex(second, flex))
+  }
+  else {
+    cut("b", bMin, hasFlex(second, flex))
+    cut("a", aMin, hasFlex(first, flex))
+  }
+  if (!(a > 0) || !(b > 0) || a + b <= 0)
+    return { first: available / 2, second: available / 2 }
+  if (Math.abs(a + b - available) > 0.5) {
+    const firstWidth = available * (a / (a + b))
+    return { first: firstWidth, second: available - firstWidth }
+  }
+  return { first: a, second: b }
+}
+
+function shareLocked(lock: number, available: number, lockIsFirst: boolean): { first: number; second: number } {
+  const kept = Math.min(Math.max(1, lock), available - 1)
+  return lockIsFirst
+    ? { first: kept, second: available - kept }
+    : { second: kept, first: available - kept }
+}
+
+function lockWidth(node: LayoutNode, desired: Map<string, number>, flex: Set<string>): number | null {
+  if ("id" in node)
+    return flex.has(node.id) ? null : desired.get(node.id) ?? null
+  const first = lockWidth(node.first, desired, flex)
+  const second = lockWidth(node.second, desired, flex)
+  if (first == null || second == null)
+    return null
+  return node.axis === "v" ? Math.max(first, second) : first + second
+}
+
+function wantWidth(node: LayoutNode, desired: Map<string, number>, flex: Set<string>): number {
+  if ("id" in node)
+    return desired.get(node.id) ?? 0
+  const first = wantWidth(node.first, desired, flex)
+  const second = wantWidth(node.second, desired, flex)
+  return node.axis === "v" ? Math.max(first, second) : first + second
+}
+
+function minWidth(node: LayoutNode, desired: Map<string, number>, flex: Set<string>, dock: number): number {
+  if ("id" in node) {
+    const width = desired.get(node.id) ?? 0
+    return flex.has(node.id) ? Math.min(width, paneLimit(dock)) : width
+  }
+  const first = minWidth(node.first, desired, flex, dock)
+  const second = minWidth(node.second, desired, flex, dock)
+  return node.axis === "v" ? Math.max(first, second) : first + second
+}
+
+function hasFlex(node: LayoutNode, flex: Set<string>): boolean {
+  if ("id" in node)
+    return flex.has(node.id)
+  return hasFlex(node.first, flex) || hasFlex(node.second, flex)
+}
+
+type PaneRect = { x: number; y: number; width: number; height: number }
+
+function measureRects(node: LayoutNode, width: number, height: number): Map<string, PaneRect> {
+  const found = new Map<string, PaneRect>()
+  const walk = (current: LayoutNode, x: number, y: number, w: number, h: number) => {
+    if ("id" in current) {
+      found.set(current.id, { x, y, width: w, height: h })
+      return
+    }
+    const span = current.axis === "h" ? w : h
+    const size = span * current.ratio
+    if (current.axis === "h") {
+      walk(current.first, x, y, size, h)
+      walk(current.second, x + size, y, Math.max(0, w - size), h)
+      return
+    }
+    walk(current.first, x, y, w, size)
+    walk(current.second, x, y + size, w, Math.max(0, h - size))
+  }
+  walk(node, 0, 0, width, height)
+  return found
+}
+
+function subtreeSize(node: LayoutNode, find: LayoutNode, width: number, height: number): { width: number; height: number } | null {
+  if (node === find)
+    return { width, height }
+  if ("id" in node)
+    return null
+  const span = node.axis === "h" ? width : height
+  const size = span * node.ratio
+  if (node.axis === "h") {
+    return subtreeSize(node.first, find, size, height)
+      ?? subtreeSize(node.second, find, Math.max(0, width - size), height)
+  }
+  return subtreeSize(node.first, find, width, size)
+    ?? subtreeSize(node.second, find, width, Math.max(0, height - size))
 }
 
 function readNode(value: unknown, seen: Set<string>): LayoutNode | null {
