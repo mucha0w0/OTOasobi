@@ -876,6 +876,32 @@ public sealed partial class MainPage
         var text = RecFolderStore.GuideTextPath(path);
         if (!File.Exists(text))
             ShowNotice("同じ名前の txt がありません", Path.GetFileName(text));
+        else
+            TryApplyGuideScript(path);
+    }
+
+    void TryApplyGuideScript(string wavPath)
+    {
+        double duration;
+        try
+        {
+            var audio = WavAudio.Read(wavPath);
+            duration = audio.Samples.Length / (double)Math.Max(1, audio.Channels) / audio.SampleRate;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
+        {
+            return;
+        }
+
+        var offsets = RecGuideScript.Parse(RecFolderStore.GuideTextPath(wavPath), duration);
+        if (offsets.StartAfter == null && offsets.EndBefore == null)
+            return;
+        if (offsets.StartAfter is double start)
+            _recSettings.RecStartAfter = start;
+        if (offsets.EndBefore is double end)
+            _recSettings.RecEndBefore = end;
+        _recSettings.Save();
+        _recSettings = RecAppSettings.Load();
     }
 
     async Task RecOpenListAsync()

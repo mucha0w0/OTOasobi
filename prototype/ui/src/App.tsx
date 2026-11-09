@@ -193,6 +193,8 @@ export function App() {
   const [bpm, setBpm] = useState(120)
   const [moras, setMoras] = useState(5)
   const [guideWhile, setGuideWhile] = useState(false)
+  const [recStartAfter, setRecStartAfter] = useState(0)
+  const [recEndBefore, setRecEndBefore] = useState(0)
   const [advance, setAdvance] = useState(false)
   const [guidePlaying, setGuidePlaying] = useState(false)
   const [folder, setFolder] = useState("")
@@ -273,7 +275,7 @@ export function App() {
       ...emptySnapshot(),
       appearance: { theme, accent: null, scale, lockPanels },
       monitor,
-      rec: { note, semitones, speed, volume, countIn, countBeats, countBeatsAfter, bpm, moras, guideWhile, advance },
+      rec: { note, semitones, speed, volume, countIn, countBeats, countBeatsAfter, bpm, moras, guideWhile, advance, recStartAfter, recEndBefore },
     }
   }
   const resolved = resolveTheme(theme, systemDark)
@@ -406,10 +408,12 @@ export function App() {
         moras,
         guideWhile,
         advance,
+        recStartAfter,
+        recEndBefore,
       })
     }, 300)
     return () => window.clearTimeout(timer)
-  }, [advance, bpm, countBeats, countBeatsAfter, countIn, guideWhile, moras, note, semitones, speed, volume])
+  }, [advance, bpm, countBeats, countBeatsAfter, countIn, guideWhile, moras, note, recEndBefore, recStartAfter, semitones, speed, volume])
 
   function viewModel(over: Partial<GraphModel> = {}): GraphModel {
     return {
@@ -1023,6 +1027,8 @@ export function App() {
             moras: event.moras,
             guideWhile: event.guideWhile,
             advance: event.advance,
+            recStartAfter: event.recStartAfter,
+            recEndBefore: event.recEndBefore,
           },
         }
         setNote(event.note)
@@ -1035,6 +1041,8 @@ export function App() {
         setBpm(event.bpm)
         setMoras(event.moras)
         setGuideWhile(event.guideWhile)
+        setRecStartAfter(event.recStartAfter)
+        setRecEndBefore(event.recEndBefore)
         setAdvance(event.advance)
         break
       case "layout":
@@ -1170,6 +1178,8 @@ export function App() {
       note,
       semitones,
       speed,
+      recStartAfter,
+      recEndBefore,
     })
   }
 
@@ -1526,6 +1536,8 @@ export function App() {
                     bpm={bpm}
                     moras={moras}
                     guideWhile={guideWhile}
+                    recStartAfter={recStartAfter}
+                    recEndBefore={recEndBefore}
                     playing={guidePlaying}
                     setNote={touchRec(setNote)}
                     setSemitones={touchRec(setSemitones)}
@@ -1537,6 +1549,8 @@ export function App() {
                     setBpm={touchRec(setBpm)}
                     setMoras={touchRec(setMoras)}
                     setGuideWhile={touchRec(setGuideWhile)}
+                    setRecStartAfter={touchRec(setRecStartAfter)}
+                    setRecEndBefore={touchRec(setRecEndBefore)}
                     send={(command) => sendRef.current(command)}
                   />
                 )

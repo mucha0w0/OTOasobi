@@ -38,6 +38,7 @@
     <Compile Include="..\..\winui\VoicebankImage.cs" Link="Winui\VoicebankImage.cs" />
     <Compile Include="..\..\winui\RecList.cs" Link="Winui\RecList.cs" />
     <Compile Include="..\..\winui\RecTone.cs" Link="Winui\RecTone.cs" />
+    <Compile Include="..\..\winui\RecGuideScript.cs" Link="Winui\RecGuideScript.cs" />
     <Compile Include="..\..\winui\WavAudio.cs" Link="Winui\WavAudio.cs" />
     <Compile Include="..\..\winui\RecMonitor.cs" Link="Winui\RecMonitor.cs" />
     <Compile Include="..\..\winui\ProjectFolder.cs" Link="Winui\ProjectFolder.cs" />

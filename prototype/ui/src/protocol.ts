@@ -15,9 +15,9 @@ export type PageCommand =
   | { type: "monitor"; on: boolean }
   | { type: "guide"; note: string; semitones: number; speed: number; volume?: number; bpm?: number; moras?: number; countIn?: boolean; countBeats?: number; countBeatsAfter?: number }
   | { type: "guideStop" }
-  | { type: "record"; name?: string; countIn?: boolean; countBeats?: number; countBeatsAfter?: number; bpm?: number; moras?: number; guideWhile?: boolean; volume?: number; note?: string; semitones?: number; speed?: number }
+  | { type: "record"; name?: string; countIn?: boolean; countBeats?: number; countBeatsAfter?: number; bpm?: number; moras?: number; guideWhile?: boolean; volume?: number; note?: string; semitones?: number; speed?: number; recStartAfter?: number; recEndBefore?: number }
   | { type: "recordStop" }
-  | { type: "recSettings"; note: string; semitones: number; speed: number; volume: number; countIn: boolean; countBeats: number; countBeatsAfter: number; bpm: number; moras: number; guideWhile: boolean; advance: boolean }
+  | { type: "recSettings"; note: string; semitones: number; speed: number; volume: number; countIn: boolean; countBeats: number; countBeatsAfter: number; bpm: number; moras: number; guideWhile: boolean; advance: boolean; recStartAfter: number; recEndBefore: number }
   | { type: "recList"; op: "none" | "pick" | "open"; path?: string }
   | { type: "frq"; op: "write"; mode: "all" | "missing" | "selected"; clear: boolean; names?: string[] }
   | { type: "frq"; op: "stroke"; points: { frame: number; midi: number; unvoiced: boolean }[] }
@@ -183,6 +183,8 @@ export type RecSettingsEvent = {
   moras: number
   guideWhile: boolean
   advance: boolean
+  recStartAfter: number
+  recEndBefore: number
 }
 
 export type BankRow = { label: string; value: string; fullwidth: boolean }
@@ -413,6 +415,8 @@ export function parseHostEvent(value: unknown): HostEvent | null {
         moras: numberOr(value.moras, 5),
         guideWhile: value.guideWhile === true,
         advance: value.advance === true,
+        recStartAfter: numberOr(value.recStartAfter, 0),
+        recEndBefore: numberOr(value.recEndBefore, 0),
       }
     case "bank":
       return parseBank(value)

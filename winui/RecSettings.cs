@@ -36,6 +36,12 @@ sealed class RecAppSettings
 
     public bool AutoAdvance { get; set; }
 
+    // ガイド BGM の開始からの秒数でマイクをオンにする。
+    public double RecStartAfter { get; set; }
+
+    // ガイド BGM の終了の何秒前にマイクをオフにする。
+    public double RecEndBefore { get; set; }
+
     public string? DeviceId { get; set; }
 
     public string? OutputDeviceId { get; set; }
@@ -56,6 +62,8 @@ sealed class RecAppSettings
         settings.CountBeatsAfter = Math.Clamp(settings.CountBeatsAfter, 0, RecTone.MaxCountBeats);
         if (settings.CountWhileMoras && settings.CountBeatsAfter == 0)
             settings.CountBeatsAfter = RecTone.DefaultCountBeats;
+        settings.RecStartAfter = Math.Clamp(settings.RecStartAfter, 0, 600);
+        settings.RecEndBefore = Math.Clamp(settings.RecEndBefore, 0, 600);
         settings.DeviceId = BlankToNull(settings.DeviceId);
         settings.OutputDeviceId = BlankToNull(settings.OutputDeviceId);
         return settings;

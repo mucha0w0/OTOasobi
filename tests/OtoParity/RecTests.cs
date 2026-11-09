@@ -191,6 +191,21 @@ public class RecTests
     }
 
     [Fact]
+    public void GuideScriptFindsRecordStartAndStop()
+    {
+        var text = """
+            sec
+            # F3.wav用の設定ファイル
+               1, 0,	0, 0, 0, 0, BGM再生
+               2, 0.6,	1, 0, 0, 0, 録音開始
+               5, 2.5,	0, 1, 0, 0, 録音停止
+            """;
+        var offsets = RecGuideScript.ParseBytes(System.Text.Encoding.UTF8.GetBytes(text), 4);
+        Assert.Equal(0.6, offsets.StartAfter);
+        Assert.Equal(1.5, offsets.EndBefore);
+    }
+
+    [Fact]
     public void GuideBgmIsAWavAndTheSameNamedText()
     {
         Assert.False(RecFolderStore.IsGuideWav(null));

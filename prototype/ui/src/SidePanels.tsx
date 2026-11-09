@@ -91,6 +91,8 @@ export function GuidePanel({
   bpm,
   moras,
   guideWhile,
+  recStartAfter,
+  recEndBefore,
   playing,
   setNote,
   setSemitones,
@@ -102,6 +104,8 @@ export function GuidePanel({
   setBpm,
   setMoras,
   setGuideWhile,
+  setRecStartAfter,
+  setRecEndBefore,
   send,
 }: {
   guide: GuideFileState
@@ -115,6 +119,8 @@ export function GuidePanel({
   bpm: number
   moras: number
   guideWhile: boolean
+  recStartAfter: number
+  recEndBefore: number
   playing: boolean
   setNote: (value: string) => void
   setSemitones: (value: number) => void
@@ -126,8 +132,28 @@ export function GuidePanel({
   setBpm: (value: number) => void
   setMoras: (value: number) => void
   setGuideWhile: (value: boolean) => void
+  setRecStartAfter: (value: number) => void
+  setRecEndBefore: (value: number) => void
   send: (command: PageCommand) => void
 }) {
+  const timingSliders = (
+    <>
+      <label className="grid gap-1">
+        <span className="flex justify-between">
+          録音開始位置
+          <span className="num text-[var(--muted)]">{recStartAfter.toFixed(1)} s</span>
+        </span>
+        <input type="range" min={0} max={60} step={0.1} value={recStartAfter} onChange={(event) => setRecStartAfter(Number(event.target.value))} />
+      </label>
+      <label className="grid gap-1">
+        <span className="flex justify-between">
+          録音終了位置
+          <span className="num text-[var(--muted)]">{recEndBefore.toFixed(1)} s</span>
+        </span>
+        <input type="range" min={0} max={60} step={0.1} value={recEndBefore} onChange={(event) => setRecEndBefore(Number(event.target.value))} />
+      </label>
+    </>
+  )
   return (
     <div className="flex h-full flex-col text-sm">
       <div className="flex flex-1 flex-col gap-3 overflow-auto p-3">
@@ -197,6 +223,7 @@ export function GuidePanel({
               <input type="checkbox" checked={guideWhile} onChange={(event) => setGuideWhile(event.target.checked)} />
               録音中のガイド
             </label>
+            {timingSliders}
           </>
         ) : (
           <>
@@ -231,6 +258,7 @@ export function GuidePanel({
               </span>
               <input type="range" min={-12} max={12} step={1} value={semitones} onChange={(event) => setSemitones(Number(event.target.value))} />
             </label>
+            {timingSliders}
           </>
         )}
       </div>

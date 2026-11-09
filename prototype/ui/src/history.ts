@@ -23,6 +23,8 @@ export type RecSnapshot = {
   moras: number
   guideWhile: boolean
   advance: boolean
+  recStartAfter: number
+  recEndBefore: number
 }
 
 export type BankSnapshot = {
@@ -108,6 +110,8 @@ export function emptySnapshot(): EditSnapshot {
       moras: 5,
       guideWhile: false,
       advance: false,
+      recStartAfter: 0,
+      recEndBefore: 0,
     },
     guide: { manual: true, path: "" },
     recListPath: "",
@@ -299,6 +303,8 @@ export function applySnapshot(snapshot: EditSnapshot, command: PageCommand): Edi
           moras: command.moras,
           guideWhile: command.guideWhile,
           advance: command.advance,
+          recStartAfter: command.recStartAfter,
+          recEndBefore: command.recEndBefore,
         },
       }
     case "guideFile":
@@ -913,10 +919,12 @@ function describeRec(command: Extract<PageCommand, { type: "recSettings" }>, sna
     command.moras !== current.moras ? "moras" : "",
     command.guideWhile !== current.guideWhile ? "guideWhile" : "",
     command.advance !== current.advance ? "advance" : "",
+    !near(command.recStartAfter, current.recStartAfter) ? "recStartAfter" : "",
+    !near(command.recEndBefore, current.recEndBefore) ? "recEndBefore" : "",
   ].filter((item) => item.length > 0)
   if (changed.length === 0)
     return null
-  const numeric = changed.length === 1 && (changed[0] === "semitones" || changed[0] === "speed" || changed[0] === "volume" || changed[0] === "bpm" || changed[0] === "moras" || changed[0] === "countBeats" || changed[0] === "countBeatsAfter")
+  const numeric = changed.length === 1 && (changed[0] === "semitones" || changed[0] === "speed" || changed[0] === "volume" || changed[0] === "bpm" || changed[0] === "moras" || changed[0] === "countBeats" || changed[0] === "countBeatsAfter" || changed[0] === "recStartAfter" || changed[0] === "recEndBefore")
   const key = changed.length === 1 ? `rec.${changed[0]}` : `rec.${changed.join("+")}`
   return edit(key, numeric, [{ type: "recSettings", ...current }], [command])
 }

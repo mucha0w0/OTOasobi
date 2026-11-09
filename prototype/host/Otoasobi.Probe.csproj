@@ -78,6 +78,7 @@
     <Compile Include="..\..\winui\VoicebankText.cs" Link="Winui\VoicebankText.cs" />
     <Compile Include="..\..\winui\VoicebankImage.cs" Link="Winui\VoicebankImage.cs" />
     <Compile Include="..\..\winui\RecSettings.cs" Link="Winui\RecSettings.cs" />
+    <Compile Include="..\..\winui\RecGuideScript.cs" Link="Winui\RecGuideScript.cs" />
   </ItemGroup>
 
   <ItemGroup>

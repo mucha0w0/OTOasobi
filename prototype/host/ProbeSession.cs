@@ -64,6 +64,7 @@ sealed class ProbeSession : IDisposable
     }
     int _countGen;
     bool _counting;
+    int _recordScheduleGen;
     string? _recordStem;
     DateTime _recordStarted;
     bool _takePlaying;
@@ -934,6 +935,8 @@ sealed class ProbeSession : IDisposable
             Post(new { type = "notice", message = "同じ名前の txt がありません。" + error["missing-text:".Length..] });
         else if (error != null)
             Post(new { type = "failed", message = error });
+        else
+            TryApplyGuideScript(path);
         PostGuide();
     }
 
@@ -962,7 +965,36 @@ sealed class ProbeSession : IDisposable
             Post(new { type = "notice", message = "同じ名前の txt がありません。" + error["missing-text:".Length..] });
         else if (error != null)
             Post(new { type = "failed", message = error });
+        else
+            TryApplyGuideScript(file.Path);
         PostGuide();
+    }
+
+    void TryApplyGuideScript(string wavPath)
+    {
+        if (string.IsNullOrWhiteSpace(wavPath) || !File.Exists(wavPath))
+            return;
+        double duration;
+        try
+        {
+            var audio = WavAudio.Read(wavPath);
+            duration = audio.Samples.Length / (double)Math.Max(1, audio.Channels) / audio.SampleRate;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
+        {
+            return;
+        }
+
+        var offsets = RecGuideScript.Parse(RecFolderStore.GuideTextPath(wavPath), duration);
+        if (offsets.StartAfter == null && offsets.EndBefore == null)
+            return;
+        var settings = RecAppSettings.Load();
+        if (offsets.StartAfter is double start)
+            settings.RecStartAfter = start;
+        if (offsets.EndBefore is double end)
+            settings.RecEndBefore = end;
+        settings.Save();
+        PostRecSettings();
     }
 
     void PostGuide() => Post(_rec.GuideSnapshot());
@@ -1218,25 +1250,107 @@ sealed class ProbeSession : IDisposable
 
         if (_disposed || _recording)
             return;
+
+        var startAfter = RecStartAfterOf(root);
+        var endBefore = RecEndBeforeOf(root);
+        var schedule = ++_recordScheduleGen;
+        var plan = BuildRecordGuidePlan(root, manualGuide, bpm, MorasOf(root), countIn, countBeats, CountBeatsAfterOf(root));
+        var guideDuration = plan?.DurationSeconds ?? 0;
+        var wantPlay = plan?.Wav != null && (manualGuide
+            ? root.TryGetProperty("guideWhile", out var guideValue) && guideValue.ValueKind == JsonValueKind.True
+            : true);
+
+        DateTime bgmAt = DateTime.UtcNow;
+        if (wantPlay && plan?.Wav != null)
+        {
+            _player.Volume = Volume(root);
+            var played = await _player.PlayAsync(plan.Wav, loop: false);
+            bgmAt = DateTime.UtcNow;
+            if (!played && !_disposed)
+            {
+                Post(new { type = "failed", message = "ガイドを再生できませんでした。" });
+                return;
+            }
+        }
+        else if (guideDuration > 0)
+            bgmAt = DateTime.UtcNow;
+
+        if (_disposed || _recording || schedule != _recordScheduleGen)
+            return;
+
+        await WaitUntilSecondsFromAsync(bgmAt, startAfter, schedule);
+        if (_disposed || _recording || schedule != _recordScheduleGen || !_capture.Running)
+            return;
+
         _capture.BeginTake();
         _recording = true;
         _recordStarted = DateTime.UtcNow;
         PostCapture();
-        if (manualGuide && root.TryGetProperty("guideWhile", out var guideValue) && guideValue.ValueKind == JsonValueKind.True)
+
+        if (guideDuration > 0)
+        {
+            var stopAt = guideDuration - endBefore - startAfter;
+            if (stopAt > 0.05)
+                _ = ScheduleRecordStopAsync(stopAt, schedule);
+        }
+    }
+
+    sealed record RecordGuidePlan(byte[]? Wav, double DurationSeconds);
+
+    RecordGuidePlan? BuildRecordGuidePlan(JsonElement root, bool manual, int bpm, int moras, bool countIn, int countBeats, int countBeatsAfter)
+    {
+        var semitones = (int)Math.Round(Number(root, "semitones"));
+        var speed = Number(root, "speed") == 0 ? 1 : Number(root, "speed");
+        if (manual)
         {
             var note = Text(root, "note") ?? "C4";
-            _ = GuideAsync(
-                note,
-                (int)Math.Round(Number(root, "semitones")),
-                Number(root, "speed") == 0 ? 1 : Number(root, "speed"),
-                Volume(root),
-                loop: true,
-                bpm,
-                MorasOf(root),
-                countIn: false,
-                countBeats,
-                CountBeatsAfterOf(root));
+            if (!RecTone.TryHertz(note, out var hz))
+                return null;
+            var tone = RecTone.ManualGuide(hz, bpm, moras, RecTone.TargetRate, countIn, false, countBeats, countBeatsAfter);
+            var shaped = RecTone.ShapeGuide(tone, 1, RecTone.TargetRate, speed, semitones);
+            var wav = PreviewWav.Encode(shaped, 1, RecTone.TargetRate);
+            return new RecordGuidePlan(wav, shaped.Length / (double)RecTone.TargetRate);
         }
+
+        var path = _rec.GuidePath;
+        if (string.IsNullOrEmpty(path) || !File.Exists(path))
+            return new RecordGuidePlan(null, 0);
+        try
+        {
+            var audio = WavAudio.Read(path);
+            var shaped = RecTone.ShapeGuide(audio.Samples, audio.Channels, audio.SampleRate, speed, semitones);
+            var wav = PreviewWav.Encode(shaped, audio.Channels, audio.SampleRate);
+            var seconds = shaped.Length / (double)Math.Max(1, audio.Channels) / audio.SampleRate;
+            return new RecordGuidePlan(wav, seconds);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
+        {
+            Post(new { type = "failed", message = ex.Message });
+            return new RecordGuidePlan(null, 0);
+        }
+    }
+
+    async Task WaitUntilSecondsFromAsync(DateTime started, double seconds, int schedule)
+    {
+        if (seconds <= 0)
+            return;
+        while (schedule == _recordScheduleGen && !_disposed)
+        {
+            var left = seconds - (DateTime.UtcNow - started).TotalSeconds;
+            if (left <= 0)
+                return;
+            await Task.Delay(Math.Clamp((int)(left * 1000), 10, 80));
+        }
+    }
+
+    async Task ScheduleRecordStopAsync(double seconds, int schedule)
+    {
+        var delay = TimeSpan.FromSeconds(seconds);
+        if (delay > TimeSpan.Zero)
+            await Task.Delay(delay);
+        if (schedule != _recordScheduleGen || _disposed || !_recording)
+            return;
+        _queue.TryEnqueue(StopRecord);
     }
 
     void StopRecord()
@@ -1251,10 +1365,11 @@ sealed class ProbeSession : IDisposable
             return;
         }
 
-        if (_disposed || !_recording)
-            return;
+        _recordScheduleGen++;
         _player.Stop();
         Post(new { type = "guide", playing = false });
+        if (_disposed || !_recording)
+            return;
         var saved = WriteTake();
         PostCapture();
         if (saved == null)
@@ -1805,6 +1920,10 @@ sealed class ProbeSession : IDisposable
             settings.CountBeatsAfter = RecTone.DefaultCountBeats;
         settings.GuideWhileRecording = root.TryGetProperty("guideWhile", out var guide) && guide.ValueKind == JsonValueKind.True;
         settings.AutoAdvance = root.TryGetProperty("advance", out var advance) && advance.ValueKind == JsonValueKind.True;
+        if (root.TryGetProperty("recStartAfter", out _))
+            settings.RecStartAfter = RecStartAfterOf(root);
+        if (root.TryGetProperty("recEndBefore", out _))
+            settings.RecEndBefore = RecEndBeforeOf(root);
         settings.Save();
     }
 
@@ -1825,6 +1944,8 @@ sealed class ProbeSession : IDisposable
             moras = settings.Moras,
             guideWhile = settings.GuideWhileRecording,
             advance = settings.AutoAdvance,
+            recStartAfter = settings.RecStartAfter,
+            recEndBefore = settings.RecEndBefore,
         });
     }
 
@@ -2137,6 +2258,20 @@ sealed class ProbeSession : IDisposable
         if (root.TryGetProperty("countWhileMoras", out var legacy) && legacy.ValueKind == JsonValueKind.True)
             return RecTone.DefaultCountBeats;
         return 0;
+    }
+
+    static double RecStartAfterOf(JsonElement root)
+    {
+        if (root.TryGetProperty("recStartAfter", out var value) && value.TryGetDouble(out var seconds))
+            return Math.Clamp(seconds, 0, 600);
+        return RecAppSettings.Load().RecStartAfter;
+    }
+
+    static double RecEndBeforeOf(JsonElement root)
+    {
+        if (root.TryGetProperty("recEndBefore", out var value) && value.TryGetDouble(out var seconds))
+            return Math.Clamp(seconds, 0, 600);
+        return RecAppSettings.Load().RecEndBefore;
     }
 
     bool _keepRatios;
