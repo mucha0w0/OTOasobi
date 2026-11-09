@@ -17,6 +17,11 @@ describe("表示メニュー", () => {
     expect(titles).toEqual(["原音設定の推定", "原音設定"])
     expect(paneTitles.spec).toBe("スペクトログラム")
   })
+
+  it("エイリアスリストは推定と原音設定から開く", () => {
+    const titles = viewFolders.filter((folder) => folder.ids.includes("aliasList")).map((folder) => folder.title)
+    expect(titles).toEqual(["原音設定の推定", "原音設定"])
+  })
 })
 
 describe("初期配置", () => {
@@ -28,6 +33,8 @@ describe("初期配置", () => {
     expect(contains(root, "rec")).toBe(false)
     expect(contains(root, "mic")).toBe(false)
     expect(contains(root, "analyze")).toBe(false)
+    expect(contains(root, "aliasList")).toBe(false)
+    expect(paneTitles.aliasList).toBe("エイリアスリスト")
   })
 
   it("隠すと残り、足すと既存の葉を割る", () => {

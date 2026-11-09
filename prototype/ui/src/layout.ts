@@ -10,6 +10,7 @@ export type PaneBox = { width: number; height: number }
 
 export const paneTitles: Record<string, string> = {
   file: "ファイルリスト",
+  aliasList: "エイリアスリスト",
   wave: "音素推定",
   spec: "スペクトログラム",
   loud: "音量",
@@ -32,8 +33,8 @@ export const paneTitles: Record<string, string> = {
 // 表示メニューのフォルダ。同じ id は複数に置いてよく、開閉は id で揃う。
 export const viewFolders: { title: string; ids: string[] }[] = [
   { title: "録音", ids: ["file", "recList", "recScript", "rec", "guide", "mic"] },
-  { title: "原音設定の推定", ids: ["file", "analyze", "source", "wave", "spec", "loud", "oto"] },
-  { title: "原音設定", ids: ["file", "wave", "spec", "loud", "otoBand", "otoParams", "otoIni"] },
+  { title: "原音設定の推定", ids: ["file", "aliasList", "analyze", "source", "wave", "spec", "loud", "oto"] },
+  { title: "原音設定", ids: ["file", "aliasList", "wave", "spec", "loud", "otoBand", "otoParams", "otoIni"] },
   { title: "frq", ids: ["file", "frq", "frqEdit"] },
   { title: "パッケージ化", ids: ["bank"] },
 ]

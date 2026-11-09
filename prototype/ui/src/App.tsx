@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { BankPanel } from "./BankPanel"
 import { Dock } from "./Dock"
 import { EffectsPanel } from "./EffectsPanel"
-import { FileList, type FileListHandle } from "./FileList"
+import { currentAliasId, findAlias, markIndexForAlias, selectedAliasIds } from "./aliasList"
+import { AliasList, FileList, type FileListHandle } from "./FileList"
 import { applyFileClick, emptyFilePick, pruneFilePick, sameName, type FilePick } from "./filePick"
 import { nextFileIndex } from "./fileStep"
 import { FrqEditor } from "./FrqEditor"
@@ -152,6 +153,7 @@ export function App() {
   const noteRef = useRef("")
   const missingRef = useRef(false)
   const focusRef = useRef(-1)
+  const pendingFocus = useRef<{ file: string; index: number; alias?: string; autoAlias: string; mode?: string } | null>(null)
   const liveRef = useRef<LiveTune | null>(null)
   const draftRef = useRef<PhoneSpan[] | null>(null)
   const modelRef = useRef<GraphModel>({ picture: null, range: rangeRef.current, marks: [], spans: [], note: "", focus: -1, live: null, draft: null })
@@ -195,6 +197,8 @@ export function App() {
   const pickRef = useRef<FilePick>(emptyFilePick)
   const [pick, setPick] = useState<FilePick>(emptyFilePick)
   const fileListRef = useRef<FileListHandle>(null)
+  const aliasListRef = useRef<FileListHandle>(null)
+  const [focusIndex, setFocusIndex] = useState(-1)
   const [picture, setPicture] = useState<PreviewEvent | null>(null)
   const [notice, setNotice] = useState<{ message: string; tone: NoticeTone } | null>(null)
   const [saved, setSaved] = useState<SavedEvent | null>(null)
@@ -354,11 +358,10 @@ export function App() {
         const target = event.target
         if (target instanceof HTMLElement && target.closest("input, textarea, select"))
           return
-        focusRef.current = -1
+        pendingFocus.current = null
         liveRef.current = null
         draftRef.current = null
-        modelRef.current = viewModel()
-        redraw()
+        setFocus(-1)
       }
     }
     window.addEventListener("keydown", keys)
@@ -367,7 +370,7 @@ export function App() {
 
   useEffect(() => {
     sendRef.current({ type: "watchMic", on: contains(layout, "rec") || contains(layout, "mic") })
-    sendRef.current({ type: "watchPanels", frq: contains(layout, "frqEdit"), oto: contains(layout, "otoParams") })
+    sendRef.current({ type: "watchPanels", frq: contains(layout, "frqEdit"), oto: contains(layout, "otoParams") || contains(layout, "aliasList") })
   }, [layout])
 
   useEffect(() => {
@@ -420,9 +423,12 @@ export function App() {
   }
 
   function setFocus(index: number) {
-    if (focusRef.current === index)
+    if (focusRef.current === index) {
+      setFocusIndex(index)
       return
+    }
     focusRef.current = index
+    setFocusIndex(index)
     modelRef.current = viewModel()
     redraw()
   }
@@ -482,7 +488,9 @@ export function App() {
     setPicture(null)
     pictureRef.current = null
     rangeRef.current = { t0: 0, t1: 0 }
+    pendingFocus.current = null
     focusRef.current = -1
+    setFocusIndex(-1)
     liveRef.current = null
     draftRef.current = null
     modelRef.current = viewModel()
@@ -521,6 +529,7 @@ export function App() {
       rangeRef.current = { t0: 0, t1: 0 }
     }
     focusRef.current = -1
+    setFocusIndex(-1)
     liveRef.current = null
     draftRef.current = null
     modelRef.current = viewModel()
@@ -554,13 +563,16 @@ export function App() {
   }
 
   function clickFile(name: string, shift: boolean, ctrl: boolean) {
+    pendingFocus.current = null
     const next = applyFileClick(namesRef.current, pickRef.current, name, shift, ctrl)
     const changed = !sameName(next.active, pickRef.current.active)
     commitPick(next)
     if (changed)
       chooseFile(next.active)
-    else
+    else {
       fileListRef.current?.release()
+      aliasListRef.current?.release()
+    }
   }
 
   function selectAllFiles() {
@@ -572,8 +584,24 @@ export function App() {
     commitPick({ selected: [...list], active: active || list[0] || "", anchor: anchor || list[0] || "" })
     if (!active && list[0])
       chooseFile(list[0])
-    else
+    else {
       fileListRef.current?.release()
+      aliasListRef.current?.release()
+    }
+  }
+
+  function clickAlias(id: string, shift: boolean, ctrl: boolean) {
+    const row = findAlias(otoRef.current?.rows ?? [], id)
+    if (!row)
+      return
+    clickFile(row.file, shift, ctrl)
+    if (!sameName(pickRef.current.active, row.file))
+      return
+    pendingFocus.current = { file: row.file, index: row.index, alias: row.alias, autoAlias: row.autoAlias, mode: row.mode }
+    if (!sameName(row.file, fileNameRef.current))
+      return
+    const index = markIndexForAlias(row, marksRef.current, otoRef.current?.mode)
+    setFocus(index)
   }
 
   function stepFile(direction: number) {
@@ -602,6 +630,7 @@ export function App() {
       else {
         stepTarget.current = null
         fileListRef.current?.release()
+        aliasListRef.current?.release()
         restoreWheelHold()
       }
     }, 200)
@@ -655,6 +684,7 @@ export function App() {
           restoreWheelHold()
         stepTarget.current = null
         fileListRef.current?.release()
+        aliasListRef.current?.release()
         if (!keep) {
           fileNameRef.current = ""
           setFileName("")
@@ -662,7 +692,9 @@ export function App() {
           pictureRef.current = null
           rangeRef.current = { t0: 0, t1: 0 }
           noteRef.current = ""
+          pendingFocus.current = null
           focusRef.current = -1
+          setFocusIndex(-1)
           liveRef.current = null
           draftRef.current = null
           modelRef.current = viewModel()
@@ -687,6 +719,7 @@ export function App() {
         }
         stepTarget.current = null
         fileListRef.current?.release()
+        aliasListRef.current?.release()
         if (event.missing) {
           loadingFile.current = null
           pictureCache.current.delete(event.name)
@@ -695,7 +728,9 @@ export function App() {
           setPicture(null)
           pictureRef.current = null
           rangeRef.current = { t0: 0, t1: 0 }
+          pendingFocus.current = null
           focusRef.current = -1
+          setFocusIndex(-1)
           liveRef.current = null
           draftRef.current = null
           modelRef.current = viewModel()
@@ -837,8 +872,19 @@ export function App() {
         otoRef.current = next
         marksRef.current = next.marks
         spansRef.current = next.spans
-        if (focusRef.current >= 0 && !next.marks.some((mark) => mark.index === focusRef.current))
-          focusRef.current = -1
+        let nextFocus = focusRef.current
+        const pending = pendingFocus.current
+        if (pending && sameName(pending.file, fileNameRef.current)) {
+          const index = markIndexForAlias(pending, next.marks, next.mode)
+          if (index >= 0 && next.marks.some((mark) => mark.index === index))
+            nextFocus = index
+          pendingFocus.current = null
+        } else if (nextFocus >= 0 && !next.marks.some((mark) => mark.index === nextFocus))
+          nextFocus = -1
+        if (focusRef.current !== nextFocus) {
+          focusRef.current = nextFocus
+          setFocusIndex(nextFocus)
+        }
         modelRef.current = viewModel()
         setOto(next)
         for (const band of bands.current)
@@ -1230,6 +1276,9 @@ export function App() {
 
   const recLine = recIndex == null ? null : recList?.lines[recIndex] ?? null
   const selectedNames = names.filter((name) => pick.selected.some((item) => sameName(item, name)))
+  const aliasRows = oto?.rows ?? []
+  const aliasSelected = selectedAliasIds(aliasRows, pick.selected)
+  const aliasCurrent = currentAliasId(aliasRows, pick.active, focusIndex, oto?.mode)
   useEffect(() => {
     if (recLine?.recorded)
       sendRef.current({ type: "take", op: "wave", name: recLine.wav })
@@ -1296,6 +1345,18 @@ export function App() {
                     selected={pick.selected}
                     current={pick.active}
                     onSelect={clickFile}
+                    onSelectAll={selectAllFiles}
+                  />
+                )
+              if (id === "aliasList")
+                return (
+                  <AliasList
+                    ref={aliasListRef}
+                    folder={folder}
+                    rows={aliasRows}
+                    selected={aliasSelected}
+                    current={aliasCurrent}
+                    onSelect={clickAlias}
                     onSelectAll={selectAllFiles}
                   />
                 )

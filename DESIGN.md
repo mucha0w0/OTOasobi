@@ -171,6 +171,10 @@ WinUI のコマンド領域は **左が Primary、右が Close**。Accent（プ�
 
 配布画面の oto数値表は、枠線で区切った表です。上は列名で、面より少し濃い色です。選んだ範囲はアクセントを面に混ぜた不透明な色で塗り、範囲の外側にアクセントの枠を付けます。いま入力するマスは面の色のままです。数値は等幅で右揃えです。手で直した欄は太字で、横に * を出します。* はコピーしません。ファイル名の列は選択できても書き換えません。エイリアスは oto.ini に書く名前で、同じ名前の 2 回目以降には番号が付きます。
 
+## エイリアスリスト
+
+配布画面のエイリアスリストは、oto数値表のエイリアス列をファイルリストと同じ行の一覧にしたものです。選択の見た目と操作はファイルリストに合わせます。強調している音素の行は `--accent-current`、同じファイルのほかのエイリアスは `--accent-subtle` です。
+
 ## 参照ファイル
 
 | 内容 | 場所 |
@@ -183,4 +187,5 @@ WinUI のコマンド領域は **左が Primary、右が Close**。Accent（プ�
 | frqエディター | `winui/FrqPianoRoll.cs`, `winui/FrqFile.cs` |
 | 録音 | `winui/MainPage.Rec.cs`, `winui/MainPage.Mic.cs`, `winui/RecList.cs`, `winui/RecTone.cs`, `winui/RecCapture.cs`, `winui/RecTrace.cs` |
 | oto数値表 | `prototype/ui/src/OtoTable.tsx`, `prototype/ui/src/otoSheet.ts` |
+| エイリアスリスト | `prototype/ui/src/FileList.tsx`, `prototype/ui/src/aliasList.ts` |
 | ウィンドウサイズ・ドロップ | `winui/MainWindow.xaml.cs` |
