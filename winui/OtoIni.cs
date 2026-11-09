@@ -94,6 +94,9 @@ static class OtoIni
         return source;
     }
 
+    public static bool IsLeadingHyphenAlias(string alias) =>
+        alias.StartsWith("- ", StringComparison.Ordinal);
+
     // 表のメモ。改行は潰す。空なら null。oto.ini には出さない。
     public static string? CleanComment(string? text)
     {

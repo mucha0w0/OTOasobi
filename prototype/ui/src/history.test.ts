@@ -256,9 +256,12 @@ describe("戻すコマンド", () => {
     ]))
   })
 
-  it("先行と休符のプリセットは名前だけを戻す", () => {
+  it("先頭音素のプリセットは、連続音と CVVC を一緒に戻す", () => {
     const edit = describeEdit({ type: "oto", op: "preset", target: "rest", name: "別" }, snap())
-    expect(edit?.undo).toEqual([{ type: "oto", op: "preset", target: "rest", name: "初期値" }])
+    expect(edit?.undo).toEqual([
+      { type: "oto", op: "preset", target: "rest", name: "初期値" },
+      { type: "oto", op: "preset", target: "lead", name: "初期値" },
+    ])
   })
 
   it("エフェクトのプリセットは、適用前の数値を set で戻す", () => {

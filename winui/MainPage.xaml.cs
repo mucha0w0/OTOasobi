@@ -1362,11 +1362,21 @@ public sealed partial class MainPage : Page
         RestPresetNameText.Text = _restPreset.Name;
     }
 
-    void SelectRestPreset(OtoPreset preset)
+    void SelectRestPreset(OtoPreset preset) => SelectLeadRestPreset(preset);
+
+    void SelectLeadRestPreset(OtoPreset preset)
     {
         _restPreset = preset;
+        _leadPreset = preset;
         RestPresetNameText.Text = preset.Name;
+        CvvcLeadPresetNameText.Text = preset.Name;
         foreach (var entry in RestPresetFlyout.Items)
+        {
+            if (entry is RadioMenuFlyoutItem radio && ReferenceEquals(radio.Tag, preset))
+                radio.IsChecked = true;
+        }
+
+        foreach (var entry in CvvcLeadPresetFlyout.Items)
         {
             if (entry is RadioMenuFlyoutItem radio && ReferenceEquals(radio.Tag, preset))
                 radio.IsChecked = true;

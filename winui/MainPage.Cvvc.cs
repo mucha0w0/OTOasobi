@@ -174,19 +174,7 @@ public sealed partial class MainPage
         CvvcLeadPresetNameText.Text = _leadPreset.Name;
     }
 
-    void SelectCvvcLead(OtoPreset preset)
-    {
-        _leadPreset = preset;
-        CvvcLeadPresetNameText.Text = preset.Name;
-        foreach (var entry in CvvcLeadPresetFlyout.Items)
-        {
-            if (entry is RadioMenuFlyoutItem radio && ReferenceEquals(radio.Tag, preset))
-                radio.IsChecked = true;
-        }
-
-        if (_configReady)
-            OnConfigChanged();
-    }
+    void SelectCvvcLead(OtoPreset preset) => SelectLeadRestPreset(preset);
 
     void RebuildCvvcPresetMenu() =>
         PresetUi.Fill(

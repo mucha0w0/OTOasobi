@@ -167,18 +167,25 @@ public sealed partial class MainPage
         var drafts = new List<OtoTableDraft>();
         if (!_analyzed || _files.Count == 0)
             return drafts;
+        var dedupeLeading = AliasRenzokuBox?.IsChecked == true && AliasCvvcBox?.IsChecked == true;
         foreach (var file in _files)
         {
             if (file.Spans.Count == 0)
                 continue;
+            var leading = new Dictionary<string, int>(StringComparer.Ordinal);
             foreach (var mode in SelectedAliasModes())
-                AppendOtoDrafts(drafts, file, mode);
+                AppendOtoDrafts(drafts, file, mode, dedupeLeading, leading);
         }
 
         return drafts;
     }
 
-    void AppendOtoDrafts(List<OtoTableDraft> drafts, WavFile file, string mode)
+    void AppendOtoDrafts(
+        List<OtoTableDraft> drafts,
+        WavFile file,
+        string mode,
+        bool dedupeLeading,
+        Dictionary<string, int> leading)
     {
         var auto = new List<OtoMark>();
         _loudnessByFile.TryGetValue(file.Name, out var loud);
@@ -212,7 +219,23 @@ public sealed partial class MainPage
             var any = false;
             foreach (var flag in tuned)
                 any |= flag;
-            drafts.Add(new OtoTableDraft(file.Name, mode, i, auto[i].Alias, name, comment, shown, tuned, any));
+            var alias = auto[i].Alias;
+            if (dedupeLeading && OtoIni.IsLeadingHyphenAlias(alias))
+            {
+                if (leading.TryGetValue(alias, out var at))
+                {
+                    if (mode == "cvvc")
+                    {
+                        drafts[at] = new OtoTableDraft(file.Name, mode, i, alias, name, comment, shown, tuned, any);
+                    }
+
+                    continue;
+                }
+
+                leading[alias] = drafts.Count;
+            }
+
+            drafts.Add(new OtoTableDraft(file.Name, mode, i, alias, name, comment, shown, tuned, any));
         }
     }
 

@@ -615,14 +615,14 @@
                                                     <Border Style="{StaticResource PanelCardStyle}">
                                                         <StackPanel Spacing="8">
                                                             <local:InfoNote
-                                                                Title="無音の直後"
-                                                                Text="アンダーバーの無音の直後の音素は、選んだ単独音のプリセットで計算します。" />
+                                                                Title="先頭音素"
+                                                                Text="ファイルの先頭と、アンダーバーの無音の直後は、選んだ単独音のプリセットで計算します。" />
                                                             <DropDownButton
                                                                 x:Name="RestPresetMenu"
                                                                 MinHeight="32"
                                                                 HorizontalAlignment="Stretch"
                                                                 HorizontalContentAlignment="Stretch"
-                                                                AutomationProperties.HelpText="無音の直後に使う単独音のプリセット"
+                                                                AutomationProperties.HelpText="先頭音素に使う単独音のプリセット"
                                                                 AutomationProperties.Name="単独音のプリセット">
                                                                 <TextBlock
                                                                     x:Name="RestPresetNameText"

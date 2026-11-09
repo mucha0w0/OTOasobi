@@ -48,7 +48,7 @@ export function OtoSettings({ oto, send }: { oto: OtoState | null; send: Send })
       )}
       {oto.mode === "renzoku" && (
         <div className="mt-3 grid gap-4">
-          <Card title="無音の直後">
+          <Card title="先頭音素">
             <PresetSelect
               names={oto.presets}
               value={oto.restPreset}

@@ -458,13 +458,21 @@ function describeOto(command: Extract<PageCommand, { type: "oto" }>, snapshot: E
       return edit(`oto.slider.${command.group}.${command.key}`, true, [slider(command.group, command.key, current)], [command])
     }
     case "preset": {
+      if (command.target === "rest" || command.target === "lead") {
+        if (oto.restPreset === command.name && oto.leadPreset === command.name)
+          return null
+        return edit(`oto.preset.${command.target}`, false, [
+          { type: "oto", op: "preset", target: "rest", name: oto.restPreset },
+          { type: "oto", op: "preset", target: "lead", name: oto.leadPreset },
+        ], [command])
+      }
       const current = presetName(oto, command.target)
       if (current === command.name)
         return null
       const restore: PageCommand[] = [{ type: "oto", op: "preset", target: command.target, name: current }]
       if (command.target === "cvvc")
         restore.push(...cvvcSliders(oto))
-      else if (command.target !== "rest" && command.target !== "lead")
+      else
         restore.push(...monoSliders(oto))
       return edit(`oto.preset.${command.target}`, false, restore, [command])
     }
@@ -585,10 +593,8 @@ function applyOto(snapshot: EditSnapshot, command: Extract<PageCommand, { type: 
       return next ? withOto(snapshot, next) : snapshot
     }
     case "preset": {
-      if (command.target === "rest")
-        return withOto(snapshot, { ...oto, restPreset: command.name })
-      if (command.target === "lead")
-        return withOto(snapshot, { ...oto, leadPreset: command.name })
+      if (command.target === "rest" || command.target === "lead")
+        return withOto(snapshot, { ...oto, restPreset: command.name, leadPreset: command.name })
       if (command.target === "cvvc")
         return withOto(snapshot, { ...oto, cvvcPreset: command.name })
       return withOto(snapshot, { ...oto, standalonePreset: command.name })

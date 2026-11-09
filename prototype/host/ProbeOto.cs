@@ -197,9 +197,15 @@ sealed class ProbeOto
 
         var oto = FindOto(name);
         if (target == "rest")
+        {
             _rest = oto.Name;
-        else if (target == "lead")
             _lead = oto.Name;
+        }
+        else if (target == "lead")
+        {
+            _lead = oto.Name;
+            _rest = oto.Name;
+        }
         else
         {
             _preset = oto.Name;
@@ -551,13 +557,30 @@ sealed class ProbeOto
         var drafts = new List<TableDraft>();
         if (string.IsNullOrEmpty(_folder))
             return drafts;
+        var dedupeLeading = _aliasRenzoku && _aliasCvvc;
         foreach (var file in _files)
         {
+            var leading = new Dictionary<string, int>(StringComparer.Ordinal);
             foreach (var mode in AliasModes())
             {
                 var auto = MarksFor(file, mode);
                 for (var i = 0; i < auto.Count; i++)
+                {
+                    var alias = auto[i].Alias;
+                    if (dedupeLeading && OtoIni.IsLeadingHyphenAlias(alias))
+                    {
+                        if (leading.TryGetValue(alias, out var at))
+                        {
+                            if (mode == "cvvc")
+                                drafts[at] = Draft(file, mode, i, auto[i]);
+                            continue;
+                        }
+
+                        leading[alias] = drafts.Count;
+                    }
+
                     drafts.Add(Draft(file, mode, i, auto[i]));
+                }
             }
         }
 
