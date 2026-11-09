@@ -75,21 +75,28 @@ export function RecListPanel({
             ? <p className="p-3 text-[var(--muted)]">リストに無い WAV はありません。</p>
             : list?.outside.map((wav) => (
               <button key={wav} type="button" className="block w-full px-3 py-2 text-left hover:bg-[var(--line)]" onClick={() => onSelect(null, wav)}>
-                {wav}
-                <span className="mt-1 block text-xs text-[var(--muted)]">リスト外</span>
+                <span className="flex w-full min-w-0 items-baseline justify-between gap-2">
+                  <span className="min-w-0 truncate">{wav}</span>
+                  <span className="shrink-0 text-right text-xs text-[var(--muted)]">リスト外</span>
+                </span>
               </button>
             ))
-        ) : shown.map(({ line, index }) => (
-          <button
-            key={`${line.wav}-${index}`}
-            type="button"
-            className={`block w-full px-3 py-2 text-left ${selected === index ? "is-picked" : "hover:bg-[var(--line)]"}`}
-            onClick={() => onSelect(index, line.wav)}
-          >
-            <span className="block truncate">{line.sing}</span>
-            <span className="mt-1 block truncate text-xs text-[var(--muted)]">{line.error ?? (line.recorded ? "録音済み" : "未録音")}{line.comment ? `　${line.comment}` : ""}</span>
-          </button>
-        ))}
+        ) : shown.map(({ line, index }) => {
+          const status = line.error ?? (line.recorded ? "録音済み" : "未録音")
+          return (
+            <button
+              key={`${line.wav}-${index}`}
+              type="button"
+              className={`block w-full px-3 py-2 text-left ${selected === index ? "is-picked" : "hover:bg-[var(--line)]"}`}
+              onClick={() => onSelect(index, line.wav)}
+            >
+              <span className="flex w-full min-w-0 items-baseline justify-between gap-2">
+                <span className="min-w-0 truncate">{line.wav}</span>
+                <span className="shrink-0 text-right text-xs text-[var(--muted)]">{status}{line.comment ? `　${line.comment}` : ""}</span>
+              </span>
+            </button>
+          )
+        })}
       </div>
     </div>
   )
