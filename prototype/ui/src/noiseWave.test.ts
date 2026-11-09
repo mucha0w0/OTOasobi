@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { clampNoiseView, formatNoiseSeconds, samplePeaks, shadeRect, timeAtNoise, zoomNoiseView } from "./noiseWave"
+import { clampNoiseView, fitNoiseHeight, formatNoiseSeconds, samplePeaks, shadeRect, timeAtNoise, wavePeak, zoomNoiseView } from "./noiseWave"
 
 describe("無音波形の表示範囲", () => {
   it("全体より長い表示はファイル全体になる", () => {
@@ -41,5 +41,12 @@ describe("無音の選択", () => {
     const lo = [0, -0.4, -0.1, 0]
     const hi = [0.1, 0.2, 0.8, 0.1]
     expect(samplePeaks(lo, hi, 4, 1, 3)).toEqual({ min: -0.4, max: 0.8 })
+  })
+
+  it("縦の拡大はピークに合わせ、枠は余った高さまで", () => {
+    expect(wavePeak(-0.2, 0.4)).toBeCloseTo(0.4)
+    expect(wavePeak(0, 0)).toBeCloseTo(0.001)
+    expect(fitNoiseHeight(200)).toBe(200)
+    expect(fitNoiseHeight(40)).toBe(88)
   })
 })

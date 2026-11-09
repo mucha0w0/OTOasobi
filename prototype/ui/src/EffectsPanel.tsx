@@ -55,7 +55,7 @@ export function EffectsPanel({
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col text-sm">
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto overflow-x-hidden p-3">
+      <div data-noise-scroll className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto overflow-x-hidden p-3">
         <label className="grid gap-1">
           プリセット
           <select className="field min-w-0 w-full" value={form.preset} onChange={(event) => send({ type: "effects", op: "preset", name: event.target.value })}>

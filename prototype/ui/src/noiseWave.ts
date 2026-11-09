@@ -1,7 +1,9 @@
 export const noisePlotHeight = 88
+export const noisePlotReserve = 46
 export const noiseMinView = 0.12
 export const noiseMaxZoom = 16
 export const noiseOpenView = 2
+export const noisePeakFloor = 1e-3
 
 export type NoiseView = { start: number; length: number }
 
@@ -66,4 +68,14 @@ export function samplePeaks(lo: number[], hi: number[], duration: number, t0: nu
 
 export function formatNoiseSeconds(start: number, end: number) {
   return `${Math.abs(end - start).toFixed(2)}秒`
+}
+
+export function wavePeak(min: number, max: number, floor = noisePeakFloor) {
+  return Math.max(Math.abs(min), Math.abs(max), floor)
+}
+
+export function fitNoiseHeight(available: number, min = noisePlotHeight) {
+  if (!Number.isFinite(available))
+    return min
+  return Math.max(min, Math.floor(available))
 }
