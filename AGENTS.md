@@ -127,6 +127,10 @@ id は `recList`、`recScript`、`rec`、`guide`、`mic`。初期配置には入
 
 波形、スペクトログラム、音量、oto の描画面は明暗に合わせます。区間の種類の色は固定です。コードから色を取るときは `AppearanceTheme.Brush` で、その要素の `ActualTheme` の辞書を見ます。`Application.Current.Resources` はアプリのテーマなので、画面の明暗とは一致しません。テーマが変わったときは `ActualThemeChanged` で塗り直します。
 
+## 外部パネル
+
+`%LocalAppData%\Otoasobi\plugins\<id>\manifest.json`。id はフォルダ名で、`^[a-z0-9]+(\.[a-z0-9]+)*$`。画面の id は `plugin.` を付ける。`entry` の既定は `index.html`、`script` は任意の `.py`。ホストはプラグインごとに `https://<id のドットをハイフンにした名前>.plugins.otoasobi.assets/` を割り当て、hello の `plugins` で届ける。開発時も、仮想ホストの割り当ては `Source` を決める前に行う。表示メニューは 1 件以上のときだけ「プラグイン」。中身は iframe で、親は登録した origin の `postMessage` だけを `{ type: "plugin" }` にする。`list` / `read` / `write` は開いている音源フォルダの中だけ、256KB まで、文字コードは utf-8 と cp932。`run` は同梱の `.py` へ JSON を 1 行（`project` と `body`）送り、1 行を返す。プロセスはプラグインごとに 1 つ、30 秒で打ち切る。配置の読み込みは、入っていない外部パネルの葉だけ外し、隣は残す。`EditorLayout.IsValid` は `plugin.` の id を許す。Ctrl+Z の対象には入れない。旧画面には足さない。見本は `prototype/plugins/sample` で、配布物には入れない。
+
 ## 確認
 
 ```text

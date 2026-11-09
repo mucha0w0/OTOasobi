@@ -29,6 +29,8 @@ sealed class ProbeSession : IDisposable
     readonly ProbeBank _bank = new();
     readonly ProbeEffects _effects = new();
     readonly ProbeUpdate _update = new();
+    readonly PluginRuntime _pluginsRuntime = new();
+    PluginCatalog _plugins = PluginCatalog.Empty;
     bool _applying;
     readonly DispatcherQueueTimer _otoSave;
     readonly DispatcherQueueTimer _otoRows;
@@ -134,6 +136,7 @@ sealed class ProbeSession : IDisposable
             "document.documentElement.style.zoom='" + AppAppearance.Scale.ToString(CultureInfo.InvariantCulture) + "';" +
             "document.documentElement.dataset.panelsLocked='" + (AppAppearance.LockPanels ? "1" : "") + "';");
         _view.CoreWebView2.WebMessageReceived += OnMessage;
+        MapPlugins();
         var url = Environment.GetEnvironmentVariable("OTOASOBI_PROBE_URL");
         if (!string.IsNullOrWhiteSpace(url))
         {
@@ -157,6 +160,7 @@ sealed class ProbeSession : IDisposable
         _timer.Stop();
         if (_recording)
             WriteTake();
+        _pluginsRuntime.Dispose();
         _capture.Dispose();
         _player.Dispose();
         _take.Dispose();
@@ -291,8 +295,68 @@ sealed class ProbeSession : IDisposable
                 case "loadSettings":
                     LoadSettings(Text(root, "name"));
                     break;
+                case "plugin":
+                    StartPlugin(root);
+                    break;
             }
         }
+    }
+
+    void MapPlugins()
+    {
+        if (_view.CoreWebView2 == null)
+            return;
+        _plugins = PluginCatalog.Load(Path.Combine(AppPaths.DataRoot, "plugins"));
+        foreach (var item in _plugins.Items)
+        {
+            _view.CoreWebView2.SetVirtualHostNameToFolderMapping(
+                item.Host,
+                item.Directory,
+                CoreWebView2HostResourceAccessKind.Deny);
+        }
+    }
+
+    void PostPlugins()
+    {
+        Post(new
+        {
+            type = "plugins",
+            items = _plugins.Items.Select(item => new
+            {
+                id = item.Id,
+                title = item.Title,
+                origin = item.Origin,
+                entry = item.Entry,
+            }).ToArray(),
+        });
+        if (_plugins.Errors.Count > 0)
+            Post(new { type = "status", message = string.Join("、", _plugins.Errors) });
+    }
+
+    void StartPlugin(JsonElement root)
+    {
+        var id = Text(root, "id") ?? "";
+        var request = Text(root, "request") ?? "";
+        var op = Text(root, "op") ?? "";
+        var path = Text(root, "path") ?? "";
+        var text = Text(root, "text") ?? "";
+        var encoding = Text(root, "encoding") ?? "";
+        JsonElement? body = root.TryGetProperty("body", out var bodyValue) ? bodyValue.Clone() : null;
+        var project = _folder;
+        var catalog = _plugins;
+        _ = Task.Run(async () =>
+        {
+            var reply = await _pluginsRuntime.Execute(catalog, project, new PluginCall(id, request, op, path, text, encoding, body));
+            Post(new
+            {
+                type = "plugin",
+                id,
+                request,
+                ok = reply.Ok,
+                result = reply.Result,
+                error = reply.Error,
+            });
+        });
     }
 
     async Task HelloAsync()
@@ -300,6 +364,7 @@ sealed class ProbeSession : IDisposable
         if (_disposed)
             return;
         _ready = true;
+        PostPlugins();
         PostLayout();
         try
         {

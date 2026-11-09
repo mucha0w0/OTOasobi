@@ -554,7 +554,8 @@ static class EditorLayout
 
     static bool ValidNode(LayoutNode node, HashSet<string> seen, int depth)
     {
-        if (depth > 12 || seen.Count > 24)
+        // 本体の 20 枚に、外部パネルを足しても保存できる。
+        if (depth > 12 || seen.Count > 48)
             return false;
         if (node.IsLeaf)
         {
@@ -636,7 +637,7 @@ static class EditorLayout
                 return true;
         }
 
-        return false;
+        return id.StartsWith("plugin.", StringComparison.Ordinal) && PluginPath.IsId(id["plugin.".Length..]);
     }
 
     static LayoutNode Leaf(string id) => new() { Id = id };

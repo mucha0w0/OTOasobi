@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <title>見本</title>
+  <style>
+    html, body { margin: 0; height: 100%; }
+    body { font: 13px sans-serif; background: #fff; color: #111; }
+    main { display: flex; flex-direction: column; gap: 8px; padding: 12px; }
+    h1 { margin: 0; font-size: 14px; }
+    p { margin: 0; min-height: 1.2em; }
+    button { font: inherit; padding: 6px 10px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>見本</h1>
+    <p id="file"></p>
+    <button id="write" type="button">書き込む</button>
+    <button id="run" type="button">実行</button>
+    <p id="state"></p>
+  </main>
+  <script>
+    let request = 0
+    const pending = new Map()
+    const file = document.getElementById("file")
+    const state = document.getElementById("state")
+
+    window.addEventListener("message", (event) => {
+      const data = event.data
+      if (!data || data.type !== "otoasobi")
+        return
+      if (data.context) {
+        const dark = data.context.theme === "dark"
+        document.body.style.background = dark ? "#1c1c1c" : "#fff"
+        document.body.style.color = dark ? "#e4e7eb" : "#111"
+        document.documentElement.style.zoom = String(data.context.scale || 1)
+        file.textContent = data.context.file || ""
+      }
+      if (typeof data.request === "string" && pending.has(data.request)) {
+        const done = pending.get(data.request)
+        pending.delete(data.request)
+        done(data)
+      }
+    })
+
+    function call(op, extra) {
+      const id = String(++request)
+      return new Promise((resolve) => {
+        pending.set(id, resolve)
+        parent.postMessage(Object.assign({ type: "otoasobi", request: id, op }, extra), "*")
+      })
+    }
+
+    document.getElementById("write").addEventListener("click", () => {
+      call("write", { path: "plugin-sample.txt", text: file.textContent, encoding: "utf-8" }).then((reply) => {
+        state.textContent = reply.ok ? "書き込みました" : (reply.error || "")
+      })
+    })
+
+    document.getElementById("run").addEventListener("click", () => {
+      call("run", { body: { file: file.textContent } }).then((reply) => {
+        state.textContent = reply.ok ? "実行しました" : (reply.error || "")
+      })
+    })
+  </script>
+</body>
+</html>

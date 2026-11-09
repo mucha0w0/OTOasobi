@@ -182,6 +182,24 @@ describe("ホストのメッセージ", () => {
       lockPanels: true,
     })
     expect(parseHostEvent({ type: "appearance", theme: "system", accent: null })).toMatchObject({ scale: 1, lockPanels: false })
+    expect(parseHostEvent({
+      type: "plugins",
+      items: [
+        { id: "sample", title: "見本", origin: "https://sample.plugins.otoasobi.assets", entry: "index.html" },
+        { id: "Bad", title: "外", origin: "https://otoasobi.assets", entry: "../index.html" },
+      ],
+    })).toEqual({
+      type: "plugins",
+      items: [{ id: "sample", title: "見本", origin: "https://sample.plugins.otoasobi.assets", entry: "index.html" }],
+    })
+    expect(parseHostEvent({ type: "plugin", id: "sample", request: "1", ok: false, error: "フォルダを開いていません。" })).toEqual({
+      type: "plugin",
+      id: "sample",
+      request: "1",
+      ok: false,
+      result: null,
+      error: "フォルダを開いていません。",
+    })
   })
 })
 

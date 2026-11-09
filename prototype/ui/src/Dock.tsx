@@ -1,7 +1,7 @@
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react"
 import { armBox, hitDrop, type DropAim, type HitLeaf, type HitRegion, type ScreenBox } from "./dockHit"
 import { pickTitleResize, type TitleEdge } from "./dockSplit"
-import { commitMove, hidePane, idsOf, insertedRect, layoutHits, liftPane, paneTitles, type DockSpan, type LayoutNode, type PaneBox } from "./layout"
+import { commitMove, hidePane, idsOf, insertedRect, layoutHits, liftPane, paneTitle, type DockSpan, type LayoutNode, type PaneBox } from "./layout"
 import { IconDown, IconNext, IconPrev, IconUp } from "./IconButton"
 import { PaneHost } from "./paneSlots"
 import { measureFloors, measureSplitters, moveSplitter } from "./splitter"
@@ -36,7 +36,7 @@ export function Dock({ layout, locked, boxes, onChange, onRatio, onResizing }: P
       return
     const session = {
       id,
-      title: paneTitles[id] ?? id,
+      title: paneTitle(id),
       origin: layout,
       startX: event.clientX,
       startY: event.clientY,
@@ -196,7 +196,7 @@ function nodeKey(node: LayoutNode, path: number[]) {
 function Node({ layout, node, path, locked, boxes, onRatio, onResizing, onTitleDown, onClose }: NodeProps) {
   const ids = idsOf(node).join(",")
   if ("id" in node) {
-    const title = paneTitles[node.id] ?? node.id
+    const title = paneTitle(node.id)
     return (
       <section
         key={node.id}

@@ -38,7 +38,38 @@ export const viewFolders: { title: string; ids: string[] }[] = [
   { title: "パッケージ化", ids: ["bank"] },
 ]
 
-const paneIds = Object.keys(paneTitles)
+const pluginPrefix = "plugin."
+const pluginTitles = new Map<string, string>()
+let pluginsReady = false
+
+export function isPluginFolderId(id: string): boolean {
+  return /^[a-z0-9]+(\.[a-z0-9]+)*$/.test(id)
+}
+
+export function pluginPaneId(id: string): string {
+  return pluginPrefix + id
+}
+
+function isPluginPane(id: string): boolean {
+  return id.startsWith(pluginPrefix) && isPluginFolderId(id.slice(pluginPrefix.length))
+}
+
+export function registerPlugins(items: { id: string; title: string }[]): void {
+  pluginsReady = true
+  pluginTitles.clear()
+  for (const item of items) {
+    if (isPluginPane(item.id) && item.title)
+      pluginTitles.set(item.id, item.title)
+  }
+}
+
+export function paneTitle(id: string): string {
+  return paneTitles[id] ?? pluginTitles.get(id) ?? id
+}
+
+function isKnownPane(id: string): boolean {
+  return Object.prototype.hasOwnProperty.call(paneTitles, id) || pluginTitles.has(id)
+}
 
 export function createDefault(): LayoutNode {
   return h(
@@ -66,8 +97,8 @@ export function createRecording(): LayoutNode {
 
 export function parseLayout(value: unknown): LayoutNode | null {
   const seen = new Set<string>()
-  const node = readNode(value, seen)
-  return node && seen.size > 0 ? node : null
+  const read = readNode(value, seen)
+  return read.ok && read.node && seen.size > 0 ? read.node : null
 }
 
 export function leaf(id: string): LayoutNode {
@@ -83,7 +114,7 @@ export function contains(node: LayoutNode | null, id: string): boolean {
 }
 
 export function showPane(root: LayoutNode | null, id: string, boxes: Record<string, PaneBox>): LayoutNode {
-  if (!paneIds.includes(id))
+  if (!isKnownPane(id))
     return root ?? leaf(id)
   if (root && contains(root, id))
     return root
@@ -519,25 +550,37 @@ function subtreeSize(node: LayoutNode, find: LayoutNode, width: number, height: 
     ?? subtreeSize(node.second, find, width, Math.max(0, height - size))
 }
 
-function readNode(value: unknown, seen: Set<string>): LayoutNode | null {
+type ReadResult = { ok: true; node: LayoutNode | null } | { ok: false }
+
+function readNode(value: unknown, seen: Set<string>): ReadResult {
   if (typeof value !== "object" || value === null)
-    return null
+    return { ok: false }
   const record = value as Record<string, unknown>
   if (typeof record.id === "string") {
-    if (!paneIds.includes(record.id) || seen.has(record.id))
-      return null
-    seen.add(record.id)
-    return { id: record.id }
+    if (seen.has(record.id))
+      return { ok: false }
+    if (isKnownPane(record.id) || (!pluginsReady && isPluginPane(record.id))) {
+      seen.add(record.id)
+      return { ok: true, node: { id: record.id } }
+    }
+    // 入っていない外部パネルだけ外す。隣のパネルは残す。
+    if (record.id.startsWith(pluginPrefix))
+      return { ok: true, node: null }
+    return { ok: false }
   }
   if (record.axis !== "h" && record.axis !== "v")
-    return null
+    return { ok: false }
   if (typeof record.ratio !== "number" || !Number.isFinite(record.ratio) || record.ratio <= 0 || record.ratio >= 1)
-    return null
+    return { ok: false }
   const first = readNode(record.first, seen)
   const second = readNode(record.second, seen)
-  if (!first || !second)
-    return null
-  return { axis: record.axis, ratio: record.ratio, first, second }
+  if (!first.ok || !second.ok)
+    return { ok: false }
+  if (!first.node)
+    return second
+  if (!second.node)
+    return first
+  return { ok: true, node: { axis: record.axis, ratio: record.ratio, first: first.node, second: second.node } }
 }
 
 function h(ratio: number, first: LayoutNode, second: LayoutNode): LayoutNode {

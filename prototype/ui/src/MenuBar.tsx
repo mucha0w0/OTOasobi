@@ -22,6 +22,7 @@ type Props = {
   onTemplate: (name: string) => void
   onSaveTemplate: () => void
   onCheckUpdate: () => void
+  plugins: { id: string; title: string }[]
 }
 
 export function MenuBar({
@@ -45,6 +46,7 @@ export function MenuBar({
   onTemplate,
   onSaveTemplate,
   onCheckUpdate,
+  plugins,
 }: Props) {
   const [open, setOpen] = useState<string | null>(null)
   const [folder, setFolder] = useState<string | null>(null)
@@ -95,6 +97,19 @@ export function MenuBar({
             ))}
           </Flyout>
         ))}
+        {plugins.length > 0 && (
+          <Flyout
+            title="プラグイン"
+            open={folder === "プラグイン"}
+            onOpen={() => setFolder("プラグイン")}
+          >
+            {plugins.map((item) => (
+              <Item key={item.id} checked={contains(layout, `plugin.${item.id}`)} onClick={() => onToggle(`plugin.${item.id}`)}>
+                {item.title}
+              </Item>
+            ))}
+          </Flyout>
+        )}
         <div onMouseEnter={() => setFolder(null)}>
           <div className="my-1 border-t border-[var(--line)]" />
           <Item onClick={onReset}>初期配置</Item>

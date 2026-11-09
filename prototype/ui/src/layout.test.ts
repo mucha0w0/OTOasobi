@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { commitMove, contains, createDefault, createRecording, hidePane, liftPane, movePane, paneTitles, parseLayout, showPane, viewFolders, type LayoutNode, type PaneBox } from "./layout"
+import { commitMove, contains, createDefault, createRecording, hidePane, liftPane, movePane, paneTitle, paneTitles, parseLayout, registerPlugins, showPane, viewFolders, type LayoutNode, type PaneBox } from "./layout"
 
 describe("表示メニュー", () => {
   it("フォルダは既知のパネルだけで、どのパネルも一度は出る", () => {
@@ -213,6 +213,44 @@ describe("パネルの移動", () => {
     expect(parseLayout(createDefault())).toEqual(createDefault())
     expect(parseLayout({ id: "missing" })).toBeNull()
     expect(parseLayout({ axis: "h", ratio: 0.5, first: { id: "file" }, second: { id: "file" } })).toBeNull()
+    expect(parseLayout({ axis: "h", ratio: 0.5, first: { id: "file" }, second: { id: "missing" } })).toBeNull()
+  })
+
+  it("登録した外部パネルは開けて、無い外部パネルだけ外れる", () => {
+    registerPlugins([{ id: "plugin.sample", title: "見本" }])
+    try {
+      const shown = showPane({ id: "file" }, "plugin.sample", { file: { width: 300, height: 200 } })
+      expect(contains(shown, "plugin.sample")).toBe(true)
+      expect(parseLayout(shown)).toEqual(shown)
+      expect(paneTitle("plugin.sample")).toBe("見本")
+      registerPlugins([])
+      expect(parseLayout({
+        axis: "h",
+        ratio: 0.4,
+        first: { id: "file" },
+        second: {
+          axis: "v",
+          ratio: 0.5,
+          first: { id: "plugin.sample" },
+          second: { id: "wave" },
+        },
+      })).toEqual({
+        axis: "h",
+        ratio: 0.4,
+        first: { id: "file" },
+        second: { id: "wave" },
+      })
+      expect(parseLayout({ id: "plugin.sample" })).toBeNull()
+      expect(parseLayout({
+        axis: "h",
+        ratio: 0.5,
+        first: { id: "plugin.a" },
+        second: { id: "plugin.b" },
+      })).toBeNull()
+      expect(showPane({ id: "file" }, "plugin.sample", {})).toEqual({ id: "file" })
+    } finally {
+      registerPlugins([])
+    }
   })
 })
 

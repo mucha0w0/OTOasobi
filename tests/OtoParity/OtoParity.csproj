@@ -41,6 +41,8 @@
     <Compile Include="..\..\winui\WavAudio.cs" Link="Winui\WavAudio.cs" />
     <Compile Include="..\..\winui\RecMonitor.cs" Link="Winui\RecMonitor.cs" />
     <Compile Include="..\..\winui\ProjectFolder.cs" Link="Winui\ProjectFolder.cs" />
+    <Compile Include="..\..\winui\PluginPath.cs" Link="Winui\PluginPath.cs" />
+    <Compile Include="..\..\prototype\host\PluginCatalog.cs" Link="Host\PluginCatalog.cs" />
   </ItemGroup>
 
 </Project>

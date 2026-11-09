@@ -29,12 +29,13 @@ import {
   type PendingEdit,
 } from "./history"
 import { connectHost } from "./host"
-import { contains, createDefault, hidePane, idsOf, showPane, type LayoutNode, type PaneBox } from "./layout"
+import { contains, createDefault, hidePane, idsOf, parseLayout, pluginPaneId, registerPlugins, showPane, type LayoutNode, type PaneBox } from "./layout"
 import { createLiveBus, type LiveBus } from "./live"
 import { MenuBar } from "./MenuBar"
 import { OtoTable } from "./OtoTable"
 import { AnalyzePanel, OtoIni, OtoSettings } from "./OtoPanels"
-import { previewColumnLimit, previewRowLimit, previewStillCovers, requestsPreviewAfter, uiScale, type BankEvent, type DeviceInfo, type EffectsEvent, type FrqViewEvent, type HostEvent, type OtoMark, type OtoState, type PageCommand, type PreviewEvent, type RecListEvent, type SavedEvent } from "./protocol"
+import { PluginFrame, type PluginContext } from "./PluginFrame"
+import { previewColumnLimit, previewRowLimit, previewStillCovers, requestsPreviewAfter, uiScale, type BankEvent, type DeviceInfo, type EffectsEvent, type FrqViewEvent, type HostEvent, type OtoMark, type OtoState, type PageCommand, type PluginItem, type PluginReply, type PreviewEvent, type RecListEvent, type SavedEvent } from "./protocol"
 import { RecListPanel, RecScriptPanel } from "./RecPanels"
 import { noticeTone, ToneIcon, ToneRow, type NoticeTone } from "./notice"
 import { createPointerBus } from "./ruler"
@@ -227,6 +228,14 @@ export function App() {
   const [creating, setCreating] = useState(false)
   const createOpenRef = useRef(false)
   const [templates, setTemplates] = useState<string[]>([])
+  const [plugins, setPlugins] = useState<PluginItem[]>([])
+  const pluginPorts = useRef(new Map<string, (reply: PluginReply) => void>())
+  const bindPlugin = useCallback((id: string, send: ((reply: PluginReply) => void) | null) => {
+    if (send)
+      pluginPorts.current.set(id, send)
+    else
+      pluginPorts.current.delete(id)
+  }, [])
   const [updatePrompt, setUpdatePrompt] = useState<{ phase: string; title: string; body: string } | null>(null)
   const [frqMode, setFrqMode] = useState<FrqRadios["mode"]>("all")
   const [frqPreutter, setFrqPreutter] = useState<FrqRadios["preutter"]>("keep")
@@ -910,6 +919,14 @@ export function App() {
         keepRatios.current = event.keepRatios
         setLayout(event.root ?? createDefault())
         break
+      case "plugins":
+        registerPlugins(event.items.map((item) => ({ id: pluginPaneId(item.id), title: item.title })))
+        setPlugins(event.items)
+        setLayout((current) => current ? parseLayout(current) ?? current : current)
+        break
+      case "plugin":
+        pluginPorts.current.get(event.id)?.(event)
+        break
     }
   }
   applyRef.current = applyHost
@@ -1250,6 +1267,7 @@ export function App() {
         onTemplate={applyTemplate}
         onSaveTemplate={saveTemplate}
         onCheckUpdate={() => sendRef.current({ type: "update", op: "check" })}
+        plugins={plugins}
       />
       {status && (
         <div role="status" className="flex items-center gap-2 border-b border-l-[3px] border-[var(--line)] bg-[var(--panel)] px-4 py-2 text-sm" style={{ borderLeftColor: "var(--muted)" }}>
@@ -1428,6 +1446,26 @@ export function App() {
                 return <OtoSettings oto={oto} send={(command) => sendRef.current(command)} />
               if (id === "otoIni")
                 return <OtoIni oto={oto} send={(command) => sendRef.current(command)} />
+              if (id.startsWith("plugin.")) {
+                const plugin = plugins.find((item) => pluginPaneId(item.id) === id)
+                if (!plugin)
+                  return null
+                const pluginContext: PluginContext = {
+                  theme: resolved,
+                  accent: accentPaint.fill,
+                  scale,
+                  file: fileName,
+                  selected: selectedNames,
+                }
+                return (
+                  <PluginFrame
+                    item={plugin}
+                    context={pluginContext}
+                    onCall={(command) => sendRef.current(command)}
+                    bind={bindPlugin}
+                  />
+                )
+              }
               return null
             }}
           >

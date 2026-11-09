@@ -216,6 +216,18 @@ dotnet run --project prototype/host
 
 ファイル名に使えない文字があるときは、その理由を表示します。
 
+## 外部パネル
+
+本体を再ビルドせずにパネルを足せます。フォルダを `%LocalAppData%\Otoasobi\plugins\<id>\` に置いて、アプリを起動し直します。配布物には入りません。アプリ内での入手や更新はありません。見本は `prototype/plugins/sample` です。このフォルダを `plugins\sample` としてコピーすると、表示メニューの「プラグイン」に「見本」が出ます。
+
+`<id>` はフォルダ名です。使える文字は小文字、数字、区切りの `.` です。`manifest.json` の `title` が表示名です。`entry` を省くと `index.html` です。`script` は同じフォルダの中の `.py` だけで、無くてもパネルは出ます。`id` を書くときはフォルダ名と同じにします。条件を外れたフォルダは読み飛ばし、そのフォルダ名だけを状態に出します。
+
+パネルは別オリジンの iframe です。親へは `postMessage` だけが届き、解析や録音や oto.ini の操作には変換しません。親から届くのは、明暗、アクセント、倍率、開いているファイル名、選択中のファイル名です。音源フォルダのパスはパネルへ渡しません。
+
+パネルから親へ送るメッセージは `{ type: "otoasobi", request, op }` です。`op` は `list`、`read`、`write`、`run` です。`list` / `read` / `write` の `path` は、開いている音源フォルダの中の相対パスだけです。1 回の読み書きは 256KB までです。`encoding` は `utf-8` か `cp932` で、省くと `utf-8` です。WAV はこの経路では扱いません。応答は `{ type: "otoasobi", request, ok, result, error }` です。`list` の `result` は `{ names }`、`read` は `{ text }` です。
+
+`run` は、manifest の `script` へ JSON を 1 行送り、1 行を受け取ります。行には `project`（音源フォルダのパス）と、パネルが渡した `body` が入ります。標準出力には、その応答の JSON 以外を書きません。プロセスはパネルごとに 1 つで、30 秒で打ち切ります。Python は解析と同じものを使います。インストールしたパネルの Python は、そのフォルダを信用したことになります。読み書きの制限は、パネルから親へ送る `list` / `read` / `write` だけです。Ctrl+Z では戻せません。
+
 ## 旧画面
 
 公開しない WinUI の画面です。
@@ -319,6 +331,7 @@ dotnet run --project winui
 | --- | --- |
 | `prototype/host` | 配布する `Otoasobi.exe`。React を WebView2 に表示し、計算は `winui/` の C# を呼ぶ |
 | `prototype/ui` | 配布する画面。開発中は `npm run dev` と環境変数 `OTOASOBI_PROBE_URL` |
+| `prototype/plugins/sample` | 外部パネルの見本。配布物には入れない |
 | `winui/` | 計算と、公開しない旧画面。リリースの対象ではない |
 | `.github/workflows/release.yml` | タグ `v*` で Setup と高精度エンジンをリリースする |
 | `scripts/stage_release.ps1` | 音響用 Python、エンジン zip、`engine.json` を作る |

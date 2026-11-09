@@ -1,4 +1,4 @@
-import { parseLayout, type LayoutNode } from "./layout"
+import { isPluginFolderId, parseLayout, type LayoutNode } from "./layout"
 import type { PhoneSpan } from "./spans"
 
 export type PreviewGesture = "boundary" | "pan" | "zoom" | "resize"
@@ -57,6 +57,7 @@ export type PageCommand =
   | { type: "oto"; op: "comment"; file: string; index: number; alias: string; mode?: string; comment: string }
   | { type: "saveSettings"; name: string; replace: boolean }
   | { type: "loadSettings"; name: string }
+  | { type: "plugin"; id: string; request: string; op: "list" | "read" | "write" | "run"; path?: string; text?: string; encoding?: "utf-8" | "cp932"; body?: unknown }
 
 export type DeviceInfo = { id: string; label: string }
 
@@ -131,7 +132,17 @@ export type HostEvent =
   | { type: "notice"; message: string }
   | { type: "otoExists"; name: string }
   | { type: "layout"; root: LayoutNode | null; keepRatios: boolean }
+  | { type: "plugins"; items: PluginItem[] }
+  | { type: "plugin"; id: string; request: string; ok: boolean; result: unknown; error: string | null }
   | OtoState
+
+export type PluginItem = { id: string; title: string; origin: string; entry: string }
+
+export type PluginReply = { type: "plugin"; id: string; request: string; ok: boolean; result: unknown; error: string | null }
+
+export function pluginOrigin(id: string): string {
+  return `https://${id.replaceAll(".", "-")}.plugins.otoasobi.assets`
+}
 
 export type FrqViewEvent = {
   type: "frqView"
@@ -449,6 +460,19 @@ export function parseHostEvent(value: unknown): HostEvent | null {
       const root = parseLayout(value.root)
       return root ? { type: "layout", root, keepRatios } : null
     }
+    case "plugins":
+      return Array.isArray(value.items) ? { type: "plugins", items: value.items.flatMap(parsePluginItem) } : null
+    case "plugin":
+      if (typeof value.id !== "string" || !isPluginFolderId(value.id) || typeof value.request !== "string")
+        return null
+      return {
+        type: "plugin",
+        id: value.id,
+        request: value.request,
+        ok: value.ok === true,
+        result: value.result ?? null,
+        error: typeof value.error === "string" ? value.error : null,
+      }
     case "guideFile":
       return {
         type: "guideFile",
@@ -726,6 +750,21 @@ function numberMap(value: unknown): Record<string, number> {
       result[key] = item
   }
   return result
+}
+
+function parsePluginItem(value: unknown): PluginItem[] {
+  if (!isRecord(value) || typeof value.id !== "string" || typeof value.title !== "string" || typeof value.origin !== "string" || typeof value.entry !== "string")
+    return []
+  const title = value.title.trim()
+  if (!isPluginFolderId(value.id) || title.length === 0 || value.origin !== pluginOrigin(value.id) || !isPluginEntry(value.entry))
+    return []
+  return [{ id: value.id, title, origin: value.origin, entry: value.entry }]
+}
+
+function isPluginEntry(entry: string): boolean {
+  if (entry.length === 0 || entry.length > 120 || entry.startsWith("/") || entry.includes("\\") || entry.includes(":") || entry.includes(".."))
+    return false
+  return entry.split("/").every((part) => part.length > 0 && part !== "." && part !== "..")
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
