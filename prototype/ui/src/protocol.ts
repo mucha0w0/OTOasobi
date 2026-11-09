@@ -13,7 +13,7 @@ export type PageCommand =
   | { type: "preview"; t0: number; t1: number; columns: number; rows: number }
   | { type: "setDevices"; inputId: string; outputId: string }
   | { type: "monitor"; on: boolean }
-  | { type: "guide"; note: string; semitones: number; speed: number; volume?: number; bpm?: number; moras?: number }
+  | { type: "guide"; note: string; semitones: number; speed: number; volume?: number; bpm?: number; moras?: number; countIn?: boolean }
   | { type: "guideStop" }
   | { type: "record"; name?: string; countIn?: boolean; bpm?: number; moras?: number; guideWhile?: boolean; volume?: number; note?: string; semitones?: number; speed?: number }
   | { type: "recordStop" }

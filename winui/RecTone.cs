@@ -94,6 +94,21 @@ static class RecTone
         return samples;
     }
 
+    // カウントありなら、モーラの前に 4 拍のクリックを付ける。
+    public static float[] ManualGuide(double hz, int bpm, int moras, int sampleRate, bool countIn)
+    {
+        var mora = MoraGuide(hz, bpm, moras, sampleRate);
+        if (!countIn || mora.Length == 0)
+            return mora;
+        var clicks = CountIn(bpm, sampleRate);
+        if (clicks.Length == 0)
+            return mora;
+        var samples = new float[clicks.Length + mora.Length];
+        Array.Copy(clicks, 0, samples, 0, clicks.Length);
+        Array.Copy(mora, 0, samples, clicks.Length, mora.Length);
+        return samples;
+    }
+
     // 1 小節のクリック。長さは拍数そのものなので、終わった瞬間が録音の開始になる。
     public static float[] CountIn(int bpm, int sampleRate, int beats = 4)
     {

@@ -97,6 +97,18 @@ public class RecTests
     }
 
     [Fact]
+    public void ManualGuidePutsCountInBeforeMoras()
+    {
+        const int rate = 44100;
+        var plain = RecTone.ManualGuide(261.63, 120, 5, rate, countIn: false);
+        var withCount = RecTone.ManualGuide(261.63, 120, 5, rate, countIn: true);
+        Assert.Equal(rate * 5, plain.Length);
+        Assert.Equal(rate * 2 + plain.Length, withCount.Length);
+        Assert.True(withCount[rate / 50] > 0.1f);
+        Assert.True(withCount[rate * 2 + rate / 50] > 0.05f);
+    }
+
+    [Fact]
     public void GuideSpeedAndPitchStayIndependent()
     {
         const int rate = 44100;

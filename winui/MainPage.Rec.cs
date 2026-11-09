@@ -1145,7 +1145,11 @@ public sealed partial class MainPage
             _guideListening = false;
             if (!RecTone.TryHertz(CurrentNote(), out var hz))
                 hz = 261.6255653005986;
-            wav = PreviewWav.Encode(RecTone.MoraGuide(hz, _recSettings.Bpm, _recSettings.Moras, RecTone.TargetRate), 1, RecTone.TargetRate);
+            // 録音中のループにはカウントを入れない。聴くときだけ前に 4 拍付ける。
+            wav = PreviewWav.Encode(
+                RecTone.ManualGuide(hz, _recSettings.Bpm, _recSettings.Moras, RecTone.TargetRate, _recSettings.CountIn && !loop),
+                1,
+                RecTone.TargetRate);
         }
 
         if (_recPlayer == null || (loop && !_recTaking) || shape != _guideShapeToken)

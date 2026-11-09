@@ -228,7 +228,8 @@ sealed class ProbeSession : IDisposable
                         Volume(root),
                         loop: false,
                         BpmOf(root),
-                        MorasOf(root));
+                        MorasOf(root),
+                        root.TryGetProperty("countIn", out var guideCount) && guideCount.ValueKind == JsonValueKind.True);
                     break;
                 case "guideStop":
                     _player.Stop();
@@ -964,7 +965,7 @@ sealed class ProbeSession : IDisposable
 
     void PostGuide() => Post(_rec.GuideSnapshot());
 
-    async Task GuideAsync(string note, int semitones, double speed, double volume, bool loop, int bpm, int moras)
+    async Task GuideAsync(string note, int semitones, double speed, double volume, bool loop, int bpm, int moras, bool countIn)
     {
         if (_disposed)
             return;
@@ -980,7 +981,8 @@ sealed class ProbeSession : IDisposable
             return;
         }
 
-        var tone = RecTone.MoraGuide(hz, bpm, moras, RecTone.TargetRate);
+        // 録音中のループにはカウントを入れない。聴くときだけ前に 4 拍付ける。
+        var tone = RecTone.ManualGuide(hz, bpm, moras, RecTone.TargetRate, countIn && !loop);
         var shaped = RecTone.ShapeGuide(tone, 1, RecTone.TargetRate, speed, semitones);
         var wav = PreviewWav.Encode(shaped, 1, RecTone.TargetRate);
         _player.Volume = volume;
@@ -1227,7 +1229,8 @@ sealed class ProbeSession : IDisposable
                 Volume(root),
                 loop: true,
                 bpm,
-                MorasOf(root));
+                MorasOf(root),
+                countIn: false);
         }
     }
 

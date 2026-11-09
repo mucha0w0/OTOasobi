@@ -210,7 +210,7 @@ export function GuidePanel({
         <IconButton
           label={playing ? "停止" : "ガイドを聴く"}
           accent
-          onClick={() => send(playing ? { type: "guideStop" } : { type: "guide", note, semitones, speed, volume, bpm, moras })}
+          onClick={() => send(playing ? { type: "guideStop" } : { type: "guide", note, semitones, speed, volume, bpm, moras, countIn })}
         >
           {playing ? <IconStop /> : <IconPlay />}
         </IconButton>
