@@ -59,6 +59,7 @@ export function NoiseWaveform({
       const width = frame.clientWidth
       const height = noisePlotHeight
       if (width < 2)
+        return
       const ratio = bitmapRatio()
       const nextWidth = Math.max(1, Math.floor(width * ratio))
       const nextHeight = Math.max(1, Math.floor(height * ratio))
