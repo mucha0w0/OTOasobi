@@ -1683,17 +1683,6 @@
                             HorizontalScrollBarVisibility="Disabled"
                             VerticalScrollBarVisibility="Auto">
                             <StackPanel Padding="12" Spacing="8">
-                                <RadioButton
-                                    x:Name="RecGuideFileRadio"
-                                    GroupName="RecGuideKind"
-                                    Content="ファイルを選ぶ"
-                                    Checked="RecGuideKind_Checked" />
-                                <RadioButton
-                                    x:Name="RecGuideManualRadio"
-                                    GroupName="RecGuideKind"
-                                    Content="自分で設定する"
-                                    IsChecked="True"
-                                    Checked="RecGuideKind_Checked" />
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*" />
@@ -1716,6 +1705,17 @@
                                     ToolTipService.ToolTip="ファイルと、自分で作るガイド音の両方に効きます"
                                     Value="70"
                                     ValueChanged="RecVolume_Changed" />
+                                <RadioButton
+                                    x:Name="RecGuideFileRadio"
+                                    GroupName="RecGuideKind"
+                                    Content="ファイルを選ぶ"
+                                    Checked="RecGuideKind_Checked" />
+                                <RadioButton
+                                    x:Name="RecGuideManualRadio"
+                                    GroupName="RecGuideKind"
+                                    Content="自分で設定する"
+                                    IsChecked="True"
+                                    Checked="RecGuideKind_Checked" />
                                 <StackPanel
                                     x:Name="RecGuideFilePanel"
                                     Spacing="8"
