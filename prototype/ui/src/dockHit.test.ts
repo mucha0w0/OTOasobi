@@ -1,13 +1,20 @@
 import { describe, expect, it } from "vitest"
-import { halfBox, hitDrop, previewBox, type HitLeaf, type HitRegion } from "./dockHit"
+import { armBox, halfBox, hitDrop, previewBox, type HitLeaf, type HitRegion, type ScreenBox } from "./dockHit"
 
 const leaf: HitLeaf = { id: "wave", rect: { x: 0, y: 0, width: 400, height: 300 } }
 const outer: HitRegion = { ids: ["wave", "spec"], rect: { x: 0, y: 0, width: 400, height: 300 } }
 const inner: HitRegion = { ids: ["wave"], rect: { x: 0, y: 0, width: 400, height: 180 } }
 
+function areaOverlap(a: ScreenBox, b: ScreenBox) {
+  const width = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x)
+  const height = Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y)
+  return width > 0 && height > 0
+}
+
 describe("ドロップ先", () => {
   it("中央の印は、その1枚だけを割る", () => {
-    const aim = hitDrop([leaf], [outer, inner], "file", 200 - 6 - 14, 150)
+    const mark = armBox(leaf.rect, "left")
+    const aim = hitDrop([leaf], [outer, inner], "file", mark.x + mark.width / 2, mark.y + mark.height / 2)
     expect(aim?.edge).toBe("left")
     expect(aim?.targetIds).toEqual(["wave"])
     expect(aim?.hot).toBe(true)
@@ -37,6 +44,15 @@ describe("ドロップ先", () => {
   it("左へ入れる予告は、対象の左端から始まる", () => {
     const half = halfBox({ x: 100, y: 40, width: 400, height: 200 }, "left")
     expect(previewBox(half, "left", 0.25)).toEqual({ x: 100, y: 40, width: 100, height: 200 })
+  })
+
+  it("上下左右の四角は重ならない", () => {
+    const edges = ["left", "right", "top", "bottom"] as const
+    const boxes = edges.map((edge) => armBox(leaf.rect, edge))
+    for (let i = 0; i < boxes.length; i++) {
+      for (let j = i + 1; j < boxes.length; j++)
+        expect(areaOverlap(boxes[i]!, boxes[j]!)).toBe(false)
+    }
   })
 
   it("印でも端でもない中央では入れない", () => {

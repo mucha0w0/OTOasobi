@@ -2,6 +2,7 @@ import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react"
 import { armBox, hitDrop, type DropAim, type HitLeaf, type HitRegion, type ScreenBox } from "./dockHit"
 import { pickTitleResize, type TitleEdge } from "./dockSplit"
 import { commitMove, hidePane, idsOf, insertedRect, liftPane, paneTitles, type DockSpan, type LayoutNode, type PaneBox } from "./layout"
+import { IconDown, IconNext, IconPrev, IconUp } from "./IconButton"
 import { PaneHost } from "./paneSlots"
 import { measureFloors, measureSplitters, moveSplitter } from "./splitter"
 
@@ -135,10 +136,10 @@ function Arms({ rect, hot, origin }: { rect: ScreenBox; hot: DropAim["edge"]; or
         return (
           <div
             key={edge}
-            className={`pointer-events-none absolute z-30 grid place-items-center rounded border text-[10px] ${hot === edge ? "border-[var(--accent)] bg-[var(--panel)] text-[var(--text)]" : "border-[var(--line)] bg-[var(--panel)] text-[var(--muted)]"}`}
+            className={`pointer-events-none absolute z-30 grid place-items-center rounded border ${hot === edge ? "border-[var(--accent)] bg-[var(--panel)] text-[var(--text)]" : "border-[var(--line)] bg-[var(--panel)] text-[var(--muted)]"}`}
             style={placed(box, origin)}
           >
-            {edge === "left" ? "左" : edge === "right" ? "右" : edge === "top" ? "上" : "下"}
+            {edge === "left" ? <IconPrev /> : edge === "right" ? <IconNext /> : edge === "top" ? <IconUp /> : <IconDown />}
           </div>
         )
       })}

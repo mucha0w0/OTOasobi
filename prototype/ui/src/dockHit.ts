@@ -15,7 +15,8 @@ export type DropAim = {
 }
 
 const armSize = 28
-const armGap = 6
+// 上下左右の四角が角で重ならないよう、中心からの空きは一辺の半分以上にする。
+const armGap = armSize / 2
 const sideBand = 44
 const endBand = 16
 
