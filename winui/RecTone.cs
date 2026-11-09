@@ -46,6 +46,12 @@ static class RecTone
         return true;
     }
 
+    public const int DefaultMoras = 5;
+
+    public const int MinMoras = 1;
+
+    public const int MaxMoras = 16;
+
     public static float[] Tone(double hz, int sampleRate, double seconds)
     {
         if (sampleRate <= 0 || seconds <= 0 || hz <= 0)
@@ -61,6 +67,28 @@ static class RecTone
                 + 0.16 * Math.Sin(2 * Math.PI * hz * 3 * t)
                 + 0.08 * Math.Sin(2 * Math.PI * hz * 4 * t);
             samples[i] = (float)(wave / 1.6 * env);
+        }
+
+        return samples;
+    }
+
+    // テンポの二分音符で、同じ音をモーラ数だけ繰り返す。
+    public static float[] MoraGuide(double hz, int bpm, int moras, int sampleRate)
+    {
+        if (sampleRate <= 0 || hz <= 0)
+            return [];
+        bpm = Math.Clamp(bpm, 40, 240);
+        moras = Math.Clamp(moras, MinMoras, MaxMoras);
+        var halfSeconds = 120.0 / bpm;
+        var perMora = Math.Max(1, (int)Math.Round(sampleRate * halfSeconds));
+        var samples = new float[perMora * moras];
+        for (var mora = 0; mora < moras; mora++)
+        {
+            var tone = Tone(hz, sampleRate, halfSeconds);
+            var offset = mora * perMora;
+            var copy = Math.Min(tone.Length, samples.Length - offset);
+            if (copy > 0)
+                Array.Copy(tone, 0, samples, offset, copy);
         }
 
         return samples;

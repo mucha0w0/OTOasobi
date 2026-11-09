@@ -83,6 +83,20 @@ public class RecTests
     }
 
     [Fact]
+    public void MoraGuideRepeatsHalfNotes()
+    {
+        const int rate = 44100;
+        var guide = RecTone.MoraGuide(261.63, 120, 5, rate);
+        Assert.Equal(rate * 5, guide.Length);
+        Assert.All(guide, sample => Assert.InRange(sample, -1f, 1f));
+        for (var mora = 0; mora < 5; mora++)
+        {
+            var start = mora * rate;
+            Assert.True(guide[start + rate / 50] > 0.05f);
+        }
+    }
+
+    [Fact]
     public void GuideSpeedAndPitchStayIndependent()
     {
         const int rate = 44100;

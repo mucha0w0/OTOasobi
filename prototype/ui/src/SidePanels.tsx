@@ -86,6 +86,7 @@ export function GuidePanel({
   volume,
   countIn,
   bpm,
+  moras,
   guideWhile,
   playing,
   setNote,
@@ -94,6 +95,7 @@ export function GuidePanel({
   setVolume,
   setCountIn,
   setBpm,
+  setMoras,
   setGuideWhile,
   send,
 }: {
@@ -104,6 +106,7 @@ export function GuidePanel({
   volume: number
   countIn: boolean
   bpm: number
+  moras: number
   guideWhile: boolean
   playing: boolean
   setNote: (value: string) => void
@@ -112,6 +115,7 @@ export function GuidePanel({
   setVolume: (value: number) => void
   setCountIn: (value: boolean) => void
   setBpm: (value: number) => void
+  setMoras: (value: number) => void
   setGuideWhile: (value: boolean) => void
   send: (command: PageCommand) => void
 }) {
@@ -142,6 +146,13 @@ export function GuidePanel({
                   <option key={item}>{item}</option>
                 ))}
               </select>
+            </label>
+            <label className="grid gap-1">
+              <span className="flex justify-between">
+                モーラ数
+                <span className="num text-[var(--muted)]">{moras}</span>
+              </span>
+              <input type="range" min={1} max={16} step={1} value={moras} onChange={(event) => setMoras(Number(event.target.value))} />
             </label>
             <label className="flex gap-2">
               <input type="checkbox" checked={countIn} onChange={(event) => setCountIn(event.target.checked)} />
@@ -199,7 +210,7 @@ export function GuidePanel({
         <IconButton
           label={playing ? "停止" : "ガイドを聴く"}
           accent
-          onClick={() => send(playing ? { type: "guideStop" } : { type: "guide", note, semitones, speed, volume })}
+          onClick={() => send(playing ? { type: "guideStop" } : { type: "guide", note, semitones, speed, volume, bpm, moras })}
         >
           {playing ? <IconStop /> : <IconPlay />}
         </IconButton>

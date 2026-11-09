@@ -58,6 +58,7 @@ public sealed partial class MainPage
         RecGuidePitchValue.Text = FormatGuidePitch((int)Math.Round(RecGuidePitchSlider.Value));
         RecCountInSwitch.IsOn = _recSettings.CountIn;
         RecBpmBox.Value = _recSettings.Bpm;
+        RecMorasBox.Value = _recSettings.Moras;
         RecGuideWhileSwitch.IsOn = _recSettings.GuideWhileRecording;
         RecAutoSwitch.IsOn = _recSettings.AutoAdvance;
         _recApplying = false;
@@ -478,6 +479,14 @@ public sealed partial class MainPage
         if (_recApplying || double.IsNaN(e.NewValue))
             return;
         _recSettings.Bpm = (int)Math.Clamp(Math.Round(e.NewValue), 40, 240);
+        _recSettings.Save();
+    }
+
+    void RecMoras_Changed(NumberBox sender, NumberBoxValueChangedEventArgs e)
+    {
+        if (_recApplying || double.IsNaN(e.NewValue))
+            return;
+        _recSettings.Moras = (int)Math.Clamp(Math.Round(e.NewValue), RecTone.MinMoras, RecTone.MaxMoras);
         _recSettings.Save();
     }
 
@@ -1136,8 +1145,7 @@ public sealed partial class MainPage
             _guideListening = false;
             if (!RecTone.TryHertz(CurrentNote(), out var hz))
                 hz = 261.6255653005986;
-            var seconds = loop ? 1.2 : 0.8;
-            wav = PreviewWav.Encode(RecTone.Tone(hz, RecTone.TargetRate, seconds), 1, RecTone.TargetRate);
+            wav = PreviewWav.Encode(RecTone.MoraGuide(hz, _recSettings.Bpm, _recSettings.Moras, RecTone.TargetRate), 1, RecTone.TargetRate);
         }
 
         if (_recPlayer == null || (loop && !_recTaking) || shape != _guideShapeToken)

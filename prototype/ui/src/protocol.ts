@@ -13,11 +13,11 @@ export type PageCommand =
   | { type: "preview"; t0: number; t1: number; columns: number; rows: number }
   | { type: "setDevices"; inputId: string; outputId: string }
   | { type: "monitor"; on: boolean }
-  | { type: "guide"; note: string; semitones: number; speed: number; volume?: number }
+  | { type: "guide"; note: string; semitones: number; speed: number; volume?: number; bpm?: number; moras?: number }
   | { type: "guideStop" }
-  | { type: "record"; name?: string; countIn?: boolean; bpm?: number; guideWhile?: boolean; volume?: number; note?: string; semitones?: number; speed?: number }
+  | { type: "record"; name?: string; countIn?: boolean; bpm?: number; moras?: number; guideWhile?: boolean; volume?: number; note?: string; semitones?: number; speed?: number }
   | { type: "recordStop" }
-  | { type: "recSettings"; note: string; semitones: number; speed: number; volume: number; countIn: boolean; bpm: number; guideWhile: boolean; advance: boolean }
+  | { type: "recSettings"; note: string; semitones: number; speed: number; volume: number; countIn: boolean; bpm: number; moras: number; guideWhile: boolean; advance: boolean }
   | { type: "recList"; op: "none" | "pick" | "open"; path?: string }
   | { type: "frq"; op: "write"; mode: "all" | "missing" | "selected"; clear: boolean; names?: string[] }
   | { type: "frq"; op: "stroke"; points: { frame: number; midi: number; unvoiced: boolean }[] }
@@ -178,6 +178,7 @@ export type RecSettingsEvent = {
   volume: number
   countIn: boolean
   bpm: number
+  moras: number
   guideWhile: boolean
   advance: boolean
 }
@@ -399,6 +400,7 @@ export function parseHostEvent(value: unknown): HostEvent | null {
         volume: numberOr(value.volume, 0.7),
         countIn: value.countIn === true,
         bpm: numberOr(value.bpm, 120),
+        moras: numberOr(value.moras, 5),
         guideWhile: value.guideWhile === true,
         advance: value.advance === true,
       }

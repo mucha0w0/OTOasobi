@@ -189,6 +189,7 @@ export function App() {
   const [volume, setVolume] = useState(0.7)
   const [countIn, setCountIn] = useState(false)
   const [bpm, setBpm] = useState(120)
+  const [moras, setMoras] = useState(5)
   const [guideWhile, setGuideWhile] = useState(false)
   const [advance, setAdvance] = useState(false)
   const [guidePlaying, setGuidePlaying] = useState(false)
@@ -270,7 +271,7 @@ export function App() {
       ...emptySnapshot(),
       appearance: { theme, accent: null, scale, lockPanels },
       monitor,
-      rec: { note, semitones, speed, volume, countIn, bpm, guideWhile, advance },
+      rec: { note, semitones, speed, volume, countIn, bpm, moras, guideWhile, advance },
     }
   }
   const resolved = resolveTheme(theme, systemDark)
@@ -398,12 +399,13 @@ export function App() {
         volume,
         countIn,
         bpm,
+        moras,
         guideWhile,
         advance,
       })
     }, 300)
     return () => window.clearTimeout(timer)
-  }, [advance, bpm, countIn, guideWhile, note, semitones, speed, volume])
+  }, [advance, bpm, countIn, guideWhile, moras, note, semitones, speed, volume])
 
   function viewModel(over: Partial<GraphModel> = {}): GraphModel {
     return {
@@ -1012,6 +1014,7 @@ export function App() {
             volume: event.volume,
             countIn: event.countIn,
             bpm: event.bpm,
+            moras: event.moras,
             guideWhile: event.guideWhile,
             advance: event.advance,
           },
@@ -1022,6 +1025,7 @@ export function App() {
         setVolume(event.volume)
         setCountIn(event.countIn)
         setBpm(event.bpm)
+        setMoras(event.moras)
         setGuideWhile(event.guideWhile)
         setAdvance(event.advance)
         break
@@ -1150,6 +1154,7 @@ export function App() {
       name,
       countIn,
       bpm,
+      moras,
       guideWhile,
       volume,
       note,
@@ -1285,6 +1290,7 @@ export function App() {
         || volume !== rec.volume
         || countIn !== rec.countIn
         || bpm !== rec.bpm
+        || moras !== rec.moras
         || guideWhile !== rec.guideWhile
         || advance !== rec.advance
       if (changed) {
@@ -1295,6 +1301,7 @@ export function App() {
         setVolume(rec.volume)
         setCountIn(rec.countIn)
         setBpm(rec.bpm)
+        setMoras(rec.moras)
         setGuideWhile(rec.guideWhile)
         setAdvance(rec.advance)
       }
@@ -1501,6 +1508,7 @@ export function App() {
                     volume={volume}
                     countIn={countIn}
                     bpm={bpm}
+                    moras={moras}
                     guideWhile={guideWhile}
                     playing={guidePlaying}
                     setNote={touchRec(setNote)}
@@ -1509,6 +1517,7 @@ export function App() {
                     setVolume={touchRec(setVolume)}
                     setCountIn={touchRec(setCountIn)}
                     setBpm={touchRec(setBpm)}
+                    setMoras={touchRec(setMoras)}
                     setGuideWhile={touchRec(setGuideWhile)}
                     send={(command) => sendRef.current(command)}
                   />

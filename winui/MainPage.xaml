@@ -1781,6 +1781,24 @@
                                         HorizontalAlignment="Stretch"
                                         AutomationProperties.Name="ガイドの音程"
                                         SelectionChanged="RecNote_Changed" />
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="120" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock VerticalAlignment="Center" Text="モーラ数" />
+                                        <NumberBox
+                                            x:Name="RecMorasBox"
+                                            Grid.Column="1"
+                                            AutomationProperties.Name="モーラ数"
+                                            LargeChange="1"
+                                            Maximum="16"
+                                            Minimum="1"
+                                            SmallChange="1"
+                                            SpinButtonPlacementMode="Inline"
+                                            Value="5"
+                                            ValueChanged="RecMoras_Changed" />
+                                    </Grid>
                                     <ToggleSwitch
                                         x:Name="RecCountInSwitch"
                                         AutomationProperties.Name="カウント"

@@ -221,7 +221,14 @@ sealed class ProbeSession : IDisposable
                     _ = MonitorAsync(root.TryGetProperty("on", out var onValue) && onValue.ValueKind == JsonValueKind.True);
                     break;
                 case "guide":
-                    _ = GuideAsync(Text(root, "note") ?? "C4", (int)Math.Round(Number(root, "semitones")), Number(root, "speed"), Volume(root));
+                    _ = GuideAsync(
+                        Text(root, "note") ?? "C4",
+                        (int)Math.Round(Number(root, "semitones")),
+                        Number(root, "speed"),
+                        Volume(root),
+                        loop: false,
+                        BpmOf(root),
+                        MorasOf(root));
                     break;
                 case "guideStop":
                     _player.Stop();
@@ -957,7 +964,7 @@ sealed class ProbeSession : IDisposable
 
     void PostGuide() => Post(_rec.GuideSnapshot());
 
-    async Task GuideAsync(string note, int semitones, double speed, double volume)
+    async Task GuideAsync(string note, int semitones, double speed, double volume, bool loop, int bpm, int moras)
     {
         if (_disposed)
             return;
@@ -973,11 +980,11 @@ sealed class ProbeSession : IDisposable
             return;
         }
 
-        var tone = RecTone.Tone(hz, RecTone.TargetRate, 2);
+        var tone = RecTone.MoraGuide(hz, bpm, moras, RecTone.TargetRate);
         var shaped = RecTone.ShapeGuide(tone, 1, RecTone.TargetRate, speed, semitones);
         var wav = PreviewWav.Encode(shaped, 1, RecTone.TargetRate);
         _player.Volume = volume;
-        var played = await _player.PlayAsync(wav, loop: true);
+        var played = await _player.PlayAsync(wav, loop);
         Post(new { type = "guide", playing = played });
     }
 
@@ -1213,7 +1220,14 @@ sealed class ProbeSession : IDisposable
         if (manualGuide && root.TryGetProperty("guideWhile", out var guideValue) && guideValue.ValueKind == JsonValueKind.True)
         {
             var note = Text(root, "note") ?? "C4";
-            _ = GuideAsync(note, (int)Math.Round(Number(root, "semitones")), Number(root, "speed") == 0 ? 1 : Number(root, "speed"), Volume(root));
+            _ = GuideAsync(
+                note,
+                (int)Math.Round(Number(root, "semitones")),
+                Number(root, "speed") == 0 ? 1 : Number(root, "speed"),
+                Volume(root),
+                loop: true,
+                bpm,
+                MorasOf(root));
         }
     }
 
@@ -1773,6 +1787,8 @@ sealed class ProbeSession : IDisposable
         var bpm = Number(root, "bpm");
         if (bpm > 0)
             settings.Bpm = (int)Math.Clamp(Math.Round(bpm), 40, 240);
+        if (root.TryGetProperty("moras", out _))
+            settings.Moras = MorasOf(root);
         settings.GuideWhileRecording = root.TryGetProperty("guideWhile", out var guide) && guide.ValueKind == JsonValueKind.True;
         settings.AutoAdvance = root.TryGetProperty("advance", out var advance) && advance.ValueKind == JsonValueKind.True;
         settings.Save();
@@ -1790,6 +1806,7 @@ sealed class ProbeSession : IDisposable
             volume = settings.GuideVolume,
             countIn = settings.CountIn,
             bpm = settings.Bpm,
+            moras = settings.Moras,
             guideWhile = settings.GuideWhileRecording,
             advance = settings.AutoAdvance,
         });
@@ -2077,6 +2094,18 @@ sealed class ProbeSession : IDisposable
         if (!root.TryGetProperty("volume", out var value) || !value.TryGetDouble(out var parsed))
             return 0.7;
         return Math.Clamp(parsed, 0, 1);
+    }
+
+    static int BpmOf(JsonElement root)
+    {
+        var bpm = Number(root, "bpm");
+        return (int)Math.Clamp(Math.Round(bpm <= 0 ? 120 : bpm), 40, 240);
+    }
+
+    static int MorasOf(JsonElement root)
+    {
+        var moras = Number(root, "moras");
+        return (int)Math.Clamp(Math.Round(moras <= 0 ? RecTone.DefaultMoras : moras), RecTone.MinMoras, RecTone.MaxMoras);
     }
 
     bool _keepRatios;

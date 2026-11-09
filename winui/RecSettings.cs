@@ -23,6 +23,8 @@ sealed class RecAppSettings
 
     public int Bpm { get; set; } = 120;
 
+    public int Moras { get; set; } = RecTone.DefaultMoras;
+
     public bool GuideWhileRecording { get; set; }
 
     public bool AutoAdvance { get; set; }
@@ -42,6 +44,7 @@ sealed class RecAppSettings
         settings.GuideSpeed = Math.Clamp(settings.GuideSpeed, 0.5, 2);
         settings.GuidePitch = Math.Clamp(settings.GuidePitch, -12, 12);
         settings.Bpm = Math.Clamp(settings.Bpm, 40, 240);
+        settings.Moras = Math.Clamp(settings.Moras, RecTone.MinMoras, RecTone.MaxMoras);
         settings.DeviceId = BlankToNull(settings.DeviceId);
         settings.OutputDeviceId = BlankToNull(settings.OutputDeviceId);
         return settings;

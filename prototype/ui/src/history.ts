@@ -18,6 +18,7 @@ export type RecSnapshot = {
   volume: number
   countIn: boolean
   bpm: number
+  moras: number
   guideWhile: boolean
   advance: boolean
 }
@@ -100,6 +101,7 @@ export function emptySnapshot(): EditSnapshot {
       volume: 0.7,
       countIn: false,
       bpm: 120,
+      moras: 5,
       guideWhile: false,
       advance: false,
     },
@@ -288,6 +290,7 @@ export function applySnapshot(snapshot: EditSnapshot, command: PageCommand): Edi
           volume: command.volume,
           countIn: command.countIn,
           bpm: command.bpm,
+          moras: command.moras,
           guideWhile: command.guideWhile,
           advance: command.advance,
         },
@@ -899,12 +902,13 @@ function describeRec(command: Extract<PageCommand, { type: "recSettings" }>, sna
     !near(command.volume, current.volume) ? "volume" : "",
     command.countIn !== current.countIn ? "countIn" : "",
     command.bpm !== current.bpm ? "bpm" : "",
+    command.moras !== current.moras ? "moras" : "",
     command.guideWhile !== current.guideWhile ? "guideWhile" : "",
     command.advance !== current.advance ? "advance" : "",
   ].filter((item) => item.length > 0)
   if (changed.length === 0)
     return null
-  const numeric = changed.length === 1 && (changed[0] === "semitones" || changed[0] === "speed" || changed[0] === "volume" || changed[0] === "bpm")
+  const numeric = changed.length === 1 && (changed[0] === "semitones" || changed[0] === "speed" || changed[0] === "volume" || changed[0] === "bpm" || changed[0] === "moras")
   const key = changed.length === 1 ? `rec.${changed[0]}` : `rec.${changed.join("+")}`
   return edit(key, numeric, [{ type: "recSettings", ...current }], [command])
 }
