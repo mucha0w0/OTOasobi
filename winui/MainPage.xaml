@@ -1842,11 +1842,11 @@
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="120" />
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock VerticalAlignment="Center" Text="テンポ" />
+                                        <TextBlock VerticalAlignment="Center" Text="BPM" />
                                         <NumberBox
                                             x:Name="RecBpmBox"
                                             Grid.Column="1"
-                                            AutomationProperties.Name="カウントのテンポ"
+                                            AutomationProperties.Name="BPM"
                                             LargeChange="10"
                                             Maximum="240"
                                             Minimum="40"
@@ -1854,6 +1854,24 @@
                                             SpinButtonPlacementMode="Inline"
                                             Value="120"
                                             ValueChanged="RecBpm_Changed" />
+                                    </Grid>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="120" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock VerticalAlignment="Center" Text="テンポ" />
+                                        <NumberBox
+                                            x:Name="RecMoraBeatsBox"
+                                            Grid.Column="1"
+                                            AutomationProperties.Name="モーラの間隔"
+                                            LargeChange="0.25"
+                                            Maximum="4"
+                                            Minimum="0.25"
+                                            SmallChange="0.05"
+                                            SpinButtonPlacementMode="Inline"
+                                            Value="1"
+                                            ValueChanged="RecMoraBeats_Changed" />
                                     </Grid>
                                 </StackPanel>
                             </StackPanel>

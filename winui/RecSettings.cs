@@ -32,6 +32,9 @@ sealed class RecAppSettings
 
     public int Moras { get; set; } = RecTone.DefaultMoras;
 
+    // モーラとモーラの間隔（四分音符の拍数）。
+    public double MoraBeats { get; set; } = RecTone.DefaultMoraBeats;
+
     public bool AutoAdvance { get; set; }
 
     // ガイド BGM の開始からの秒数でマイクをオンにする。
@@ -56,6 +59,7 @@ sealed class RecAppSettings
         settings.GuidePitch = Math.Clamp(settings.GuidePitch, -12, 12);
         settings.Bpm = Math.Clamp(settings.Bpm, 40, 240);
         settings.Moras = Math.Clamp(settings.Moras, RecTone.MinMoras, RecTone.MaxMoras);
+        settings.MoraBeats = Math.Clamp(settings.MoraBeats, RecTone.MinMoraBeats, RecTone.MaxMoraBeats);
         settings.CountBeats = Math.Clamp(settings.CountBeats, RecTone.MinCountBeats, RecTone.MaxCountBeats);
         settings.CountBeatsAfter = Math.Clamp(settings.CountBeatsAfter, 0, RecTone.MaxCountBeats);
         if (settings.CountWhileMoras && settings.CountBeatsAfter == 0)

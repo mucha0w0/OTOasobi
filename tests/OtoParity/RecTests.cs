@@ -83,17 +83,15 @@ public class RecTests
     }
 
     [Fact]
-    public void MoraGuideRepeatsHalfNotes()
+    public void MoraGuideSpacesMorasByBeats()
     {
         const int rate = 44100;
-        var guide = RecTone.MoraGuide(261.63, 120, 5, rate);
-        Assert.Equal(rate * 5, guide.Length);
-        Assert.All(guide, sample => Assert.InRange(sample, -1f, 1f));
-        for (var mora = 0; mora < 5; mora++)
-        {
-            var start = mora * rate;
-            Assert.True(guide[start + rate / 50] > 0.05f);
-        }
+        var oneBeat = RecTone.MoraGuide(261.63, 120, 5, rate, moraBeats: 1);
+        var halfBeat = rate / 2;
+        Assert.Equal(halfBeat * 5, oneBeat.Length);
+        var twoBeats = RecTone.MoraGuide(261.63, 120, 2, rate, moraBeats: 2);
+        Assert.Equal(rate * 2, twoBeats.Length);
+        Assert.Contains(oneBeat, sample => sample > 0.05f);
     }
 
     [Fact]
@@ -102,7 +100,7 @@ public class RecTests
         const int rate = 44100;
         var plain = RecTone.ManualGuide(261.63, 120, 5, rate, countEnabled: false, preCount: false, 4, 0);
         var withCount = RecTone.ManualGuide(261.63, 120, 5, rate, countEnabled: true, preCount: true, 4, 0);
-        Assert.Equal(rate * 5, plain.Length);
+        Assert.Equal(rate / 2 * 5, plain.Length);
         Assert.Equal(rate * 2 + plain.Length, withCount.Length);
         Assert.True(withCount[rate / 50] > 0.1f);
         Assert.True(withCount[rate * 2 + rate / 50] > 0.05f);

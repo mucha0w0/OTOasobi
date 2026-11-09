@@ -79,6 +79,11 @@ export type GuideFileState = {
   recent: { path: string; label: string }[]
 }
 
+function formatMoraBeats(value: number): string {
+  const text = Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/\.?0+$/, "")
+  return `${text}拍`
+}
+
 export function GuidePanel({
   guide,
   note,
@@ -90,6 +95,7 @@ export function GuidePanel({
   countBeatsAfter,
   bpm,
   moras,
+  moraBeats,
   recStartAfter,
   recEndBefore,
   playing,
@@ -102,6 +108,7 @@ export function GuidePanel({
   setCountBeatsAfter,
   setBpm,
   setMoras,
+  setMoraBeats,
   setRecStartAfter,
   setRecEndBefore,
   send,
@@ -116,6 +123,7 @@ export function GuidePanel({
   countBeatsAfter: number
   bpm: number
   moras: number
+  moraBeats: number
   recStartAfter: number
   recEndBefore: number
   playing: boolean
@@ -128,6 +136,7 @@ export function GuidePanel({
   setCountBeatsAfter: (value: number) => void
   setBpm: (value: number) => void
   setMoras: (value: number) => void
+  setMoraBeats: (value: number) => void
   setRecStartAfter: (value: number) => void
   setRecEndBefore: (value: number) => void
   send: (command: PageCommand) => void
@@ -210,10 +219,17 @@ export function GuidePanel({
             )}
             <label className="grid gap-1">
               <span className="flex justify-between">
-                テンポ
+                BPM
                 <span className="num text-[var(--muted)]">{bpm}</span>
               </span>
               <input type="range" min={40} max={240} step={1} value={bpm} onChange={(event) => setBpm(Number(event.target.value))} />
+            </label>
+            <label className="grid gap-1">
+              <span className="flex justify-between">
+                テンポ
+                <span className="num text-[var(--muted)]">{formatMoraBeats(moraBeats)}</span>
+              </span>
+              <input type="range" min={0.25} max={4} step={0.05} value={moraBeats} onChange={(event) => setMoraBeats(Number(event.target.value))} />
             </label>
             {timingSliders}
           </>
@@ -258,7 +274,7 @@ export function GuidePanel({
         <IconButton
           label={playing ? "停止" : "ガイドを聴く"}
           accent
-          onClick={() => send(playing ? { type: "guideStop" } : { type: "guide", note, semitones, speed, volume, bpm, moras, countIn, countBeats, countBeatsAfter })}
+          onClick={() => send(playing ? { type: "guideStop" } : { type: "guide", note, semitones, speed, volume, bpm, moras, moraBeats, countIn, countBeats, countBeatsAfter })}
         >
           {playing ? <IconStop /> : <IconPlay />}
         </IconButton>

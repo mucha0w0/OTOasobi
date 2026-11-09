@@ -13,11 +13,11 @@ export type PageCommand =
   | { type: "preview"; t0: number; t1: number; columns: number; rows: number }
   | { type: "setDevices"; inputId: string; outputId: string }
   | { type: "monitor"; on: boolean }
-  | { type: "guide"; note: string; semitones: number; speed: number; volume?: number; bpm?: number; moras?: number; countIn?: boolean; countBeats?: number; countBeatsAfter?: number }
+  | { type: "guide"; note: string; semitones: number; speed: number; volume?: number; bpm?: number; moras?: number; moraBeats?: number; countIn?: boolean; countBeats?: number; countBeatsAfter?: number }
   | { type: "guideStop" }
-  | { type: "record"; name?: string; countIn?: boolean; countBeats?: number; countBeatsAfter?: number; bpm?: number; moras?: number; volume?: number; note?: string; semitones?: number; speed?: number; recStartAfter?: number; recEndBefore?: number }
+  | { type: "record"; name?: string; countIn?: boolean; countBeats?: number; countBeatsAfter?: number; bpm?: number; moras?: number; moraBeats?: number; volume?: number; note?: string; semitones?: number; speed?: number; recStartAfter?: number; recEndBefore?: number }
   | { type: "recordStop" }
-  | { type: "recSettings"; note: string; semitones: number; speed: number; volume: number; countIn: boolean; countBeats: number; countBeatsAfter: number; bpm: number; moras: number; advance: boolean; recStartAfter: number; recEndBefore: number }
+  | { type: "recSettings"; note: string; semitones: number; speed: number; volume: number; countIn: boolean; countBeats: number; countBeatsAfter: number; bpm: number; moras: number; moraBeats: number; advance: boolean; recStartAfter: number; recEndBefore: number }
   | { type: "recList"; op: "none" | "pick" | "open"; path?: string }
   | { type: "frq"; op: "write"; mode: "all" | "missing" | "selected"; clear: boolean; names?: string[] }
   | { type: "frq"; op: "stroke"; points: { frame: number; midi: number; unvoiced: boolean }[] }
@@ -181,6 +181,7 @@ export type RecSettingsEvent = {
   countBeatsAfter: number
   bpm: number
   moras: number
+  moraBeats: number
   advance: boolean
   recStartAfter: number
   recEndBefore: number
@@ -412,6 +413,7 @@ export function parseHostEvent(value: unknown): HostEvent | null {
         })(),
         bpm: numberOr(value.bpm, 120),
         moras: numberOr(value.moras, 5),
+        moraBeats: numberOr(value.moraBeats, 1),
         advance: value.advance === true,
         recStartAfter: numberOr(value.recStartAfter, 0),
         recEndBefore: numberOr(value.recEndBefore, 0),

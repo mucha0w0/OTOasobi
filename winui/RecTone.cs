@@ -52,6 +52,12 @@ static class RecTone
 
     public const int MaxMoras = 16;
 
+    public const double DefaultMoraBeats = 1;
+
+    public const double MinMoraBeats = 0.25;
+
+    public const double MaxMoraBeats = 4;
+
     public const int DefaultCountBeats = 4;
 
     public const int MinCountBeats = 1;
@@ -78,19 +84,20 @@ static class RecTone
         return samples;
     }
 
-    // テンポの二分音符で、同じ音をモーラ数だけ繰り返す。
-    public static float[] MoraGuide(double hz, int bpm, int moras, int sampleRate)
+    // BPM の 1 拍あたり moraBeats 拍の間隔で、同じ音をモーラ数だけ繰り返す。
+    public static float[] MoraGuide(double hz, int bpm, int moras, int sampleRate, double moraBeats = DefaultMoraBeats)
     {
         if (sampleRate <= 0 || hz <= 0)
             return [];
         bpm = Math.Clamp(bpm, 40, 240);
         moras = Math.Clamp(moras, MinMoras, MaxMoras);
-        var halfSeconds = 120.0 / bpm;
-        var perMora = Math.Max(1, (int)Math.Round(sampleRate * halfSeconds));
+        moraBeats = Math.Clamp(moraBeats, MinMoraBeats, MaxMoraBeats);
+        var moraSeconds = 60.0 / bpm * moraBeats;
+        var perMora = Math.Max(1, (int)Math.Round(sampleRate * moraSeconds));
         var samples = new float[perMora * moras];
         for (var mora = 0; mora < moras; mora++)
         {
-            var tone = Tone(hz, sampleRate, halfSeconds);
+            var tone = Tone(hz, sampleRate, moraSeconds);
             var offset = mora * perMora;
             var copy = Math.Min(tone.Length, samples.Length - offset);
             if (copy > 0)
@@ -101,9 +108,9 @@ static class RecTone
     }
 
     // 発声前のカウント、発声中のクリック重ね（カウントオン時は自動）、発声後の追加カウント。
-    public static float[] ManualGuide(double hz, int bpm, int moras, int sampleRate, bool countEnabled, bool preCount, int countBeatsBefore, int countBeatsAfter)
+    public static float[] ManualGuide(double hz, int bpm, int moras, int sampleRate, bool countEnabled, bool preCount, int countBeatsBefore, int countBeatsAfter, double moraBeats = DefaultMoraBeats)
     {
-        var mora = MoraGuide(hz, bpm, moras, sampleRate);
+        var mora = MoraGuide(hz, bpm, moras, sampleRate, moraBeats);
         if (mora.Length == 0)
             return mora;
         countBeatsBefore = Math.Clamp(countBeatsBefore, MinCountBeats, MaxCountBeats);

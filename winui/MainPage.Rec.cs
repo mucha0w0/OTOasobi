@@ -61,6 +61,7 @@ public sealed partial class MainPage
         RecCountBeatsAfterBox.Value = _recSettings.CountBeatsAfter;
         RecBpmBox.Value = _recSettings.Bpm;
         RecMorasBox.Value = _recSettings.Moras;
+        RecMoraBeatsBox.Value = _recSettings.MoraBeats;
         RecAutoSwitch.IsOn = _recSettings.AutoAdvance;
         _recApplying = false;
 
@@ -504,6 +505,14 @@ public sealed partial class MainPage
         if (_recApplying || double.IsNaN(e.NewValue))
             return;
         _recSettings.Moras = (int)Math.Clamp(Math.Round(e.NewValue), RecTone.MinMoras, RecTone.MaxMoras);
+        _recSettings.Save();
+    }
+
+    void RecMoraBeats_Changed(NumberBox sender, NumberBoxValueChangedEventArgs e)
+    {
+        if (_recApplying || double.IsNaN(e.NewValue))
+            return;
+        _recSettings.MoraBeats = Math.Clamp(e.NewValue, RecTone.MinMoraBeats, RecTone.MaxMoraBeats);
         _recSettings.Save();
     }
 
@@ -1188,7 +1197,8 @@ public sealed partial class MainPage
                     _recSettings.CountIn,
                     _recSettings.CountIn && !loop,
                     _recSettings.CountBeats,
-                    _recSettings.CountBeatsAfter),
+                    _recSettings.CountBeatsAfter,
+                    _recSettings.MoraBeats),
                 1,
                 RecTone.TargetRate);
         }
