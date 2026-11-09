@@ -42,6 +42,7 @@ function oto(partial: Partial<OtoState> = {}): OtoState {
   return {
     type: "oto",
     generation: 1,
+    rowGeneration: 0,
     mode: "mono",
     busy: false,
     analyzed: true,

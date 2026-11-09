@@ -30,6 +30,7 @@ sealed class ProbeOto
     string _scope = "all";
     bool _busy;
     readonly OtoAdjustBook _adjust = new();
+    readonly object _gate = new();
     string? _loudPath;
     double[]? _loudness;
 
@@ -40,6 +41,12 @@ sealed class ProbeOto
     public bool IsBusy => _busy;
 
     public void Open(string folder)
+    {
+        lock (_gate)
+            OpenUnlocked(folder);
+    }
+
+    void OpenUnlocked(string folder)
     {
         if (!string.IsNullOrEmpty(_folder) && !string.Equals(_folder, folder, StringComparison.OrdinalIgnoreCase))
             FlushSession();
@@ -82,17 +89,23 @@ sealed class ProbeOto
 
     public void SetFiles(IReadOnlyList<WavFile> files)
     {
-        _files.Clear();
-        _files.AddRange(files);
+        lock (_gate)
+        {
+            _files.Clear();
+            _files.AddRange(files);
+        }
     }
 
     public void MergeFile(WavFile file)
     {
-        var index = _files.FindIndex(item => string.Equals(item.Name, file.Name, StringComparison.OrdinalIgnoreCase));
-        if (index < 0)
-            _files.Add(file);
-        else
-            _files[index] = file;
+        lock (_gate)
+        {
+            var index = _files.FindIndex(item => string.Equals(item.Name, file.Name, StringComparison.OrdinalIgnoreCase));
+            if (index < 0)
+                _files.Add(file);
+            else
+                _files[index] = file;
+        }
     }
 
     public object[] PreutterClears()
@@ -120,6 +133,12 @@ sealed class ProbeOto
     public IReadOnlyList<WavFile> Files => _files;
 
     public bool SetSlider(string? group, string? key, double value)
+    {
+        lock (_gate)
+            return SetSliderUnlocked(group, key, value);
+    }
+
+    bool SetSliderUnlocked(string? group, string? key, double value)
     {
         if (string.IsNullOrEmpty(group) || string.IsNullOrEmpty(key))
             return false;
@@ -342,12 +361,14 @@ sealed class ProbeOto
         }
     }
 
-    public object Snapshot(string? fileName, bool includeRows, int generation)
+    public object Snapshot(string? fileName, bool includeRows, int generation, int rowGeneration = 0)
     {
-        return new
+        lock (_gate)
+            return new
         {
             type = "oto",
             generation,
+            rowGeneration,
             mode = _mode,
             busy = _busy,
             analyzed = _files.Count > 0,

@@ -1,4 +1,5 @@
 import { isPluginFolderId, parseLayout, type LayoutNode } from "./layout"
+import { decodeBase64 } from "./specTone"
 import type { PhoneSpan } from "./spans"
 
 export type PreviewGesture = "boundary" | "pan" | "zoom" | "resize"
@@ -9,7 +10,7 @@ export type PageCommand =
   | { type: "openFolder" }
   | { type: "pickProjectPlace" }
   | { type: "createProject"; parent: string; name: string }
-  | { type: "selectFile"; name: string }
+  | { type: "selectFile"; name: string; file?: number }
   | { type: "preview"; t0: number; t1: number; columns: number; rows: number }
   | { type: "setDevices"; inputId: string; outputId: string }
   | { type: "monitor"; on: boolean }
@@ -70,7 +71,7 @@ export type PreviewEvent = {
   lo: number[]
   hi: number[]
   png: string
-  spec: string
+  indices: Uint8Array
   specColumns: number
   specRows: number
   specT0: number
@@ -79,6 +80,7 @@ export type PreviewEvent = {
   waveT1: number
   sampleRate: number
   loudness: number[]
+  file: number
 }
 
 export type CaptureEvent = {
@@ -105,8 +107,8 @@ export type SavedEvent = {
 
 export type HostEvent =
   | { type: "devices"; inputs: DeviceInfo[]; outputs: DeviceInfo[] }
-  | { type: "files"; folder: string; names: string[] }
-  | { type: "opened"; name: string; missing?: boolean }
+  | { type: "files"; folder: string; names: string[]; file: number }
+  | { type: "opened"; name: string; missing?: boolean; file: number }
   | { type: "status"; message: string }
   | { type: "recordWait"; waiting: boolean }
   | { type: "frq"; wavs: number; frqs: number; busy: boolean }
@@ -271,6 +273,7 @@ export type OtoKind = { group: string; key: string; caption: string }
 export type OtoState = {
   type: "oto"
   generation: number
+  rowGeneration: number
   mode: "mono" | "renzoku" | "cvvc"
   busy: boolean
   analyzed: boolean
@@ -311,12 +314,12 @@ export type OtoState = {
 }
 
 export function previewStillCovers(
-  picture: Pick<PreviewEvent, "spec" | "specT0" | "specT1" | "waveT0" | "waveT1"> | null,
+  picture: Pick<PreviewEvent, "indices" | "specT0" | "specT1" | "waveT0" | "waveT1"> | null,
   askedColumns: number,
   range: { t0: number; t1: number },
   columns: number,
 ): boolean {
-  if (!picture || picture.spec.length === 0 || askedColumns !== columns)
+  if (!picture || picture.indices.length === 0 || askedColumns !== columns)
     return false
   const near = (left: number, right: number) => Math.abs(left - right) <= 1e-4
   return near(picture.waveT0, range.t0)
@@ -371,9 +374,12 @@ export function parseHostEvent(value: unknown): HostEvent | null {
         type: "files",
         folder: value.folder,
         names: value.names.filter((item): item is string => typeof item === "string"),
+        file: numberOr(value.file, 0),
       }
     case "opened":
-      return typeof value.name === "string" ? { type: "opened", name: value.name, missing: value.missing === true } : null
+      return typeof value.name === "string"
+        ? { type: "opened", name: value.name, missing: value.missing === true, file: numberOr(value.file, 0) }
+        : null
     case "status":
       return typeof value.message === "string" ? { type: "status", message: value.message } : null
     case "recordWait":
@@ -430,7 +436,7 @@ export function parseHostEvent(value: unknown): HostEvent | null {
         lo: value.lo.filter((item): item is number => typeof item === "number"),
         hi: value.hi.filter((item): item is number => typeof item === "number"),
         png: typeof value.png === "string" ? value.png : "",
-        spec: typeof value.spec === "string" ? value.spec : "",
+        indices: decodeBase64(typeof value.spec === "string" ? value.spec : ""),
         specColumns: numberOr(value.specColumns, 0),
         specRows: numberOr(value.specRows, 0),
         specT0: numberOr(value.specT0, 0),
@@ -441,6 +447,7 @@ export function parseHostEvent(value: unknown): HostEvent | null {
         loudness: Array.isArray(value.loudness)
           ? value.loudness.filter((item): item is number => typeof item === "number")
           : [],
+        file: numberOr(value.file, 0),
       }
     case "capture":
       if (!Array.isArray(value.lo) || !Array.isArray(value.hi))
@@ -571,6 +578,7 @@ function parseOto(value: Record<string, unknown>): OtoState | null {
   return {
     type: "oto",
     generation: numberOr(value.generation, 0),
+    rowGeneration: numberOr(value.rowGeneration, 0),
     mode: value.mode,
     busy: value.busy === true,
     analyzed: value.analyzed === true,

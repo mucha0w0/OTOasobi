@@ -38,6 +38,7 @@ export function toneLut(): Uint8ClampedArray {
 }
 
 const lut = toneLut()
+const frames = new WeakMap<Uint8Array, ImageData>()
 
 export function decodeBase64(value: string): Uint8Array {
   const binary = atob(value)
@@ -47,15 +48,13 @@ export function decodeBase64(value: string): Uint8Array {
   return bytes
 }
 
-export function paintIndices(
-  ctx: CanvasRenderingContext2D,
-  indices: Uint8Array,
-  columns: number,
-  rows: number,
-) {
+export function specImage(indices: Uint8Array, columns: number, rows: number): ImageData | null {
+  const cached = frames.get(indices)
+  if (cached && cached.width === columns && cached.height === rows)
+    return cached
   if (columns < 1 || rows < 1 || indices.length < columns * rows)
-    return false
-  const image = ctx.createImageData(columns, rows)
+    return null
+  const image = new ImageData(columns, rows)
   const data = image.data
   const count = columns * rows
   for (let index = 0; index < count; index++) {
@@ -66,6 +65,19 @@ export function paintIndices(
     data[offset + 2] = lut[tone + 2] ?? 0
     data[offset + 3] = 255
   }
+  frames.set(indices, image)
+  return image
+}
+
+export function paintIndices(
+  ctx: CanvasRenderingContext2D,
+  indices: Uint8Array,
+  columns: number,
+  rows: number,
+) {
+  const image = specImage(indices, columns, rows)
+  if (!image)
+    return false
   ctx.putImageData(image, 0, 0)
   return true
 }

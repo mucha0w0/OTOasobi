@@ -48,23 +48,22 @@ clear は、ファイル名と [開始秒, 終了秒] の組。推定のあと�
 
 from __future__ import annotations
 
-import base64
 import json
 import os
 import sys
 import threading
 import traceback
-from collections import OrderedDict, deque
+from collections import deque
 from pathlib import Path
 
 # torch.hub の進捗表示は改行しない。標準エラーのパイプが埋まると、音素対応のまま止まる。
 os.environ.setdefault("TQDM_DISABLE", "1")
 
 from otoasobi.analyze import (
+    AnalysisCancelled,
     analyze_folder_files,
     analyze_wav,
     export_folder,
-    load_wav,
     skipped_notice,
 )
 from otoasobi.wavs import AnalyzedFile
@@ -72,7 +71,7 @@ from otoasobi.cache import file_from_mapping, file_to_mapping, read_cache, save_
 from otoasobi.frq import write_folder_frq
 from otoasobi.oto import adjustments_from, oto_settings_from
 from otoasobi.parser import FilenameError
-from otoasobi.preview import FilmSkipped, film_ready, index_wave, render_index, render_preview, spectrogram_only
+from otoasobi.preview_worker import preview_payload
 
 
 def _respond(payload: dict) -> None:
@@ -162,6 +161,8 @@ def _analyze_only(request_id: object, folder: str, only: object) -> dict:
     failed: list[str] = []
     total = len(wavs)
     for index, wav in enumerate(wavs):
+        if _pull_cancels():
+            return {"id": request_id, "ok": True, "cancelled": True}
         on_progress(index, total)
 
         def on_step(fraction: float, label: str, name: str = wav.name) -> None:
@@ -219,7 +220,10 @@ def _analyze(request_id: object, path: str, force: bool) -> dict:
     def on_file(name: str, fraction: float, label: str) -> None:
         _note_file(request_id, shown, name, fraction, label)
 
-    files, skipped = analyze_folder_files(path, on_progress=on_progress, on_file=on_file)
+    try:
+        files, skipped = analyze_folder_files(path, on_progress=on_progress, on_file=on_file, stop=_pull_cancels)
+    except AnalysisCancelled:
+        return {"id": request_id, "ok": True, "cancelled": True}
     if not files:
         return {"id": request_id, "ok": False, "error": skipped_notice(skipped)}
     notes: list[str] = []
@@ -239,52 +243,6 @@ def _analyze(request_id: object, path: str, force: bool) -> dict:
     return payload
 
 
-_WAV_KEEP = 12
-_wavs: OrderedDict[tuple[str, int, int], tuple[np.ndarray, int]] = OrderedDict()
-
-
-def _load_cached(path: str) -> tuple[np.ndarray, int, tuple[str, int, int]]:
-    st = os.stat(path)
-    key = (path, st.st_mtime_ns, st.st_size)
-    cached = _wavs.get(key)
-    if cached is not None:
-        _wavs.move_to_end(key)
-        return cached[0], cached[1], key
-    y, sr = load_wav(path)
-    _wavs[key] = (y, sr)
-    while len(_wavs) > _WAV_KEEP:
-        _wavs.popitem(last=False)
-    return y, sr, key
-
-
-def _optional_float(value: object) -> float | None:
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        return None
-    return float(value)
-
-
-def _optional_int(value: object, default: int, lo: int, hi: int) -> int:
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        return default
-    return max(lo, min(hi, int(value)))
-
-
-def _wave_fields(preview: object, duration: float) -> dict:
-    payload = {
-        "ok": True,
-        "duration": duration,
-        "wave_lo": preview.wave_lo,
-        "wave_hi": preview.wave_hi,
-        "wave_t0": preview.wave_t0,
-        "wave_t1": preview.wave_t1,
-        "wave_samples": preview.samples,
-        "sr": preview.sr,
-    }
-    if preview.loudness:
-        payload["loudness"] = preview.loudness
-    return payload
-
-
 def _preview_waiting() -> bool:
     with _lines_cv:
         for line in _lines:
@@ -298,42 +256,35 @@ def _preview_waiting() -> bool:
 
 
 def _preview(path: str, request: dict, request_id: object) -> dict:
-    y, sr, key = _load_cached(path)
-    duration = len(y) / float(sr) if sr else 0.0
-    t0 = _optional_float(request.get("t0"))
-    t1 = _optional_float(request.get("t1"))
-    if t0 is None:
-        t0 = 0.0
-    if t1 is None or t1 <= t0:
-        t1 = duration
-    columns = _optional_int(request.get("columns"), 1600, 32, 4096)
-    rows = _optional_int(request.get("rows"), 320, 32, 1200)
-    want_wave = request.get("wave") is not False
+    return preview_payload(path, request, request_id, _respond, _preview_waiting)
+
+
+def _peek_command(line: str) -> tuple[str | None, dict | None]:
     try:
-        if request.get("spec") == "index":
-            if want_wave and not film_ready(y, sr, key):
-                early = index_wave(y, sr, t0, t1, columns)
-                _respond({"id": request_id, "event": "wave", **_wave_fields(early, duration)})
-            preview = (
-                render_index(y, sr, t0, t1, columns, _preview_waiting, key)
-                if want_wave
-                else spectrogram_only(y, sr, t0, t1, columns, _preview_waiting, key)
-            )
-            payload = _wave_fields(preview, duration)
-            payload["spec_index"] = base64.b64encode(preview.spec).decode("ascii")
-            payload["spec_columns"] = preview.spec_columns
-            payload["spec_rows"] = preview.spec_rows
-            payload["spec_t0"] = preview.spec_t0
-            payload["spec_t1"] = preview.spec_t1
-            return payload
-        preview = render_preview(y, sr, t0, t1, columns, rows)
-    except FilmSkipped:
-        return {"ok": True, "skipped": True}
-    payload = _wave_fields(preview, duration)
-    payload["spec_png"] = base64.b64encode(preview.png).decode("ascii")
-    payload["spec_t0"] = preview.spec_t0
-    payload["spec_t1"] = preview.spec_t1
-    return payload
+        request = json.loads(line)
+    except json.JSONDecodeError:
+        return None, None
+    if not isinstance(request, dict):
+        return None, None
+    command = request.get("cmd")
+    return (command if isinstance(command, str) else None), request
+
+
+def _pull_cancels() -> bool:
+    """キューに入った cancel を取り出して応答し、ほかの行は順に戻す。"""
+    found = False
+    with _lines_cv:
+        kept: deque[str] = deque()
+        while _lines:
+            line = _lines.popleft()
+            command, request = _peek_command(line)
+            if command == "cancel" and request is not None:
+                found = True
+                _respond({"id": request.get("id"), "ok": True, "cancelled": True})
+            else:
+                kept.append(line)
+        _lines.extend(kept)
+    return found
 
 
 def _parsed_files(files: object) -> list[AnalyzedFile]:
@@ -540,6 +491,8 @@ def _dispatch(request: dict) -> None:
                 payload = _analyze_only(request_id, path, only)
             else:
                 payload = _analyze(request_id, path, request.get("force") is True)
+        elif command == "cancel":
+            payload = {"ok": True, "cancelled": True}
         elif command == "preview":
             path = request.get("path")
             if not isinstance(path, str) or not path:

@@ -1,12 +1,11 @@
 using System.Diagnostics;
-using System.Text;
 using System.Text.Json;
 
 namespace Otoasobi.Probe;
 
 using Otoasobi;
 
-// preview だけを話す。AnalysisClient は oto の保存型に依存するので、この試作には含めない。
+// preview だけを話す。解析プロセスとは分け、スペクトログラムが解析のあいだも動くようにする。
 sealed class ProbePreview : IDisposable
 {
     readonly Process _process;
@@ -18,39 +17,15 @@ sealed class ProbePreview : IDisposable
 
     public ProbePreview()
     {
-        var (repo, python, bundled) = Locate();
-        var psi = new ProcessStartInfo
-        {
-            FileName = python,
-            Arguments = "-X utf8 -m otoasobi.worker",
-            WorkingDirectory = repo,
-            RedirectStandardInput = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            StandardInputEncoding = new UTF8Encoding(false),
-            StandardOutputEncoding = new UTF8Encoding(false),
-            StandardErrorEncoding = new UTF8Encoding(false),
-        };
-        psi.Environment["PYTHONUTF8"] = "1";
-        psi.Environment["PYTHONIOENCODING"] = "utf-8";
-        psi.Environment["PYTHONPATH"] = repo;
-        psi.Environment["TORCH_HOME"] = ResolveTorchHome();
-        psi.Environment["TQDM_DISABLE"] = "1";
-        if (bundled)
-            psi.Environment["PYTHONNOUSERSITE"] = "1";
-
-        _process = new Process { StartInfo = psi, EnableRaisingEvents = true };
-        if (!_process.Start())
-            throw new IOException("解析プロセスを起動できませんでした。");
-
+        _process = PythonProcess.Start("otoasobi.preview_worker");
         _input = _process.StandardInput;
         _input.NewLine = "\n";
         _process.BeginErrorReadLine();
         _process.Exited += (_, _) => FailPending("解析プロセスが終了しました。");
         _ = Task.Run(ReadLoop);
     }
+
+    public bool Alive => !_disposed && !_process.HasExited;
 
     public async Task<PreviewPicture> LoadAsync(
         string path,
@@ -228,52 +203,6 @@ sealed class ProbePreview : IDisposable
 
         foreach (var done in pending)
             done.Done.TrySetException(new IOException(message));
-    }
-
-    static string ResolveTorchHome()
-    {
-        if (File.Exists(AppPaths.ModelFile))
-            return AppPaths.ModelsRoot;
-
-        var profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        var cached = Path.Combine(profile, ".cache", "torch", "hub", "checkpoints", "model.pt");
-        if (File.Exists(cached))
-            return Path.Combine(profile, ".cache", "torch");
-
-        return AppPaths.ModelsRoot;
-    }
-
-    static (string Repo, string Python, bool Bundled) Locate()
-    {
-        var root = FindScriptRoot();
-        if (root == null)
-            throw new FileNotFoundException("解析用の Python が見つかりません。");
-
-        if (File.Exists(AppPaths.EnginePython))
-            return (root, AppPaths.EnginePython, true);
-
-        var slim = Path.Combine(root, "python", "python.exe");
-        if (File.Exists(slim))
-            return (root, slim, true);
-
-        var venv = Path.Combine(root, ".venv", "Scripts", "python.exe");
-        if (File.Exists(venv))
-            return (root, venv, false);
-
-        throw new FileNotFoundException("解析用の Python が見つかりません。");
-    }
-
-    static string? FindScriptRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir != null)
-        {
-            if (File.Exists(Path.Combine(dir.FullName, "otoasobi", "worker.py")))
-                return dir.FullName;
-            dir = dir.Parent;
-        }
-
-        return null;
     }
 }
 

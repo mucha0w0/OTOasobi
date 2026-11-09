@@ -5,7 +5,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
-import soundfile as sf
 
 from otoasobi.breath import apply_leading_breath
 from otoasobi.features import compute_features, loudness_db
@@ -28,6 +27,7 @@ from otoasobi.oto import (
 from otoasobi.parser import Token, parse_stem, stem_from_path
 from otoasobi.phones import VOWEL_ONSET_LABELS
 from otoasobi.segment import Span, segment_tokens
+from otoasobi.wavload import load_wav
 from otoasobi.wavs import AnalyzedFile, list_wavs
 
 
@@ -43,15 +43,8 @@ class Analysis:
     engine: str = "acoustic"
 
 
-def load_wav(path: str | Path) -> tuple[np.ndarray, int]:
-    y, sr = sf.read(str(path), always_2d=False)
-    y = np.asarray(y, dtype=np.float64)
-    if y.ndim > 1:
-        y = np.mean(y, axis=1)
-    peak = np.max(np.abs(y))
-    if peak > 0:
-        y = y / peak * 0.99
-    return y, int(sr)
+class AnalysisCancelled(Exception):
+    """フォルダ解析を、ファイルのあいだで打ち切った。"""
 
 
 def analyze_wav(
@@ -187,8 +180,9 @@ def analyze_folder_files(
     folder: str | Path,
     on_progress: Callable[[int, int], None] | None = None,
     on_file: Callable[[str, float, str], None] | None = None,
+    stop: Callable[[], bool] | None = None,
 ) -> tuple[list[AnalyzedFile], list[str]]:
-    """フォルダ内の WAV を解析する。ファイルはまだ書かない。"""
+    """フォルダ内の WAV を解析する。ファイルはまだ書かない。stop が真なら、次のファイルの前で止める。"""
     folder = Path(folder)
     if not folder.is_dir():
         raise RuntimeError("フォルダが見つかりません。")
@@ -201,6 +195,9 @@ def analyze_folder_files(
     files: list[AnalyzedFile] = []
     skipped: list[str] = []
     for index, wav in enumerate(wavs, start=1):
+        if stop is not None and stop():
+            raise AnalysisCancelled()
+
         def on_step(fraction: float, label: str, name: str = wav.name) -> None:
             if on_file is not None:
                 on_file(name, fraction, label)

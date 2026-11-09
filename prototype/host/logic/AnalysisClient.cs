@@ -1,6 +1,5 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
-using System.Text;
 using System.Text.Json;
 
 namespace Otoasobi;
@@ -18,39 +17,28 @@ sealed class AnalysisClient : IDisposable
 
     public AnalysisClient()
     {
-        var (repo, python, bundled) = Locate();
-        var psi = new ProcessStartInfo
-        {
-            FileName = python,
-            Arguments = "-X utf8 -m otoasobi.worker",
-            WorkingDirectory = repo,
-            RedirectStandardInput = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            StandardInputEncoding = new UTF8Encoding(false),
-            StandardOutputEncoding = new UTF8Encoding(false),
-            StandardErrorEncoding = new UTF8Encoding(false),
-        };
-        psi.Environment["PYTHONUTF8"] = "1";
-        psi.Environment["PYTHONIOENCODING"] = "utf-8";
-        psi.Environment["PYTHONPATH"] = repo;
-        psi.Environment["TORCH_HOME"] = ResolveTorchHome();
-        // ダウンロード表示が改行せず、標準エラーが詰まると解析が戻ってこない。
-        psi.Environment["TQDM_DISABLE"] = "1";
-        if (bundled)
-            psi.Environment["PYTHONNOUSERSITE"] = "1";
-
-        _process = new Process { StartInfo = psi, EnableRaisingEvents = true };
-        if (!_process.Start())
-            throw new IOException("解析プロセスを起動できませんでした。");
-
+        _process = PythonProcess.Start("otoasobi.worker");
         _input = _process.StandardInput;
         _input.NewLine = "\n";
         _process.BeginErrorReadLine();
         _process.Exited += (_, _) => FailPending("解析プロセスが終了しました。");
         _ = Task.Run(ReadLoop);
+    }
+
+    public bool Alive => !_disposed && !_process.HasExited;
+
+    // 進行中の解析が、ファイルのあいだで止まる。応答は待たない。
+    public void Cancel()
+    {
+        if (_disposed || _process.HasExited)
+            return;
+        var id = Interlocked.Increment(ref _nextId);
+        var request = JsonSerializer.Serialize(new { id, cmd = "cancel" });
+        lock (_writeLock)
+        {
+            _input.WriteLine(request);
+            _input.Flush();
+        }
     }
 
     public async Task<FolderData> AnalyzeFolderAsync(
@@ -90,14 +78,6 @@ sealed class AnalysisClient : IDisposable
             onProgress,
             onFile).ConfigureAwait(true);
         return ReadFolder(doc.RootElement);
-    }
-
-    public async Task<PreviewData> PreviewAsync(string path, double t0, double t1, int columns, int rows)
-    {
-        using var doc = await SendAsync(
-            id => JsonSerializer.Serialize(new { id, cmd = "preview", path, t0, t1, columns, rows }),
-            null).ConfigureAwait(true);
-        return ReadPreview(doc.RootElement);
     }
 
     public async Task SaveCacheAsync(string folder, IReadOnlyList<WavFile> files)
@@ -236,7 +216,8 @@ sealed class AnalysisClient : IDisposable
         }
 
         var cached = root.TryGetProperty("cached", out var cachedValue) && cachedValue.ValueKind == JsonValueKind.True;
-        return new FolderData(ok, error, notice, files, cached);
+        var cancelled = root.TryGetProperty("cancelled", out var cancelledValue) && cancelledValue.ValueKind == JsonValueKind.True;
+        return new FolderData(ok, error, notice, files, cached, cancelled);
     }
 
     static object ConfigPayload(OtoExport config) => new
@@ -303,46 +284,6 @@ sealed class AnalysisClient : IDisposable
                 token = span.Token,
             }).ToArray(),
         }).ToArray();
-    }
-
-    static PreviewData ReadPreview(JsonElement root)
-    {
-        var ok = root.TryGetProperty("ok", out var okValue) && okValue.GetBoolean();
-        string? error = root.TryGetProperty("error", out var errorValue) ? errorValue.GetString() : null;
-        var lo = ReadDoubles(root, "wave_lo");
-        var hi = ReadDoubles(root, "wave_hi");
-        var loudness = ReadDoubles(root, "loudness");
-        var png = Array.Empty<byte>();
-        if (root.TryGetProperty("spec_png", out var pngValue) && pngValue.ValueKind == JsonValueKind.String)
-        {
-            var text = pngValue.GetString();
-            if (!string.IsNullOrEmpty(text))
-                png = Convert.FromBase64String(text);
-        }
-
-        var t0 = root.TryGetProperty("spec_t0", out var t0Value) ? t0Value.GetDouble() : 0;
-        var t1 = root.TryGetProperty("spec_t1", out var t1Value) ? t1Value.GetDouble() : 0;
-        var waveT0 = root.TryGetProperty("wave_t0", out var waveT0Value) ? waveT0Value.GetDouble() : 0;
-        var waveT1 = root.TryGetProperty("wave_t1", out var waveT1Value) ? waveT1Value.GetDouble() : 0;
-        var samples = root.TryGetProperty("wave_samples", out var samplesValue)
-            && samplesValue.ValueKind == JsonValueKind.True;
-        var sampleRate = 0;
-        if (root.TryGetProperty("sr", out var srValue) && srValue.TryGetInt32(out var parsedRate))
-            sampleRate = parsedRate;
-        var fileDuration = root.TryGetProperty("duration", out var durationValue) ? durationValue.GetDouble() : 0;
-        return new PreviewData(
-            ok, error, lo, hi, loudness, png, t0, t1, waveT0, waveT1, samples, sampleRate, fileDuration);
-    }
-
-    static double[] ReadDoubles(JsonElement root, string name)
-    {
-        if (!root.TryGetProperty(name, out var value) || value.ValueKind != JsonValueKind.Array)
-            return [];
-        var values = new double[value.GetArrayLength()];
-        var index = 0;
-        foreach (var item in value.EnumerateArray())
-            values[index++] = item.GetDouble();
-        return values;
     }
 
     public void Dispose()
@@ -458,55 +399,6 @@ sealed class AnalysisClient : IDisposable
             if (_pending.TryRemove(id, out var done))
                 done.TrySetException(new IOException(message));
         }
-    }
-
-    // アプリ用の model.pt が無いときは、既にある torch のキャッシュを使う。
-    // 空の保存先のままだと、音素対応の途中で 1.2GB を取り直して止まる。
-    static string ResolveTorchHome()
-    {
-        if (File.Exists(AppPaths.ModelFile))
-            return AppPaths.ModelsRoot;
-
-        var profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        var cached = Path.Combine(profile, ".cache", "torch", "hub", "checkpoints", "model.pt");
-        if (File.Exists(cached))
-            return Path.Combine(profile, ".cache", "torch");
-
-        return AppPaths.ModelsRoot;
-    }
-
-    // 高精度エンジン、同梱の音響用 Python、開発用 .venv の順。スクリプトはアプリ側を使う。
-    static (string Repo, string Python, bool Bundled) Locate()
-    {
-        var root = FindScriptRoot();
-        if (root == null)
-            throw new FileNotFoundException("解析用の Python が見つかりません。");
-
-        if (File.Exists(AppPaths.EnginePython))
-            return (root, AppPaths.EnginePython, true);
-
-        var slim = Path.Combine(root, "python", "python.exe");
-        if (File.Exists(slim))
-            return (root, slim, true);
-
-        var venv = Path.Combine(root, ".venv", "Scripts", "python.exe");
-        if (File.Exists(venv))
-            return (root, venv, false);
-
-        throw new FileNotFoundException("解析用の Python が見つかりません。");
-    }
-
-    static string? FindScriptRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir != null)
-        {
-            if (File.Exists(Path.Combine(dir.FullName, "otoasobi", "worker.py")))
-                return dir.FullName;
-            dir = dir.Parent;
-        }
-
-        return null;
     }
 }
 

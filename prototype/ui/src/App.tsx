@@ -78,12 +78,12 @@ function mergePreview(current: PreviewEvent | null, event: PreviewEvent, keepSpe
     ? event.loudness
     : keepSpec && current ? current.loudness : []
   const hasWave = event.lo.length > 0
-  const hasSpec = event.specColumns > 0 && event.spec.length > 0
+  const hasSpec = event.specColumns > 0 && event.indices.length > 0
   if (hasSpec && !hasWave && current)
     return {
       ...current,
       duration: event.duration || current.duration,
-      spec: event.spec,
+      indices: event.indices,
       specColumns: event.specColumns,
       specRows: event.specRows,
       specT0: event.specT0,
@@ -92,7 +92,7 @@ function mergePreview(current: PreviewEvent | null, event: PreviewEvent, keepSpe
       loudness,
       sampleRate: event.sampleRate || current.sampleRate,
     }
-  if (hasWave && !hasSpec && keepSpec && current && current.spec.length > 0)
+  if (hasWave && !hasSpec && keepSpec && current && current.indices.length > 0)
     return {
       ...current,
       lo: event.lo,
@@ -105,7 +105,7 @@ function mergePreview(current: PreviewEvent | null, event: PreviewEvent, keepSpe
       loudness,
     }
   if (hasWave && !hasSpec)
-    return { ...event, spec: "", specColumns: 0, specRows: 0, png: "", loudness }
+    return { ...event, indices: new Uint8Array(), specColumns: 0, specRows: 0, png: "", loudness }
   return { ...event, loudness }
 }
 
@@ -146,6 +146,9 @@ export function App() {
   const previewAsk = useRef({ t0: 0, t1: 0, columns: 0 })
   const otoRef = useRef<OtoState | null>(null)
   const otoGenRef = useRef(-1)
+  const otoRowGenRef = useRef(-1)
+  const fileToken = useRef(0)
+  const fileArmed = useRef("")
   const folderRef = useRef("")
   const rangeRef = useRef<Range>({ t0: 0, t1: 0 })
   const marksRef = useRef<OtoMark[]>([])
@@ -551,17 +554,35 @@ export function App() {
     setPick(next)
   }
 
+  function armFile(name: string) {
+    if (fileArmed.current !== "" && sameName(fileArmed.current, name))
+      return fileToken.current
+    fileArmed.current = name
+    fileToken.current += 1
+    return fileToken.current
+  }
+
+  function acceptFileEcho(file: number | undefined) {
+    const echoed = file ?? 0
+    if (echoed < fileToken.current)
+      return false
+    if (echoed > fileToken.current)
+      fileToken.current = echoed
+    return true
+  }
+
   function chooseFile(name: string) {
     window.clearTimeout(fileStepTimer.current)
     stepTarget.current = null
     fileListRef.current?.highlight(name)
+    const file = armFile(name)
     if (!sameName(name, fileNameRef.current)) {
       wheeling.current = false
       wheelHold.current = null
       showFilePending(name)
     } else if (wheeling.current)
       restoreWheelHold()
-    sendRef.current({ type: "selectFile", name })
+    sendRef.current({ type: "selectFile", name, file })
   }
 
   function focusFile(name: string) {
@@ -641,6 +662,7 @@ export function App() {
       return
     aliasStepTarget.current = next
     stepTarget.current = null
+    armFile(row.file)
     commitPick({ selected: [row.file], active: row.file, anchor: row.file })
     fileListRef.current?.highlight(row.file)
     aliasListRef.current?.highlight(aliasId(row))
@@ -687,6 +709,7 @@ export function App() {
       return
     stepTarget.current = next
     aliasStepTarget.current = null
+    armFile(name)
     commitPick({ selected: [name], active: name, anchor: name })
     fileListRef.current?.highlight(name)
     aliasListRef.current?.release()
@@ -721,6 +744,9 @@ export function App() {
         if (folderChanged) {
           pictureCache.current.clear()
           otoGenRef.current = -1
+          otoRowGenRef.current = -1
+          fileArmed.current = ""
+          fileToken.current = Math.max(fileToken.current + 1, event.file)
           batchRef.current = []
           historyRef.current = emptyHistory()
           guidePick.current = false
@@ -775,10 +801,7 @@ export function App() {
         break
       }
       case "opened": {
-        if (loadingFile.current != null && !sameName(loadingFile.current, event.name))
-          break
-        const pendingName = stepTarget.current == null ? null : namesRef.current[stepTarget.current]
-        if (pendingName != null && !sameName(pendingName, event.name))
+        if (!acceptFileEcho(event.file))
           break
         fileNameRef.current = event.name
         missingRef.current = event.missing === true
@@ -817,18 +840,21 @@ export function App() {
         break
       }
       case "preview": {
-        if (event.name !== "" && !sameName(event.name, fileNameRef.current))
+        if (!acceptFileEcho(event.file))
           break
-        if (stepTarget.current != null || wheeling.current)
-          break
-        if (loadingFile.current != null && !sameName(loadingFile.current, fileNameRef.current))
-          break
+        if (event.name !== "" && !sameName(event.name, fileNameRef.current)) {
+          fileNameRef.current = event.name
+          setFileName(event.name)
+          loadingFile.current = null
+          stepTarget.current = null
+          wheeling.current = false
+        }
         missingRef.current = false
         const sameFile = pictureName.current !== "" && pictureName.current === fileNameRef.current
         const sameLength = pictureRef.current == null || event.duration === 0 || event.duration === pictureRef.current.duration
         const keepSpec = sameFile && sameLength
         const next = mergePreview(pictureRef.current, event, keepSpec)
-        if (next.specColumns > 0 && next.spec.length > 0)
+        if (next.specColumns > 0 && next.indices.length > 0)
           noteRef.current = ""
         pictureName.current = fileNameRef.current
         const cacheName = event.name || fileNameRef.current
@@ -938,12 +964,19 @@ export function App() {
         setReplaceName(event.name)
         break
       case "oto": {
-        if (event.generation < otoGenRef.current)
+        const viewFresh = event.generation >= otoGenRef.current
+        const rowsFresh = event.rows != null && event.rowGeneration > 0 && event.rowGeneration >= otoRowGenRef.current
+        if (!viewFresh && !rowsFresh)
           break
-        otoGenRef.current = event.generation
-        const rows = event.rows ?? otoRef.current?.rows ?? []
-        const next = { ...event, rows }
-        snapRef.current = absorbOto(snapRef.current ?? emptySnapshot(), event)
+        if (viewFresh)
+          otoGenRef.current = event.generation
+        if (rowsFresh)
+          otoRowGenRef.current = event.rowGeneration
+        const previous = otoRef.current
+        const base = viewFresh || !previous ? event : previous
+        const rows = rowsFresh ? event.rows ?? [] : previous?.rows ?? event.rows ?? []
+        const next = { ...base, rows, generation: otoGenRef.current, rowGeneration: otoRowGenRef.current }
+        snapRef.current = absorbOto(snapRef.current ?? emptySnapshot(), next)
         otoRef.current = next
         marksRef.current = next.marks
         spansRef.current = next.spans

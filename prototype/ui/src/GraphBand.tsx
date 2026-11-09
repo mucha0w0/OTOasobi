@@ -3,7 +3,7 @@ import { bitmapRatio, canvasContext, shouldReplaceBitmap } from "./bitmap"
 import { drawPeaks } from "./drawPeaks"
 import { cycleOtoFocus, focusedOwnsTime, hitOtoPoint } from "./otoHit"
 import { previewColumnLimit, previewRowLimit, timeAt, type OtoMark, type PreviewEvent } from "./protocol"
-import { decodeBase64, paintIndices } from "./specTone"
+import { specImage } from "./specTone"
 import { hitBoundary, moveBoundary, spanBoundaries, spanCaption, spanFill, spanTimesChanged, type PhoneSpan } from "./spans"
 import { xForTime, type PointerBus } from "./ruler"
 import { imagePlacement, loudnessLevel, loudnessX, panRange, zoomRange, type Range } from "./viewport"
@@ -52,7 +52,7 @@ export function GraphBand({ kind, model, appearance, register, onRange, onFileSt
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const pictureRef = useRef<HTMLCanvasElement>(null)
   const paintedRef = useRef<PreviewEvent | null>(null)
-  const paintedSpecRef = useRef("")
+  const paintedSpecRef = useRef<Uint8Array | null>(null)
   const paintedSizeRef = useRef({ width: 0, height: 0, color: "" })
   const bindPicture = useCallback((node: HTMLCanvasElement | null) => {
     pictureRef.current = node
@@ -234,8 +234,8 @@ export function GraphBand({ kind, model, appearance, register, onRange, onFileSt
     if (
       kind === "spec"
       && pictureNow !== null
-      && pictureNow.spec.length > 0
-      && paintedSpecRef.current === pictureNow.spec
+      && pictureNow.indices.length > 0
+      && paintedSpecRef.current === pictureNow.indices
       && canvas.width > 0
     )
       return
@@ -258,19 +258,23 @@ export function GraphBand({ kind, model, appearance, register, onRange, onFileSt
       ctx.fillRect(0, 0, canvas.width, canvas.height)
       drawNote(ctx, canvas.width, canvas.height, note)
       paintedRef.current = null
-      paintedSpecRef.current = ""
+      paintedSpecRef.current = null
       paintedSizeRef.current = { width, height, color }
       return
     }
-    if (kind === "spec" && pictureNow.specColumns > 0 && pictureNow.specRows > 0 && pictureNow.spec) {
-      canvas.width = pictureNow.specColumns
-      canvas.height = pictureNow.specRows
-      if (!paintIndices(ctx, decodeBase64(pictureNow.spec), pictureNow.specColumns, pictureNow.specRows)) {
+    if (kind === "spec" && pictureNow.specColumns > 0 && pictureNow.specRows > 0 && pictureNow.indices.length > 0) {
+      const image = specImage(pictureNow.indices, pictureNow.specColumns, pictureNow.specRows)
+      if (!image) {
+        canvas.width = pictureNow.specColumns
+        canvas.height = pictureNow.specRows
         ctx.fillStyle = getCss("--canvas")
         ctx.fillRect(0, 0, canvas.width, canvas.height)
-        paintedSpecRef.current = ""
+        paintedSpecRef.current = null
       } else {
-        paintedSpecRef.current = pictureNow.spec
+        canvas.width = image.width
+        canvas.height = image.height
+        ctx.putImageData(image, 0, 0)
+        paintedSpecRef.current = pictureNow.indices
       }
     } else if (kind === "wave" || kind === "oto") {
       canvas.width = Math.max(1, Math.floor(width))
@@ -522,7 +526,7 @@ function tunedMarks(marks: OtoMark[], tune: LiveTune | null) {
 
 function paneReady(kind: BandKind, picture: PreviewEvent) {
   if (kind === "spec")
-    return picture.specColumns > 0 && picture.spec.length > 0
+    return picture.specColumns > 0 && picture.indices.length > 0
   if (kind === "loud")
     return picture.loudness.length > 0
   return picture.lo.length > 0

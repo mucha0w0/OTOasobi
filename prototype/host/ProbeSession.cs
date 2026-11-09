@@ -51,6 +51,12 @@ sealed class ProbeSession : IDisposable
     bool _disposed;
     int _previewGen;
     int _otoGen;
+    int _otoRowGen;
+    int _fileToken;
+    readonly object _previewLock = new();
+    PreviewJob? _previewQueued;
+    PreviewJob? _previewActive;
+    int _previewPump;
     volatile int _fileGen;
     readonly object _frqGate = new();
     List<string> _listedNames = [];
@@ -100,11 +106,23 @@ sealed class ProbeSession : IDisposable
         _otoRows.Tick += (_, _) => PostOtoRows();
     }
 
-    sealed class Outbound(object payload, int? previewGen, int? otoGen)
+    sealed class Outbound(object payload, int? previewGen, int? otoGen, int? otoRowGen)
     {
         public object Payload { get; } = payload;
         public int? PreviewGen { get; } = previewGen;
         public int? OtoGen { get; } = otoGen;
+        public int? OtoRowGen { get; } = otoRowGen;
+    }
+
+    sealed class PreviewJob
+    {
+        public int Generation { get; init; }
+        public string Path { get; init; } = "";
+        public double T0 { get; init; }
+        public double T1 { get; init; }
+        public int Columns { get; init; }
+        public int Rows { get; init; }
+        public TaskCompletionSource<bool> Superseded { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
     }
 
     public async Task AttachAsync()
@@ -206,10 +224,12 @@ sealed class ProbeSession : IDisposable
                     _ = CreateProjectAsync(Text(root, "parent"), Text(root, "name"));
                     break;
                 case "selectFile":
+                    if (root.TryGetProperty("file", out var fileToken) && fileToken.TryGetInt32(out var parsedToken) && parsedToken > 0)
+                        _fileToken = parsedToken;
                     SelectFile(Text(root, "name"));
                     break;
                 case "preview":
-                    _ = PreviewAsync(
+                    EnqueuePreview(
                         Number(root, "t0"),
                         Number(root, "t1"),
                         Count(root, "columns", 800),
@@ -423,9 +443,9 @@ sealed class ProbeSession : IDisposable
             return;
         _folder = Path.GetDirectoryName(file.Path);
         _wavPath = file.Path;
-        Interlocked.Increment(ref _previewGen);
+        RetirePreview();
         PostFiles();
-        Post(new { type = "opened", name = file.Name });
+        PostOpened(file.Name);
         BeginFile(file.Path);
         if (!string.IsNullOrEmpty(_folder))
         {
@@ -587,6 +607,8 @@ sealed class ProbeSession : IDisposable
 
     void AdoptFolder(string folder)
     {
+        if (!string.Equals(_folder, folder, StringComparison.OrdinalIgnoreCase))
+            _fileToken++;
         _folder = folder;
         List<string> names;
         try
@@ -607,12 +629,12 @@ sealed class ProbeSession : IDisposable
             if (!still)
             {
                 _wavPath = null;
-                Interlocked.Increment(ref _previewGen);
+                RetirePreview();
                 _fileGen++;
             }
         }
 
-        Post(new { type = "files", folder = _folder, names });
+        Post(new { type = "files", folder = _folder, names, file = _fileToken });
         _oto.Open(folder);
         _rec.OpenFolder(folder);
         OpenVoice(folder);
@@ -646,7 +668,7 @@ sealed class ProbeSession : IDisposable
             if (name!.EndsWith(".wav", StringComparison.OrdinalIgnoreCase))
             {
                 _wavPath = null;
-                Interlocked.Increment(ref _previewGen);
+                RetirePreview();
                 _fileGen++;
                 _waveLoad = null;
                 lock (_frqGate)
@@ -655,7 +677,7 @@ sealed class ProbeSession : IDisposable
                     if (_frqOpen)
                         Post(_frq.View(null));
                 }
-                Post(new { type = "opened", name, missing = true });
+                PostOpened(name!, missing: true);
                 PostOtoView();
                 return;
             }
@@ -665,8 +687,8 @@ sealed class ProbeSession : IDisposable
         }
 
         _wavPath = Path.Combine(_folder, match);
-        Interlocked.Increment(ref _previewGen);
-        Post(new { type = "opened", name = match });
+        RetirePreview();
+        PostOpened(match);
         PostOtoView();
         BeginFile(_wavPath);
     }
@@ -703,7 +725,7 @@ sealed class ProbeSession : IDisposable
         {
             var names = WavNames(_folder);
             _listedNames = names;
-            Post(new { type = "files", folder = _folder, names });
+            Post(new { type = "files", folder = _folder, names, file = _fileToken });
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -751,6 +773,209 @@ sealed class ProbeSession : IDisposable
         return name.IndexOfAny(['\\', '/', ':']) < 0;
     }
 
+    void PostOpened(string name, bool missing = false) =>
+        Post(new { type = "opened", name, missing, file = _fileToken });
+
+    void RetirePreview()
+    {
+        Interlocked.Increment(ref _previewGen);
+        lock (_previewLock)
+        {
+            _previewQueued?.Superseded.TrySetResult(true);
+            _previewQueued = null;
+            _previewActive?.Superseded.TrySetResult(true);
+        }
+    }
+
+    void EnqueuePreview(double t0, double t1, int columns, int rows)
+    {
+        if (_disposed)
+            return;
+        if (string.IsNullOrEmpty(_wavPath))
+        {
+            Post(new { type = "failed", message = "WAV を開いてください。" });
+            return;
+        }
+
+        var job = new PreviewJob
+        {
+            Generation = Interlocked.Increment(ref _previewGen),
+            Path = _wavPath,
+            T0 = t0,
+            T1 = t1,
+            Columns = Math.Clamp(columns, 32, 1024),
+            Rows = Math.Clamp(rows, 32, 256),
+        };
+        var start = false;
+        lock (_previewLock)
+        {
+            _previewQueued?.Superseded.TrySetResult(true);
+            _previewActive?.Superseded.TrySetResult(true);
+            _previewQueued = job;
+            if (_previewPump == 0)
+            {
+                _previewPump = 1;
+                start = true;
+            }
+        }
+
+        if (start)
+            _ = PumpPreview();
+    }
+
+    async Task PumpPreview()
+    {
+        var stopped = false;
+        try
+        {
+            while (!_disposed)
+            {
+                PreviewJob job;
+                lock (_previewLock)
+                {
+                    if (_previewQueued == null)
+                    {
+                        _previewPump = 0;
+                        stopped = true;
+                        return;
+                    }
+
+                    job = _previewQueued;
+                    _previewQueued = null;
+                    _previewActive = job;
+                }
+
+                await RunPreview(job).ConfigureAwait(false);
+                lock (_previewLock)
+                {
+                    if (_previewActive == job)
+                        _previewActive = null;
+                }
+            }
+        }
+        finally
+        {
+            if (!stopped)
+            {
+                lock (_previewLock)
+                {
+                    if (_disposed || _previewQueued == null)
+                        _previewPump = 0;
+                    else
+                        _ = PumpPreview();
+                }
+            }
+        }
+    }
+
+    async Task RunPreview(PreviewJob job)
+    {
+        try
+        {
+            var waveTask = WaveAsync(job.Path);
+            var finished = await Task.WhenAny(waveTask, job.Superseded.Task).ConfigureAwait(false);
+            if (finished != waveTask || !PreviewCurrent(job))
+            {
+                Forget(waveTask);
+                return;
+            }
+
+            var audio = await waveTask.ConfigureAwait(false);
+            if (!PreviewCurrent(job))
+                return;
+            if (audio == null)
+            {
+                Post(new { type = "failed", message = "波形を読めませんでした。" });
+                return;
+            }
+
+            var (lo, hi, waveT0, waveT1) = ProbeWave.Peaks(audio, job.T0, job.T1, job.Columns);
+            PostPreview(new PreviewPicture(
+                true,
+                null,
+                lo,
+                hi,
+                "",
+                "",
+                0,
+                0,
+                false,
+                waveT0,
+                waveT1,
+                waveT0,
+                waveT1,
+                audio.SampleRate,
+                audio.Duration,
+                []), job.Generation);
+            if (!PreviewCurrent(job))
+                return;
+            var python = PreviewEngine();
+            var load = python.LoadAsync(job.Path, job.T0, job.T1, job.Columns, job.Rows);
+            finished = await Task.WhenAny(load, job.Superseded.Task).ConfigureAwait(false);
+            if (finished != load || !PreviewCurrent(job))
+            {
+                Forget(load);
+                return;
+            }
+
+            var picture = await load.ConfigureAwait(false);
+            if (!PreviewCurrent(job) || picture.Skipped)
+                return;
+            if (!picture.Ok)
+            {
+                Post(new { type = "failed", message = picture.Error ?? "プレビューを作れませんでした。" });
+                return;
+            }
+
+            PostPreview(picture, job.Generation);
+        }
+        catch (Exception ex) when (ex is IOException or FileNotFoundException or JsonException)
+        {
+            if (_python != null && !_python.Alive)
+            {
+                _python.Dispose();
+                _python = null;
+            }
+
+            if (PreviewCurrent(job))
+                Post(new { type = "failed", message = ex.Message });
+        }
+    }
+
+    bool PreviewCurrent(PreviewJob job) =>
+        !_disposed
+        && job.Generation == Volatile.Read(ref _previewGen)
+        && string.Equals(job.Path, _wavPath, StringComparison.OrdinalIgnoreCase);
+
+    static void Forget(Task task) =>
+        _ = task.ContinueWith(
+            done => { _ = done.Exception; },
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
+
+    ProbePreview PreviewEngine()
+    {
+        if (_python != null && !_python.Alive)
+        {
+            _python.Dispose();
+            _python = null;
+        }
+
+        return _python ??= new ProbePreview();
+    }
+
+    AnalysisClient Analysis()
+    {
+        if (_analysis != null && !_analysis.Alive)
+        {
+            _analysis.Dispose();
+            _analysis = null;
+        }
+
+        return _analysis ??= new AnalysisClient();
+    }
+
     void PostPreview(PreviewPicture picture, int generation)
     {
         if (generation != Volatile.Read(ref _previewGen))
@@ -772,69 +997,8 @@ sealed class ProbeSession : IDisposable
             waveT1 = picture.WaveT1,
             sampleRate = picture.SampleRate,
             loudness = picture.Loudness,
+            file = _fileToken,
         }, previewGen: generation);
-    }
-
-    async Task PreviewAsync(double t0, double t1, int columns, int rows)
-    {
-        if (_disposed)
-            return;
-        if (string.IsNullOrEmpty(_wavPath))
-        {
-            Post(new { type = "failed", message = "WAV を開いてください。" });
-            return;
-        }
-
-        var generation = Interlocked.Increment(ref _previewGen);
-        var path = _wavPath;
-        columns = Math.Clamp(columns, 32, 1024);
-        rows = Math.Clamp(rows, 32, 256);
-        try
-        {
-            var audio = await WaveAsync(path).ConfigureAwait(true);
-            if (_disposed || generation != _previewGen || !string.Equals(path, _wavPath, StringComparison.OrdinalIgnoreCase))
-                return;
-            if (audio == null)
-            {
-                Post(new { type = "failed", message = "波形を読めませんでした。" });
-                return;
-            }
-
-            var (lo, hi, waveT0, waveT1) = ProbeWave.Peaks(audio, t0, t1, columns);
-            PostPreview(new PreviewPicture(
-                true,
-                null,
-                lo,
-                hi,
-                "",
-                "",
-                0,
-                0,
-                false,
-                waveT0,
-                waveT1,
-                waveT0,
-                waveT1,
-                audio.SampleRate,
-                audio.Duration,
-                []), generation);
-            _python ??= new ProbePreview();
-            var picture = await _python.LoadAsync(path, t0, t1, columns, rows);
-            if (_disposed || generation != _previewGen || picture.Skipped)
-                return;
-            if (!picture.Ok)
-            {
-                Post(new { type = "failed", message = picture.Error ?? "プレビューを作れませんでした。" });
-                return;
-            }
-
-            PostPreview(picture, generation);
-        }
-        catch (Exception ex) when (ex is IOException or FileNotFoundException or JsonException)
-        {
-            if (!_disposed && generation == _previewGen)
-                Post(new { type = "failed", message = ex.Message });
-        }
     }
 
     ProbeWave.Audio? LoadWave(string path, int epoch)
@@ -1505,8 +1669,7 @@ sealed class ProbeSession : IDisposable
             return;
         try
         {
-            _analysis ??= new AnalysisClient();
-            await _analysis.SaveCacheAsync(_folder, _oto.Files);
+            await Analysis().SaveCacheAsync(_folder, _oto.Files);
         }
         catch (Exception ex)
         {
@@ -1540,7 +1703,6 @@ sealed class ProbeSession : IDisposable
             PostOto();
         else
         {
-            TouchOto();
             PostOtoView();
             ScheduleOtoRows();
         }
@@ -1577,6 +1739,14 @@ sealed class ProbeSession : IDisposable
         if (string.IsNullOrEmpty(_folder) || _disposed)
             return;
         var gen = ++_analyzeGen;
+        try
+        {
+            _analysis?.Cancel();
+        }
+        catch (IOException)
+        {
+        }
+
         _ = AnalyzeAsync(gen, force);
     }
 
@@ -1603,6 +1773,14 @@ sealed class ProbeSession : IDisposable
         }
 
         var gen = ++_analyzeGen;
+        try
+        {
+            _analysis?.Cancel();
+        }
+        catch (IOException)
+        {
+        }
+
         _ = AnalyzeFilesAsync(gen, list);
     }
 
@@ -1613,13 +1791,12 @@ sealed class ProbeSession : IDisposable
         PostStatus("解析しています");
         try
         {
-            _analysis ??= new AnalysisClient();
-            var data = await _analysis.AnalyzeFolderAsync(
+            var data = await Analysis().AnalyzeFolderAsync(
                 _folder!,
                 (done, total) => PostStatus($"解析しています　{done} / {total} ファイル"),
                 force,
                 (name, _, label) => PostStatus(string.IsNullOrEmpty(label) ? name : $"{name}　{label}"));
-            if (gen != _analyzeGen || _disposed)
+            if (gen != _analyzeGen || _disposed || data.Cancelled)
                 return;
             if (!data.Ok)
                 Post(new { type = "failed", message = string.IsNullOrEmpty(data.Error) ? "解析できませんでした。" : data.Error });
@@ -1649,13 +1826,12 @@ sealed class ProbeSession : IDisposable
         PostStatus(names.Count == 1 ? $"{names[0]} を解析しています" : "解析しています");
         try
         {
-            _analysis ??= new AnalysisClient();
-            var data = await _analysis.AnalyzeFilesAsync(
+            var data = await Analysis().AnalyzeFilesAsync(
                 _folder!,
                 names,
                 (done, total) => PostStatus($"解析しています　{done} / {total} ファイル"),
                 (name, _, label) => PostStatus(string.IsNullOrEmpty(label) ? name : $"{name}　{label}"));
-            if (gen != _analyzeGen || _disposed)
+            if (gen != _analyzeGen || _disposed || data.Cancelled)
                 return;
             if (!data.Ok)
                 Post(new { type = "failed", message = string.IsNullOrEmpty(data.Error) ? "解析できませんでした。" : data.Error });
@@ -1704,9 +1880,9 @@ sealed class ProbeSession : IDisposable
         PostOto();
         try
         {
-            _analysis ??= new AnalysisClient();
+            var analysis = Analysis();
             var parts = modes.Select(mode => new OtoWritePart(_oto.ExportFor(mode), _oto.Adjustments(mode))).ToList();
-            var result = await _analysis.WriteAsync(_folder, _oto.Files, parts, _oto.ScopeForWrite());
+            var result = await analysis.WriteAsync(_folder, _oto.Files, parts, _oto.ScopeForWrite());
             if (_disposed)
                 return;
             if (!result.Ok)
@@ -1787,8 +1963,7 @@ sealed class ProbeSession : IDisposable
         PostStatus(".frqを計算しています");
         try
         {
-            _analysis ??= new AnalysisClient();
-            var result = await _analysis.WriteFrqAsync(
+            var result = await Analysis().WriteFrqAsync(
                 _folder,
                 mode,
                 only,
@@ -2184,14 +2359,11 @@ sealed class ProbeSession : IDisposable
             PostOtoRows();
     }
 
-    int TouchOto() => Interlocked.Increment(ref _otoGen);
-
     string? CurrentWavName() => string.IsNullOrEmpty(_wavPath) ? null : Path.GetFileName(_wavPath);
 
     void PostOto()
     {
         _otoRows.Stop();
-        TouchOto();
         PostOtoView();
         if (_otoTable)
             PostOtoRows();
@@ -2199,7 +2371,7 @@ sealed class ProbeSession : IDisposable
 
     void PostOtoView()
     {
-        var generation = Volatile.Read(ref _otoGen);
+        var generation = Interlocked.Increment(ref _otoGen);
         Post(_oto.Snapshot(CurrentWavName(), false, generation), otoGen: generation);
     }
 
@@ -2207,8 +2379,16 @@ sealed class ProbeSession : IDisposable
     {
         if (_disposed || !_otoTable)
             return;
-        var generation = Volatile.Read(ref _otoGen);
-        Post(_oto.Snapshot(CurrentWavName(), true, generation), otoGen: generation);
+        var rowGeneration = Interlocked.Increment(ref _otoRowGen);
+        var viewGeneration = Volatile.Read(ref _otoGen);
+        var name = CurrentWavName();
+        _ = Task.Run(() =>
+        {
+            if (_disposed || rowGeneration != Volatile.Read(ref _otoRowGen))
+                return;
+            var payload = _oto.Snapshot(name, true, viewGeneration, rowGeneration);
+            Post(payload, otoRowGen: rowGeneration);
+        });
     }
 
     void ScheduleOtoRows()
@@ -2473,14 +2653,14 @@ sealed class ProbeSession : IDisposable
             Post(new { type = "take", playing = true, position = _take.PositionSeconds, duration = _takeDuration });
     }
 
-    void Post(object payload, int? previewGen = null, int? otoGen = null)
+    void Post(object payload, int? previewGen = null, int? otoGen = null, int? otoRowGen = null)
     {
         if (_disposed)
             return;
         var start = false;
         lock (_postGate)
         {
-            _outbound.Enqueue(new Outbound(payload, previewGen, otoGen));
+            _outbound.Enqueue(new Outbound(payload, previewGen, otoGen, otoRowGen));
             if (_draining == 0)
             {
                 _draining = 1;
@@ -2531,6 +2711,8 @@ sealed class ProbeSession : IDisposable
         if (item.PreviewGen is int preview && preview != Volatile.Read(ref _previewGen))
             return true;
         if (item.OtoGen is int oto && oto != Volatile.Read(ref _otoGen))
+            return true;
+        if (item.OtoRowGen is int row && row != Volatile.Read(ref _otoRowGen))
             return true;
         return false;
     }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { parseHostEvent, previewStillCovers, requestsPreview, requestsPreviewAfter, shownInputRate, timeAt, uiScale, xAt } from "./protocol"
+import { decodeBase64 } from "./specTone"
 
 describe("プレビューを頼む操作", () => {
   it("境界のドラッグとリサイズの途中では頼まない", () => {
@@ -44,6 +45,7 @@ describe("ホストのメッセージ", () => {
       type: "files",
       folder: "C:/voice",
       names: ["あ.wav", "い.wav"],
+      file: 0,
     })
   })
 
@@ -60,9 +62,10 @@ describe("ホストのメッセージ", () => {
       waveT1: 2,
       sampleRate: 44100,
     })
-    expect(preview).toMatchObject({ type: "preview", name: "", png: "abc", spec: "", sampleRate: 44100, loudness: [] })
+    expect(preview && preview.type === "preview" && [...preview.indices]).toEqual([])
+    expect(preview).toMatchObject({ type: "preview", name: "", png: "abc", sampleRate: 44100, loudness: [], file: 0 })
 
-    expect(parseHostEvent({
+    const indexed = parseHostEvent({
       type: "preview",
       duration: 2,
       lo: [0],
@@ -72,7 +75,9 @@ describe("ホストのメッセージ", () => {
       specRows: 1,
       waveT0: 0,
       waveT1: 2,
-    })).toMatchObject({ type: "preview", name: "", png: "", spec: "qqo=", specColumns: 2, specRows: 1 })
+    })
+    expect(indexed && indexed.type === "preview" && [...indexed.indices]).toEqual([...decodeBase64("qqo=")])
+    expect(indexed).toMatchObject({ type: "preview", name: "", png: "", specColumns: 2, specRows: 1 })
     expect(preview && "names" in preview).toBe(false)
 
     expect(parseHostEvent({
@@ -113,7 +118,7 @@ describe("ホストのメッセージ", () => {
       generation: 4,
       rows: null,
     })
-    expect(parseHostEvent({
+    const named = parseHostEvent({
       type: "preview",
       name: "あ.wav",
       duration: 1,
@@ -126,15 +131,16 @@ describe("ホストのメッセージ", () => {
       specT1: 1,
       waveT0: 0,
       waveT1: 1,
-    })).toMatchObject({ name: "あ.wav", spec: "qqo=" })
+    })
+    expect(named && named.type === "preview" && [...named.indices]).toEqual([...decodeBase64("qqo=")])
   })
 
   it("同じ範囲と列数の絵は取り直さない", () => {
-    const picture = { spec: "qqo=", specColumns: 2, specRows: 1, specT0: 0, specT1: 1, waveT0: 0, waveT1: 1 }
+    const picture = { indices: decodeBase64("qqo="), specColumns: 2, specRows: 1, specT0: 0, specT1: 1, waveT0: 0, waveT1: 1 }
     expect(previewStillCovers(picture, 800, { t0: 0, t1: 1 }, 800)).toBe(true)
     expect(previewStillCovers(picture, 800, { t0: 0, t1: 1 }, 900)).toBe(false)
     expect(previewStillCovers(picture, 800, { t0: 0.2, t1: 0.4 }, 800)).toBe(false)
-    expect(previewStillCovers({ ...picture, spec: "" }, 800, { t0: 0, t1: 1 }, 800)).toBe(false)
+    expect(previewStillCovers({ ...picture, indices: new Uint8Array() }, 800, { t0: 0, t1: 1 }, 800)).toBe(false)
   })
 
   it("解析の進み具合と .frq と録音リストを読む", () => {
@@ -154,10 +160,11 @@ describe("ホストのメッセージ", () => {
       type: "projectPlace",
       path: "C:/voice",
     })
-    expect(parseHostEvent({ type: "opened", name: "あ.wav", missing: true })).toEqual({
+    expect(parseHostEvent({ type: "opened", name: "あ.wav", missing: true, file: 3 })).toEqual({
       type: "opened",
       name: "あ.wav",
       missing: true,
+      file: 3,
     })
     expect(parseHostEvent({
       type: "bank",
