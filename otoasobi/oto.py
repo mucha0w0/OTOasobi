@@ -869,6 +869,14 @@ def _alias_key(line: str) -> str | None:
     return alias or None
 
 
+def leading_hyphen_alias(line: str) -> str | None:
+    """ファイルの先頭と休符の直後に使う、`- かな` 形のエイリアス。"""
+    alias = _alias_key(line)
+    if alias and alias.startswith("- "):
+        return alias
+    return None
+
+
 def merge_existing_aliases(existing: list[str], generated: list[str], scope: str) -> list[str]:
     """all は生成した行だけ。missing は無いエイリアスを足す。overlap は既にあるエイリアスだけ差し替える。"""
     if scope == "all" or not existing:

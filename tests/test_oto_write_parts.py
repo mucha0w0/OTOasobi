@@ -14,7 +14,13 @@ if str(ROOT) not in sys.path:
 
 from otoasobi.analyze import export_folder
 from otoasobi.wavs import AnalyzedFile
-from otoasobi.oto import OtoSettings, merge_existing_aliases, mono_oto_lines, renzoku_oto_lines
+from otoasobi.oto import (
+    OtoSettings,
+    leading_hyphen_alias,
+    merge_existing_aliases,
+    mono_oto_lines,
+    renzoku_oto_lines,
+)
 from otoasobi.segment import Span
 
 
@@ -31,6 +37,18 @@ class WritePartsTests(unittest.TestCase):
             path = export_folder(tmp, [item], parts=[(mono, []), (renzoku, [])])
             text = path.read_text(encoding=locale.getpreferredencoding(False))
         self.assertEqual([line for line in text.splitlines() if line], expected)
+
+    def test_renzoku_cvvc_writes_leading_hyphen_once(self) -> None:
+        spans = [Span(0.0, 0.2, "a", "あ"), Span(0.2, 0.5, "k", "い")]
+        item = AnalyzedFile("あい.wav", 0.8, spans)
+        renzoku = OtoSettings(mode="renzoku")
+        cvvc = OtoSettings(mode="cvvc")
+        with tempfile.TemporaryDirectory() as tmp:
+            path = export_folder(tmp, [item], parts=[(renzoku, []), (cvvc, [])])
+            text = path.read_text(encoding=locale.getpreferredencoding(False))
+        lines = [line for line in text.splitlines() if line]
+        leading = [line for line in lines if leading_hyphen_alias(line)]
+        self.assertEqual(len(leading), 1)
 
     def test_merge_keeps_missing_and_replaces_overlap(self) -> None:
         existing = ["a.wav=あ,1,2,3,4,5", "b.wav=か,1,2,3,4,5"]

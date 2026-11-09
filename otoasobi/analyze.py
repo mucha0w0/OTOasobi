@@ -21,6 +21,7 @@ from otoasobi.oto import (
     apply_file_adjustments,
     cvvc_oto_lines,
     mono_oto_lines,
+    leading_hyphen_alias,
     renzoku_oto_lines,
     write_oto_ini,
 )
@@ -222,6 +223,37 @@ def analyze_folder_files(
     return files, skipped
 
 
+def _append_part_lines(
+    oto_lines: list[str],
+    pinned: set[int],
+    lines: list[str],
+    names: list[int],
+    *,
+    mode: str | None,
+    dedupe_leading: bool,
+    leading_index: dict[str, int],
+) -> None:
+    """連続音と CVVC を同時に書くとき、`- かな` は 1 行だけ。2 回目は CVVC で上書きする。"""
+    buffer: list[str] = []
+    index_map: dict[int, int] = {}
+    base = len(oto_lines)
+    for index, line in enumerate(lines):
+        alias = leading_hyphen_alias(line) if dedupe_leading else None
+        if alias and alias in leading_index:
+            if mode == "cvvc":
+                oto_lines[leading_index[alias]] = line
+                index_map[index] = leading_index[alias]
+            continue
+        if alias:
+            leading_index[alias] = base + len(buffer)
+        index_map[index] = base + len(buffer)
+        buffer.append(line)
+    oto_lines.extend(buffer)
+    for index in names:
+        if 0 <= index < len(lines) and index in index_map:
+            pinned.add(index_map[index])
+
+
 def _file_loudness(folder: Path, name: str) -> np.ndarray | None:
     """書き出し時のブランク用。読めないファイルは母音終了へ戻す。"""
     path = folder / name
@@ -259,8 +291,11 @@ def export_folder(
     # parts は選んだエイリアス順。ファイルごとに、その順で行を足す。
     if parts is None:
         parts = [(settings, adjustments)]
+    part_modes = {part[0].mode for part in parts if part[0] is not None}
+    dedupe_leading = "renzoku" in part_modes and "cvvc" in part_modes
     for item in files:
         loudness = _file_loudness(folder, item.name)
+        leading_index: dict[str, int] = {}
         for part_settings, part_adjustments in parts:
             if part_settings is not None and part_settings.mode == "renzoku":
                 write_lines = renzoku_oto_lines
@@ -285,11 +320,15 @@ def export_folder(
                 ),
                 names,
             )
-            start = len(oto_lines)
-            for index in names:
-                if 0 <= index < len(lines):
-                    pinned.add(start + index)
-            oto_lines.extend(lines)
+            _append_part_lines(
+                oto_lines,
+                pinned,
+                lines,
+                names,
+                mode=part_settings.mode if part_settings is not None else None,
+                dedupe_leading=dedupe_leading,
+                leading_index=leading_index,
+            )
     out = folder / OTO_INI_NAME
     log = folder / BATCH_LOG_NAME
     onset = folder / BATCH_TXT_NAME
