@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { BankPanel } from "./BankPanel"
 import { Dock } from "./Dock"
 import { EffectsPanel } from "./EffectsPanel"
-import { currentAliasId, findAlias, markIndexForAlias, selectedAliasIds } from "./aliasList"
+import { aliasPanelMode, currentAliasId, findAlias, markIndexForAlias, pendingAliasReady, selectedAliasIds } from "./aliasList"
 import { AliasList, FileList, type FileListHandle } from "./FileList"
 import { applyFileClick, emptyFilePick, pruneFilePick, sameName, type FilePick } from "./filePick"
 import { nextFileIndex } from "./fileStep"
@@ -598,7 +598,11 @@ export function App() {
     if (!sameName(pickRef.current.active, row.file))
       return
     pendingFocus.current = { file: row.file, index: row.index, alias: row.alias, autoAlias: row.autoAlias, mode: row.mode }
-    if (!sameName(row.file, fileNameRef.current))
+    const mode = aliasPanelMode(row.mode)
+    const modeChanged = mode != null && mode !== otoRef.current?.mode
+    if (modeChanged)
+      sendRef.current({ type: "oto", op: "mode", mode })
+    if (!sameName(row.file, fileNameRef.current) || modeChanged)
       return
     const index = markIndexForAlias(row, marksRef.current, otoRef.current?.mode)
     setFocus(index)
@@ -874,7 +878,7 @@ export function App() {
         spansRef.current = next.spans
         let nextFocus = focusRef.current
         const pending = pendingFocus.current
-        if (pending && sameName(pending.file, fileNameRef.current)) {
+        if (pending && pendingAliasReady(pending, fileNameRef.current, next.mode)) {
           const index = markIndexForAlias(pending, next.marks, next.mode)
           if (index >= 0 && next.marks.some((mark) => mark.index === index))
             nextFocus = index

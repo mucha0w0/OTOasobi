@@ -30,6 +30,19 @@ export function currentAliasId(rows: OtoMark[], file: string, focus: number, mod
   return matched ? aliasId(matched) : ""
 }
 
+export function aliasPanelMode(mode: string | undefined): "mono" | "renzoku" | "cvvc" | null {
+  if (mode === "mono" || mode === "renzoku" || mode === "cvvc")
+    return mode
+  return null
+}
+
+export function pendingAliasReady(pending: { file: string; mode?: string }, file: string, mode: string): boolean {
+  if (!sameName(pending.file, file))
+    return false
+  const want = aliasPanelMode(pending.mode)
+  return want == null || want === mode
+}
+
 export function markIndexForAlias(row: AliasRef, marks: OtoMark[], mode?: string): number {
   if (!row.mode || row.mode === mode) {
     if (marks.some((mark) => mark.index === row.index))
