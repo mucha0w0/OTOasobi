@@ -581,7 +581,7 @@ public sealed partial class MainPage
             return modes;
         }
 
-        if (AliasIncludesStandalone() || AliasMonoBox.IsChecked == true)
+        if (_aliasMonoWanted && !AliasIncludesStandalone())
             modes.Add("mono");
         if (AliasRenzokuBox.IsChecked == true)
             modes.Add("renzoku");

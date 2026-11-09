@@ -264,7 +264,7 @@ sealed class ProbeOto
     public List<string> AliasModes()
     {
         var modes = new List<string>();
-        if (_aliasRenzoku || _aliasCvvc || _aliasMonoWanted)
+        if (_aliasMonoWanted && !_aliasRenzoku && !_aliasCvvc)
             modes.Add("mono");
         if (_aliasRenzoku)
             modes.Add("renzoku");
