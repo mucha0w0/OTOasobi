@@ -686,11 +686,11 @@ public sealed partial class MainPage
         UseRecGuide(choice.Path);
     }
 
-    void RecGuideKind_Checked(object sender, RoutedEventArgs e)
+    void RecGuideKind_SelectionChanged(SelectorBar sender, SelectorBarSelectionChangedEventArgs e)
     {
-        if (_recApplying || sender is not RadioButton radio || radio.IsChecked != true)
+        if (_recApplying)
             return;
-        var manual = ReferenceEquals(radio, RecGuideManualRadio);
+        var manual = ReferenceEquals(sender.SelectedItem, RecGuideManualItem);
         if (manual == _recGuideManual)
         {
             ApplyGuideKind();
@@ -708,11 +708,10 @@ public sealed partial class MainPage
             RecGuideFilePanel.Visibility = _recGuideManual ? Visibility.Collapsed : Visibility.Visible;
         if (RecGuideManualPanel != null)
             RecGuideManualPanel.Visibility = _recGuideManual ? Visibility.Visible : Visibility.Collapsed;
-        if (RecGuideFileRadio == null || RecGuideManualRadio == null)
+        if (RecGuideKindBar == null)
             return;
         _recApplying = true;
-        RecGuideFileRadio.IsChecked = !_recGuideManual;
-        RecGuideManualRadio.IsChecked = _recGuideManual;
+        RecGuideKindBar.SelectedItem = _recGuideManual ? RecGuideManualItem : RecGuideFileItem;
         _recApplying = false;
     }
 

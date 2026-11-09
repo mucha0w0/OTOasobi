@@ -1705,17 +1705,13 @@
                                     ToolTipService.ToolTip="ファイルと、自分で作るガイド音の両方に効きます"
                                     Value="70"
                                     ValueChanged="RecVolume_Changed" />
-                                <RadioButton
-                                    x:Name="RecGuideFileRadio"
-                                    GroupName="RecGuideKind"
-                                    Content="ファイルを選ぶ"
-                                    Checked="RecGuideKind_Checked" />
-                                <RadioButton
-                                    x:Name="RecGuideManualRadio"
-                                    GroupName="RecGuideKind"
-                                    Content="自分で設定する"
-                                    IsChecked="True"
-                                    Checked="RecGuideKind_Checked" />
+                                <SelectorBar
+                                    x:Name="RecGuideKindBar"
+                                    AutomationProperties.Name="ガイドの種類"
+                                    SelectionChanged="RecGuideKind_SelectionChanged">
+                                    <SelectorBarItem x:Name="RecGuideFileItem" Text="ファイルを選ぶ" />
+                                    <SelectorBarItem x:Name="RecGuideManualItem" Text="自分で設定する" IsSelected="True" />
+                                </SelectorBar>
                                 <StackPanel
                                     x:Name="RecGuideFilePanel"
                                     Spacing="8"

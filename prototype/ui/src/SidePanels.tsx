@@ -4,6 +4,7 @@ import { IconButton, IconNext, IconPlay, IconPrev, IconRecord, IconSkip, IconSto
 import { drawPeaks } from "./drawPeaks"
 import { shownInputRate, type CaptureEvent, type PageCommand, type SavedEvent } from "./protocol"
 import type { LiveBus } from "./live"
+import { Segmented } from "./Segmented"
 
 const notes = ["C3", "D3", "E3", "F3", "G3", "A3", "B3", "C4", "D4", "E4", "F4", "G4", "A4", "B4", "C5", "D5", "E5", "F5", "G5", "A5", "B5", "C6"]
 
@@ -129,14 +130,15 @@ export function GuidePanel({
           </span>
           <input type="range" min={0} max={1} step={0.01} value={volume} onChange={(event) => setVolume(Number(event.target.value))} />
         </label>
-        <label className="flex gap-2">
-          <input type="radio" checked={!guide.manual} onChange={() => send({ type: "guideFile", manual: false })} />
-          ファイルを選ぶ
-        </label>
-        <label className="flex gap-2">
-          <input type="radio" checked={guide.manual} onChange={() => send({ type: "guideFile", manual: true })} />
-          自分で設定する
-        </label>
+        <Segmented
+          label="ガイドの種類"
+          value={guide.manual ? "manual" : "file"}
+          onChange={(value) => send({ type: "guideFile", manual: value === "manual" })}
+          options={[
+            ["file", "ファイルを選ぶ"],
+            ["manual", "自分で設定する"],
+          ]}
+        />
         {guide.manual ? (
           <>
             <label className="grid gap-1">
