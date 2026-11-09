@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { BankPanel } from "./BankPanel"
 import { Dock } from "./Dock"
 import { EffectsPanel } from "./EffectsPanel"
-import { aliasPanelMode, currentAliasId, findAlias, markIndexForAlias, pendingAliasReady, selectedAliasIds } from "./aliasList"
+import { aliasId, aliasPanelMode, aliasStepIndex, currentAliasId, findAlias, markIndexForAlias, pendingAliasReady, selectedAliasIds } from "./aliasList"
 import { AliasList, FileList, type FileListHandle } from "./FileList"
 import { applyFileClick, emptyFilePick, pruneFilePick, sameName, type FilePick } from "./filePick"
 import { nextFileIndex } from "./fileStep"
@@ -162,6 +162,7 @@ export function App() {
   const previewTimer = useRef<number | undefined>(undefined)
   const fileStepTimer = useRef<number | undefined>(undefined)
   const stepTarget = useRef<number | null>(null)
+  const aliasStepTarget = useRef<number | null>(null)
   const busRef = useRef<LiveBus | null>(null)
   if (!busRef.current)
     busRef.current = createLiveBus()
@@ -590,13 +591,7 @@ export function App() {
     }
   }
 
-  function clickAlias(id: string, shift: boolean, ctrl: boolean) {
-    const row = findAlias(otoRef.current?.rows ?? [], id)
-    if (!row)
-      return
-    clickFile(row.file, shift, ctrl)
-    if (!sameName(pickRef.current.active, row.file))
-      return
+  function applyAlias(row: OtoMark) {
     pendingFocus.current = { file: row.file, index: row.index, alias: row.alias, autoAlias: row.autoAlias, mode: row.mode }
     const mode = aliasPanelMode(row.mode)
     const modeChanged = mode != null && mode !== otoRef.current?.mode
@@ -604,8 +599,69 @@ export function App() {
       sendRef.current({ type: "oto", op: "mode", mode })
     if (!sameName(row.file, fileNameRef.current) || modeChanged)
       return
-    const index = markIndexForAlias(row, marksRef.current, otoRef.current?.mode)
-    setFocus(index)
+    setFocus(markIndexForAlias(row, marksRef.current, otoRef.current?.mode))
+  }
+
+  function clickAlias(id: string, shift: boolean, ctrl: boolean) {
+    const row = findAlias(otoRef.current?.rows ?? [], id)
+    if (!row)
+      return
+    clickFile(row.file, shift, ctrl)
+    if (!sameName(pickRef.current.active, row.file))
+      return
+    applyAlias(row)
+  }
+
+  function stepGraph(direction: number) {
+    if (contains(layout, "aliasList"))
+      stepAlias(direction)
+    else
+      stepFile(direction)
+  }
+
+  function stepAlias(direction: number) {
+    const rows = otoRef.current?.rows ?? []
+    if (rows.length === 0 || direction === 0)
+      return
+    const index = aliasStepTarget.current ?? aliasStepIndex(rows, fileNameRef.current, focusRef.current, otoRef.current?.mode)
+    const next = nextFileIndex(index, rows.length, direction)
+    if (next < 0 || next === index)
+      return
+    const row = rows[next]
+    if (!row)
+      return
+    aliasStepTarget.current = next
+    stepTarget.current = null
+    commitPick({ selected: [row.file], active: row.file, anchor: row.file })
+    fileListRef.current?.highlight(row.file)
+    aliasListRef.current?.highlight(aliasId(row))
+    if (!sameName(row.file, fileNameRef.current))
+      showWheelLoading()
+    window.clearTimeout(fileStepTimer.current)
+    fileStepTimer.current = window.setTimeout(() => {
+      const landed = aliasStepTarget.current
+      const chosen = landed == null ? null : (otoRef.current?.rows ?? [])[landed] ?? null
+      wheeling.current = false
+      if (!chosen) {
+        aliasStepTarget.current = null
+        fileListRef.current?.release()
+        aliasListRef.current?.release()
+        restoreWheelHold()
+        return
+      }
+      const waiting = !sameName(chosen.file, fileNameRef.current)
+        || (aliasPanelMode(chosen.mode) != null && aliasPanelMode(chosen.mode) !== otoRef.current?.mode)
+      if (!waiting)
+        aliasStepTarget.current = null
+      applyAlias(chosen)
+      if (!sameName(chosen.file, fileNameRef.current))
+        focusFile(chosen.file)
+      else {
+        fileListRef.current?.release()
+        aliasListRef.current?.release()
+        restoreWheelHold()
+      }
+    }, 200)
   }
 
   function stepFile(direction: number) {
@@ -621,8 +677,10 @@ export function App() {
     if (!name)
       return
     stepTarget.current = next
+    aliasStepTarget.current = null
     commitPick({ selected: [name], active: name, anchor: name })
     fileListRef.current?.highlight(name)
+    aliasListRef.current?.release()
     showWheelLoading()
     window.clearTimeout(fileStepTimer.current)
     fileStepTimer.current = window.setTimeout(() => {
@@ -687,6 +745,7 @@ export function App() {
         if (wheeling.current)
           restoreWheelHold()
         stepTarget.current = null
+        aliasStepTarget.current = null
         fileListRef.current?.release()
         aliasListRef.current?.release()
         if (!keep) {
@@ -883,6 +942,7 @@ export function App() {
           if (index >= 0 && next.marks.some((mark) => mark.index === index))
             nextFocus = index
           pendingFocus.current = null
+          aliasStepTarget.current = null
         } else if (nextFocus >= 0 && !next.marks.some((mark) => mark.index === nextFocus))
           nextFocus = -1
         if (focusRef.current !== nextFocus) {
@@ -1282,7 +1342,10 @@ export function App() {
   const selectedNames = names.filter((name) => pick.selected.some((item) => sameName(item, name)))
   const aliasRows = oto?.rows ?? []
   const aliasSelected = selectedAliasIds(aliasRows, pick.selected)
-  const aliasCurrent = currentAliasId(aliasRows, pick.active, focusIndex, oto?.mode)
+  const steppingAlias = aliasStepTarget.current
+  const aliasCurrent = steppingAlias != null && aliasRows[steppingAlias]
+    ? aliasId(aliasRows[steppingAlias]!)
+    : currentAliasId(aliasRows, pick.active, focusIndex, oto?.mode)
   useEffect(() => {
     if (recLine?.recorded)
       sendRef.current({ type: "take", op: "wave", name: recLine.wav })
@@ -1373,7 +1436,7 @@ export function App() {
                     pointerBus={pointerBus}
                     register={register}
                     onRange={onRange}
-                    onFileStep={stepFile}
+                    onFileStep={stepGraph}
                     onTune={(index, point, time) => {
                       const key = (["offset", "overlap", "preutter", "consonant", "blank"] as const)[point]
                       if (key)

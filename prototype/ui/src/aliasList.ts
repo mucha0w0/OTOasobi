@@ -30,6 +30,16 @@ export function currentAliasId(rows: OtoMark[], file: string, focus: number, mod
   return matched ? aliasId(matched) : ""
 }
 
+export function aliasStepIndex(rows: OtoMark[], file: string, focus: number, mode?: string): number {
+  const id = currentAliasId(rows, file, focus, mode)
+  if (id) {
+    const at = rows.findIndex((row) => aliasId(row) === id)
+    if (at >= 0)
+      return at
+  }
+  return rows.findIndex((row) => sameName(row.file, file))
+}
+
 export function aliasPanelMode(mode: string | undefined): "mono" | "renzoku" | "cvvc" | null {
   if (mode === "mono" || mode === "renzoku" || mode === "cvvc")
     return mode

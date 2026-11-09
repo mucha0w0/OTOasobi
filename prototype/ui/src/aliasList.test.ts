@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { aliasId, aliasPanelMode, currentAliasId, findAlias, markIndexForAlias, pendingAliasReady, selectedAliasIds } from "./aliasList"
+import { aliasId, aliasPanelMode, aliasStepIndex, currentAliasId, findAlias, markIndexForAlias, pendingAliasReady, selectedAliasIds } from "./aliasList"
 import type { OtoMark } from "./protocol"
 
 function mark(over: Partial<OtoMark> = {}): OtoMark {
@@ -64,5 +64,12 @@ describe("エイリアスリスト", () => {
     expect(pendingAliasReady({ file: "あ.wav", mode: "cvvc" }, "あ.wav", "mono")).toBe(false)
     expect(pendingAliasReady({ file: "あ.wav", mode: "cvvc" }, "あ.wav", "cvvc")).toBe(true)
     expect(pendingAliasReady({ file: "あ.wav" }, "あ.wav", "mono")).toBe(true)
+  })
+
+  it("ホイールは強調中のエイリアスから進み、無ければそのファイルの先頭から", () => {
+    expect(aliasStepIndex(rows, "あい.wav", 1, "renzoku")).toBe(1)
+    expect(aliasStepIndex(rows, "あい.wav", -1, "renzoku")).toBe(1)
+    expect(aliasStepIndex(rows, "あ.wav", -1, "mono")).toBe(0)
+    expect(aliasStepIndex(rows, "ない.wav", -1, "mono")).toBe(-1)
   })
 })
