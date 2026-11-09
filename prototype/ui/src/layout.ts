@@ -1,6 +1,10 @@
+import { minPane } from "./splitter"
+
 export type LayoutNode =
   | { id: string }
   | { axis: "h" | "v"; ratio: number; first: LayoutNode; second: LayoutNode }
+
+export type DockSpan = { width: number; height: number }
 
 export type PaneBox = { width: number; height: number }
 
@@ -97,9 +101,25 @@ export function hidePane(root: LayoutNode | null, id: string): LayoutNode | null
   return remove(root, id)
 }
 
+// 持ち上げで空いた領域は、接していた側だけが広げる。接していないパネルの幅と高さはそのままにする。
+// 下限より狭いパネルだけは、空いた側から下限まで受け取ってよい。
+export function liftPane(root: LayoutNode | null, id: string, span?: DockSpan): LayoutNode | null {
+  if (!root || !contains(root, id))
+    return root
+  const width = span?.width ?? 0
+  const height = span?.height ?? 0
+  return detach(root, id, width, height)
+}
+
 export type DockEdge = "left" | "right" | "top" | "bottom"
 
-export function movePane(root: LayoutNode | null, draggedId: string, targetIds: string[], edge: DockEdge): LayoutNode | null {
+export function movePane(
+  root: LayoutNode | null,
+  draggedId: string,
+  targetIds: string[],
+  edge: DockEdge,
+  span?: DockSpan,
+): LayoutNode | null {
   if (!root || !contains(root, draggedId))
     return root
   const stay = targetIds.filter((id) => id !== draggedId)
@@ -108,7 +128,7 @@ export function movePane(root: LayoutNode | null, draggedId: string, targetIds: 
   const dragged = findPane(root, draggedId)
   if (!dragged)
     return root
-  const without = remove(root, draggedId)
+  const without = liftPane(root, draggedId, span)
   if (!without)
     return dragged
   const resolved = smallestContaining(without, stay) ?? without
@@ -127,12 +147,13 @@ export function commitMove(
   draggedId: string | null,
   targetIds: string[] | null,
   edge: DockEdge | null,
+  span?: DockSpan,
 ): LayoutNode | null {
   if (!origin)
     return origin
   if (!draggedId || !targetIds || !edge)
     return origin
-  const moved = movePane(origin, draggedId, targetIds, edge)
+  const moved = movePane(origin, draggedId, targetIds, edge, span)
   if (moved && contains(moved, draggedId))
     return moved
   return origin
@@ -209,6 +230,202 @@ function replace(node: LayoutNode, id: string, next: LayoutNode): LayoutNode {
   if ("id" in node)
     return node.id === id ? next : node
   return { ...node, first: replace(node.first, id, next), second: replace(node.second, id, next) }
+}
+
+function detach(node: LayoutNode, id: string, width: number, height: number): LayoutNode | null {
+  if ("id" in node)
+    return node.id === id ? null : node
+  const horizontal = node.axis === "h"
+  const span = horizontal ? width : height
+  const firstSpan = span * node.ratio
+  const secondSpan = span - firstSpan
+  const first = detach(
+    node.first,
+    id,
+    horizontal ? firstSpan : width,
+    horizontal ? height : firstSpan,
+  )
+  const second = detach(
+    node.second,
+    id,
+    horizontal ? secondSpan : width,
+    horizontal ? height : secondSpan,
+  )
+  if (first === node.first && second === node.second)
+    return node
+  if (!first && !second)
+    return null
+  if (!first)
+    return expandInto(second!, node.axis, 1 - node.ratio, true, span)
+  if (!second)
+    return expandInto(first, node.axis, node.ratio, false, span)
+  return { axis: node.axis, ratio: node.ratio, first, second }
+}
+
+// oldShare は、広げる前のこの節が親の中で占めていた割合。newShare まで広げる。
+// 増分は growAtStart のとき始端（左か上）、そうでないとき終端（右か下）に足す。
+// parentPx はその親の実寸。0 のときは下限の受け渡しをしない。
+function expandInto(
+  node: LayoutNode,
+  axis: "h" | "v",
+  oldShare: number,
+  growAtStart: boolean,
+  parentPx: number,
+): LayoutNode {
+  return expandTo(node, axis, oldShare, 1, growAtStart, parentPx)
+}
+
+function expandTo(
+  node: LayoutNode,
+  axis: "h" | "v",
+  oldShare: number,
+  newShare: number,
+  growAtStart: boolean,
+  parentPx: number,
+): LayoutNode {
+  if (!(oldShare > 0) || !(newShare > 0) || Math.abs(newShare - oldShare) < 1e-9)
+    return node
+  if ("id" in node)
+    return node
+  if (node.axis !== axis) {
+    const first = expandTo(node.first, axis, oldShare, newShare, growAtStart, parentPx)
+    const second = expandTo(node.second, axis, oldShare, newShare, growAtStart, parentPx)
+    if (first === node.first && second === node.second)
+      return node
+    return { axis: node.axis, ratio: node.ratio, first, second }
+  }
+  const firstOld = oldShare * node.ratio
+  const secondOld = oldShare - firstOld
+  const firstNew = growAtStart ? newShare - secondOld : firstOld
+  const secondNew = newShare - firstNew
+  const first = expandTo(node.first, axis, firstOld, firstNew, growAtStart, firstNew * parentPx)
+  const second = expandTo(node.second, axis, secondOld, secondNew, growAtStart, secondNew * parentPx)
+  if (!(parentPx > 1))
+    return { axis, ratio: firstNew / newShare, first, second }
+  const farIsSecond = growAtStart
+  const farPx = (farIsSecond ? secondNew : firstNew) * parentPx
+  const nearPx = parentPx - farPx
+  const farNode = farIsSecond ? second : first
+  const nearNode = farIsSecond ? first : second
+  const deficit = shortfall(farNode, axis, farPx, paneLimit(parentPx))
+  const shrunk = shrinkEdge(nearNode, axis, nearPx, !growAtStart, parentPx, deficit)
+  if (shrunk.shrunk < 0.5)
+    return { axis, ratio: firstNew / newShare, first, second }
+  const grown = growShort(farNode, axis, farPx, farPx + shrunk.shrunk, paneLimit(parentPx))
+  const nearPxNext = nearPx - shrunk.shrunk
+  const farPxNext = farPx + shrunk.shrunk
+  return {
+    axis,
+    ratio: (farIsSecond ? nearPxNext : farPxNext) / parentPx,
+    first: farIsSecond ? shrunk.node : grown,
+    second: farIsSecond ? grown : shrunk.node,
+  }
+}
+
+function paneLimit(span: number) {
+  return span <= minPane * 2 ? Math.max(1, span * 0.08) : minPane
+}
+
+function shortfall(node: LayoutNode, axis: "h" | "v", px: number, limit: number): number {
+  if ("id" in node)
+    return Math.max(0, limit - px)
+  if (node.axis !== axis) {
+    return Math.max(
+      shortfall(node.first, axis, px, limit),
+      shortfall(node.second, axis, px, limit),
+    )
+  }
+  const firstPx = px * node.ratio
+  return shortfall(node.first, axis, firstPx, limit) + shortfall(node.second, axis, px - firstPx, limit)
+}
+
+function growShort(node: LayoutNode, axis: "h" | "v", oldPx: number, newPx: number, limit: number): LayoutNode {
+  const extra = newPx - oldPx
+  if (!(extra > 0.5) || "id" in node)
+    return node
+  if (node.axis !== axis) {
+    const first = growShort(node.first, axis, oldPx, newPx, limit)
+    const second = growShort(node.second, axis, oldPx, newPx, limit)
+    if (first === node.first && second === node.second)
+      return node
+    return { axis: node.axis, ratio: node.ratio, first, second }
+  }
+  const firstPx = oldPx * node.ratio
+  const secondPx = oldPx - firstPx
+  const firstShort = shortfall(node.first, axis, firstPx, limit)
+  const secondShort = shortfall(node.second, axis, secondPx, limit)
+  const total = firstShort + secondShort
+  const firstGain = total > 0 ? extra * (firstShort / total) : 0
+  const secondGain = extra - firstGain
+  const firstNew = firstPx + firstGain
+  const secondNew = secondPx + secondGain
+  return {
+    axis,
+    ratio: firstNew / newPx,
+    first: growShort(node.first, axis, firstPx, firstNew, limit),
+    second: growShort(node.second, axis, secondPx, secondNew, limit),
+  }
+}
+
+function shrinkEdge(
+  node: LayoutNode,
+  axis: "h" | "v",
+  oldPx: number,
+  fromEnd: boolean,
+  span: number,
+  want: number,
+): { node: LayoutNode; shrunk: number } {
+  if (!(want > 0.5))
+    return { node, shrunk: 0 }
+  const limit = paneLimit(span)
+  if ("id" in node)
+    return { node, shrunk: Math.min(want, Math.max(0, oldPx - limit)) }
+  if (node.axis !== axis) {
+    const spare = Math.min(
+      edgeSpare(node.first, axis, oldPx, fromEnd, span),
+      edgeSpare(node.second, axis, oldPx, fromEnd, span),
+    )
+    const shrunk = Math.min(want, spare)
+    if (shrunk < 0.5)
+      return { node, shrunk: 0 }
+    return {
+      node: {
+        axis: node.axis,
+        ratio: node.ratio,
+        first: shrinkEdge(node.first, axis, oldPx, fromEnd, span, shrunk).node,
+        second: shrinkEdge(node.second, axis, oldPx, fromEnd, span, shrunk).node,
+      },
+      shrunk,
+    }
+  }
+  if (fromEnd) {
+    const secondPx = oldPx * (1 - node.ratio)
+    const firstPx = oldPx - secondPx
+    const edge = shrinkEdge(node.second, axis, secondPx, true, span, want)
+    if (edge.shrunk < 0.5)
+      return { node, shrunk: 0 }
+    return {
+      node: { axis, ratio: firstPx / (oldPx - edge.shrunk), first: node.first, second: edge.node },
+      shrunk: edge.shrunk,
+    }
+  }
+  const firstPx = oldPx * node.ratio
+  const edge = shrinkEdge(node.first, axis, firstPx, false, span, want)
+  if (edge.shrunk < 0.5)
+    return { node, shrunk: 0 }
+  return {
+    node: {
+      axis,
+      ratio: (firstPx - edge.shrunk) / (oldPx - edge.shrunk),
+      first: edge.node,
+      second: node.second,
+    },
+    shrunk: edge.shrunk,
+  }
+}
+
+function edgeSpare(node: LayoutNode, axis: "h" | "v", oldPx: number, fromEnd: boolean, span: number): number {
+  return shrinkEdge(node, axis, oldPx, fromEnd, span, Number.POSITIVE_INFINITY).shrunk
 }
 
 function remove(node: LayoutNode, id: string): LayoutNode | null {

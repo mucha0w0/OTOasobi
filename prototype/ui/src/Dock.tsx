@@ -1,7 +1,7 @@
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react"
 import { armBox, hitDrop, type DropAim, type HitLeaf, type HitRegion, type ScreenBox } from "./dockHit"
 import { pickTitleResize, type TitleEdge } from "./dockSplit"
-import { commitMove, hidePane, idsOf, paneTitles, type LayoutNode, type PaneBox } from "./layout"
+import { commitMove, hidePane, idsOf, liftPane, paneTitles, type DockSpan, type LayoutNode, type PaneBox } from "./layout"
 import { PaneHost } from "./paneSlots"
 import { measureFloors, measureSplitters, moveSplitter } from "./splitter"
 
@@ -54,7 +54,7 @@ export function Dock({ layout, locked, boxes, onChange, onRatio, onResizing }: P
         current.moving = true
         document.documentElement.classList.add("dragging")
         onResizing(true)
-        onChange(hidePane(current.origin, current.id), false)
+        onChange(liftPane(current.origin, current.id, dockSpan(rootRef.current)), false)
       }
       setGhost({ x: ev.clientX, y: ev.clientY, title: current.title })
       const root = rootRef.current
@@ -77,6 +77,7 @@ export function Dock({ layout, locked, boxes, onChange, onRatio, onResizing }: P
         current.id,
         hit?.edge && hit.targetIds.length ? hit.targetIds : null,
         hit?.edge ?? null,
+        dockSpan(rootRef.current),
       )
       onChange(next, true)
       window.requestAnimationFrame(() => window.requestAnimationFrame(() => onResizing(false)))
@@ -150,6 +151,13 @@ function placed(box: ScreenBox, origin: DOMRect) {
     width: box.width,
     height: box.height,
   }
+}
+
+function dockSpan(root: HTMLElement | null): DockSpan | undefined {
+  if (!root)
+    return undefined
+  const rect = root.getBoundingClientRect()
+  return rect.width >= 1 && rect.height >= 1 ? { width: rect.width, height: rect.height } : undefined
 }
 
 function readHits(root: HTMLElement): [HitLeaf[], HitRegion[]] {
