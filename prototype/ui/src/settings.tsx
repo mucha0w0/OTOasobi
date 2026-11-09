@@ -67,19 +67,6 @@ export function SettingsDialog({ tabs, onClose }: { tabs: SettingsTab[]; onClose
   return (
     <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/40 p-6">
       <div role="dialog" aria-modal="true" aria-label="環境設定" className="flex h-[min(32rem,100%)] w-full max-w-3xl flex-col rounded-md border border-[var(--line)] bg-[var(--panel)] text-[var(--text)]">
-        <div className="flex items-center justify-end border-b border-[var(--line)] py-2 pr-3 pl-5">
-          <button
-            type="button"
-            className="grid size-7 shrink-0 place-items-center rounded text-[var(--muted)] hover:bg-[var(--line)]"
-            aria-label="閉じる"
-            title="閉じる"
-            onClick={onClose}
-          >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-              <path d="M4 4 L12 12 M12 4 L4 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-            </svg>
-          </button>
-        </div>
         <div className="flex min-h-0 flex-1">
           <div role="tablist" aria-orientation="vertical" className="flex w-40 shrink-0 flex-col gap-1 border-r border-[var(--line)] p-3" onKeyDown={move}>
             {tabs.map((tab) => {
@@ -104,6 +91,10 @@ export function SettingsDialog({ tabs, onClose }: { tabs: SettingsTab[]; onClose
           <div role="tabpanel" id={panelId} aria-labelledby={current ? `settings-tab-${current.id}` : undefined} className="min-h-0 flex-1 overflow-auto p-5">
             {current?.content}
           </div>
+        </div>
+        <div className="flex justify-end gap-2 border-t border-[var(--line)] px-3 pt-2.5 pb-3">
+          <button type="button" className="ghost-button" onClick={onClose}>キャンセル</button>
+          <button type="button" className="accent-button" onClick={onClose}>適用して閉じる</button>
         </div>
       </div>
     </div>

@@ -108,7 +108,7 @@ id は `recList`、`recScript`、`rec`、`guide`、`mic`。初期配置には入
 
 ## 環境設定
 
-配布画面の環境設定はダイアログです。画面は `prototype/ui/src/settings.tsx`。「環境設定」の見出しは出さず、閉じるは上端の右です。左がタブ、右が選んだタブの中身で、開いたときは並びの先頭です。右の項目はパネルと同じ見出しと区切り線です。タブ名は左だけに出します。タブを足すときは `settingsTabs` に `{ id, title, content }` を足し、その中の項目は `Setting` で足します。いまは「見た目」（明暗、アクセント、倍率、パネルを固定）と「入出力」（マイクと再生先）です。ページが `appearance` と `setDevices` を送り、ホストが保存します。倍率は `appearance.json` の `scale` で、50% から 200% の 10% 刻みです。ページは `documentElement.style.zoom` に入れ、起動前のスクリプトでも同じ値を入れます。Ctrl＋ホイールと Ctrl＋± は `IsZoomControlEnabled` を切ってあり、画面全体の倍率には効きません。グラフ上の Ctrl＋ホイールは、その面の時間の拡大のままです。キャンバスの画素は、この倍率を `devicePixelRatio` に掛けて取ります。「パネルを固定」は `appearance.json` の `lockPanels` で、既定はオフです。オンのときはタイトルバーを出さず、境界の線は 1px で、中身がその分広くなります。リサイズと移動は受けません。表示メニューの開閉はそのままです。起動前のスクリプトが `documentElement.dataset.panelsLocked` を `1` にします。
+配布画面の環境設定はダイアログです。画面は `prototype/ui/src/settings.tsx`。「環境設定」の見出しと上端の × は出さない。下端の右に「キャンセル」と「適用して閉じる」があり、どちらもダイアログを閉じる。左がタブ、右が選んだタブの中身で、開いたときは並びの先頭です。右の項目はパネルと同じ見出しと区切り線です。タブ名は左だけに出します。タブを足すときは `settingsTabs` に `{ id, title, content }` を足し、その中の項目は `Setting` で足します。いまは「見た目」（明暗、アクセント、倍率、パネルを固定）と「入出力」（マイクと再生先）です。ページが `appearance` と `setDevices` を送り、ホストが保存します。倍率は `appearance.json` の `scale` で、50% から 200% の 10% 刻みです。ページは `documentElement.style.zoom` に入れ、起動前のスクリプトでも同じ値を入れます。Ctrl＋ホイールと Ctrl＋± は `IsZoomControlEnabled` を切ってあり、画面全体の倍率には効きません。グラフ上の Ctrl＋ホイールは、その面の時間の拡大のままです。キャンバスの画素は、この倍率を `devicePixelRatio` に掛けて取ります。「パネルを固定」は `appearance.json` の `lockPanels` で、既定はオフです。オンのときはタイトルバーを出さず、境界の線は 1px で、中身がその分広くなります。リサイズと移動は受けません。表示メニューの開閉はそのままです。起動前のスクリプトが `documentElement.dataset.panelsLocked` を `1` にします。
 
 旧画面は、編集画面のパネルにしない別ウィンドウ `SettingsWindow`（`winui/SettingsWindow.xaml`）です。
 
