@@ -23,6 +23,9 @@ sealed class RecAppSettings
 
     public int CountBeats { get; set; } = RecTone.DefaultCountBeats;
 
+    public int CountBeatsAfter { get; set; }
+
+    // 旧設定の読み取り用。
     public bool CountWhileMoras { get; set; }
 
     public int Bpm { get; set; } = 120;
@@ -50,6 +53,9 @@ sealed class RecAppSettings
         settings.Bpm = Math.Clamp(settings.Bpm, 40, 240);
         settings.Moras = Math.Clamp(settings.Moras, RecTone.MinMoras, RecTone.MaxMoras);
         settings.CountBeats = Math.Clamp(settings.CountBeats, RecTone.MinCountBeats, RecTone.MaxCountBeats);
+        settings.CountBeatsAfter = Math.Clamp(settings.CountBeatsAfter, 0, RecTone.MaxCountBeats);
+        if (settings.CountWhileMoras && settings.CountBeatsAfter == 0)
+            settings.CountBeatsAfter = RecTone.DefaultCountBeats;
         settings.DeviceId = BlankToNull(settings.DeviceId);
         settings.OutputDeviceId = BlankToNull(settings.OutputDeviceId);
         return settings;

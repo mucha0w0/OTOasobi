@@ -189,7 +189,7 @@ export function App() {
   const [volume, setVolume] = useState(0.7)
   const [countIn, setCountIn] = useState(false)
   const [countBeats, setCountBeats] = useState(4)
-  const [countWhileMoras, setCountWhileMoras] = useState(false)
+  const [countBeatsAfter, setCountBeatsAfter] = useState(0)
   const [bpm, setBpm] = useState(120)
   const [moras, setMoras] = useState(5)
   const [guideWhile, setGuideWhile] = useState(false)
@@ -273,7 +273,7 @@ export function App() {
       ...emptySnapshot(),
       appearance: { theme, accent: null, scale, lockPanels },
       monitor,
-      rec: { note, semitones, speed, volume, countIn, countBeats, countWhileMoras, bpm, moras, guideWhile, advance },
+      rec: { note, semitones, speed, volume, countIn, countBeats, countBeatsAfter, bpm, moras, guideWhile, advance },
     }
   }
   const resolved = resolveTheme(theme, systemDark)
@@ -401,7 +401,7 @@ export function App() {
         volume,
         countIn,
         countBeats,
-        countWhileMoras,
+        countBeatsAfter,
         bpm,
         moras,
         guideWhile,
@@ -409,7 +409,7 @@ export function App() {
       })
     }, 300)
     return () => window.clearTimeout(timer)
-  }, [advance, bpm, countBeats, countIn, countWhileMoras, guideWhile, moras, note, semitones, speed, volume])
+  }, [advance, bpm, countBeats, countBeatsAfter, countIn, guideWhile, moras, note, semitones, speed, volume])
 
   function viewModel(over: Partial<GraphModel> = {}): GraphModel {
     return {
@@ -1018,7 +1018,7 @@ export function App() {
             volume: event.volume,
             countIn: event.countIn,
             countBeats: event.countBeats,
-            countWhileMoras: event.countWhileMoras,
+            countBeatsAfter: event.countBeatsAfter,
             bpm: event.bpm,
             moras: event.moras,
             guideWhile: event.guideWhile,
@@ -1031,7 +1031,7 @@ export function App() {
         setVolume(event.volume)
         setCountIn(event.countIn)
         setCountBeats(event.countBeats)
-        setCountWhileMoras(event.countWhileMoras)
+        setCountBeatsAfter(event.countBeatsAfter)
         setBpm(event.bpm)
         setMoras(event.moras)
         setGuideWhile(event.guideWhile)
@@ -1162,7 +1162,7 @@ export function App() {
       name,
       countIn,
       countBeats,
-      countWhileMoras,
+      countBeatsAfter,
       bpm,
       moras,
       guideWhile,
@@ -1300,7 +1300,7 @@ export function App() {
         || volume !== rec.volume
         || countIn !== rec.countIn
         || countBeats !== rec.countBeats
-        || countWhileMoras !== rec.countWhileMoras
+        || countBeatsAfter !== rec.countBeatsAfter
         || bpm !== rec.bpm
         || moras !== rec.moras
         || guideWhile !== rec.guideWhile
@@ -1313,7 +1313,7 @@ export function App() {
         setVolume(rec.volume)
         setCountIn(rec.countIn)
         setCountBeats(rec.countBeats)
-        setCountWhileMoras(rec.countWhileMoras)
+        setCountBeatsAfter(rec.countBeatsAfter)
         setBpm(rec.bpm)
         setMoras(rec.moras)
         setGuideWhile(rec.guideWhile)
@@ -1522,7 +1522,7 @@ export function App() {
                     volume={volume}
                     countIn={countIn}
                     countBeats={countBeats}
-                    countWhileMoras={countWhileMoras}
+                    countBeatsAfter={countBeatsAfter}
                     bpm={bpm}
                     moras={moras}
                     guideWhile={guideWhile}
@@ -1533,7 +1533,7 @@ export function App() {
                     setVolume={touchRec(setVolume)}
                     setCountIn={touchRec(setCountIn)}
                     setCountBeats={touchRec(setCountBeats)}
-                    setCountWhileMoras={touchRec(setCountWhileMoras)}
+                    setCountBeatsAfter={touchRec(setCountBeatsAfter)}
                     setBpm={touchRec(setBpm)}
                     setMoras={touchRec(setMoras)}
                     setGuideWhile={touchRec(setGuideWhile)}

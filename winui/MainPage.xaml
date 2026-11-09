@@ -1806,11 +1806,11 @@
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="120" />
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock VerticalAlignment="Center" Text="カウント数" />
+                                        <TextBlock VerticalAlignment="Center" Text="発声前のカウント数" />
                                         <NumberBox
                                             x:Name="RecCountBeatsBox"
                                             Grid.Column="1"
-                                            AutomationProperties.Name="カウント数"
+                                            AutomationProperties.Name="発声前のカウント数"
                                             LargeChange="1"
                                             Maximum="16"
                                             Minimum="1"
@@ -1819,12 +1819,24 @@
                                             Value="4"
                                             ValueChanged="RecCountBeats_Changed" />
                                     </Grid>
-                                    <ToggleSwitch
-                                        x:Name="RecCountWhileSwitch"
-                                        AutomationProperties.Name="発声中もカウントを鳴らす"
-                                        OffContent="発声中はカウントなし"
-                                        OnContent="発声中もカウントする"
-                                        Toggled="RecCountWhile_Toggled" />
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="120" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock VerticalAlignment="Center" Text="発声後のカウント数" />
+                                        <NumberBox
+                                            x:Name="RecCountBeatsAfterBox"
+                                            Grid.Column="1"
+                                            AutomationProperties.Name="発声後のカウント数"
+                                            LargeChange="1"
+                                            Maximum="16"
+                                            Minimum="0"
+                                            SmallChange="1"
+                                            SpinButtonPlacementMode="Inline"
+                                            Value="0"
+                                            ValueChanged="RecCountBeatsAfter_Changed" />
+                                    </Grid>
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />

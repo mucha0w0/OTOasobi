@@ -87,7 +87,7 @@ export function GuidePanel({
   volume,
   countIn,
   countBeats,
-  countWhileMoras,
+  countBeatsAfter,
   bpm,
   moras,
   guideWhile,
@@ -98,7 +98,7 @@ export function GuidePanel({
   setVolume,
   setCountIn,
   setCountBeats,
-  setCountWhileMoras,
+  setCountBeatsAfter,
   setBpm,
   setMoras,
   setGuideWhile,
@@ -111,7 +111,7 @@ export function GuidePanel({
   volume: number
   countIn: boolean
   countBeats: number
-  countWhileMoras: boolean
+  countBeatsAfter: number
   bpm: number
   moras: number
   guideWhile: boolean
@@ -122,7 +122,7 @@ export function GuidePanel({
   setVolume: (value: number) => void
   setCountIn: (value: boolean) => void
   setCountBeats: (value: number) => void
-  setCountWhileMoras: (value: boolean) => void
+  setCountBeatsAfter: (value: number) => void
   setBpm: (value: number) => void
   setMoras: (value: number) => void
   setGuideWhile: (value: boolean) => void
@@ -172,14 +172,17 @@ export function GuidePanel({
               <>
                 <label className="grid gap-1">
                   <span className="flex justify-between">
-                    カウント数
+                    発声前のカウント数
                     <span className="num text-[var(--muted)]">{countBeats}</span>
                   </span>
                   <input type="range" min={1} max={16} step={1} value={countBeats} onChange={(event) => setCountBeats(Number(event.target.value))} />
                 </label>
-                <label className="flex gap-2">
-                  <input type="checkbox" checked={countWhileMoras} onChange={(event) => setCountWhileMoras(event.target.checked)} />
-                  発声中もカウントを鳴らす
+                <label className="grid gap-1">
+                  <span className="flex justify-between">
+                    発声後のカウント数
+                    <span className="num text-[var(--muted)]">{countBeatsAfter}</span>
+                  </span>
+                  <input type="range" min={0} max={16} step={1} value={countBeatsAfter} onChange={(event) => setCountBeatsAfter(Number(event.target.value))} />
                 </label>
               </>
             )}
@@ -235,7 +238,7 @@ export function GuidePanel({
         <IconButton
           label={playing ? "停止" : "ガイドを聴く"}
           accent
-          onClick={() => send(playing ? { type: "guideStop" } : { type: "guide", note, semitones, speed, volume, bpm, moras, countIn, countBeats, countWhileMoras })}
+          onClick={() => send(playing ? { type: "guideStop" } : { type: "guide", note, semitones, speed, volume, bpm, moras, countIn, countBeats, countBeatsAfter })}
         >
           {playing ? <IconStop /> : <IconPlay />}
         </IconButton>

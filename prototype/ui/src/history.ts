@@ -18,7 +18,7 @@ export type RecSnapshot = {
   volume: number
   countIn: boolean
   countBeats: number
-  countWhileMoras: boolean
+  countBeatsAfter: number
   bpm: number
   moras: number
   guideWhile: boolean
@@ -103,7 +103,7 @@ export function emptySnapshot(): EditSnapshot {
       volume: 0.7,
       countIn: false,
       countBeats: 4,
-      countWhileMoras: false,
+      countBeatsAfter: 0,
       bpm: 120,
       moras: 5,
       guideWhile: false,
@@ -294,7 +294,7 @@ export function applySnapshot(snapshot: EditSnapshot, command: PageCommand): Edi
           volume: command.volume,
           countIn: command.countIn,
           countBeats: command.countBeats,
-          countWhileMoras: command.countWhileMoras,
+          countBeatsAfter: command.countBeatsAfter,
           bpm: command.bpm,
           moras: command.moras,
           guideWhile: command.guideWhile,
@@ -908,7 +908,7 @@ function describeRec(command: Extract<PageCommand, { type: "recSettings" }>, sna
     !near(command.volume, current.volume) ? "volume" : "",
     command.countIn !== current.countIn ? "countIn" : "",
     command.countBeats !== current.countBeats ? "countBeats" : "",
-    command.countWhileMoras !== current.countWhileMoras ? "countWhileMoras" : "",
+    command.countBeatsAfter !== current.countBeatsAfter ? "countBeatsAfter" : "",
     command.bpm !== current.bpm ? "bpm" : "",
     command.moras !== current.moras ? "moras" : "",
     command.guideWhile !== current.guideWhile ? "guideWhile" : "",
@@ -916,7 +916,7 @@ function describeRec(command: Extract<PageCommand, { type: "recSettings" }>, sna
   ].filter((item) => item.length > 0)
   if (changed.length === 0)
     return null
-  const numeric = changed.length === 1 && (changed[0] === "semitones" || changed[0] === "speed" || changed[0] === "volume" || changed[0] === "bpm" || changed[0] === "moras" || changed[0] === "countBeats")
+  const numeric = changed.length === 1 && (changed[0] === "semitones" || changed[0] === "speed" || changed[0] === "volume" || changed[0] === "bpm" || changed[0] === "moras" || changed[0] === "countBeats" || changed[0] === "countBeatsAfter")
   const key = changed.length === 1 ? `rec.${changed[0]}` : `rec.${changed.join("+")}`
   return edit(key, numeric, [{ type: "recSettings", ...current }], [command])
 }

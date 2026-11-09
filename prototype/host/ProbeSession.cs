@@ -231,7 +231,7 @@ sealed class ProbeSession : IDisposable
                         MorasOf(root),
                         root.TryGetProperty("countIn", out var guideCount) && guideCount.ValueKind == JsonValueKind.True,
                         CountBeatsOf(root),
-                        CountWhileMorasOf(root));
+                        CountBeatsAfterOf(root));
                     break;
                 case "guideStop":
                     _player.Stop();
@@ -967,7 +967,7 @@ sealed class ProbeSession : IDisposable
 
     void PostGuide() => Post(_rec.GuideSnapshot());
 
-    async Task GuideAsync(string note, int semitones, double speed, double volume, bool loop, int bpm, int moras, bool countIn, int countBeats, bool countWhileMoras)
+    async Task GuideAsync(string note, int semitones, double speed, double volume, bool loop, int bpm, int moras, bool countIn, int countBeats, int countBeatsAfter)
     {
         if (_disposed)
             return;
@@ -984,7 +984,7 @@ sealed class ProbeSession : IDisposable
         }
 
         // 録音中のループには先頭カウントを入れない。発声中のクリックはループでも効く。
-        var tone = RecTone.ManualGuide(hz, bpm, moras, RecTone.TargetRate, countIn && !loop, countBeats, countWhileMoras);
+        var tone = RecTone.ManualGuide(hz, bpm, moras, RecTone.TargetRate, countIn && !loop, countBeats, countBeatsAfter);
         var shaped = RecTone.ShapeGuide(tone, 1, RecTone.TargetRate, speed, semitones);
         var wav = PreviewWav.Encode(shaped, 1, RecTone.TargetRate);
         _player.Volume = volume;
@@ -1235,7 +1235,7 @@ sealed class ProbeSession : IDisposable
                 MorasOf(root),
                 countIn: false,
                 countBeats,
-                CountWhileMorasOf(root));
+                CountBeatsAfterOf(root));
         }
     }
 
@@ -1799,7 +1799,10 @@ sealed class ProbeSession : IDisposable
             settings.Moras = MorasOf(root);
         if (root.TryGetProperty("countBeats", out _))
             settings.CountBeats = CountBeatsOf(root);
-        settings.CountWhileMoras = root.TryGetProperty("countWhileMoras", out var moraCount) && moraCount.ValueKind == JsonValueKind.True;
+        if (root.TryGetProperty("countBeatsAfter", out _))
+            settings.CountBeatsAfter = CountBeatsAfterOf(root);
+        else if (root.TryGetProperty("countWhileMoras", out var moraCount) && moraCount.ValueKind == JsonValueKind.True && settings.CountBeatsAfter == 0)
+            settings.CountBeatsAfter = RecTone.DefaultCountBeats;
         settings.GuideWhileRecording = root.TryGetProperty("guideWhile", out var guide) && guide.ValueKind == JsonValueKind.True;
         settings.AutoAdvance = root.TryGetProperty("advance", out var advance) && advance.ValueKind == JsonValueKind.True;
         settings.Save();
@@ -1817,7 +1820,7 @@ sealed class ProbeSession : IDisposable
             volume = settings.GuideVolume,
             countIn = settings.CountIn,
             countBeats = settings.CountBeats,
-            countWhileMoras = settings.CountWhileMoras,
+            countBeatsAfter = settings.CountBeatsAfter,
             bpm = settings.Bpm,
             moras = settings.Moras,
             guideWhile = settings.GuideWhileRecording,
@@ -2127,8 +2130,14 @@ sealed class ProbeSession : IDisposable
         return (int)Math.Clamp(Math.Round(beats <= 0 ? RecTone.DefaultCountBeats : beats), RecTone.MinCountBeats, RecTone.MaxCountBeats);
     }
 
-    static bool CountWhileMorasOf(JsonElement root) =>
-        root.TryGetProperty("countWhileMoras", out var value) && value.ValueKind == JsonValueKind.True;
+    static int CountBeatsAfterOf(JsonElement root)
+    {
+        if (root.TryGetProperty("countBeatsAfter", out var after) && after.TryGetDouble(out var parsedAfter))
+            return (int)Math.Clamp(Math.Round(parsedAfter), 0, RecTone.MaxCountBeats);
+        if (root.TryGetProperty("countWhileMoras", out var legacy) && legacy.ValueKind == JsonValueKind.True)
+            return RecTone.DefaultCountBeats;
+        return 0;
+    }
 
     bool _keepRatios;
 

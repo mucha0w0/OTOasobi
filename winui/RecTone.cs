@@ -100,18 +100,19 @@ static class RecTone
         return samples;
     }
 
-    // 先頭カウントと、モーラ中へのクリック重ね。
-    public static float[] ManualGuide(double hz, int bpm, int moras, int sampleRate, bool preCount, int countBeats, bool countWhileMoras)
+    // 発声前のカウントと、発声中のクリック重ね。
+    public static float[] ManualGuide(double hz, int bpm, int moras, int sampleRate, bool preCount, int countBeatsBefore, int countBeatsAfter)
     {
         var mora = MoraGuide(hz, bpm, moras, sampleRate);
         if (mora.Length == 0)
             return mora;
-        countBeats = Math.Clamp(countBeats, MinCountBeats, MaxCountBeats);
+        countBeatsBefore = Math.Clamp(countBeatsBefore, MinCountBeats, MaxCountBeats);
+        countBeatsAfter = Math.Clamp(countBeatsAfter, 0, MaxCountBeats);
         float[] samples;
         var moraStart = 0;
         if (preCount)
         {
-            var clicks = CountIn(bpm, sampleRate, countBeats);
+            var clicks = CountIn(bpm, sampleRate, countBeatsBefore);
             if (clicks.Length == 0)
                 samples = mora;
             else
@@ -125,8 +126,8 @@ static class RecTone
         else
             samples = mora;
 
-        if (countWhileMoras)
-            OverlayBeatClicks(samples, moraStart, mora.Length, bpm, sampleRate);
+        if (countBeatsAfter > 0)
+            OverlayBeatClicks(samples, moraStart, mora.Length, bpm, sampleRate, countBeatsAfter);
         return samples;
     }
 
@@ -151,13 +152,15 @@ static class RecTone
         return samples;
     }
 
-    static void OverlayBeatClicks(float[] samples, int regionStart, int regionLength, int bpm, int sampleRate)
+    static void OverlayBeatClicks(float[] samples, int regionStart, int regionLength, int bpm, int sampleRate, int beatCount)
     {
-        if (sampleRate <= 0 || regionLength <= 0)
+        if (sampleRate <= 0 || regionLength <= 0 || beatCount <= 0)
             return;
         bpm = Math.Clamp(bpm, 40, 240);
+        beatCount = Math.Clamp(beatCount, 0, MaxCountBeats);
         var beat = sampleRate * 60.0 / bpm;
-        var beats = Math.Max(0, (int)Math.Floor(regionLength / beat));
+        var regionBeats = Math.Max(0, (int)Math.Floor(regionLength / beat));
+        var beats = Math.Min(beatCount, regionBeats);
         for (var index = 0; index < beats; index++)
         {
             var start = regionStart + (int)Math.Round(beat * index);

@@ -58,7 +58,7 @@ public sealed partial class MainPage
         RecGuidePitchValue.Text = FormatGuidePitch((int)Math.Round(RecGuidePitchSlider.Value));
         RecCountInSwitch.IsOn = _recSettings.CountIn;
         RecCountBeatsBox.Value = _recSettings.CountBeats;
-        RecCountWhileSwitch.IsOn = _recSettings.CountWhileMoras;
+        RecCountBeatsAfterBox.Value = _recSettings.CountBeatsAfter;
         RecBpmBox.Value = _recSettings.Bpm;
         RecMorasBox.Value = _recSettings.Moras;
         RecGuideWhileSwitch.IsOn = _recSettings.GuideWhileRecording;
@@ -484,11 +484,11 @@ public sealed partial class MainPage
         _recSettings.Save();
     }
 
-    void RecCountWhile_Toggled(object sender, RoutedEventArgs e)
+    void RecCountBeatsAfter_Changed(NumberBox sender, NumberBoxValueChangedEventArgs e)
     {
-        if (_recApplying)
+        if (_recApplying || double.IsNaN(e.NewValue))
             return;
-        _recSettings.CountWhileMoras = RecCountWhileSwitch.IsOn;
+        _recSettings.CountBeatsAfter = (int)Math.Clamp(Math.Round(e.NewValue), 0, RecTone.MaxCountBeats);
         _recSettings.Save();
     }
 
@@ -1171,7 +1171,7 @@ public sealed partial class MainPage
                     RecTone.TargetRate,
                     _recSettings.CountIn && !loop,
                     _recSettings.CountBeats,
-                    _recSettings.CountWhileMoras),
+                    _recSettings.CountBeatsAfter),
                 1,
                 RecTone.TargetRate);
         }
