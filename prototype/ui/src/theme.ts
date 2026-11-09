@@ -30,12 +30,34 @@ export function contrastRatio(fill: Rgb, ink: Rgb): number {
 const black: Rgb = { r: 0, g: 0, b: 0 }
 const white: Rgb = { r: 255, g: 255, b: 255 }
 
-export function buttonColors(hex: string): { fill: string; ink: string } {
-  const fill = parseHex(hex) ?? { r: 15, g: 118, b: 110 }
-  const onBlack = contrastRatio(fill, black)
-  const onWhite = contrastRatio(fill, white)
-  const ink = onBlack >= onWhite ? "#000000" : "#ffffff"
-  return { fill: toHex(fill), ink }
+export function buttonColors(hex: string, theme: "light" | "dark"): { fill: string; ink: string } {
+  const parsed = parseHex(hex) ?? parseHex(defaultAccent(theme))!
+  if (theme === "dark") {
+    const onBlack = contrastRatio(parsed, black)
+    const onWhite = contrastRatio(parsed, white)
+    return { fill: toHex(parsed), ink: onBlack >= onWhite ? "#000000" : "#ffffff" }
+  }
+  return { fill: toHex(darkenForWhiteText(parsed)), ink: "#ffffff" }
+}
+
+// 白文字が 4.5:1 に足りないときだけ、色相を残して明度を下げる。
+function darkenForWhiteText(fill: Rgb): Rgb {
+  if (contrastRatio(fill, white) >= 4.5)
+    return fill
+  const oklch = rgbToOklch(fill)
+  let lo = 0
+  let hi = oklch.L
+  let best = 0
+  for (let i = 0; i < 24; i++) {
+    const mid = (lo + hi) / 2
+    if (contrastRatio(oklchToRgb({ ...oklch, L: mid }), white) >= 4.5) {
+      best = mid
+      lo = mid
+    } else {
+      hi = mid
+    }
+  }
+  return oklchToRgb({ ...oklch, L: best })
 }
 
 export function defaultAccent(theme: "light" | "dark"): string {

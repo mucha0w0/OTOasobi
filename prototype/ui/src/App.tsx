@@ -259,7 +259,7 @@ export function App() {
     }
   }
   const resolved = resolveTheme(theme, systemDark)
-  const accentPaint = buttonColors(correctAccent(accent ?? defaultAccent(resolved), resolved))
+  const accentPaint = buttonColors(correctAccent(accent ?? defaultAccent(resolved), resolved), resolved)
   document.documentElement.dataset.theme = resolved
   document.documentElement.style.setProperty("--accent", accentPaint.fill)
   document.documentElement.style.setProperty("--on-accent", accentPaint.ink)

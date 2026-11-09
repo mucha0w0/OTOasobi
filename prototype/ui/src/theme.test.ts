@@ -2,9 +2,21 @@ import { describe, expect, it } from "vitest"
 import { buttonColors, contrastRatio, correctAccent, defaultAccent, oklchOf, parseHex } from "./theme"
 
 describe("アクセントの文字色", () => {
-  it("白、黒、明るい黄でも塗りと文字のコントラストが 4.5 以上になる", () => {
+  it("ライトでは文字を白にし、白とのコントラストを 4.5 以上にする", () => {
+    for (const hex of ["#ffffff", "#000000", "#ffe600", "#0f766e", "#ff66cc"]) {
+      const colors = buttonColors(correctAccent(hex, "light"), "light")
+      expect(colors.ink).toBe("#ffffff")
+      const fill = parseHex(colors.fill)
+      const ink = parseHex(colors.ink)
+      expect(fill).not.toBeNull()
+      expect(ink).not.toBeNull()
+      expect(contrastRatio(fill!, ink!)).toBeGreaterThanOrEqual(4.5)
+    }
+  })
+
+  it("ダークでは白と黒のうちコントラストが高い方を選ぶ", () => {
     for (const hex of ["#ffffff", "#000000", "#ffe600"]) {
-      const colors = buttonColors(hex)
+      const colors = buttonColors(correctAccent(hex, "dark"), "dark")
       const fill = parseHex(colors.fill)
       const ink = parseHex(colors.ink)
       expect(fill).not.toBeNull()
