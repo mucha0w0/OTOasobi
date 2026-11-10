@@ -29,26 +29,23 @@ sealed class ProbeUpdate
                 return;
             }
 
-            if (!manager.IsInstalled)
-            {
-                post("unavailable", "更新", "Setup からインストールしたときに、更新を確認します。");
-                return;
-            }
-
+            var installed = manager.IsInstalled;
             UpdateInfo? info = null;
             string? appError = null;
-            try
+            if (installed)
             {
-                info = await manager.CheckForUpdatesAsync().ConfigureAwait(false);
-            }
-            catch (NotInstalledException)
-            {
-                post("unavailable", "更新", "Setup からインストールしたときに、更新を確認します。");
-                return;
-            }
-            catch (Exception)
-            {
-                appError = "更新情報を取得できませんでした。";
+                try
+                {
+                    info = await manager.CheckForUpdatesAsync().ConfigureAwait(false);
+                }
+                catch (NotInstalledException)
+                {
+                    installed = false;
+                }
+                catch (Exception)
+                {
+                    appError = "更新情報を取得できませんでした。";
+                }
             }
 
             EngineRelease? release = null;
@@ -71,7 +68,13 @@ sealed class ProbeUpdate
             if (info == null && !need.Any)
             {
                 var problem = appError ?? engineError;
-                var current = manager.CurrentVersion?.ToString();
+                if (problem == null && !installed)
+                {
+                    post("current", "更新", "高精度エンジンは入っています。アプリの更新は、Setup からインストールしたときに確認します。");
+                    return;
+                }
+
+                var current = installed ? manager.CurrentVersion?.ToString() : null;
                 var body = problem ?? (current == null ? "いまのバージョンが最新です。" : $"{current} は最新です。");
                 post("current", "更新", body);
                 return;
