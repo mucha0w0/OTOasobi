@@ -146,4 +146,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         shell: pwsh
-        run: gh release upload "v${{ steps.version.outputs.version }}" engine-dist/OtoasobiEngine.zip engine-dist/mms-fa-model.pt engine-dist/engine.json --clobber
+        run: gh release upload "v${{ steps.version.outputs.version }}" engine-dist/OtoasobiEngine.zip engine-dist/mms-fa-model.pt engine-dist/engine.json engine-dist/OtoasobiEnginePack.zip --clobber

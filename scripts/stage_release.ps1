@@ -159,6 +159,29 @@ function Write-EngineManifest {
     Save-Utf8 (Join-Path $Directory "engine.json") (($meta | ConvertTo-Json) + "`n")
 }
 
+function Write-EnginePack([string]$Directory) {
+    $pack = Join-Path $Directory "OtoasobiEnginePack.zip"
+    $names = @("engine.json", "OtoasobiEngine.zip", "mms-fa-model.pt")
+    if (Test-Path $pack) {
+        Remove-Item $pack -Force
+    }
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $zip = [IO.Compression.ZipFile]::Open($pack, [IO.Compression.ZipArchiveMode]::Create)
+    try {
+        foreach ($name in $names) {
+            [IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
+                $zip,
+                (Join-Path $Directory $name),
+                $name,
+                [IO.Compression.CompressionLevel]::NoCompression) | Out-Null
+        }
+    }
+    finally {
+        $zip.Dispose()
+    }
+    Assert-GitHubSize $pack
+}
+
 function Assert-GitHubSize([string]$Path) {
     $limit = 2GB - 1
     $length = (Get-Item $Path).Length
@@ -193,6 +216,7 @@ $modelPath = Join-Path $OutputDir "mms-fa-model.pt"
 if ($ReuseEngine -and (Test-ReusedEngine $OutputDir)) {
     Assert-GitHubSize $zipPath
     Assert-GitHubSize $modelPath
+    Write-EnginePack $OutputDir
     return
 }
 
@@ -230,4 +254,5 @@ $version = Get-TextSha256 ($req + "`npython=$PythonVersion`n")
 Write-EngineManifest $OutputDir $version $zipPath $modelPath
 Assert-GitHubSize $zipPath
 Assert-GitHubSize $modelPath
+Write-EnginePack $OutputDir
 Remove-Item $engineRoot -Recurse -Force
