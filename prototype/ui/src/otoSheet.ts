@@ -20,7 +20,7 @@ const maxMs = 86_400_000
 
 export const sheetColumns: SheetColumn[] = [
   { id: "file", header: "ファイル", title: "WAV の名前", kind: "file", point: null, align: "left" },
-  { id: "alias", header: "エイリアス", title: "oto.ini に書く名前。同じ名前の 2 回目以降には 2、3、… が付く。子音音素は、CVVC を出すとき、子音があるモーラの前に入る。編集印の * はコピーされません", kind: "alias", point: null, align: "left" },
+  { id: "alias", header: "エイリアス", title: "oto.ini のその行の名前。編集印の * はコピーされません", kind: "alias", point: null, align: "left" },
   { id: "offset", header: "オフセット", title: "ファイル先頭からのミリ秒。0 未満にはしない", kind: "number", point: 0, align: "right" },
   { id: "overlap", header: "オーバーラップ", title: "オフセットからのミリ秒。前にあるときは負の数", kind: "number", point: 1, align: "right" },
   { id: "preutter", header: "先行発声", title: "オフセットからのミリ秒。0 未満にはしない", kind: "number", point: 2, align: "right" },
