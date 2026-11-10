@@ -1,4 +1,5 @@
 import { sameName } from "./filePick"
+import { otoField } from "./otoFields"
 import type { BankEvent, BankLocale, BankRow, EffectsEvent, OtoMark, OtoState, PageCommand } from "./protocol"
 import type { PhoneSpan } from "./spans"
 import type { ThemeChoice } from "./theme"
@@ -527,33 +528,31 @@ function describeOto(command: Extract<PageCommand, { type: "oto" }>, snapshot: E
       const mark = findPlaced(snapshot, command.file, command.index, command.alias, command.mode)
       if (!mark || sameFields(mark, command))
         return null
-      return edit(`oto.fields.${command.file}.${command.index}.${command.alias}`, false, [{
-        type: "oto",
-        op: "fields",
-        file: command.file,
-        index: command.index,
-        alias: command.alias,
-        mode: command.mode,
-        offset: mark.offset,
-        overlap: mark.overlap,
-        preutter: mark.preutter,
-        consonant: mark.consonant,
-        blank: mark.blank,
-      }], [command])
+      const current = fieldCommand(mark, command)
+      return edit(`oto.fields.${command.file}.${command.index}.${command.alias}`, false, [current], [command])
     }
     case "aliasName": {
       const mark = findPlaced(snapshot, command.file, command.index, command.alias, command.mode)
-      if (!mark || mark.name === command.name)
+      const shown = mark ? aliasShown(mark) : ""
+      if (!mark || shown === command.name)
         return null
       return edit(`oto.aliasName.${command.file}.${command.index}`, false, [{
         type: "oto",
         op: "aliasName",
         file: command.file,
         index: command.index,
-        alias: command.alias,
+        alias: command.name,
         mode: command.mode,
-        name: mark.name,
-      }], [command])
+        name: shown,
+      }], [{
+        type: "oto",
+        op: "aliasName",
+        file: command.file,
+        index: command.index,
+        alias: shown,
+        mode: command.mode,
+        name: command.name,
+      }])
     }
     case "comment": {
       const mark = findPlaced(snapshot, command.file, command.index, command.alias, command.mode)
@@ -575,20 +574,54 @@ function describeOto(command: Extract<PageCommand, { type: "oto" }>, snapshot: E
 }
 
 function sameFields(mark: OtoMark, command: Extract<PageCommand, { type: "oto"; op: "fields" }>) {
-  return near(mark.offset, command.offset)
-    && near(mark.overlap, command.overlap)
-    && near(mark.preutter, command.preutter)
-    && near(mark.consonant, command.consonant)
-    && near(mark.blank, command.blank)
+  return near(otoField(mark, 0), command.offset)
+    && near(otoField(mark, 1), command.overlap)
+    && near(otoField(mark, 2), command.preutter)
+    && near(otoField(mark, 3), command.consonant)
+    && near(otoField(mark, 4), command.blank)
+}
+
+function fieldCommand(mark: OtoMark, command: Extract<PageCommand, { type: "oto"; op: "fields" }>): Extract<PageCommand, { type: "oto"; op: "fields" }> {
+  return {
+    type: "oto",
+    op: "fields",
+    file: command.file,
+    index: command.index,
+    alias: command.alias,
+    mode: command.mode,
+    offset: otoField(mark, 0),
+    overlap: otoField(mark, 1),
+    preutter: otoField(mark, 2),
+    consonant: otoField(mark, 3),
+    blank: otoField(mark, 4),
+  }
+}
+
+function modeMatches(mark: OtoMark, mode?: string) {
+  return mode == null || mode.length === 0 || mark.mode == null || mark.mode === mode
+}
+
+function aliasShown(mark: OtoMark): string {
+  return mark.alias.replace(/ \*$/u, "")
+}
+
+function timesFromFields(offset: number, overlap: number, preutter: number, consonant: number, blank: number) {
+  return {
+    offset: offset / 1000,
+    overlap: (offset + overlap) / 1000,
+    preutter: (offset + preutter) / 1000,
+    consonant: (offset + consonant) / 1000,
+    blank: (offset - blank) / 1000,
+  }
 }
 
 function findPlaced(snapshot: EditSnapshot, file: string, index: number, alias: string, mode?: string) {
   const rows = snapshot.oto?.rows ?? []
   const pool = rows.length > 0 ? rows : snapshot.marks
   return pool.find((mark) => mark.index === index
-    && sameName(mark.alias, alias)
+    && (sameName(mark.alias, alias) || sameName(mark.autoAlias, alias))
     && (mark.file.length === 0 || sameName(mark.file, file))
-    && (mode == null || mark.mode == null || mark.mode === mode))
+    && modeMatches(mark, mode))
 }
 
 function withOto(snapshot: EditSnapshot, oto: OtoState, marks = oto.marks ?? snapshot.marks, spans = snapshot.spans): EditSnapshot {
@@ -638,14 +671,15 @@ function applyOto(snapshot: EditSnapshot, command: Extract<PageCommand, { type: 
     case "fields":
       return withPlaced(snapshot, command.file, command.index, command.alias, command.mode, (mark) => ({
         ...mark,
-        offset: command.offset,
-        overlap: command.overlap,
-        preutter: command.preutter,
-        consonant: command.consonant,
-        blank: command.blank,
+        ...timesFromFields(command.offset, command.overlap, command.preutter, command.consonant, command.blank),
       }))
     case "aliasName":
-      return withPlaced(snapshot, command.file, command.index, command.alias, command.mode, (mark) => ({ ...mark, name: command.name }))
+      return withPlaced(snapshot, command.file, command.index, command.alias, command.mode, (mark) => ({
+        ...mark,
+        alias: command.name,
+        autoAlias: command.name,
+        name: "",
+      }))
     case "comment":
       return withPlaced(snapshot, command.file, command.index, command.alias, command.mode, (mark) => ({ ...mark, comment: command.comment }))
     default:
@@ -662,9 +696,9 @@ function withPlaced(
   map: (mark: OtoMark) => OtoMark,
 ): EditSnapshot {
   const hit = (mark: OtoMark) => mark.index === index
-    && sameName(mark.alias, alias)
+    && (sameName(mark.alias, alias) || sameName(mark.autoAlias, alias))
     && (mark.file.length === 0 || sameName(mark.file, file))
-    && (mode == null || mark.mode == null || mark.mode === mode)
+    && modeMatches(mark, mode)
   const oto = snapshot.oto
   if (!oto)
     return snapshot

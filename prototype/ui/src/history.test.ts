@@ -209,7 +209,33 @@ describe("同じ手へのまとめ", () => {
     expect(pasted.history.undo).toHaveLength(1)
     expect(pasted.step?.undo.map((command) => command.type === "oto" ? command.op : "")).toEqual(["comment", "fields"])
     expect(pasted.step?.undo[0]).toMatchObject({ comment: "" })
-    expect(pasted.step?.undo[1]).toMatchObject({ offset: 0.1 })
+    expect(pasted.step?.undo[1]).toMatchObject({ offset: 100, overlap: -80, preutter: 100, consonant: 200, blank: -300 })
+    const undone = undoHistory(pasted.history)!
+    const restored = applyCommands(pasted.snapshot, undone.step.undo)
+    expect(restored.oto?.rows?.[0]?.offset).toBeCloseTo(0.1)
+    expect(restored.oto?.rows?.[1]?.comment).toBe("")
+  })
+
+  it("数値表の行は mode が ini でも空の操作と照合する", () => {
+    const row = mark({ mode: "ini" })
+    const snapshot = snap({ oto: oto({ rows: [row] }) })
+    const edit = describeEdit({
+      type: "oto",
+      op: "fields",
+      file: "あ.wav",
+      index: 0,
+      alias: "あ",
+      mode: "",
+      offset: 250,
+      overlap: -80,
+      preutter: 100,
+      consonant: 200,
+      blank: -300,
+    }, snapshot)
+    expect(edit?.undo[0]).toMatchObject({ op: "fields", offset: 100 })
+    const renamed = describeEdit({ type: "oto", op: "aliasName", file: "あ.wav", index: 0, alias: "あ", mode: "", name: "か" }, snapshot)
+    expect(renamed?.undo[0]).toMatchObject({ alias: "か", name: "あ" })
+    expect(renamed?.redo[0]).toMatchObject({ alias: "あ", name: "か" })
   })
 })
 
