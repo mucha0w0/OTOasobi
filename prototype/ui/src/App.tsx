@@ -981,7 +981,7 @@ export function App() {
         const previous = otoRef.current
         const base = viewFresh || !previous ? event : previous
         const rows = rowsFresh ? event.rows ?? [] : previous?.rows ?? event.rows ?? []
-        const iniMarks = viewFresh && event.marks !== undefined
+        const iniMarks = viewFresh && event.fromIni
           ? iniMarksForFile(event.marks, fileNameRef.current)
           : marksRef.current
         const spans = viewFresh && event.spans !== undefined

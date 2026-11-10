@@ -278,6 +278,8 @@ export type OtoState = {
   busy: boolean
   analyzed: boolean
   hasIni: boolean
+  /** true のとき marks は oto.ini を読んだ結果。 */
+  fromIni?: boolean
   scope: "all" | "missing" | "overlap"
   aliasMono: boolean
   aliasMonoLocked: boolean
@@ -591,6 +593,7 @@ function parseOto(value: Record<string, unknown>): OtoState | null {
     busy: value.busy === true,
     analyzed: value.analyzed === true,
     hasIni: value.hasIni === true,
+    fromIni: value.fromIni === true,
     scope: value.scope,
     aliasMono: value.aliasMono === true,
     aliasMonoLocked: value.aliasMonoLocked === true,

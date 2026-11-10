@@ -1717,9 +1717,7 @@ sealed class ProbeSession : IDisposable
             case "spans":
                 if (_oto.MoveSpans(Text(root, "file"), ReadSpanTimes(Property(root, "spans"))))
                 {
-                    PostOtoView();
                     _ = SaveSpanCacheAsync();
-                    ScheduleOtoIniSync();
                     ScheduleOtoRows();
                 }
                 break;
@@ -1770,11 +1768,11 @@ sealed class ProbeSession : IDisposable
         return times;
     }
 
-    void RememberOto(bool rowsNow, bool syncIni = true)
+    void RememberOto(bool rowsNow, bool syncIni = false)
     {
         _otoSave.Stop();
         _otoSave.Start();
-        if (syncIni)
+        if (syncIni && _oto.HasIni)
             ScheduleOtoIniSync();
         if (rowsNow)
             PostOto();

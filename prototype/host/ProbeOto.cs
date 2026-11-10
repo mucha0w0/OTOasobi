@@ -405,6 +405,7 @@ sealed class ProbeOto
             vcConsonant = Shown(_cvvc.VcConsonant, DefaultVcConsonant),
             vcBlank = Shown(_cvvc.VcBlank, DefaultVcBlank),
             kinds = ConsonantOverlap.Kinds.Select(kind => new { group = kind.Group, key = kind.Key, caption = kind.Caption }).ToArray(),
+            fromIni = includeViewFields,
             spans = includeViewFields ? SpansOf(fileName) : null,
             marks = includeViewFields ? FileMarks(fileName) : null,
             rows = includeRows ? Rows() : null,
