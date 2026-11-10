@@ -26,7 +26,7 @@ static class OtoIniFile
         return marks;
     }
 
-    public static bool TryPatchLine(string? folder, string fileName, int index, OtoMark placed, string expectedAlias)
+    public static bool TryPatchLine(string? folder, string fileName, int index, OtoMark placed, string expectedAlias, string? nextAlias = null)
     {
         if (string.IsNullOrEmpty(folder))
             return false;
@@ -52,7 +52,8 @@ static class OtoIniFile
             left = alias.Trim();
         if (!left.Equals(right, StringComparison.Ordinal))
             return false;
-        lines[at] = RenderLine(filename, alias.TrimEnd('*').Trim(), placed);
+        var written = string.IsNullOrEmpty(nextAlias) ? alias.TrimEnd('*').Trim() : nextAlias;
+        lines[at] = RenderLine(filename, written, placed);
         try
         {
             WriteLines(path, lines);

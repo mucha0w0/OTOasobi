@@ -480,7 +480,10 @@ sealed class ProbeOto
             desired.Blank,
             [true, true, true, true, true],
             Math.Max(file.Duration, 0));
-        return StorePlaced(file, index, auto[index], placed, which);
+        if (!StorePlaced(file, index, auto[index], placed, which))
+            return false;
+        WriteIniLine(file, which, index, placed, null);
+        return true;
     }
 
     public bool TuneAlias(string? fileName, int index, string? alias, string? name, string? mode = null)
@@ -507,6 +510,8 @@ sealed class ProbeOto
         var stored = cleaned != null && string.Equals(cleaned, natural, StringComparison.Ordinal) ? null : cleaned;
         var row = drafts[at];
         _adjust.RememberName(which, row.File, row.Index, row.AutoAlias, stored);
+        var shown = Draft(file, which, index, MarksFor(file, which)[index]).Shown;
+        WriteIniLine(file, which, index, shown, stored ?? natural);
         return true;
     }
 
@@ -521,6 +526,47 @@ sealed class ProbeOto
             return false;
         _adjust.RememberComment(which, file.Name, index, auto[index].Alias, OtoIni.CleanComment(comment));
         return true;
+    }
+
+    void WriteIniLine(WavFile file, string mode, int index, OtoMark placed, string? nextAlias)
+    {
+        if (!HasIni || string.IsNullOrEmpty(_folder))
+            return;
+        var at = IniLineIndex(file, mode, index);
+        var marks = IniMarksForFile(file);
+        if (at < 0 || at >= marks.Count)
+            return;
+        OtoIniFile.TryPatchLine(_folder, file.Name, at, placed, marks[at].Alias, nextAlias);
+    }
+
+    int IniLineIndex(WavFile file, string mode, int index)
+    {
+        var dedupe = _aliasRenzoku && _aliasCvvc;
+        var leading = new Dictionary<string, int>(StringComparer.Ordinal);
+        var line = 0;
+        foreach (var which in AliasModes())
+        {
+            var auto = MarksFor(file, which);
+            for (var i = 0; i < auto.Count; i++)
+            {
+                var alias = auto[i].Alias;
+                var reused = -1;
+                if (dedupe && OtoIni.IsLeadingHyphenAlias(alias))
+                {
+                    if (leading.TryGetValue(alias, out var earlier))
+                        reused = earlier;
+                    else
+                        leading[alias] = line;
+                }
+
+                if (which == mode && i == index)
+                    return reused >= 0 ? reused : line;
+                if (reused < 0)
+                    line++;
+            }
+        }
+
+        return -1;
     }
 
     bool StorePlaced(WavFile file, int index, OtoMark auto, OtoMark placed, string mode)

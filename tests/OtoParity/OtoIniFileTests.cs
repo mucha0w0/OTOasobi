@@ -27,6 +27,11 @@ public class OtoIniFileTests
             var marks = OtoIniFile.MarksForFile(folder, "a.wav");
             Assert.Single(marks);
             Assert.Equal("あ", marks[0].Alias);
+            var placed = marks[0];
+            Assert.True(OtoIniFile.TryPatchLine(folder, "a.wav", 0, placed, "あ", "あ2"));
+            var again = OtoIniFile.MarksForFile(folder, "a.wav");
+            Assert.Equal("あ2", again[0].Alias);
+            Assert.Equal("b.wav=い,1,1,1,1,1", File.ReadAllLines(path)[1].Trim());
         }
         finally
         {
