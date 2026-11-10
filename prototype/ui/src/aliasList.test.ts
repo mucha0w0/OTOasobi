@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { aliasId, aliasPanelMode, aliasStepIndex, currentAliasId, findAlias, markIndexForAlias, pendingAliasReady, selectedAliasIds } from "./aliasList"
+import { aliasId, aliasPanelMode, aliasStepIndex, currentAliasId, findAlias, markIndexForAlias, pendingAliasReady, selectedAliasIds, shownAliasId } from "./aliasList"
 import type { OtoMark } from "./protocol"
 
 function mark(over: Partial<OtoMark> = {}): OtoMark {
@@ -37,6 +37,12 @@ describe("エイリアスリスト", () => {
     expect(currentAliasId(rows, "あい.wav", 0, "renzoku")).toBe("")
     expect(currentAliasId(rows, "あい.wav", 1, "renzoku")).toBe(aliasId(rows[1]!))
     expect(currentAliasId(rows, "あい.wav", -1, "renzoku")).toBe("")
+  })
+
+  it("クリックしたエイリアスを強調する", () => {
+    expect(shownAliasId(rows, "あい.wav", 1, "renzoku", aliasId(rows[2]!), null)).toBe(aliasId(rows[2]!))
+    expect(shownAliasId(rows, "あい.wav", 1, "renzoku", "", null)).toBe(aliasId(rows[1]!))
+    expect(shownAliasId(rows, "あ.wav", 0, "renzoku", aliasId(rows[2]!), 0)).toBe(aliasId(rows[0]!))
   })
 
   it("今のモードの行を優先して強調する", () => {

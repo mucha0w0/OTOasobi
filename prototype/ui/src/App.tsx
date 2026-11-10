@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { BankPanel } from "./BankPanel"
 import { Dock } from "./Dock"
 import { EffectsPanel } from "./EffectsPanel"
-import { aliasId, aliasPanelMode, aliasStepIndex, currentAliasId, findAlias, markIndexForAlias, pendingAliasReady, selectedAliasIds } from "./aliasList"
+import { aliasId, aliasPanelMode, aliasStepIndex, findAlias, markIndexForAlias, pendingAliasReady, selectedAliasIds, shownAliasId } from "./aliasList"
 import { AliasList, FileList, type FileListHandle } from "./FileList"
 import { applyFileClick, emptyFilePick, pruneFilePick, sameName, type FilePick } from "./filePick"
 import { nextFileIndex } from "./fileStep"
@@ -207,6 +207,8 @@ export function App() {
   const fileListRef = useRef<FileListHandle>(null)
   const aliasListRef = useRef<FileListHandle>(null)
   const [focusIndex, setFocusIndex] = useState(-1)
+  const [pinnedAlias, setPinnedAlias] = useState("")
+  const pinnedAliasRef = useRef("")
   const [picture, setPicture] = useState<PreviewEvent | null>(null)
   const [notice, setNotice] = useState<{ message: string; tone: NoticeTone } | null>(null)
   const [saved, setSaved] = useState<SavedEvent | null>(null)
@@ -595,9 +597,15 @@ export function App() {
     chooseFile(name)
   }
 
+  function pinAlias(id: string) {
+    pinnedAliasRef.current = id
+    setPinnedAlias(id)
+  }
+
   function clickFile(name: string, shift: boolean, ctrl: boolean) {
     window.clearTimeout(fileStepTimer.current)
     aliasStepTarget.current = null
+    pinAlias("")
     pendingFocus.current = null
     const next = applyFileClick(namesRef.current, pickRef.current, name, shift, ctrl)
     const changed = !sameName(next.active, pickRef.current.active)
@@ -641,6 +649,8 @@ export function App() {
     if (!row)
       return
     clickFile(row.file, shift, ctrl)
+    pinAlias(id)
+    aliasListRef.current?.highlight(id)
     if (!sameName(pickRef.current.active, row.file))
       return
     applyAlias(row)
@@ -664,6 +674,8 @@ export function App() {
     const row = rows[next]
     if (!row)
       return
+    if (pinnedAliasRef.current)
+      pinAlias("")
     aliasStepTarget.current = next
     stepTarget.current = null
     armFile(row.file)
@@ -691,6 +703,7 @@ export function App() {
         return
       }
       applyAlias(chosen)
+      pinAlias(aliasId(chosen))
       const mode = aliasPanelMode(chosen.mode)
       const waiting = !sameName(chosen.file, fileNameRef.current) || (mode != null && mode !== otoRef.current?.mode)
       const synced = !waiting && aliasStepIndex(rowsNow, fileNameRef.current, focusRef.current, otoRef.current?.mode) === landed
@@ -1434,10 +1447,7 @@ export function App() {
   const selectedNames = names.filter((name) => pick.selected.some((item) => sameName(item, name)))
   const aliasRows = oto?.rows ?? []
   const aliasSelected = selectedAliasIds(aliasRows, pick.selected)
-  const steppingAlias = aliasStepTarget.current
-  const aliasCurrent = steppingAlias != null && aliasRows[steppingAlias]
-    ? aliasId(aliasRows[steppingAlias]!)
-    : currentAliasId(aliasRows, pick.active, focusIndex, oto?.mode)
+  const aliasCurrent = shownAliasId(aliasRows, pick.active, focusIndex, oto?.mode, pinnedAlias, aliasStepTarget.current)
   useEffect(() => {
     if (recLine?.recorded)
       sendRef.current({ type: "take", op: "wave", name: recLine.wav })

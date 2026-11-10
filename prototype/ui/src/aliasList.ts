@@ -22,6 +22,17 @@ export function selectedAliasIds(rows: OtoMark[], files: string[]): string[] {
   return rows.filter((row) => files.some((file) => sameName(file, row.file))).map(aliasId)
 }
 
+export function shownAliasId(rows: OtoMark[], file: string, focus: number, mode: string | undefined, pinned: string, stepping: number | null): string {
+  if (stepping != null) {
+    const row = rows[stepping]
+    if (row)
+      return aliasId(row)
+  }
+  if (pinned && rows.some((row) => aliasId(row) === pinned))
+    return pinned
+  return currentAliasId(rows, file, focus, mode)
+}
+
 export function currentAliasId(rows: OtoMark[], file: string, focus: number, mode?: string): string {
   if (focus < 0 || !file)
     return ""
