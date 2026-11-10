@@ -39,6 +39,8 @@ sealed class ProbeSession : IDisposable
     readonly Queue<Outbound> _outbound = new();
     int _draining;
     int _analyzeGen;
+    int _prepareGen;
+    volatile bool _preparing;
     string? _folder;
     string? _wavPath;
     string? _inputId;
@@ -468,7 +470,8 @@ sealed class ProbeSession : IDisposable
             PostOto();
             PostRec();
             PostFrqCount();
-            BeginAnalyze(false);
+            EnsureWorkSessionFile();
+            BeginPrepareFolder();
             RecentFolders.Remember(_folder);
             PostRecent();
         }
@@ -654,9 +657,66 @@ sealed class ProbeSession : IDisposable
         PostOto();
         PostRec();
         PostFrqCount();
-        BeginAnalyze(false);
+        EnsureWorkSessionFile();
+        BeginPrepareFolder();
         RecentFolders.Remember(folder);
         PostRecent();
+    }
+
+    void EnsureWorkSessionFile()
+    {
+        if (string.IsNullOrEmpty(_folder) || _oto.SessionLocked)
+            return;
+        try
+        {
+            if (!File.Exists(OtoSaveStore.SessionPath(_folder)))
+                _oto.FlushSession();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+        }
+    }
+
+    void BeginPrepareFolder()
+    {
+        if (string.IsNullOrEmpty(_folder) || _disposed)
+            return;
+        var gen = ++_prepareGen;
+        _ = PrepareFolderAsync(gen);
+    }
+
+    async Task PrepareFolderAsync(int gen)
+    {
+        var folder = _folder!;
+        _preparing = true;
+        PostStatus("準備しています");
+        try
+        {
+            await Task.Run(() => OriginalLibrary.Prepare(folder, (label, index, count) =>
+            {
+                _queue.TryEnqueue(() =>
+                {
+                    if (!_disposed && _folder == folder && gen == _prepareGen)
+                        PostStatus(label + "　" + index + " / " + count);
+                });
+            })).ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
+        {
+            if (gen == _prepareGen && !_disposed && _folder == folder)
+                Post(new { type = "failed", message = ex.Message });
+        }
+        finally
+        {
+            if (gen == _prepareGen)
+                _preparing = false;
+            if (gen == _prepareGen && !_disposed && _folder == folder)
+            {
+                _waves.Bump();
+                _waveLoad = null;
+                PostStatus("");
+            }
+        }
     }
 
     void SelectFile(string? name)
@@ -1800,6 +1860,12 @@ sealed class ProbeSession : IDisposable
     {
         if (string.IsNullOrEmpty(_folder) || _disposed)
             return;
+        if (_preparing)
+        {
+            Post(new { type = "failed", message = "準備が終わるまで待ってください。" });
+            return;
+        }
+
         var gen = ++_analyzeGen;
         try
         {
@@ -1825,6 +1891,12 @@ sealed class ProbeSession : IDisposable
         if (_disposed || string.IsNullOrEmpty(_folder) || list.Count == 0)
         {
             Post(new { type = "failed", message = "ファイルを選んでください。" });
+            return;
+        }
+
+        if (_preparing)
+        {
+            Post(new { type = "failed", message = "準備が終わるまで待ってください。" });
             return;
         }
 
@@ -2334,9 +2406,9 @@ sealed class ProbeSession : IDisposable
             return;
         }
 
-        if (_applying || _oto.IsBusy)
+        if (_applying || _preparing || _oto.IsBusy)
         {
-            Post(new { type = "failed", message = "解析が終わるまで待ってください。" });
+            Post(new { type = "failed", message = _preparing ? "準備が終わるまで待ってください。" : "解析が終わるまで待ってください。" });
             return;
         }
 
