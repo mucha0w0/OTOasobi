@@ -2796,6 +2796,23 @@ sealed class ProbeSession : IDisposable
     {
         if (op == "apply")
             await _update.ApplyAsync(PostUpdate, StopEngines);
+        else if (op == "folder")
+        {
+            string? folder;
+            try
+            {
+                folder = await WavPicker.PickAsync(WindowNative.GetWindowHandle(_window), "エンジンのフォルダ");
+            }
+            catch (Exception ex)
+            {
+                PostUpdate("failed", "更新できませんでした", ex.Message);
+                return;
+            }
+
+            if (string.IsNullOrEmpty(folder) || _disposed)
+                return;
+            await _update.InstallFromFolderAsync(folder, PostUpdate, StopEngines);
+        }
         else
             await _update.CheckAsync(PostUpdate);
     }

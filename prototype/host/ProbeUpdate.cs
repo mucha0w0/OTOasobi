@@ -158,6 +158,43 @@ sealed class ProbeUpdate
         }
     }
 
+    public async Task InstallFromFolderAsync(string folder, Action<string, string, string> post, Action stop)
+    {
+        if (Interlocked.Exchange(ref _running, 1) == 1)
+            return;
+        try
+        {
+            var release = EngineRelease.ReadFolder(folder);
+            stop();
+            await EngineInstaller.InstallZipAsync(
+                release.PythonLocation,
+                release.Manifest.PythonSha256,
+                AppPaths.EngineDirectory,
+                release.PythonBytes,
+                (done, total) => post("progress", "更新", $"高精度エンジンを読み込んでいます。{done}/{Math.Max(total, 1)}"),
+                () => post("progress", "更新", "高精度エンジンを展開しています。"),
+                CancellationToken.None).ConfigureAwait(false);
+            SaveHash(state => state.PythonSha256 = release.Manifest.PythonSha256);
+            await EngineInstaller.InstallFileAsync(
+                release.ModelLocation,
+                release.Manifest.ModelSha256,
+                AppPaths.ModelFile,
+                release.ModelBytes,
+                (done, total) => post("progress", "更新", $"音声モデルを読み込んでいます。{done}/{Math.Max(total, 1)}"),
+                CancellationToken.None).ConfigureAwait(false);
+            SaveHash(state => state.ModelSha256 = release.Manifest.ModelSha256);
+            post("done", "更新", "音声解析エンジンを更新しました。");
+        }
+        catch (Exception ex)
+        {
+            post("failed", "更新できませんでした", Message(ex));
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _running, 0);
+        }
+    }
+
     static void SaveHash(Action<EngineState> edit)
     {
         var state = JsonFiles.Read<EngineState>(AppPaths.EngineStateFile) ?? new EngineState();

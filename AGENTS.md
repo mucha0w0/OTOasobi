@@ -16,7 +16,7 @@
 - `otoasobi/` — 解析の Python。解析は `AnalysisClient` が `python -m otoasobi.worker`、プレビューは `ProbePreview` が `python -m otoasobi.preview_worker` を起動し、UTF-8 の JSON 行で話します。起動の探し方は `PythonProcess` です。プロセスが終了していたら、次の要求で 1 回だけ起動し直します。フォルダ解析は、次の解析が始まったときファイルのあいだで止まります。WAV 一覧と 1 ファイルの解析結果 `AnalyzedFile` は `wavs.py` です。
 - `tests/OtoParity/` — xUnit。`prototype/host/logic` の純粋ロジックをプロジェクト参照ではなく `Compile Include` で直にコンパイルします。新しい純粋ロジックをテストするときは、この csproj にもリンクを足します。
 - `tests/test_*.py` — Python 側のテストです。
-- アプリデータは `%LocalAppData%\Otoasobi`。パネル配置は `editor-layout.json` です。
+- アプリデータは `%LocalAppData%\Otoasobi`。パネル配置は `editor-layout.json` です。高精度エンジンは「更新を確認」で GitHub の最新リリースから取ります。「エンジンを読み込む」は、選んだフォルダの `engine.json` と、そこに書かれた zip とモデルを、同じハッシュ確認で `engine` と `models` へ入れます。
 
 ## パネル
 

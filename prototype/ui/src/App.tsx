@@ -1483,6 +1483,7 @@ export function App() {
         onTemplate={applyTemplate}
         onSaveTemplate={saveTemplate}
         onCheckUpdate={() => sendRef.current({ type: "update", op: "check" })}
+        onLoadEngine={() => sendRef.current({ type: "update", op: "folder" })}
         plugins={plugins}
       />
       {folder ? (

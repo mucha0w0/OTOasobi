@@ -22,6 +22,7 @@ type Props = {
   onTemplate: (name: string) => void
   onSaveTemplate: () => void
   onCheckUpdate: () => void
+  onLoadEngine: () => void
   plugins: { id: string; title: string }[]
 }
 
@@ -46,6 +47,7 @@ export function MenuBar({
   onTemplate,
   onSaveTemplate,
   onCheckUpdate,
+  onLoadEngine,
   plugins,
 }: Props) {
   const [open, setOpen] = useState<string | null>(null)
@@ -74,6 +76,7 @@ export function MenuBar({
         <Item disabled={!canEdit} onClick={onLoadSettings}>設定を読み込む</Item>
         <Item disabled={!canWrite} onClick={onWrite}>oto.iniを生成</Item>
         <Item onClick={onCheckUpdate}>更新を確認</Item>
+        <Item onClick={onLoadEngine}>エンジンを読み込む</Item>
         <Item onClick={onClose}>終了</Item>
       </Menu>
       <Menu title="編集" open={open} setOpen={setOpen}>

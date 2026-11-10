@@ -112,6 +112,37 @@ public class UpdateTests
         }
     }
 
+    [Fact]
+    public void EngineFolderNamesComeFromTheManifest()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "otoasobi-engine-folder-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "engine.json"), """
+                {
+                  "python": "OtoasobiEngine.zip",
+                  "pythonSha256": "abc",
+                  "model": "mms-fa-model.pt",
+                  "modelSha256": "def"
+                }
+                """);
+            File.WriteAllText(Path.Combine(root, "OtoasobiEngine.zip"), "zip");
+            File.WriteAllText(Path.Combine(root, "mms-fa-model.pt"), "model");
+
+            var release = Otoasobi.EngineRelease.ReadFolder(root);
+            Assert.Equal(Path.Combine(root, "OtoasobiEngine.zip"), release.PythonLocation);
+            Assert.Equal(Path.Combine(root, "mms-fa-model.pt"), release.ModelLocation);
+
+            File.Delete(Path.Combine(root, "mms-fa-model.pt"));
+            Assert.Throws<IOException>(() => Otoasobi.EngineRelease.ReadFolder(root));
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
     static async Task<string> ZipWithPython(string root, bool nested)
     {
         var source = Path.Combine(root, nested ? "nested-src" : "src");

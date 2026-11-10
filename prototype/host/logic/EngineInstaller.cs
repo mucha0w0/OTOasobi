@@ -22,7 +22,7 @@ sealed class EngineRelease
     {
         var feed = AppPaths.FeedDirectory;
         if (feed != null)
-            return LoadLocal(feed);
+            return ReadFolder(feed);
 
         using var response = await EngineInstaller.Api.GetAsync(AppPaths.LatestReleaseApi, cancellationToken);
         if (response.StatusCode == HttpStatusCode.NotFound)
@@ -68,11 +68,11 @@ sealed class EngineRelease
         };
     }
 
-    static EngineRelease? LoadLocal(string feed)
+    public static EngineRelease ReadFolder(string feed)
     {
         var manifestPath = Path.Combine(feed, AppPaths.ManifestName);
         if (!File.Exists(manifestPath))
-            return null;
+            throw new IOException("engine.json がありません。");
         var manifest = JsonFiles.Read<EngineManifest>(manifestPath)
             ?? throw new InvalidDataException("engine.json を読めませんでした。");
         manifest.EnsureValid();
