@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { BankPanel } from "./BankPanel"
 import { Dock } from "./Dock"
 import { EffectsPanel } from "./EffectsPanel"
-import { aliasId, aliasPanelMode, aliasStepIndex, findAlias, markIndexForAlias, pendingAliasReady, selectedAliasIds, shownAliasId } from "./aliasList"
+import { aliasId, aliasPanelMode, aliasStepIndex, aliasWheelIndex, findAlias, markIndexForAlias, pendingAliasReady, selectedAliasIds, shownAliasId } from "./aliasList"
 import { AliasList, FileList, type FileListHandle } from "./FileList"
 import { applyFileClick, emptyFilePick, pruneFilePick, sameName, type FilePick } from "./filePick"
 import { nextFileIndex } from "./fileStep"
@@ -667,7 +667,7 @@ export function App() {
     const rows = otoRef.current?.rows ?? []
     if (rows.length === 0 || direction === 0)
       return
-    const index = aliasStepTarget.current ?? aliasStepIndex(rows, fileNameRef.current, focusRef.current, otoRef.current?.mode)
+    const index = aliasWheelIndex(rows, fileNameRef.current, focusRef.current, otoRef.current?.mode, pinnedAliasRef.current, aliasStepTarget.current)
     const next = nextFileIndex(index, rows.length, direction)
     if (next < 0 || next === index)
       return

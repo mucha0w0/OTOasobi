@@ -41,6 +41,17 @@ export function currentAliasId(rows: OtoMark[], file: string, focus: number, mod
   return matched ? aliasId(matched) : ""
 }
 
+export function aliasWheelIndex(rows: OtoMark[], file: string, focus: number, mode: string | undefined, pinned: string, stepping: number | null): number {
+  if (stepping != null && stepping >= 0 && stepping < rows.length)
+    return stepping
+  if (pinned) {
+    const at = rows.findIndex((row) => aliasId(row) === pinned)
+    if (at >= 0)
+      return at
+  }
+  return aliasStepIndex(rows, file, focus, mode)
+}
+
 export function aliasStepIndex(rows: OtoMark[], file: string, focus: number, mode?: string): number {
   const id = currentAliasId(rows, file, focus, mode)
   if (id) {
