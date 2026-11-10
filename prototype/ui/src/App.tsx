@@ -674,8 +674,6 @@ export function App() {
     const row = rows[next]
     if (!row)
       return
-    if (pinnedAliasRef.current)
-      pinAlias("")
     aliasStepTarget.current = next
     stepTarget.current = null
     armFile(row.file)
