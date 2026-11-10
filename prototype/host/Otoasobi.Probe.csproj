@@ -6,7 +6,7 @@
     <RootNamespace>Otoasobi.Probe</RootNamespace>
     <AssemblyName>Otoasobi</AssemblyName>
     <ApplicationTitle>オトアソビ — OTOasobi</ApplicationTitle>
-    <Version>0.1.0-beta.1</Version>
+    <Version>0.1.0-beta.2</Version>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <Platforms>x86;x64;ARM64</Platforms>
     <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">win-$([System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString().ToLowerInvariant())</RuntimeIdentifier>
