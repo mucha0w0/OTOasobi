@@ -29,15 +29,16 @@ const PickList = forwardRef<FileListHandle, PickProps>(function PickList({ items
   useImperativeHandle(ref, () => ({
     highlight(id: string) {
       hold.current = true
-      setShown(id)
+      setShown((prev) => (prev === id ? prev : id))
     },
     release() {
       hold.current = false
-      setShown(current)
     },
   }), [current])
   useEffect(() => {
-    currentRef.current?.scrollIntoView({ block: "nearest" })
+    const row = currentRef.current
+    if (row)
+      revealRow(row)
   }, [shown])
   return (
     <ul
@@ -82,6 +83,18 @@ type FileProps = {
   current: string
   onSelect: (name: string, shift: boolean, ctrl: boolean) => void
   onSelectAll: () => void
+}
+
+function revealRow(row: HTMLElement) {
+  const list = row.closest("ul")
+  if (!list)
+    return
+  const listBox = list.getBoundingClientRect()
+  const rowBox = row.getBoundingClientRect()
+  if (rowBox.top < listBox.top)
+    list.scrollTop -= listBox.top - rowBox.top
+  else if (rowBox.bottom > listBox.bottom)
+    list.scrollTop += rowBox.bottom - listBox.bottom
 }
 
 export const FileList = forwardRef<FileListHandle, FileProps>(function FileList({ folder, names, selected, current, onSelect, onSelectAll }, ref) {

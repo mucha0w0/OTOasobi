@@ -665,7 +665,12 @@ export function App() {
     aliasStepTarget.current = next
     stepTarget.current = null
     armFile(row.file)
-    commitPick({ selected: [row.file], active: row.file, anchor: row.file })
+    const pickNow = pickRef.current
+    const pickSame = sameName(pickNow.active, row.file)
+      && pickNow.selected.length === 1
+      && sameName(pickNow.selected[0] ?? "", row.file)
+    if (!pickSame)
+      commitPick({ selected: [row.file], active: row.file, anchor: row.file })
     fileListRef.current?.highlight(row.file)
     aliasListRef.current?.highlight(aliasId(row))
     if (!sameName(row.file, fileNameRef.current))
@@ -673,7 +678,8 @@ export function App() {
     window.clearTimeout(fileStepTimer.current)
     fileStepTimer.current = window.setTimeout(() => {
       const landed = aliasStepTarget.current
-      const chosen = landed == null ? null : (otoRef.current?.rows ?? [])[landed] ?? null
+      const rowsNow = otoRef.current?.rows ?? []
+      const chosen = landed == null ? null : rowsNow[landed] ?? null
       wheeling.current = false
       if (!chosen) {
         aliasStepTarget.current = null
@@ -682,16 +688,19 @@ export function App() {
         restoreWheelHold()
         return
       }
-      const waiting = !sameName(chosen.file, fileNameRef.current)
-        || (aliasPanelMode(chosen.mode) != null && aliasPanelMode(chosen.mode) !== otoRef.current?.mode)
-      if (!waiting)
-        aliasStepTarget.current = null
       applyAlias(chosen)
+      const mode = aliasPanelMode(chosen.mode)
+      const waiting = !sameName(chosen.file, fileNameRef.current) || (mode != null && mode !== otoRef.current?.mode)
+      const synced = !waiting && aliasStepIndex(rowsNow, fileNameRef.current, focusRef.current, otoRef.current?.mode) === landed
+      if (synced)
+        aliasStepTarget.current = null
       if (!sameName(chosen.file, fileNameRef.current))
         focusFile(chosen.file)
       else {
-        fileListRef.current?.release()
-        aliasListRef.current?.release()
+        if (synced) {
+          fileListRef.current?.release()
+          aliasListRef.current?.release()
+        }
         restoreWheelHold()
       }
     }, 200)
@@ -782,9 +791,11 @@ export function App() {
         if (wheeling.current)
           restoreWheelHold()
         stepTarget.current = null
-        aliasStepTarget.current = null
+        if (folderChanged)
+          aliasStepTarget.current = null
         fileListRef.current?.release()
-        aliasListRef.current?.release()
+        if (folderChanged || aliasStepTarget.current == null)
+          aliasListRef.current?.release()
         if (!keep) {
           fileNameRef.current = ""
           setFileName("")
@@ -820,7 +831,8 @@ export function App() {
         }
         stepTarget.current = null
         fileListRef.current?.release()
-        aliasListRef.current?.release()
+        if (aliasStepTarget.current == null)
+          aliasListRef.current?.release()
         if (event.missing) {
           loadingFile.current = null
           pictureCache.current.delete(event.name)
@@ -999,7 +1011,12 @@ export function App() {
           if (index >= 0 && next.marks.some((mark) => mark.index === index))
             nextFocus = index
           pendingFocus.current = null
-          aliasStepTarget.current = null
+          const stepping = aliasStepTarget.current
+          const stepped = stepping == null ? null : rows[stepping] ?? null
+          if (stepped && sameName(stepped.file, fileNameRef.current) && stepped.index === nextFocus && (stepped.mode == null || stepped.mode === next.mode)) {
+            aliasStepTarget.current = null
+            aliasListRef.current?.release()
+          }
         } else if (nextFocus >= 0 && !next.marks.some((mark) => mark.index === nextFocus))
           nextFocus = -1
         if (focusRef.current !== nextFocus) {

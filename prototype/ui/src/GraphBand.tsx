@@ -6,6 +6,7 @@ import { previewColumnLimit, previewRowLimit, timeAt, type OtoMark, type Preview
 import { specImage } from "./specTone"
 import { hitBoundary, moveBoundary, spanBoundaries, spanCaption, spanFill, spanTimesChanged, type PhoneSpan } from "./spans"
 import { xForTime, type PointerBus } from "./ruler"
+import { takeWheelSteps } from "./fileStep"
 import { imagePlacement, loudnessLevel, loudnessX, panRange, zoomRange, type Range } from "./viewport"
 
 export type BandKind = "wave" | "spec" | "loud" | "oto"
@@ -136,11 +137,10 @@ export function GraphBand({ kind, model, appearance, register, onRange, onFileSt
       const current = model.current
       event.preventDefault()
       if (!event.shiftKey && !event.ctrlKey) {
-        wheelRef.current += event.deltaY
-        const notches = Math.trunc(wheelRef.current / 120)
-        wheelRef.current -= notches * 120
-        if (notches !== 0)
-          onFileStepRef.current(notches)
+        const taken = takeWheelSteps(wheelRef.current, event.deltaY, event.deltaMode)
+        wheelRef.current = taken.carry
+        if (taken.steps !== 0)
+          onFileStepRef.current(taken.steps)
         return
       }
       if (!current.picture)
