@@ -363,7 +363,7 @@ sealed class ProbeOto
         }
     }
 
-    public object Snapshot(string? fileName, bool includeRows, int generation, int rowGeneration = 0)
+    public object Snapshot(string? fileName, bool includeRows, int generation, int rowGeneration = 0, bool includeViewFields = true)
     {
         lock (_gate)
             return new
@@ -405,8 +405,8 @@ sealed class ProbeOto
             vcConsonant = Shown(_cvvc.VcConsonant, DefaultVcConsonant),
             vcBlank = Shown(_cvvc.VcBlank, DefaultVcBlank),
             kinds = ConsonantOverlap.Kinds.Select(kind => new { group = kind.Group, key = kind.Key, caption = kind.Caption }).ToArray(),
-            spans = SpansOf(fileName),
-            marks = FileMarks(fileName),
+            spans = includeViewFields ? SpansOf(fileName) : null,
+            marks = includeViewFields ? FileMarks(fileName) : null,
             rows = includeRows ? Rows() : null,
         };
     }

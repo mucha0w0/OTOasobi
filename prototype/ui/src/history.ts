@@ -208,12 +208,14 @@ export function bankFromEvent(event: BankEvent): BankSnapshot {
 
 export function absorbOto(snapshot: EditSnapshot, event: OtoState): EditSnapshot {
   const rows = event.rows ?? snapshot.oto?.rows ?? []
-  const oto = { ...event, rows: rows.map((mark) => ({ ...mark })) }
+  const markSource = event.marks ?? snapshot.marks
+  const spanSource = event.spans ?? snapshot.spans
+  const oto = { ...event, rows: rows.map((mark) => ({ ...mark })), marks: markSource, spans: spanSource }
   return {
     ...snapshot,
     oto,
-    marks: oto.marks.map((mark) => ({ ...mark })),
-    spans: oto.spans.map((span) => ({ ...span })),
+    marks: markSource.map((mark) => ({ ...mark })),
+    spans: spanSource.map((span) => ({ ...span })),
   }
 }
 
@@ -589,7 +591,7 @@ function findPlaced(snapshot: EditSnapshot, file: string, index: number, alias: 
     && (mode == null || mark.mode == null || mark.mode === mode))
 }
 
-function withOto(snapshot: EditSnapshot, oto: OtoState, marks = oto.marks, spans = snapshot.spans): EditSnapshot {
+function withOto(snapshot: EditSnapshot, oto: OtoState, marks = oto.marks ?? snapshot.marks, spans = snapshot.spans): EditSnapshot {
   return { ...snapshot, oto, marks, spans }
 }
 

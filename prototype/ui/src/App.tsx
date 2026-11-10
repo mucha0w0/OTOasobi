@@ -36,7 +36,7 @@ import { MenuBar } from "./MenuBar"
 import { OtoTable } from "./OtoTable"
 import { AnalyzePanel, OtoIni, OtoSettings } from "./OtoPanels"
 import { PluginFrame, type PluginContext } from "./PluginFrame"
-import { previewColumnLimit, previewRowLimit, previewStillCovers, requestsPreviewAfter, uiScale, type BankEvent, type DeviceInfo, type EffectsEvent, type FrqViewEvent, type HostEvent, type NoiseWaveEvent, type OtoMark, type OtoState, type PageCommand, type PluginItem, type PluginReply, type PreviewEvent, type RecListEvent, type SavedEvent } from "./protocol"
+import { iniMarksForFile, previewColumnLimit, previewRowLimit, previewStillCovers, requestsPreviewAfter, uiScale, type BankEvent, type DeviceInfo, type EffectsEvent, type FrqViewEvent, type HostEvent, type NoiseWaveEvent, type OtoMark, type OtoState, type PageCommand, type PluginItem, type PluginReply, type PreviewEvent, type RecListEvent, type SavedEvent } from "./protocol"
 import { RecListPanel, RecScriptPanel } from "./RecPanels"
 import { LogBar, noticeTone, ToneRow, type NoticeTone } from "./notice"
 import { createPointerBus } from "./ruler"
@@ -542,6 +542,7 @@ export function App() {
       pictureRef.current = null
       rangeRef.current = { t0: 0, t1: 0 }
     }
+    marksRef.current = []
     focusRef.current = -1
     setFocusIndex(-1)
     liveRef.current = null
@@ -806,6 +807,10 @@ export function App() {
           break
         fileNameRef.current = event.name
         missingRef.current = event.missing === true
+        marksRef.current = []
+        focusRef.current = -1
+        setFocusIndex(-1)
+        liveRef.current = null
         setFileName(event.name)
         if (!sameName(pickRef.current.active, event.name)) {
           const listed = namesRef.current.some((item) => sameName(item, event.name))
@@ -976,11 +981,17 @@ export function App() {
         const previous = otoRef.current
         const base = viewFresh || !previous ? event : previous
         const rows = rowsFresh ? event.rows ?? [] : previous?.rows ?? event.rows ?? []
-        const next = { ...base, rows, generation: otoGenRef.current, rowGeneration: otoRowGenRef.current }
+        const iniMarks = viewFresh && event.marks !== undefined
+          ? iniMarksForFile(event.marks, fileNameRef.current)
+          : marksRef.current
+        const spans = viewFresh && event.spans !== undefined
+          ? event.spans
+          : spansRef.current
+        const next = { ...base, rows, marks: iniMarks, spans, generation: otoGenRef.current, rowGeneration: otoRowGenRef.current }
         snapRef.current = absorbOto(snapRef.current ?? emptySnapshot(), next)
         otoRef.current = next
-        marksRef.current = next.marks
-        spansRef.current = next.spans
+        marksRef.current = iniMarks
+        spansRef.current = spans
         let nextFocus = focusRef.current
         const pending = pendingFocus.current
         if (pending && pendingAliasReady(pending, fileNameRef.current, next.mode)) {
@@ -1599,7 +1610,7 @@ export function App() {
               if (id === "frqEdit")
                 return <FrqEditor view={frqView} appearance={appearance} send={(command) => sendRef.current(command)} />
               if (id === "otoParams")
-                return <OtoTable rows={oto?.rows?.length ? oto.rows : oto?.marks ?? []} send={(command) => sendRef.current(command)} />
+                return <OtoTable rows={oto?.rows ?? []} send={(command) => sendRef.current(command)} />
               if (id === "mic")
                 return (
                   <MicPanel

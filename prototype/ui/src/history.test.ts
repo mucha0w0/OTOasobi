@@ -118,8 +118,8 @@ function snap(partial: Partial<EditSnapshot> = {}): EditSnapshot {
   return {
     ...emptySnapshot(),
     oto: base,
-    marks: base.marks,
-    spans: base.spans,
+    marks: base.marks ?? [],
+    spans: base.spans ?? [],
     effects: effects(),
     ...partial,
   }

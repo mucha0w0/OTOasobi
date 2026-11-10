@@ -308,9 +308,17 @@ export type OtoState = {
   vcConsonant: Record<string, number>
   vcBlank: Record<string, number>
   kinds: OtoKind[]
-  marks: OtoMark[]
+  /** oto.ini の線。行更新だけのイベントでは省略される。 */
+  marks?: OtoMark[]
   rows: OtoMark[] | null
-  spans: PhoneSpan[]
+  /** 音素区間。行更新だけのイベントでは省略される。 */
+  spans?: PhoneSpan[]
+}
+
+export function iniMarksForFile(marks: OtoMark[] | undefined, fileName: string): OtoMark[] {
+  if (!marks || !fileName)
+    return []
+  return marks.filter((mark) => mark.file.length === 0 || mark.file.toLowerCase() === fileName.toLowerCase())
 }
 
 export function previewStillCovers(
@@ -625,9 +633,9 @@ function parseOto(value: Record<string, unknown>): OtoState | null {
           return [{ group: item.group, key: item.key, caption: item.caption }]
         })
       : [],
-    marks: parseMarks(value.marks),
+    marks: value.marks == null ? undefined : parseMarks(value.marks),
     rows: Array.isArray(value.rows) ? parseMarks(value.rows) : null,
-    spans: parseSpans(value.spans),
+    spans: value.spans == null ? undefined : parseSpans(value.spans),
   }
 }
 

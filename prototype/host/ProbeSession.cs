@@ -2523,7 +2523,7 @@ sealed class ProbeSession : IDisposable
         {
             if (_disposed || rowGeneration != Volatile.Read(ref _otoRowGen))
                 return;
-            var payload = _oto.Snapshot(name, true, viewGeneration, rowGeneration);
+            var payload = _oto.Snapshot(name, true, viewGeneration, rowGeneration, includeViewFields: false);
             Post(payload, otoRowGen: rowGeneration);
         });
     }

@@ -118,6 +118,11 @@ describe("ホストのメッセージ", () => {
       generation: 4,
       rows: null,
     })
+    expect(parseHostEvent({ type: "oto", mode: "mono", scope: "all", marks: null, spans: null, rows: [] })).toMatchObject({
+      marks: undefined,
+      spans: undefined,
+      rows: [],
+    })
     const named = parseHostEvent({
       type: "preview",
       name: "あ.wav",
