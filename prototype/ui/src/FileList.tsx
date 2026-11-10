@@ -33,6 +33,7 @@ const PickList = forwardRef<FileListHandle, PickProps>(function PickList({ items
     },
     release() {
       hold.current = false
+      setShown(current)
     },
   }), [current])
   useEffect(() => {

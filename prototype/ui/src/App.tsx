@@ -596,6 +596,8 @@ export function App() {
   }
 
   function clickFile(name: string, shift: boolean, ctrl: boolean) {
+    window.clearTimeout(fileStepTimer.current)
+    aliasStepTarget.current = null
     pendingFocus.current = null
     const next = applyFileClick(namesRef.current, pickRef.current, name, shift, ctrl)
     const changed = !sameName(next.active, pickRef.current.active)
