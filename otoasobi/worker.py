@@ -8,10 +8,10 @@ file の done は、いま解析しているファイルの 0 から 1。
 応答: {"id": 1, "ok": true, "files": [...], "notice": "..."}
       {"id": 1, "ok": false, "error": "..."}
 
-analyze は oto.ini を書かない。区間は OTOasibi_cache.json に残す。
+analyze は oto.ini を書かない。区間はホストの save で OTOasibi_cache.json に残す。
 同じフォルダに保存データがあるときは再解析せず、そのファイルを返す。
 "force": true のときだけ解析し直し、保存データを上書きする。
-"only" がファイル名、またはファイル名の配列のときは、そのファイルだけ解析し直す。応答の files はその件数で、保存データは書かない。
+"only" がファイル名、またはファイル名の配列のときは、そのファイルだけ解析し直す。応答の files はその件数。保存データはホストの save が上書きする。
 要求: {"id": 2, "cmd": "preview", "path": "C:/音声フォルダ/あ.wav", "t0": 0, "t1": 1.2, "columns": 1600, "rows": 400}
 preview の t0/t1 は表示中の秒。columns/rows は画面のピクセル数。
 波形はその幅の最小最大で、サンプルの方が少なければ 1 点ずつ返す。
@@ -67,7 +67,7 @@ from otoasobi.analyze import (
     skipped_notice,
 )
 from otoasobi.wavs import AnalyzedFile
-from otoasobi.cache import file_from_mapping, file_to_mapping, read_cache, save_cache
+from otoasobi.cache import file_from_mapping, file_to_mapping, merge_cache, read_cache, save_cache
 from otoasobi.frq import write_folder_frq
 from otoasobi.oto import adjustments_from, oto_settings_from
 from otoasobi.parser import FilenameError
@@ -142,7 +142,7 @@ def _only_names(only: object) -> list[str]:
 
 
 def _analyze_only(request_id: object, folder: str, only: object) -> dict:
-    """選んだファイルだけ解析する。保存データは画面側がまとめて書く。"""
+    """選んだファイルだけ解析する。"""
     wavs: list[Path] = []
     seen: set[str] = set()
     for name in _only_names(only):
@@ -229,10 +229,6 @@ def _analyze(request_id: object, path: str, force: bool) -> dict:
     notes: list[str] = []
     if skipped:
         notes.append(skipped_notice(skipped))
-    try:
-        save_cache(path, files)
-    except Exception as exc:
-        notes.append(f"保存データを書けませんでした。{exc}")
     payload = {
         "id": request_id,
         "ok": True,
@@ -295,7 +291,7 @@ def _parsed_files(files: object) -> list[AnalyzedFile]:
 
 def _save(folder: str, files: object) -> dict:
     parsed = _parsed_files(files)
-    save_cache(folder, parsed)
+    merge_cache(folder, parsed)
     return {"ok": True}
 
 
@@ -416,7 +412,7 @@ def _write(
             scope=chosen,
         )
     try:
-        save_cache(folder, parsed)
+        merge_cache(folder, parsed)
     except Exception as exc:
         return {
             "ok": True,

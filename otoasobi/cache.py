@@ -58,6 +58,52 @@ def file_from_mapping(item: object) -> AnalyzedFile:
     return AnalyzedFile(name=name, duration=duration, spans=spans, engine=engine.strip())
 
 
+def _cache_files_on_disk(folder: Path) -> list[AnalyzedFile]:
+    path = folder / CACHE_NAME
+    if not path.is_file():
+        return []
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return []
+    if not isinstance(data, dict) or data.get("version") != CACHE_VERSION:
+        return []
+    raw = data.get("files")
+    if not isinstance(raw, list) or not raw:
+        return []
+    files: list[AnalyzedFile] = []
+    for item in raw:
+        try:
+            files.append(file_from_mapping(item))
+        except RuntimeError:
+            continue
+    return files
+
+
+def merge_cache(folder: str | Path, updates: list[AnalyzedFile]) -> Path:
+    """updates で上書きし、既存の OTOasibi_cache.json は他のファイル分を残す。"""
+    folder = Path(folder)
+    existing = _cache_files_on_disk(folder)
+    by_name = {item.name.casefold(): item for item in existing}
+    for item in updates:
+        by_name[item.name.casefold()] = item
+    ordered: list[AnalyzedFile] = []
+    seen: set[str] = set()
+    for item in existing:
+        key = item.name.casefold()
+        if key not in by_name:
+            continue
+        ordered.append(by_name[key])
+        seen.add(key)
+    for item in updates:
+        key = item.name.casefold()
+        if key in seen:
+            continue
+        ordered.append(item)
+        seen.add(key)
+    return save_cache(folder, ordered)
+
+
 def save_cache(folder: str | Path, files: list[AnalyzedFile]) -> Path:
     folder = Path(folder)
     if not folder.is_dir():

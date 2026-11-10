@@ -1933,7 +1933,10 @@ sealed class ProbeSession : IDisposable
             if (!data.Ok)
                 Post(new { type = "failed", message = string.IsNullOrEmpty(data.Error) ? "解析できませんでした。" : data.Error });
             else
+            {
                 _oto.SetFiles(data.Files);
+                await SaveSpanCacheAsync();
+            }
         }
         catch (Exception ex)
         {
@@ -1973,6 +1976,7 @@ sealed class ProbeSession : IDisposable
             {
                 foreach (var file in data.Files)
                     _oto.MergeFile(file);
+                await SaveSpanCacheAsync();
                 if (!string.IsNullOrWhiteSpace(data.Notice))
                     Post(new { type = "notice", message = data.Notice });
             }
