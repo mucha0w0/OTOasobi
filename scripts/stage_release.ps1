@@ -165,6 +165,7 @@ function Write-EnginePack([string]$Directory) {
     if (Test-Path $pack) {
         Remove-Item $pack -Force
     }
+    Add-Type -AssemblyName System.IO.Compression
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     $zip = [IO.Compression.ZipFile]::Open($pack, [IO.Compression.ZipArchiveMode]::Create)
     try {
