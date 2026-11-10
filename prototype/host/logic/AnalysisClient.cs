@@ -80,6 +80,14 @@ sealed class AnalysisClient : IDisposable
         return ReadFolder(doc.RootElement);
     }
 
+    public async Task<FolderData> LoadCacheAsync(string folder)
+    {
+        using var doc = await SendAsync(
+            id => JsonSerializer.Serialize(new { id, cmd = "cache", folder }),
+            null).ConfigureAwait(true);
+        return ReadFolder(doc.RootElement);
+    }
+
     public async Task SaveCacheAsync(string folder, IReadOnlyList<WavFile> files)
     {
         using var doc = await SendAsync(id => JsonSerializer.Serialize(new

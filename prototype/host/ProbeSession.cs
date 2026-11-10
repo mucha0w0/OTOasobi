@@ -39,6 +39,7 @@ sealed class ProbeSession : IDisposable
     readonly Queue<Outbound> _outbound = new();
     int _draining;
     int _analyzeGen;
+    int _cacheGen;
     int _prepareGen;
     volatile bool _preparing;
     string? _folder;
@@ -658,6 +659,7 @@ sealed class ProbeSession : IDisposable
         PostRec();
         PostFrqCount();
         EnsureWorkSessionFile();
+        BeginLoadCache();
         BeginPrepareFolder();
         RecentFolders.Remember(folder);
         PostRecent();
@@ -674,6 +676,42 @@ sealed class ProbeSession : IDisposable
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
         {
+        }
+    }
+
+    void BeginLoadCache()
+    {
+        if (string.IsNullOrEmpty(_folder) || _disposed)
+            return;
+        var gen = ++_cacheGen;
+        var folder = _folder;
+        _ = LoadCacheAsync(gen, folder);
+    }
+
+    async Task LoadCacheAsync(int gen, string folder)
+    {
+        try
+        {
+            var data = await Analysis().LoadCacheAsync(folder);
+            if (gen != _cacheGen || _disposed || _folder != folder || data.Cancelled)
+                return;
+            if (!data.Ok)
+            {
+                if (!string.IsNullOrEmpty(data.Error))
+                    Post(new { type = "failed", message = data.Error });
+                return;
+            }
+
+            if (data.Files.Count > 0)
+                _oto.SetFiles(data.Files);
+            if (!string.IsNullOrWhiteSpace(data.Notice))
+                Post(new { type = "notice", message = data.Notice });
+            PostOto();
+        }
+        catch (Exception ex)
+        {
+            if (gen == _cacheGen && !_disposed && _folder == folder)
+                Post(new { type = "failed", message = ex.Message });
         }
     }
 
@@ -1865,6 +1903,7 @@ sealed class ProbeSession : IDisposable
         }
 
         var gen = ++_analyzeGen;
+        _cacheGen++;
         try
         {
             _analysis?.Cancel();
@@ -1905,6 +1944,7 @@ sealed class ProbeSession : IDisposable
         }
 
         var gen = ++_analyzeGen;
+        _cacheGen++;
         try
         {
             _analysis?.Cancel();

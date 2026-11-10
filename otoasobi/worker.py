@@ -9,6 +9,7 @@ file の done は、いま解析しているファイルの 0 から 1。
       {"id": 1, "ok": false, "error": "..."}
 
 analyze は oto.ini を書かない。区間はホストの save で OTOasibi_cache.json に残す。
+cache は保存データだけを返す。無ければ files は空。WAV は再解析しない。
 同じフォルダに保存データがあるときは再解析せず、そのファイルを返す。
 "force": true のときだけ解析し直し、保存データを上書きする。
 "only" がファイル名、またはファイル名の配列のときは、そのファイルだけ解析し直す。応答の files はその件数。保存データはホストの save が上書きする。
@@ -289,6 +290,24 @@ def _parsed_files(files: object) -> list[AnalyzedFile]:
     return [file_from_mapping(item) for item in files]
 
 
+def _load_cache(request_id: object, folder: str) -> dict:
+    try:
+        loaded = read_cache(folder)
+    except RuntimeError as exc:
+        return {"id": request_id, "ok": False, "error": str(exc)}
+    if loaded is None:
+        return {"id": request_id, "ok": True, "files": []}
+    payload: dict = {
+        "id": request_id,
+        "ok": True,
+        "cached": True,
+        "files": [file_to_mapping(item) for item in loaded.files],
+    }
+    if loaded.notice:
+        payload["notice"] = loaded.notice
+    return payload
+
+
 def _save(folder: str, files: object) -> dict:
     parsed = _parsed_files(files)
     merge_cache(folder, parsed)
@@ -503,6 +522,11 @@ def _dispatch(request: dict) -> None:
             if not isinstance(path, str) or not path:
                 raise RuntimeError("path がありません")
             payload = _preview(path, request, request_id)
+        elif command == "cache":
+            folder = request.get("folder")
+            if not isinstance(folder, str) or not folder:
+                raise RuntimeError("folder がありません")
+            payload = _load_cache(request_id, folder)
         elif command == "save":
             folder = request.get("folder")
             if not isinstance(folder, str) or not folder:
