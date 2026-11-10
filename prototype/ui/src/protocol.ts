@@ -40,7 +40,7 @@ export type PageCommand =
   | { type: "openRecent"; path: string }
   | { type: "template"; op: "apply" | "save"; name: string }
   | { type: "appearance"; theme: "light" | "dark" | "system"; accent: string | null; scale: number; lockPanels: boolean }
-  | { type: "update"; op: "check" | "apply" }
+  | { type: "update"; op: "check" | "apply" | "folder" }
   | { type: "oto"; op: "mode"; mode: string }
   | { type: "oto"; op: "slider"; group: string; key: string; value: number }
   | { type: "oto"; op: "preset"; target: string; name: string }
