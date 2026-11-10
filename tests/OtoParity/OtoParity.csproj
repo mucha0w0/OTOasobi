@@ -26,6 +26,7 @@
     <Compile Include="..\..\prototype\host\logic\ConsonantOverlap.cs" Link="Logic\ConsonantOverlap.cs" />
     <Compile Include="..\..\prototype\host\logic\OtoExport.cs" Link="Logic\OtoExport.cs" />
     <Compile Include="..\..\prototype\host\logic\OtoIni.cs" Link="Logic\OtoIni.cs" />
+    <Compile Include="..\..\prototype\host\logic\OtoIniFile.cs" Link="Logic\OtoIniFile.cs" />
     <Compile Include="..\..\prototype\host\logic\OtoMarks.cs" Link="Logic\OtoMarks.cs" />
     <Compile Include="..\..\prototype\host\logic\OtoTune.cs" Link="Logic\OtoTune.cs" />
     <Compile Include="..\..\prototype\host\logic\Session.cs" Link="Logic\Session.cs" />

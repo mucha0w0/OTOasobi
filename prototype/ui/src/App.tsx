@@ -159,7 +159,7 @@ export function App() {
   const pendingFocus = useRef<{ file: string; index: number; alias?: string; autoAlias: string; mode?: string } | null>(null)
   const liveRef = useRef<LiveTune | null>(null)
   const draftRef = useRef<PhoneSpan[] | null>(null)
-  const modelRef = useRef<GraphModel>({ picture: null, range: rangeRef.current, marks: [], spans: [], note: "", focus: -1, live: null, draft: null })
+  const modelRef = useRef<GraphModel>({ picture: null, range: rangeRef.current, marks: [], spans: [], note: "", otoIniMissing: false, focus: -1, live: null, draft: null })
   const fileNameRef = useRef("")
   const namesRef = useRef<string[]>([])
   const previewTimer = useRef<number | undefined>(undefined)
@@ -423,6 +423,7 @@ export function App() {
       marks: marksRef.current,
       spans: spansRef.current,
       note: noteRef.current,
+      otoIniMissing: otoRef.current?.hasIni === false,
       focus: focusRef.current,
       live: liveRef.current,
       draft: draftRef.current,

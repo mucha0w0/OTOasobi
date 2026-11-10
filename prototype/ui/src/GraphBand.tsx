@@ -25,6 +25,7 @@ export type GraphModel = {
   marks: OtoMark[]
   spans: PhoneSpan[]
   note: string
+  otoIniMissing: boolean
   focus: number
   live: LiveTune | null
   draft: PhoneSpan[] | null
@@ -340,8 +341,11 @@ export function GraphBand({ kind, model, appearance, register, onRange, onFileSt
       if (focused)
         drawPointLines(ctx, placed, source, focused, height, current.live, true)
     }
-    if (kind === "oto")
+    if (kind === "oto") {
       drawMarks(ctx, placed, source, shown, height, current.focus, current.live)
+      if (current.otoIniMissing && shown.length === 0)
+        drawNote(ctx, width, height, "oto.iniがありません")
+    }
   }
 
   function endPointer() {

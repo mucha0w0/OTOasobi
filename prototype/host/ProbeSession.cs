@@ -1712,7 +1712,7 @@ sealed class ProbeSession : IDisposable
                 break;
             case "tune":
                 if (_oto.TunePoint(Text(root, "file"), (int)Math.Round(Number(root, "index")), (int)Math.Round(Number(root, "point")), Number(root, "time")))
-                    RememberOto(true);
+                    RememberOto(true, syncIni: false);
                 break;
             case "spans":
                 if (_oto.MoveSpans(Text(root, "file"), ReadSpanTimes(Property(root, "spans"))))
@@ -1787,7 +1787,7 @@ sealed class ProbeSession : IDisposable
 
     void ScheduleOtoIniSync()
     {
-        if (_disposed)
+        if (_disposed || !_oto.HasIni)
             return;
         _otoIniSyncPending = true;
         _otoIniSync.Stop();

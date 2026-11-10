@@ -416,21 +416,23 @@ sealed class ProbeOto
 
     public bool TunePoint(string? fileName, int index, int point, double time)
     {
+        if (!HasIni)
+            return false;
         var file = FindFile(fileName);
         if (file == null || point < 0 || point >= OtoTune.PointCount)
             return false;
-        var auto = AutoMarks(file);
-        if (index < 0 || index >= auto.Count)
+        var marks = IniMarksForFile(file);
+        if (index < 0 || index >= marks.Count)
             return false;
+        var basis = marks[index];
         var duration = Math.Max(file.Duration, 0);
-        var existing = Match(_adjust.For(_mode), file.Name, index, auto[index].Alias);
-        var points = existing?.Points() ?? new double?[OtoTune.PointCount];
-        var current = OtoTune.Apply(auto[index], points, duration);
+        var current = basis;
         var stack = new bool[OtoTune.PointCount];
         stack[point] = true;
-        var next = (double?[])points.Clone();
+        var next = new double?[OtoTune.PointCount];
         next[point] = OtoTune.ClampGroup(current, stack, time, duration);
-        return StorePlaced(file, index, auto[index], OtoTune.Apply(auto[index], next, duration), _mode);
+        var placed = OtoTune.Apply(basis, next, duration);
+        return OtoIniFile.TryPatchLine(_folder, file.Name, index, placed, basis.Alias);
     }
 
     public bool MoveSpans(string? fileName, IReadOnlyList<(double Start, double End)> times)
@@ -639,12 +641,12 @@ sealed class ProbeOto
     object[] FileMarks(string? fileName)
     {
         var file = FindFile(fileName);
-        if (file == null)
+        if (file == null || !HasIni)
             return [];
-        var auto = AutoMarks(file);
-        var views = new object[auto.Count];
-        for (var i = 0; i < auto.Count; i++)
-            views[i] = Shown(file, i, auto[i]).View;
+        var marks = IniMarksForFile(file);
+        var views = new object[marks.Count];
+        for (var i = 0; i < marks.Count; i++)
+            views[i] = ShownIni(file, i, marks[i]).View;
         return views;
     }
 
@@ -688,7 +690,31 @@ sealed class ProbeOto
             ? null
             : _files.FirstOrDefault(item => string.Equals(item.Name, fileName, StringComparison.OrdinalIgnoreCase));
 
+    List<OtoMark> IniMarksForFile(WavFile file) =>
+        string.IsNullOrEmpty(_folder) ? [] : OtoIniFile.MarksForFile(_folder, file.Name);
+
     List<OtoMark> AutoMarks(WavFile file) => MarksFor(file, _mode);
+
+    ShownRow ShownIni(WavFile file, int index, OtoMark mark) => new(
+        file.Name,
+        index,
+        mark.Alias,
+        null,
+        new
+        {
+            file = file.Name,
+            index,
+            alias = mark.Alias,
+            autoAlias = mark.Alias,
+            name = "",
+            comment = "",
+            tuned = new bool[OtoTune.PointCount],
+            offset = mark.Offset,
+            overlap = mark.Overlap,
+            preutter = mark.Preutter,
+            consonant = mark.Consonant,
+            blank = mark.Blank,
+        });
 
     static OtoAdjustedEntry? Match(List<OtoAdjustedEntry> list, string file, int index, string alias)
     {
@@ -715,7 +741,7 @@ sealed class ProbeOto
         return file.Spans.Select(span => new { start = span.Start, end = span.End, label = span.Label, token = span.Token }).ToArray();
     }
 
-    bool HasIni => !string.IsNullOrEmpty(_folder) && File.Exists(Path.Combine(_folder, "oto.ini"));
+    public bool HasIni => OtoIniFile.Exists(_folder);
 
     void ReloadLibraries()
     {
