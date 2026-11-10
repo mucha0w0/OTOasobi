@@ -29,6 +29,7 @@ sealed class ProbeSession : IDisposable
     readonly ProbeBank _bank = new();
     readonly ProbeEffects _effects = new();
     readonly ProbeUpdate _update = new();
+    FileDrop? _drop;
     readonly PluginRuntime _pluginsRuntime = new();
     PluginCatalog _plugins = PluginCatalog.Empty;
     bool _applying;
@@ -170,6 +171,9 @@ sealed class ProbeSession : IDisposable
             "document.documentElement.style.zoom='" + AppAppearance.Scale.ToString(CultureInfo.InvariantCulture) + "';" +
             "document.documentElement.dataset.panelsLocked='" + (AppAppearance.LockPanels ? "1" : "") + "';");
         _view.CoreWebView2.WebMessageReceived += OnMessage;
+        var owner = WindowNative.GetWindowHandle(_window);
+        _drop = FileDrop.Attach(owner, path => _ = InstallDroppedAsync(path));
+        _view.CoreWebView2.NavigationCompleted += (_, _) => _drop?.Register(owner);
         MapPlugins();
         var url = Environment.GetEnvironmentVariable("OTOASOBI_PROBE_URL");
         if (!string.IsNullOrWhiteSpace(url))
@@ -191,6 +195,7 @@ sealed class ProbeSession : IDisposable
         if (_disposed)
             return;
         _disposed = true;
+        _drop?.Dispose();
         _timer.Stop();
         if (_recording)
             WriteTake();
@@ -2796,12 +2801,12 @@ sealed class ProbeSession : IDisposable
     {
         if (op == "apply")
             await _update.ApplyAsync(PostUpdate, StopEngines);
-        else if (op == "folder")
+        else if (op is "file" or "folder")
         {
-            string? folder;
+            string? path;
             try
             {
-                folder = await WavPicker.PickAsync(WindowNative.GetWindowHandle(_window), "エンジンのフォルダ");
+                path = await PickEngineAsync();
             }
             catch (Exception ex)
             {
@@ -2809,12 +2814,37 @@ sealed class ProbeSession : IDisposable
                 return;
             }
 
-            if (string.IsNullOrEmpty(folder) || _disposed)
+            if (string.IsNullOrEmpty(path) || _disposed)
                 return;
-            await _update.InstallFromFolderAsync(folder, PostUpdate, StopEngines);
+            await _update.InstallFromPackageAsync(path, PostUpdate, StopEngines);
         }
         else
             await _update.CheckAsync(PostUpdate);
+    }
+
+    async Task<string?> PickEngineAsync()
+    {
+        var picker = new FileOpenPicker();
+        InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(_window));
+        picker.FileTypeFilter.Add(".zip");
+        Windows.Storage.StorageFile? file;
+        try
+        {
+            file = await picker.PickSingleFileAsync();
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+
+        return file?.Path;
+    }
+
+    async Task InstallDroppedAsync(string path)
+    {
+        if (_disposed)
+            return;
+        await _update.InstallFromPackageAsync(path, PostUpdate, StopEngines);
     }
 
     void PostUpdate(string phase, string title, string body) =>

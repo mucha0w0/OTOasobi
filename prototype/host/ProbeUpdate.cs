@@ -158,13 +158,34 @@ sealed class ProbeUpdate
         }
     }
 
-    public async Task InstallFromFolderAsync(string folder, Action<string, string, string> post, Action stop)
+    public Task InstallFromFolderAsync(string folder, Action<string, string, string> post, Action stop) =>
+        InstallPreparedAsync(() => EngineRelease.ReadFolder(folder), null, post, stop);
+
+    public Task InstallFromPackageAsync(string packagePath, Action<string, string, string> post, Action stop)
+    {
+        string? temp = null;
+        return InstallPreparedAsync(
+            () =>
+            {
+                temp = EnginePack.Materialize(packagePath);
+                return EngineRelease.ReadFolder(temp);
+            },
+            () =>
+            {
+                if (temp != null && Directory.Exists(temp))
+                    Directory.Delete(temp, true);
+            },
+            post,
+            stop);
+    }
+
+    async Task InstallPreparedAsync(Func<EngineRelease> open, Action? cleanup, Action<string, string, string> post, Action stop)
     {
         if (Interlocked.Exchange(ref _running, 1) == 1)
             return;
         try
         {
-            var release = EngineRelease.ReadFolder(folder);
+            var release = open();
             stop();
             await EngineInstaller.InstallZipAsync(
                 release.PythonLocation,
@@ -191,6 +212,17 @@ sealed class ProbeUpdate
         }
         finally
         {
+            try
+            {
+                cleanup?.Invoke();
+            }
+            catch (IOException)
+            {
+            }
+            catch (UnauthorizedAccessException)
+            {
+            }
+
             Interlocked.Exchange(ref _running, 0);
         }
     }

@@ -108,6 +108,75 @@ sealed class EngineRelease
     }
 }
 
+static class EnginePack
+{
+    public static string Materialize(string packagePath)
+    {
+        if (!File.Exists(packagePath))
+            throw new IOException("ファイルがありません。");
+        var dest = Path.Combine(Path.GetTempPath(), "otoasobi-engine-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dest);
+        try
+        {
+            using var zip = ZipFile.OpenRead(packagePath);
+            var prefix = ManifestPrefix(zip);
+            CopyEntry(zip, prefix + AppPaths.ManifestName, Path.Combine(dest, AppPaths.ManifestName));
+            var manifest = JsonFiles.Read<EngineManifest>(Path.Combine(dest, AppPaths.ManifestName))
+                ?? throw new InvalidDataException("engine.json を読めませんでした。");
+            manifest.EnsureValid();
+            CopyEntry(zip, prefix + manifest.Python, Path.Combine(dest, manifest.Python));
+            CopyEntry(zip, prefix + manifest.Model, Path.Combine(dest, manifest.Model));
+            return dest;
+        }
+        catch
+        {
+            TryDeleteDirectory(dest);
+            throw;
+        }
+    }
+
+    static string ManifestPrefix(ZipArchive zip)
+    {
+        var hits = new List<string>();
+        foreach (var entry in zip.Entries)
+        {
+            var name = entry.FullName.Replace('\\', '/');
+            if (name.EndsWith("/" + AppPaths.ManifestName, StringComparison.Ordinal) || name == AppPaths.ManifestName)
+                hits.Add(name[..^AppPaths.ManifestName.Length]);
+        }
+
+        if (hits.Count == 1 && !hits[0].Contains("..", StringComparison.Ordinal))
+            return hits[0];
+        throw new IOException("engine.json がありません。");
+    }
+
+    static void CopyEntry(ZipArchive zip, string name, string destination)
+    {
+        var entry = zip.GetEntry(name) ?? zip.GetEntry(name.Replace('/', '\\'));
+        if (entry == null)
+            throw new IOException($"{Path.GetFileName(name)} がありません。");
+        var parent = Path.GetDirectoryName(destination);
+        if (!string.IsNullOrEmpty(parent))
+            Directory.CreateDirectory(parent);
+        entry.ExtractToFile(destination, overwrite: true);
+    }
+
+    static void TryDeleteDirectory(string path)
+    {
+        try
+        {
+            if (Directory.Exists(path))
+                Directory.Delete(path, true);
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
+    }
+}
+
 static class EngineInstaller
 {
     internal static readonly HttpClient Api = CreateApi();

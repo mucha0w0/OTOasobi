@@ -113,6 +113,42 @@ public class UpdateTests
     }
 
     [Fact]
+    public void EnginePackExpandsTheManifestFiles()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "otoasobi-engine-pack-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        string? expanded = null;
+        try
+        {
+            var source = Path.Combine(root, "src");
+            Directory.CreateDirectory(source);
+            File.WriteAllText(Path.Combine(source, "engine.json"), """
+                {
+                  "python": "OtoasobiEngine.zip",
+                  "pythonSha256": "abc",
+                  "model": "mms-fa-model.pt",
+                  "modelSha256": "def"
+                }
+                """);
+            File.WriteAllText(Path.Combine(source, "OtoasobiEngine.zip"), "zip");
+            File.WriteAllText(Path.Combine(source, "mms-fa-model.pt"), "model");
+            var package = Path.Combine(root, "pack.zip");
+            ZipFile.CreateFromDirectory(source, package);
+
+            expanded = Otoasobi.EnginePack.Materialize(package);
+            var release = Otoasobi.EngineRelease.ReadFolder(expanded);
+            Assert.Equal("zip", File.ReadAllText(release.PythonLocation));
+            Assert.Equal("model", File.ReadAllText(release.ModelLocation));
+        }
+        finally
+        {
+            if (expanded != null && Directory.Exists(expanded))
+                Directory.Delete(expanded, true);
+            Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void EngineFolderNamesComeFromTheManifest()
     {
         var root = Path.Combine(Path.GetTempPath(), "otoasobi-engine-folder-" + Guid.NewGuid().ToString("N"));
