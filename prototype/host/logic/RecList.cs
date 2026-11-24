@@ -45,6 +45,7 @@ static class RecNames
     public const string Missing = "未録音";
     public const string Recorded = "録音済み";
     public const string Invalid = "使えない文字";
+    public const string DummyWav = "ダミーのファイル名.wav";
 
     public static string WavName(string sing) => sing.Trim() + ".wav";
 

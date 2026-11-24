@@ -1482,6 +1482,12 @@ sealed class ProbeSession : IDisposable
             return;
         }
 
+        if (string.IsNullOrEmpty(_folder))
+        {
+            Post(new { type = "failed", message = "フォルダを開いてください。" });
+            return;
+        }
+
         var name = Text(root, "name");
         _recordStem = null;
         if (!string.IsNullOrWhiteSpace(name))
@@ -1490,12 +1496,6 @@ sealed class ProbeSession : IDisposable
             if (error != null)
             {
                 Post(new { type = "failed", message = error });
-                return;
-            }
-
-            if (string.IsNullOrEmpty(_folder))
-            {
-                Post(new { type = "failed", message = "フォルダを開いてください。" });
                 return;
             }
 
@@ -1672,17 +1672,14 @@ sealed class ProbeSession : IDisposable
 
         try
         {
-            string path;
-            if (string.IsNullOrEmpty(_recordStem) || string.IsNullOrEmpty(_folder))
+            if (string.IsNullOrEmpty(_folder))
             {
-                var directory = Path.Combine(AppPaths.DataRoot, "probe-takes");
-                Directory.CreateDirectory(directory);
-                path = Path.Combine(directory, "take-" + DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture) + ".wav");
+                Post(new { type = "failed", message = "フォルダを開いてください。" });
+                return null;
             }
-            else
-            {
-                path = Path.Combine(_folder, RecNames.WavName(_recordStem));
-            }
+
+            var file = string.IsNullOrEmpty(_recordStem) ? RecNames.DummyWav : RecNames.WavName(_recordStem);
+            var path = Path.Combine(_folder, file);
             WavAudio.Write(path, new WavAudio
             {
                 SampleRate = RecTone.TargetRate,
