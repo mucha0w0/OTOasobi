@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using System.Runtime.InteropServices.Marshalling;
 using Windows.Devices.Enumeration;
 using Windows.Media;
 using Windows.Media.Audio;
@@ -337,11 +338,12 @@ sealed class RecCapture : IDisposable
         _ => "マイクを開けませんでした。",
     };
 
-    [ComImport]
-    [Guid("5B0D3235-4DBA-4D44-865E-8F1D0E4FD04D")]
-    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-    unsafe interface IMemoryBufferByteAccess
-    {
-        void GetBuffer(out byte* buffer, out uint capacity);
-    }
+}
+
+// CsWinRT のオブジェクトは ComImport へキャストできない。生成 COM インターフェースで読む。
+[GeneratedComInterface]
+[Guid("5B0D3235-4DBA-4D44-865E-8F1D0E4FD04D")]
+unsafe partial interface IMemoryBufferByteAccess
+{
+    void GetBuffer(out byte* buffer, out uint capacity);
 }
