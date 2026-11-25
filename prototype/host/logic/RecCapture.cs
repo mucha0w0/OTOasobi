@@ -202,6 +202,7 @@ sealed class RecCapture : IDisposable
         {
             _take = [];
             _recording = true;
+            _live.Clear();
         }
     }
 
