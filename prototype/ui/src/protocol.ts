@@ -16,9 +16,9 @@ export type PageCommand =
   | { type: "monitor"; on: boolean }
   | { type: "guide"; note: string; semitones: number; speed: number; volume?: number; bpm?: number; moras?: number; moraBeats?: number; countBeats?: number; countBeatsAfter?: number }
   | { type: "guideStop" }
-  | { type: "record"; name?: string; countBeats?: number; countBeatsAfter?: number; bpm?: number; moras?: number; moraBeats?: number; volume?: number; note?: string; semitones?: number; speed?: number; recStartAfter?: number; recEndBefore?: number }
+  | { type: "record"; name?: string; countBeats?: number; countBeatsAfter?: number; bpm?: number; moras?: number; moraBeats?: number; volume?: number; note?: string; semitones?: number; speed?: number; recStartAfter?: number; recEndBefore?: number; useGuide?: boolean; advance?: boolean }
   | { type: "recordStop" }
-  | { type: "recSettings"; note: string; semitones: number; speed: number; volume: number; countBeats: number; countBeatsAfter: number; bpm: number; moras: number; moraBeats: number; advance: boolean; recStartAfter: number; recEndBefore: number }
+  | { type: "recSettings"; note: string; semitones: number; speed: number; volume: number; countBeats: number; countBeatsAfter: number; bpm: number; moras: number; moraBeats: number; advance: boolean; useGuide: boolean; recStartAfter: number; recEndBefore: number }
   | { type: "recList"; op: "none" | "pick" | "open"; path?: string }
   | { type: "frq"; op: "write"; mode: "all" | "missing" | "selected"; clear: boolean; names?: string[] }
   | { type: "frq"; op: "stroke"; points: { frame: number; midi: number; unvoiced: boolean }[] }
@@ -111,6 +111,8 @@ export type HostEvent =
   | { type: "opened"; name: string; missing?: boolean; file: number }
   | { type: "status"; message: string }
   | { type: "recordWait"; waiting: boolean }
+  | { type: "recordSession"; on: boolean }
+  | { type: "recordCue"; sing: string }
   | { type: "frq"; wavs: number; frqs: number; busy: boolean }
   | FrqViewEvent
   | RecListEvent
@@ -184,6 +186,7 @@ export type RecSettingsEvent = {
   moras: number
   moraBeats: number
   advance: boolean
+  useGuide: boolean
   recStartAfter: number
   recEndBefore: number
 }
@@ -394,6 +397,10 @@ export function parseHostEvent(value: unknown): HostEvent | null {
       return typeof value.message === "string" ? { type: "status", message: value.message } : null
     case "recordWait":
       return { type: "recordWait", waiting: value.waiting === true }
+    case "recordSession":
+      return { type: "recordSession", on: value.on === true }
+    case "recordCue":
+      return { type: "recordCue", sing: typeof value.sing === "string" ? value.sing : "" }
     case "frq":
       return { type: "frq", wavs: numberOr(value.wavs, 0), frqs: numberOr(value.frqs, 0), busy: value.busy === true }
     case "frqView":
@@ -429,6 +436,7 @@ export function parseHostEvent(value: unknown): HostEvent | null {
         moras: numberOr(value.moras, 5),
         moraBeats: numberOr(value.moraBeats, 1),
         advance: value.advance === true,
+        useGuide: value.useGuide !== false,
         recStartAfter: numberOr(value.recStartAfter, 0),
         recEndBefore: numberOr(value.recEndBefore, 0),
       }

@@ -12,8 +12,11 @@ export function RecPanel({
   bus,
   status,
   waiting,
+  session,
   advance,
   setAdvance,
+  useGuide,
+  setUseGuide,
   onPrev,
   onNext,
   onNextMissing,
@@ -26,8 +29,11 @@ export function RecPanel({
   bus: LiveBus
   status: string
   waiting: boolean
+  session: boolean
   advance: boolean
   setAdvance: (value: boolean) => void
+  useGuide: boolean
+  setUseGuide: (value: boolean) => void
   onPrev: () => void
   onNext: () => void
   onNextMissing: () => void
@@ -39,7 +45,6 @@ export function RecPanel({
 }) {
   const capture = useCapture(bus)
   const recording = capture?.recording ?? false
-  const [useGuide, setUseGuide] = useState(false)
   return (
     <div className="flex h-full flex-col text-sm">
       <div className="flex flex-1 flex-col gap-3 overflow-auto p-3">
@@ -70,12 +75,12 @@ export function RecPanel({
         <IconButton label="次へ" onClick={onNext}><IconNext /></IconButton>
         <IconButton label="次の未録音" onClick={onNextMissing}><IconSkip /></IconButton>
         <IconButton
-          label={recording || waiting ? "停止" : "録音"}
+          label={recording || waiting || session ? "停止" : "録音"}
           accent
-          disabled={Boolean(blocked) && !recording && !waiting}
-          onClick={() => onRecord(recording || waiting)}
+          disabled={Boolean(blocked) && !recording && !waiting && !session}
+          onClick={() => onRecord(recording || waiting || session)}
         >
-          {recording || waiting ? <IconStop /> : <IconRecord />}
+          {recording || waiting || session ? <IconStop /> : <IconRecord />}
         </IconButton>
       </div>
     </div>

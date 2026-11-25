@@ -68,6 +68,41 @@ sealed class ProbeRec
             Store("");
     }
 
+    public string? NextUnrecordedSing(string? current)
+    {
+        if (string.IsNullOrEmpty(_folder) || _lines.Length == 0)
+            return null;
+        var start = -1;
+        if (!string.IsNullOrEmpty(current))
+        {
+            for (var i = 0; i < _lines.Length; i++)
+            {
+                if (string.Equals(_lines[i].Sing, current, StringComparison.Ordinal))
+                {
+                    start = i;
+                    break;
+                }
+            }
+        }
+
+        for (var pass = 0; pass < 2; pass++)
+        {
+            var from = pass == 0 ? start + 1 : 0;
+            var to = pass == 0 ? _lines.Length : Math.Max(0, start);
+            for (var i = from; i < to; i++)
+            {
+                var line = _lines[i];
+                if (line.NameError != null)
+                    continue;
+                var wav = RecNames.WavName(line.Sing);
+                if (!File.Exists(Path.Combine(_folder, wav)))
+                    return line.Sing;
+            }
+        }
+
+        return null;
+    }
+
     public bool Manual => _manual;
 
     public string GuidePath => _guide;

@@ -77,7 +77,9 @@ sealed class ProbeSession : IDisposable
         public Task<ProbeWave.Audio?> Task { get; } = task;
     }
     int _countGen;
+    readonly object _takeGate = new();
     bool _counting;
+    bool _recordSession;
     int _recordScheduleGen;
     string? _recordStem;
     DateTime _recordStarted;
@@ -276,8 +278,13 @@ sealed class ProbeSession : IDisposable
                         MoraBeatsOf(root));
                     break;
                 case "guideStop":
-                    _player.Stop();
-                    Post(new { type = "guide", playing = false });
+                    if (_recordSession || _recording || _counting)
+                        StopRecord();
+                    else
+                    {
+                        _player.Stop();
+                        Post(new { type = "guide", playing = false });
+                    }
                     break;
                 case "guideFile":
                     HandleGuideFile(root);
@@ -1295,7 +1302,7 @@ sealed class ProbeSession : IDisposable
             return;
         }
 
-        // 録音中のループには先頭カウントを入れない。発声中のクリックはループでも効く。
+        // 「ガイドを聴く」と同じ音。次の行へ進む録音では、このまま繰り返す。
         var tone = RecTone.ManualGuide(hz, bpm, moras, RecTone.TargetRate, countEnabled: true, preCount: !loop, countBeats, countBeatsAfter, moraBeats);
         var shaped = RecTone.ShapeGuide(tone, 1, RecTone.TargetRate, speed, semitones);
         var wav = PreviewWav.Encode(shaped, 1, RecTone.TargetRate);
@@ -1474,7 +1481,7 @@ sealed class ProbeSession : IDisposable
 
     async Task BeginRecordAsync(JsonElement root)
     {
-        if (_disposed || _recording || _counting)
+        if (_disposed || _recording || _counting || _recordSession)
             return;
         if (!_capture.Running)
         {
@@ -1502,74 +1509,151 @@ sealed class ProbeSession : IDisposable
             _recordStem = name.Trim();
         }
 
+        var useGuide = !root.TryGetProperty("useGuide", out var useGuideValue) || useGuideValue.ValueKind == JsonValueKind.True;
+        if (!useGuide)
+        {
+            if (_disposed || !_capture.Running)
+                return;
+            _capture.BeginTake();
+            _recording = true;
+            _recordStarted = DateTime.UtcNow;
+            PostCapture();
+            return;
+        }
+
         var manualGuide = _rec.Manual;
         var bpm = (int)Math.Clamp(Math.Round(Number(root, "bpm") == 0 ? 120 : Number(root, "bpm")), 40, 240);
         var countBeats = CountBeatsOf(root);
-        if (manualGuide)
-        {
-            var token = ++_countGen;
-            _counting = true;
-            Post(new { type = "recordWait", waiting = true });
-            PostStatus("カウントしています");
-            var clicks = PreviewWav.Encode(RecTone.CountIn(bpm, RecTone.TargetRate, countBeats), 1, RecTone.TargetRate);
-            _player.Volume = Volume(root);
-            var played = await _player.PlayAsync(clicks, loop: false);
-            var seconds = countBeats * 60.0 / bpm;
-            var started = DateTime.UtcNow;
-            while (played && token == _countGen && !_disposed && (DateTime.UtcNow - started).TotalSeconds < seconds)
-                await Task.Delay(40);
-            var cancelled = token != _countGen || _disposed || !played;
-            if (token == _countGen)
-                _counting = false;
-            Post(new { type = "recordWait", waiting = false });
-            PostStatus("");
-            if (cancelled || !_capture.Running)
-                return;
-        }
-
-        if (_disposed || _recording)
-            return;
-
+        var advance = root.TryGetProperty("advance", out var advanceValue) && advanceValue.ValueKind == JsonValueKind.True;
         var startAfter = RecStartAfterOf(root);
         var endBefore = RecEndBeforeOf(root);
         var schedule = ++_recordScheduleGen;
         var plan = BuildRecordGuidePlan(root, manualGuide, bpm, MorasOf(root), countBeats, CountBeatsAfterOf(root), MoraBeatsOf(root));
-        var guideDuration = plan?.DurationSeconds ?? 0;
-        var wantPlay = plan?.Wav != null;
-
-        DateTime bgmAt = DateTime.UtcNow;
-        if (wantPlay && plan?.Wav != null)
+        if (plan == null)
         {
-            _player.Volume = Volume(root);
-            var played = await _player.PlayAsync(plan.Wav, loop: false);
-            bgmAt = DateTime.UtcNow;
-            if (!played && !_disposed)
+            Post(new { type = "failed", message = "音名を読めませんでした。" });
+            return;
+        }
+
+        if (plan.DurationSeconds < 0)
+            return;
+        if (plan.Wav == null)
+        {
+            Post(new { type = "failed", message = "ガイドのファイルを選んでください。WAV を選ぶと、同じ名前の txt が対になります。" });
+            return;
+        }
+
+        var window = plan.DurationSeconds - endBefore - startAfter;
+        if (window <= 0.05)
+        {
+            Post(new { type = "failed", message = "録音の範囲がありません。" });
+            return;
+        }
+
+        _recordSession = true;
+        Post(new { type = "recordSession", on = true });
+        _player.Volume = Volume(root);
+        var played = await _player.PlayAsync(plan.Wav, advance);
+        if (_disposed || schedule != _recordScheduleGen)
+            return;
+        if (!played)
+        {
+            EndGuideSession(schedule);
+            Post(new { type = "failed", message = "ガイドを再生できませんでした。" });
+            return;
+        }
+
+        Post(new { type = "guide", playing = true });
+        try
+        {
+            var lap = 0;
+            var phase = 0;
+            var previous = 0.0;
+            var wrapped = false;
+            while (schedule == _recordScheduleGen && !_disposed)
             {
-                Post(new { type = "failed", message = "ガイドを再生できませんでした。" });
-                return;
+                var position = await PlayerPositionAsync();
+                if (schedule != _recordScheduleGen || _disposed)
+                    return;
+                if (position < 0)
+                {
+                    if (!(phase == 0 && lap == 0))
+                        return;
+                    await Task.Delay(20);
+                    continue;
+                }
+
+                if (position + 0.08 < previous)
+                    wrapped = true;
+                previous = position;
+                if (phase == 0)
+                {
+                    if ((lap == 0 || wrapped) && position + 0.03 >= startAfter)
+                    {
+                        if (!_capture.Running || _recording)
+                            return;
+                        _capture.BeginTake();
+                        _recording = true;
+                        _recordStarted = DateTime.UtcNow;
+                        PostCapture();
+                        phase = 1;
+                        wrapped = false;
+                    }
+                }
+                else if (_recording && (position + 0.03 >= plan.DurationSeconds - endBefore || wrapped))
+                {
+                    if (!CommitTake())
+                        return;
+                    if (!advance)
+                        return;
+                    var next = _rec.NextUnrecordedSing(_recordStem);
+                    if (string.IsNullOrEmpty(next))
+                        return;
+                    _recordStem = next;
+                    Post(new { type = "recordCue", sing = next });
+                    lap++;
+                    phase = 0;
+                }
+
+                await Task.Delay(20);
             }
         }
-        else if (guideDuration > 0)
-            bgmAt = DateTime.UtcNow;
-
-        if (_disposed || _recording || schedule != _recordScheduleGen)
-            return;
-
-        await WaitUntilSecondsFromAsync(bgmAt, startAfter, schedule);
-        if (_disposed || _recording || schedule != _recordScheduleGen || !_capture.Running)
-            return;
-
-        _capture.BeginTake();
-        _recording = true;
-        _recordStarted = DateTime.UtcNow;
-        PostCapture();
-
-        if (guideDuration > 0)
+        finally
         {
-            var stopAt = guideDuration - endBefore - startAfter;
-            if (stopAt > 0.05)
-                _ = ScheduleRecordStopAsync(stopAt, schedule);
+            if (schedule == _recordScheduleGen)
+                EndGuideSession(schedule);
         }
+    }
+
+    async Task<double> PlayerPositionAsync()
+    {
+        var done = new TaskCompletionSource<double>(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (!_queue.TryEnqueue(() => done.TrySetResult(_player.IsPlaying ? _player.PositionSeconds : -1)))
+            done.TrySetResult(0);
+        return await done.Task;
+    }
+
+    void EndGuideSession(int schedule)
+    {
+        if (schedule != _recordScheduleGen)
+            return;
+        _recordScheduleGen++;
+        _recordSession = false;
+        _player.Stop();
+        Post(new { type = "guide", playing = false });
+        Post(new { type = "recordSession", on = false });
+    }
+
+    bool CommitTake()
+    {
+        var saved = WriteTake();
+        PostCapture();
+        if (saved == null)
+            return false;
+        PostFiles();
+        PostRec();
+        Post(saved);
+        return true;
     }
 
     sealed record RecordGuidePlan(byte[]? Wav, double DurationSeconds);
@@ -1583,7 +1667,7 @@ sealed class ProbeSession : IDisposable
             var note = Text(root, "note") ?? "C4";
             if (!RecTone.TryHertz(note, out var hz))
                 return null;
-            var tone = RecTone.ManualGuide(hz, bpm, moras, RecTone.TargetRate, countEnabled: true, preCount: false, countBeats, countBeatsAfter, moraBeats);
+            var tone = RecTone.ManualGuide(hz, bpm, moras, RecTone.TargetRate, countEnabled: true, preCount: true, countBeats, countBeatsAfter, moraBeats);
             var shaped = RecTone.ShapeGuide(tone, 1, RecTone.TargetRate, speed, semitones);
             var wav = PreviewWav.Encode(shaped, 1, RecTone.TargetRate);
             return new RecordGuidePlan(wav, shaped.Length / (double)RecTone.TargetRate);
@@ -1603,31 +1687,8 @@ sealed class ProbeSession : IDisposable
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
         {
             Post(new { type = "failed", message = ex.Message });
-            return new RecordGuidePlan(null, 0);
+            return new RecordGuidePlan(null, -1);
         }
-    }
-
-    async Task WaitUntilSecondsFromAsync(DateTime started, double seconds, int schedule)
-    {
-        if (seconds <= 0)
-            return;
-        while (schedule == _recordScheduleGen && !_disposed)
-        {
-            var left = seconds - (DateTime.UtcNow - started).TotalSeconds;
-            if (left <= 0)
-                return;
-            await Task.Delay(Math.Clamp((int)(left * 1000), 10, 80));
-        }
-    }
-
-    async Task ScheduleRecordStopAsync(double seconds, int schedule)
-    {
-        var delay = TimeSpan.FromSeconds(seconds);
-        if (delay > TimeSpan.Zero)
-            await Task.Delay(delay);
-        if (schedule != _recordScheduleGen || _disposed || !_recording)
-            return;
-        _queue.TryEnqueue(StopRecord);
     }
 
     void StopRecord()
@@ -1642,26 +1703,23 @@ sealed class ProbeSession : IDisposable
             return;
         }
 
-        _recordScheduleGen++;
-        _player.Stop();
-        Post(new { type = "guide", playing = false });
+        var schedule = _recordScheduleGen;
+        EndGuideSession(schedule);
         if (_disposed || !_recording)
             return;
-        var saved = WriteTake();
-        PostCapture();
-        if (saved == null)
-            return;
-        PostFiles();
-        PostRec();
-        Post(saved);
+        CommitTake();
     }
 
     object? WriteTake()
     {
-        if (!_recording)
-            return null;
-        var elapsed = Math.Max(0, (DateTime.UtcNow - _recordStarted).TotalSeconds);
-        _recording = false;
+        double elapsed;
+        lock (_takeGate)
+        {
+            if (!_recording)
+                return null;
+            elapsed = Math.Max(0, (DateTime.UtcNow - _recordStarted).TotalSeconds);
+            _recording = false;
+        }
         var (samples, channels, rate) = _capture.EndTake();
         var mono = RecTone.ToMono44100(samples, channels, rate);
         if (mono.Length == 0)
@@ -2273,6 +2331,8 @@ sealed class ProbeSession : IDisposable
         else if (root.TryGetProperty("countWhileMoras", out var moraCount) && moraCount.ValueKind == JsonValueKind.True && settings.CountBeatsAfter == 0)
             settings.CountBeatsAfter = RecTone.DefaultCountBeats;
         settings.AutoAdvance = root.TryGetProperty("advance", out var advance) && advance.ValueKind == JsonValueKind.True;
+        if (root.TryGetProperty("useGuide", out var useGuide))
+            settings.UseGuide = useGuide.ValueKind == JsonValueKind.True;
         if (root.TryGetProperty("recStartAfter", out _))
             settings.RecStartAfter = RecStartAfterOf(root);
         if (root.TryGetProperty("recEndBefore", out _))
@@ -2296,6 +2356,7 @@ sealed class ProbeSession : IDisposable
             moras = settings.Moras,
             moraBeats = settings.MoraBeats,
             advance = settings.AutoAdvance,
+            useGuide = settings.UseGuide,
             recStartAfter = settings.RecStartAfter,
             recEndBefore = settings.RecEndBefore,
         });

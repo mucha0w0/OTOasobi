@@ -137,7 +137,7 @@ sealed class PreviewPlayer : IDisposable
 
     void OnEnded(MediaPlayer sender, object args)
     {
-        if (!_live)
+        if (!_live || _player.IsLoopingEnabled)
             return;
         var token = _token;
         _live = false;

@@ -23,6 +23,7 @@ export type RecSnapshot = {
   moras: number
   moraBeats: number
   advance: boolean
+  useGuide: boolean
   recStartAfter: number
   recEndBefore: number
 }
@@ -109,6 +110,7 @@ export function emptySnapshot(): EditSnapshot {
       moras: 5,
       moraBeats: 1,
       advance: false,
+      useGuide: true,
       recStartAfter: 0,
       recEndBefore: 0,
     },
@@ -303,6 +305,7 @@ export function applySnapshot(snapshot: EditSnapshot, command: PageCommand): Edi
           moras: command.moras,
           moraBeats: command.moraBeats,
           advance: command.advance,
+          useGuide: command.useGuide,
           recStartAfter: command.recStartAfter,
           recEndBefore: command.recEndBefore,
         },
@@ -951,6 +954,7 @@ function describeRec(command: Extract<PageCommand, { type: "recSettings" }>, sna
     command.moras !== current.moras ? "moras" : "",
     !near(command.moraBeats, current.moraBeats) ? "moraBeats" : "",
     command.advance !== current.advance ? "advance" : "",
+    command.useGuide !== current.useGuide ? "useGuide" : "",
     !near(command.recStartAfter, current.recStartAfter) ? "recStartAfter" : "",
     !near(command.recEndBefore, current.recEndBefore) ? "recEndBefore" : "",
   ].filter((item) => item.length > 0)

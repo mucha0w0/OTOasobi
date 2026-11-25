@@ -35,6 +35,9 @@ sealed class RecAppSettings
 
     public bool AutoAdvance { get; set; }
 
+    // 録音ボタンでガイド BGM を鳴らし、開始・終了位置でマイクを開閉する。
+    public bool UseGuide { get; set; } = true;
+
     // ガイド BGM の開始からの秒数でマイクをオンにする。
     public double RecStartAfter { get; set; }
 

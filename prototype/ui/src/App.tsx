@@ -198,6 +198,8 @@ export function App() {
   const [recStartAfter, setRecStartAfter] = useState(0)
   const [recEndBefore, setRecEndBefore] = useState(0)
   const [advance, setAdvance] = useState(false)
+  const [useGuide, setUseGuide] = useState(true)
+  const [guideSession, setGuideSession] = useState(false)
   const [guidePlaying, setGuidePlaying] = useState(false)
   const [folder, setFolder] = useState("")
   const [names, setNames] = useState<string[]>([])
@@ -263,6 +265,8 @@ export function App() {
   const recListRef = useRef<RecListEvent | null>(null)
   const recIndexRef = useRef<number | null>(null)
   const advanceRef = useRef(false)
+  const useGuideRef = useRef(true)
+  const guideChainRef = useRef(false)
   const recordNameRef = useRef<string | null>(null)
   const historyRef = useRef<History>(emptyHistory())
   const batchRef = useRef<PendingEdit[]>([])
@@ -278,7 +282,7 @@ export function App() {
       ...emptySnapshot(),
       appearance: { theme, accent: null, scale, lockPanels },
       monitor,
-      rec: { note, semitones, speed, volume, countBeats, countBeatsAfter, bpm, moras, moraBeats, advance, recStartAfter, recEndBefore },
+      rec: { note, semitones, speed, volume, countBeats, countBeatsAfter, bpm, moras, moraBeats, advance, useGuide, recStartAfter, recEndBefore },
     }
   }
   const resolved = resolveTheme(theme, systemDark)
@@ -294,6 +298,7 @@ export function App() {
   recListRef.current = recList
   recIndexRef.current = recIndex
   advanceRef.current = advance
+  useGuideRef.current = useGuide
   createOpenRef.current = createOpen
   modelRef.current = viewModel()
 
@@ -410,12 +415,13 @@ export function App() {
         moras,
         moraBeats,
         advance,
+        useGuide,
         recStartAfter,
         recEndBefore,
       })
     }, 300)
     return () => window.clearTimeout(timer)
-  }, [advance, bpm, countBeats, countBeatsAfter, moraBeats, moras, note, recEndBefore, recStartAfter, semitones, speed, volume])
+  }, [advance, bpm, countBeats, countBeatsAfter, moraBeats, moras, note, recEndBefore, recStartAfter, semitones, speed, useGuide, volume])
 
   function viewModel(over: Partial<GraphModel> = {}): GraphModel {
     return {
@@ -991,6 +997,18 @@ export function App() {
       case "recordWait":
         setWaiting(event.waiting)
         break
+      case "recordSession":
+        guideChainRef.current = event.on && advanceRef.current && useGuideRef.current
+        setGuideSession(event.on)
+        break
+      case "recordCue": {
+        const lines = recListRef.current?.lines ?? []
+        const index = lines.findIndex((line) => line.sing === event.sing)
+        const line = lines[index]
+        if (line)
+          chooseRec(index, line.wav)
+        break
+      }
       case "otoExists":
         setReplaceName(event.name)
         break
@@ -1099,6 +1117,7 @@ export function App() {
             moras: event.moras,
             moraBeats: event.moraBeats,
             advance: event.advance,
+            useGuide: event.useGuide,
             recStartAfter: event.recStartAfter,
             recEndBefore: event.recEndBefore,
           },
@@ -1115,6 +1134,7 @@ export function App() {
         setRecStartAfter(event.recStartAfter)
         setRecEndBefore(event.recEndBefore)
         setAdvance(event.advance)
+        setUseGuide(event.useGuide)
         break
       case "layout":
         if (acceptLayout.current)
@@ -1224,7 +1244,7 @@ export function App() {
   function advanceAfterSave() {
     const name = recordNameRef.current
     recordNameRef.current = null
-    if (!advanceRef.current || !name)
+    if (!advanceRef.current || !name || guideChainRef.current)
       return
     const lines = recListRef.current?.lines ?? []
     const index = lines.findIndex((line) => line.sing === name)
@@ -1250,6 +1270,8 @@ export function App() {
       speed,
       recStartAfter,
       recEndBefore,
+      useGuide: useGuideRef.current,
+      advance: advanceRef.current,
     })
   }
 
@@ -1384,6 +1406,7 @@ export function App() {
         || moras !== rec.moras
         || moraBeats !== rec.moraBeats
         || advance !== rec.advance
+        || useGuide !== rec.useGuide
       if (changed) {
         suppressRec.current = true
         setNote(rec.note)
@@ -1396,6 +1419,7 @@ export function App() {
         setMoras(rec.moras)
         setMoraBeats(rec.moraBeats)
         setAdvance(rec.advance)
+        setUseGuide(rec.useGuide)
       }
     }
     if (commands.some((command) => command.type === "guideFile"))
@@ -1566,8 +1590,11 @@ export function App() {
                     bus={bus}
                     status={recStatus}
                     waiting={waiting}
+                    session={guideSession}
                     advance={advance}
                     setAdvance={touchRec(setAdvance)}
+                    useGuide={useGuide}
+                    setUseGuide={touchRec(setUseGuide)}
                     onPrev={() => moveRec(-1)}
                     onNext={() => moveRec(1)}
                     onNextMissing={moveMissing}
