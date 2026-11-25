@@ -1,4 +1,5 @@
 import { useState, type KeyboardEvent, type ReactNode } from "react"
+import { paneTitles } from "./layout"
 import type { DeviceInfo } from "./protocol"
 import type { ThemeChoice } from "./theme"
 
@@ -39,6 +40,7 @@ export function settingsTabs(look: LookModel, io: IoModel): SettingsTab[] {
   return [
     { id: "look", title: "見た目", content: <LookSettings {...look} /> },
     { id: "io", title: "入出力", content: <IoSettings {...io} /> },
+    { id: "panes", title: "各パネルの詳細設定", content: <PaneSettings /> },
   ]
 }
 
@@ -68,7 +70,7 @@ export function SettingsDialog({ tabs, onClose }: { tabs: SettingsTab[]; onClose
     <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/40 p-6">
       <div role="dialog" aria-modal="true" aria-label="環境設定" className="flex h-[min(32rem,100%)] w-full max-w-3xl flex-col rounded-md border border-[var(--line)] bg-[var(--panel)] text-[var(--text)]">
         <div className="flex min-h-0 flex-1">
-          <div role="tablist" aria-orientation="vertical" className="flex w-40 shrink-0 flex-col gap-1 border-r border-[var(--line)] p-3" onKeyDown={move}>
+          <div role="tablist" aria-orientation="vertical" className="flex w-48 shrink-0 flex-col gap-1 border-r border-[var(--line)] p-3" onKeyDown={move}>
             {tabs.map((tab) => {
               const selected = tab.id === current?.id
               return (
@@ -162,6 +164,16 @@ function IoSettings({ inputs, outputs, inputId, outputId, onInput, onOutput }: I
       <Setting label="出力">
         <DeviceSelect label="出力" devices={outputs} value={outputId} onChange={onOutput} />
       </Setting>
+    </div>
+  )
+}
+
+function PaneSettings() {
+  return (
+    <div className="flex flex-col gap-4 text-sm">
+      {Object.values(paneTitles).map((title) => (
+        <Setting key={title} label={title}>{null}</Setting>
+      ))}
     </div>
   )
 }
