@@ -20,6 +20,9 @@ export function RecPanel({
   onNextMissing,
   onRecord,
   blocked,
+  monitor,
+  setMonitor,
+  send,
 }: {
   bus: LiveBus
   saved: SavedEvent | null
@@ -32,6 +35,9 @@ export function RecPanel({
   onNextMissing: () => void
   onRecord: (stop: boolean) => void
   blocked?: boolean
+  monitor: boolean
+  setMonitor: (on: boolean) => void
+  send: (command: PageCommand) => void
 }) {
   const capture = useCapture(bus)
   const recording = capture?.recording ?? false
@@ -44,6 +50,18 @@ export function RecPanel({
           入力 {inputRate == null ? "—" : `${inputRate} Hz`}
           {recording ? " / 録音中" : waiting ? " / カウント中" : ""}
         </p>
+        <label className="flex gap-2">
+          <input
+            type="checkbox"
+            checked={monitor}
+            onChange={(event) => {
+              setMonitor(event.target.checked)
+              send({ type: "monitor", on: event.target.checked })
+            }}
+          />
+          入力を聴く
+        </label>
+        {capture?.listenError && <p className="text-[var(--danger)]">{capture.listenError}</p>}
         <label className="flex gap-2">
           <input type="checkbox" checked={advance} onChange={(event) => setAdvance(event.target.checked)} />
           停止したあとに次の未録音へ進む
@@ -274,23 +292,17 @@ export function GuidePanel({
 export function MicPanel({
   bus,
   appearance,
-  monitor,
-  setMonitor,
   recorded,
   wave,
   playing,
   position,
-  send,
 }: {
   bus: LiveBus
   appearance: string
-  monitor: boolean
-  setMonitor: (on: boolean) => void
   recorded: boolean
   wave: { lo: number[]; hi: number[]; duration: number } | null
   playing: boolean
   position: number
-  send: (command: PageCommand) => void
 }) {
   const capture = useCapture(bus)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -336,21 +348,6 @@ export function MicPanel({
       <LevelMeter peak={capture?.peak ?? 0} />
       <div className="relative min-h-0 min-w-0 flex-1 bg-[var(--canvas)]">
         <canvas ref={bindCanvas} className="h-full w-full" />
-        <label className="absolute left-2 top-2 flex items-center gap-1 rounded bg-[var(--panel)]/85 px-1.5 py-0.5 text-[11px] text-[var(--text)]">
-          <input
-            type="checkbox"
-            className="size-3"
-            checked={monitor}
-            onChange={(event) => {
-              setMonitor(event.target.checked)
-              send({ type: "monitor", on: event.target.checked })
-            }}
-          />
-          入力を聴く
-        </label>
-        {capture?.listenError && (
-          <p className="absolute left-2 top-8 text-[11px] text-[var(--danger)]">{capture.listenError}</p>
-        )}
       </div>
     </div>
   )
@@ -377,17 +374,16 @@ function LevelMeter({ peak }: { peak: number }) {
   const level = db <= -48 ? 0 : db >= 0 ? 1 : 1 - meterTop(db)
   const red = meterTop(-6)
   const brown = meterTop(-18) - red
-  const readout = db <= -48 ? "−∞" : String(Math.round(db))
   return (
-    <div className="flex h-full w-[4.5rem] shrink-0 flex-col bg-black px-1.5 py-1 text-[10px] leading-none text-neutral-200">
-      <div className="mb-1 text-center font-semibold text-[#f87171]">{readout}</div>
+    <div className="flex h-full w-9 shrink-0 gap-0.5 bg-black py-1 pl-1 text-[9px] leading-none text-neutral-300">
+      <div className="relative w-1 shrink-0">
+        <MeterBar level={level} red={red} brown={brown} />
+      </div>
       <div className="relative min-h-0 flex-1">
-        <MeterBar level={level} red={red} brown={brown} side="left" />
-        <MeterBar level={level} red={red} brown={brown} side="right" />
         {meterMarks.map((mark) => (
           <span
             key={mark}
-            className="absolute left-1/2 -translate-x-1/2 -translate-y-1/2 text-neutral-300"
+            className="absolute left-0 -translate-y-1/2"
             style={{ top: `${meterTop(mark) * 100}%` }}
           >
             {mark === 0 ? "0" : mark}
@@ -398,9 +394,9 @@ function LevelMeter({ peak }: { peak: number }) {
   )
 }
 
-function MeterBar({ level, red, brown, side }: { level: number; red: number; brown: number; side: "left" | "right" }) {
+function MeterBar({ level, red, brown }: { level: number; red: number; brown: number }) {
   return (
-    <div className={`absolute inset-y-0 w-2 ${side === "left" ? "left-0" : "right-0"}`}>
+    <div className="absolute inset-0">
       <div className="absolute inset-0 flex flex-col">
         <div className="bg-[#991b1b]" style={{ height: `${red * 100}%` }} />
         <div className="bg-[#92400e]" style={{ height: `${brown * 100}%` }} />

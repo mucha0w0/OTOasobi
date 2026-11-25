@@ -1573,6 +1573,9 @@ export function App() {
                     onNextMissing={moveMissing}
                     onRecord={startRecord}
                     blocked={Boolean(recLine?.error)}
+                    monitor={monitor}
+                    setMonitor={setMonitor}
+                    send={(command) => sendRef.current(command)}
                   />
                 )
               if (id === "guide")
@@ -1644,13 +1647,10 @@ export function App() {
                   <MicPanel
                     bus={bus}
                     appearance={appearance}
-                    monitor={monitor}
-                    setMonitor={setMonitor}
                     recorded={Boolean(recLine?.recorded)}
                     wave={takeWave && recLine && takeWave.name === recLine.wav ? takeWave : null}
                     playing={takePlay.playing}
                     position={takePlay.position}
-                    send={(command) => sendRef.current(command)}
                   />
                 )
               if (id === "source")
