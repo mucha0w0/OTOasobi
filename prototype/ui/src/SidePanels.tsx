@@ -39,10 +39,15 @@ export function RecPanel({
 }) {
   const capture = useCapture(bus)
   const recording = capture?.recording ?? false
+  const [useGuide, setUseGuide] = useState(false)
   return (
     <div className="flex h-full flex-col text-sm">
       <div className="flex flex-1 flex-col gap-3 overflow-auto p-3">
         {status && <p className="text-[var(--muted)]">{status}</p>}
+        <label className="flex gap-2">
+          <input type="checkbox" checked={useGuide} onChange={(event) => setUseGuide(event.target.checked)} />
+          ガイドBGMを使用する
+        </label>
         <label className="flex gap-2">
           <input
             type="checkbox"
