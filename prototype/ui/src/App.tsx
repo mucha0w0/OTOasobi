@@ -1510,6 +1510,7 @@ export function App() {
         canEdit={folder.length > 0}
         canWrite={Boolean(oto?.analyzed && !oto.busy)}
         onOpenFolder={() => sendRef.current({ type: "openFolder" })}
+        onLeaveFolder={() => sendRef.current({ type: "leaveFolder" })}
         onSaveSettings={() => {
           setSaveName("")
           setSaveOpen(true)

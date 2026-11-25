@@ -6,6 +6,7 @@ type Props = {
   canEdit: boolean
   canWrite: boolean
   onOpenFolder: () => void
+  onLeaveFolder: () => void
   onSaveSettings: () => void
   onLoadSettings: () => void
   onWrite: () => void
@@ -31,6 +32,7 @@ export function MenuBar({
   canEdit,
   canWrite,
   onOpenFolder,
+  onLeaveFolder,
   onSaveSettings,
   onLoadSettings,
   onWrite,
@@ -72,6 +74,7 @@ export function MenuBar({
     <nav ref={barRef} className="relative z-30 flex h-8 shrink-0 items-center gap-1 border-b border-[var(--line)] bg-[var(--panel)] px-2 text-sm">
       <Menu title="ファイル" open={open} setOpen={setOpen}>
         <Item onClick={onOpenFolder}>フォルダを開く</Item>
+        {canEdit && <Item onClick={onLeaveFolder}>トップ画面へ戻る</Item>}
         <Item disabled={!canEdit} onClick={onSaveSettings}>設定を保存</Item>
         <Item disabled={!canEdit} onClick={onLoadSettings}>設定を読み込む</Item>
         <Item disabled={!canWrite} onClick={onWrite}>oto.iniを生成</Item>

@@ -240,6 +240,9 @@ sealed class ProbeSession : IDisposable
                 case "openFolder":
                     _ = OpenFolderAsync();
                     break;
+                case "leaveFolder":
+                    LeaveFolder();
+                    break;
                 case "pickProjectPlace":
                     _ = PickProjectPlaceAsync();
                     break;
@@ -488,6 +491,36 @@ sealed class ProbeSession : IDisposable
             RecentFolders.Remember(_folder);
             PostRecent();
         }
+    }
+
+    void LeaveFolder()
+    {
+        if (_disposed || string.IsNullOrEmpty(_folder))
+            return;
+        if (_recordSession || _recording || _counting)
+            StopRecord();
+        _player.Stop();
+        try
+        {
+            _analysis?.Cancel();
+        }
+        catch (IOException)
+        {
+        }
+
+        _analyzeGen++;
+        _cacheGen++;
+        _prepareGen++;
+        _preparing = false;
+        _oto.FlushSession();
+        _fileToken++;
+        _fileGen++;
+        _folder = null;
+        _wavPath = null;
+        _listedNames = [];
+        RetirePreview();
+        Post(new { type = "files", folder = "", names = Array.Empty<string>(), file = _fileToken });
+        Post(new { type = "guide", playing = false });
     }
 
     async Task OpenFolderAsync()
