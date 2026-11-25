@@ -11,8 +11,8 @@ public sealed partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        Title = "オトアソビ試作";
-        AppWindow.Title = "オトアソビ試作";
+        Title = "オトアソビ";
+        AppWindow.Title = "オトアソビ";
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(DragRegion);
         if (AppWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter presenter)
@@ -45,7 +45,7 @@ public sealed partial class MainWindow : Window
         var ground = dark ? Color.FromArgb(255, 22, 22, 22) : Color.FromArgb(255, 244, 244, 245);
         DragRegion.Background = new SolidColorBrush(ground);
         CaptionText.Foreground = new SolidColorBrush(foreground);
-        CaptionText.Text = dark ? "オトアソビ試作 · ダーク" : "オトアソビ試作 · ライト";
+        CaptionText.Text = "オトアソビ";
     }
 
     void ShowMissing(string message)
