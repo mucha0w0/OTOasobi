@@ -1647,7 +1647,6 @@ export function App() {
                     monitor={monitor}
                     setMonitor={setMonitor}
                     recorded={Boolean(recLine?.recorded)}
-                    takeName={recLine?.wav ?? ""}
                     wave={takeWave && recLine && takeWave.name === recLine.wav ? takeWave : null}
                     playing={takePlay.playing}
                     position={takePlay.position}

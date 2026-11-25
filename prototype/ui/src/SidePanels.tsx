@@ -277,7 +277,6 @@ export function MicPanel({
   monitor,
   setMonitor,
   recorded,
-  takeName,
   wave,
   playing,
   position,
@@ -288,7 +287,6 @@ export function MicPanel({
   monitor: boolean
   setMonitor: (on: boolean) => void
   recorded: boolean
-  takeName: string
   wave: { lo: number[]; hi: number[]; duration: number } | null
   playing: boolean
   position: number
@@ -334,11 +332,14 @@ export function MicPanel({
   }, [capture, appearance, shown, playing, position])
 
   return (
-    <div className="flex h-full flex-col text-sm">
-      <div className="flex min-h-0 flex-1 flex-col gap-3 p-3">
-        <label className="flex items-center gap-2">
+    <div className="flex h-full min-h-0">
+      <LevelMeter peak={capture?.peak ?? 0} />
+      <div className="relative min-h-0 min-w-0 flex-1 bg-[var(--canvas)]">
+        <canvas ref={bindCanvas} className="h-full w-full" />
+        <label className="absolute left-2 top-2 flex items-center gap-1 rounded bg-[var(--panel)]/85 px-1.5 py-0.5 text-[11px] text-[var(--text)]">
           <input
             type="checkbox"
+            className="size-3"
             checked={monitor}
             onChange={(event) => {
               setMonitor(event.target.checked)
@@ -347,24 +348,65 @@ export function MicPanel({
           />
           入力を聴く
         </label>
-        {capture?.listenError && <p>{capture.listenError}</p>}
-        <div className="relative min-h-16 flex-1 rounded border border-[var(--line)] bg-[var(--canvas)]">
-          <canvas ref={bindCanvas} className="h-full w-full" />
-        </div>
-        <div className="h-2 overflow-hidden rounded bg-[var(--line)]">
-          <div className="h-full bg-[var(--accent)]" style={{ width: `${Math.min(1, capture?.peak ?? 0) * 100}%` }} />
-        </div>
+        {capture?.listenError && (
+          <p className="absolute left-2 top-8 text-[11px] text-[var(--danger)]">{capture.listenError}</p>
+        )}
       </div>
-      <div className="flex border-t border-[var(--line)] p-3">
-        <IconButton
-          label={playing ? "停止" : "テイクを聴く"}
-          accent
-          disabled={!recorded || takeName.length === 0}
-          onClick={() => send(playing ? { type: "take", op: "stop" } : { type: "take", op: "play", name: takeName })}
-        >
-          {playing ? <IconStop /> : <IconPlay />}
-        </IconButton>
+    </div>
+  )
+}
+
+const meterMarks = [0, -3, -6, -9, -12, -15, -18, -20, -24, -30, -36, -42, -48]
+
+function meterTop(db: number): number {
+  if (db >= 0)
+    return 0
+  if (db <= -48)
+    return 1
+  for (let i = 0; i < meterMarks.length - 1; i++) {
+    const hi = meterMarks[i]
+    const lo = meterMarks[i + 1]
+    if (db <= hi && db >= lo)
+      return (i + (hi - db) / (hi - lo)) / (meterMarks.length - 1)
+  }
+  return 1
+}
+
+function LevelMeter({ peak }: { peak: number }) {
+  const db = peak > 0 ? Math.max(-96, 20 * Math.log10(Math.min(1, peak))) : -96
+  const level = db <= -48 ? 0 : db >= 0 ? 1 : 1 - meterTop(db)
+  const red = meterTop(-6)
+  const brown = meterTop(-18) - red
+  const readout = db <= -48 ? "−∞" : String(Math.round(db))
+  return (
+    <div className="flex h-full w-[4.5rem] shrink-0 flex-col bg-black px-1.5 py-1 text-[10px] leading-none text-neutral-200">
+      <div className="mb-1 text-center font-semibold text-[#f87171]">{readout}</div>
+      <div className="relative min-h-0 flex-1">
+        <MeterBar level={level} red={red} brown={brown} side="left" />
+        <MeterBar level={level} red={red} brown={brown} side="right" />
+        {meterMarks.map((mark) => (
+          <span
+            key={mark}
+            className="absolute left-1/2 -translate-x-1/2 -translate-y-1/2 text-neutral-300"
+            style={{ top: `${meterTop(mark) * 100}%` }}
+          >
+            {mark === 0 ? "0" : mark}
+          </span>
+        ))}
       </div>
+    </div>
+  )
+}
+
+function MeterBar({ level, red, brown, side }: { level: number; red: number; brown: number; side: "left" | "right" }) {
+  return (
+    <div className={`absolute inset-y-0 w-2 ${side === "left" ? "left-0" : "right-0"}`}>
+      <div className="absolute inset-0 flex flex-col">
+        <div className="bg-[#991b1b]" style={{ height: `${red * 100}%` }} />
+        <div className="bg-[#92400e]" style={{ height: `${brown * 100}%` }} />
+        <div className="min-h-0 flex-1 bg-[#166534]" />
+      </div>
+      <div className="absolute inset-x-0 top-0 bg-black" style={{ height: `${(1 - level) * 100}%` }} />
     </div>
   )
 }
