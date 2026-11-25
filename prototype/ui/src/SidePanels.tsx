@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { bitmapRatio, canvasContext, shouldReplaceBitmap } from "./bitmap"
 import { IconButton, IconNext, IconPlay, IconPrev, IconRecord, IconSkip, IconStop } from "./IconButton"
 import { drawPeaks } from "./drawPeaks"
-import { shownInputRate, type CaptureEvent, type PageCommand, type SavedEvent } from "./protocol"
+import { type CaptureEvent, type PageCommand } from "./protocol"
 import type { LiveBus } from "./live"
 import { Segmented } from "./Segmented"
 
@@ -10,7 +10,6 @@ const notes = ["C3", "D3", "E3", "F3", "G3", "A3", "B3", "C4", "D4", "E4", "F4",
 
 export function RecPanel({
   bus,
-  saved,
   status,
   waiting,
   advance,
@@ -25,7 +24,6 @@ export function RecPanel({
   send,
 }: {
   bus: LiveBus
-  saved: SavedEvent | null
   status: string
   waiting: boolean
   advance: boolean
@@ -41,15 +39,10 @@ export function RecPanel({
 }) {
   const capture = useCapture(bus)
   const recording = capture?.recording ?? false
-  const inputRate = shownInputRate(capture)
   return (
     <div className="flex h-full flex-col text-sm">
       <div className="flex flex-1 flex-col gap-3 overflow-auto p-3">
         {status && <p className="text-[var(--muted)]">{status}</p>}
-        <p className="text-[var(--muted)]">
-          入力 {inputRate == null ? "—" : `${inputRate} Hz`}
-          {recording ? " / 録音中" : waiting ? " / カウント中" : ""}
-        </p>
         <label className="flex gap-2">
           <input
             type="checkbox"
@@ -66,12 +59,6 @@ export function RecPanel({
           <input type="checkbox" checked={advance} onChange={(event) => setAdvance(event.target.checked)} />
           停止したあとに次の未録音へ進む
         </label>
-        {saved && (
-          <p className="leading-6">
-            入力 {saved.inputRate} Hz、ヘッダ {saved.headerRate} Hz / {saved.bits} bit / {saved.channels} ch、
-            ファイル {saved.seconds.toFixed(2)} 秒、操作 {saved.elapsed.toFixed(2)} 秒
-          </p>
-        )}
       </div>
       <div className="flex gap-2 border-t border-[var(--line)] p-3">
         <IconButton label="前へ" onClick={onPrev}><IconPrev /></IconButton>

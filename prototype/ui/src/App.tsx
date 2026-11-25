@@ -36,7 +36,7 @@ import { MenuBar } from "./MenuBar"
 import { OtoTable } from "./OtoTable"
 import { AnalyzePanel, OtoIni, OtoSettings } from "./OtoPanels"
 import { PluginFrame, type PluginContext } from "./PluginFrame"
-import { iniMarksForFile, previewColumnLimit, previewRowLimit, previewStillCovers, requestsPreviewAfter, uiScale, type BankEvent, type DeviceInfo, type EffectsEvent, type FrqViewEvent, type HostEvent, type NoiseWaveEvent, type OtoMark, type OtoState, type PageCommand, type PluginItem, type PluginReply, type PreviewEvent, type RecListEvent, type SavedEvent } from "./protocol"
+import { iniMarksForFile, previewColumnLimit, previewRowLimit, previewStillCovers, requestsPreviewAfter, uiScale, type BankEvent, type DeviceInfo, type EffectsEvent, type FrqViewEvent, type HostEvent, type NoiseWaveEvent, type OtoMark, type OtoState, type PageCommand, type PluginItem, type PluginReply, type PreviewEvent, type RecListEvent } from "./protocol"
 import { RecListPanel, RecScriptPanel } from "./RecPanels"
 import { LogBar, noticeTone, ToneRow, type NoticeTone } from "./notice"
 import { createPointerBus } from "./ruler"
@@ -211,7 +211,6 @@ export function App() {
   const pinnedAliasRef = useRef("")
   const [picture, setPicture] = useState<PreviewEvent | null>(null)
   const [notice, setNotice] = useState<{ message: string; tone: NoticeTone } | null>(null)
-  const [saved, setSaved] = useState<SavedEvent | null>(null)
   const [settings, setSettings] = useState(false)
   const [layout, setLayout] = useState<LayoutNode | null>(() => createDefault())
   const [oto, setOto] = useState<OtoState | null>(null)
@@ -972,8 +971,7 @@ export function App() {
         setUpdatePrompt({ phase: event.phase, title: event.title, body: event.body })
         break
       case "saved":
-        setSaved(event)
-        setNotice({ message: `${event.path} を書きました。入力 ${event.inputRate} Hz、ヘッダ ${event.headerRate} Hz / ${event.bits} bit / ${event.channels} ch。`, tone: "success" })
+        setNotice({ message: `${event.path} を書きました。`, tone: "success" })
         advanceAfterSave()
         break
       case "failed":
@@ -1566,7 +1564,6 @@ export function App() {
                 return (
                   <RecPanel
                     bus={bus}
-                    saved={saved}
                     status={recStatus}
                     waiting={waiting}
                     advance={advance}
