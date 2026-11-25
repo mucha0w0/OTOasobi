@@ -1498,7 +1498,7 @@ export function App() {
     }
     sendRef.current({ type: "take", op: "wave", name: fileName })
   }, [fileName, names])
-  const recNext = recLine && recIndex != null ? recList?.lines[recIndex + 1]?.sing ?? "" : ""
+  const recNext = recLine && recIndex != null ? recList?.lines[nextShown(recIndex)]?.sing ?? "" : ""
   const recOutside = !recLine && (recList?.outside.some((name) => sameName(name, fileName)) ?? false) ? fileName : ""
   const recStatus = recLine?.error ?? (recLine ? (recLine.recorded ? "録音済み" : "未録音") : recOutside ? "リスト外" : "")
   const appearance = `${resolved}-${accentPaint.fill}-${scale}`

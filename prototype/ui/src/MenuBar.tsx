@@ -7,6 +7,7 @@ type Props = {
   canWrite: boolean
   onOpenFolder: () => void
   onLeaveFolder: () => void
+  onRevealFolder: () => void
   onSaveSettings: () => void
   onLoadSettings: () => void
   onWrite: () => void
@@ -33,6 +34,7 @@ export function MenuBar({
   canWrite,
   onOpenFolder,
   onLeaveFolder,
+  onRevealFolder,
   onSaveSettings,
   onLoadSettings,
   onWrite,

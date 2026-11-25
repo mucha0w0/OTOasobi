@@ -243,6 +243,9 @@ sealed class ProbeSession : IDisposable
                 case "leaveFolder":
                     LeaveFolder();
                     break;
+                case "revealFolder":
+                    RevealFolder();
+                    break;
                 case "pickProjectPlace":
                     _ = PickProjectPlaceAsync();
                     break;
@@ -490,6 +493,20 @@ sealed class ProbeSession : IDisposable
             BeginPrepareFolder();
             RecentFolders.Remember(_folder);
             PostRecent();
+        }
+    }
+
+    void RevealFolder()
+    {
+        if (_disposed || string.IsNullOrEmpty(_folder) || !Directory.Exists(_folder))
+            return;
+        try
+        {
+            OtoSaveStore.OpenFolder(_folder);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            Post(new { type = "failed", message = ex.Message });
         }
     }
 

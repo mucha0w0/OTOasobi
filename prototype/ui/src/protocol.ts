@@ -9,6 +9,7 @@ export type PageCommand =
   | { type: "openWav" }
   | { type: "openFolder" }
   | { type: "leaveFolder" }
+  | { type: "revealFolder" }
   | { type: "pickProjectPlace" }
   | { type: "createProject"; parent: string; name: string }
   | { type: "selectFile"; name: string; file?: number }
