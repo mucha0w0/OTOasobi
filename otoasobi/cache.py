@@ -63,7 +63,9 @@ def file_from_mapping(item: object) -> AnalyzedFile:
     return AnalyzedFile(name=name, duration=duration, spans=spans, engine=engine.strip())
 
 
-def _project_path(folder: Path) -> Path:
+def _project_path(folder: Path, project: str | None = None) -> Path:
+    if project:
+        return Path(project)
     return folder / PROJECT_NAME
 
 
@@ -86,8 +88,8 @@ def _cache_payload(data: object) -> dict | None:
     return None
 
 
-def _cache_files_on_disk(folder: Path) -> list[AnalyzedFile]:
-    path = _project_path(folder)
+def _cache_files_on_disk(folder: Path, project: str | None = None) -> list[AnalyzedFile]:
+    path = _project_path(folder, project)
     data: object | None = None
     if path.is_file():
         try:
@@ -118,10 +120,10 @@ def _cache_files_on_disk(folder: Path) -> list[AnalyzedFile]:
     return files
 
 
-def merge_cache(folder: str | Path, updates: list[AnalyzedFile]) -> Path:
+def merge_cache(folder: str | Path, updates: list[AnalyzedFile], project: str | None = None) -> Path:
     """updates で上書きし、既存の区間は他のファイル分を残す。"""
     folder = Path(folder)
-    existing = _cache_files_on_disk(folder)
+    existing = _cache_files_on_disk(folder, project)
     by_name = {item.name.casefold(): item for item in existing}
     for item in updates:
         by_name[item.name.casefold()] = item
@@ -139,10 +141,10 @@ def merge_cache(folder: str | Path, updates: list[AnalyzedFile]) -> Path:
             continue
         ordered.append(item)
         seen.add(key)
-    return save_cache(folder, ordered)
+    return save_cache(folder, ordered, project)
 
 
-def save_cache(folder: str | Path, files: list[AnalyzedFile]) -> Path:
+def save_cache(folder: str | Path, files: list[AnalyzedFile], project: str | None = None) -> Path:
     folder = Path(folder)
     if not folder.is_dir():
         raise RuntimeError("フォルダが見つかりません。")
@@ -156,16 +158,16 @@ def save_cache(folder: str | Path, files: list[AnalyzedFile]) -> Path:
     def change(document: dict) -> None:
         document["cache"] = cache
 
-    _update_document(folder, change)
+    _update_document(folder, change, project)
     for name in LEGACY_CACHE_NAMES:
         (folder / name).unlink(missing_ok=True)
-    return _project_path(folder)
+    return _project_path(folder, project)
 
 
-def read_cache(folder: str | Path) -> CacheLoad | None:
+def read_cache(folder: str | Path, project: str | None = None) -> CacheLoad | None:
     """区間が無ければ None。あるが使えないときは RuntimeError。"""
     folder = Path(folder)
-    path = _project_path(folder)
+    path = _project_path(folder, project)
     legacy = _legacy_cache_path(folder)
     if path.is_file():
         try:
@@ -210,8 +212,8 @@ def _read_cache_body(folder: Path, payload: object) -> CacheLoad | None:
     return _match_wavs(folder, files)
 
 
-def _update_document(folder: Path, change) -> None:
-    path = _project_path(folder)
+def _update_document(folder: Path, change, project: str | None = None) -> None:
+    path = _project_path(folder, project)
     last: Exception | None = None
     for _ in range(50):
         try:

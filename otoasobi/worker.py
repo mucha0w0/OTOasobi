@@ -290,9 +290,16 @@ def _parsed_files(files: object) -> list[AnalyzedFile]:
     return [file_from_mapping(item) for item in files]
 
 
-def _load_cache(request_id: object, folder: str) -> dict:
+def _project_file(request: dict) -> str | None:
+    project = request.get("project")
+    if isinstance(project, str) and project:
+        return project
+    return None
+
+
+def _load_cache(request_id: object, folder: str, project: str | None = None) -> dict:
     try:
-        loaded = read_cache(folder)
+        loaded = read_cache(folder, project)
     except RuntimeError as exc:
         return {"id": request_id, "ok": False, "error": str(exc)}
     if loaded is None:
@@ -308,9 +315,9 @@ def _load_cache(request_id: object, folder: str) -> dict:
     return payload
 
 
-def _save(folder: str, files: object) -> dict:
+def _save(folder: str, files: object, project: str | None = None) -> dict:
     parsed = _parsed_files(files)
-    merge_cache(folder, parsed)
+    merge_cache(folder, parsed, project)
     return {"ok": True}
 
 
@@ -416,6 +423,7 @@ def _write(
     adjustments: object = None,
     parts: object = None,
     scope: object = None,
+    project: str | None = None,
 ) -> dict:
     parsed = _parsed_files(files)
     chosen = _scope_name(scope)
@@ -431,7 +439,7 @@ def _write(
             scope=chosen,
         )
     try:
-        merge_cache(folder, parsed)
+        merge_cache(folder, parsed, project)
     except Exception as exc:
         return {
             "ok": True,
@@ -526,12 +534,12 @@ def _dispatch(request: dict) -> None:
             folder = request.get("folder")
             if not isinstance(folder, str) or not folder:
                 raise RuntimeError("folder がありません")
-            payload = _load_cache(request_id, folder)
+            payload = _load_cache(request_id, folder, _project_file(request))
         elif command == "save":
             folder = request.get("folder")
             if not isinstance(folder, str) or not folder:
                 raise RuntimeError("folder がありません")
-            payload = _save(folder, request.get("files"))
+            payload = _save(folder, request.get("files"), _project_file(request))
         elif command == "frq":
             folder = request.get("folder")
             if not isinstance(folder, str) or not folder:
@@ -553,6 +561,7 @@ def _dispatch(request: dict) -> None:
                 request.get("adjustments"),
                 request.get("parts"),
                 request.get("scope"),
+                _project_file(request),
             )
         else:
             raise RuntimeError("未対応のコマンドです")

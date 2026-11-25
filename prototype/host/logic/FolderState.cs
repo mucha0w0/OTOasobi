@@ -9,7 +9,13 @@ namespace Otoasobi;
 static class FolderState
 {
     public const string FileName = "OTOasobi.otoasobi";
+    public const string Extension = ".otoasobi";
     public const int Version = 1;
+
+    static string? Bound;
+
+    public static void Bind(string? projectFile) =>
+        Bound = string.IsNullOrWhiteSpace(projectFile) ? null : Path.GetFullPath(projectFile);
 
     const string SessionKey = "session";
     const string RecordingKey = "recording";
@@ -22,7 +28,16 @@ static class FolderState
         (CacheKey, ["OTOasobi_cache.json", "OTOasibi_cache.json"]),
     ];
 
-    public static string PathFor(string folder) => Path.Combine(folder, FileName);
+    public static string PathFor(string folder)
+    {
+        var root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(folder));
+        if (Bound != null && string.Equals(Path.GetDirectoryName(Bound), root, StringComparison.OrdinalIgnoreCase))
+            return Bound;
+        return Path.Combine(root, FileName);
+    }
+
+    public static bool IsProjectFile(string? path) =>
+        !string.IsNullOrWhiteSpace(path) && path.EndsWith(Extension, StringComparison.OrdinalIgnoreCase);
 
     public static bool HasSession(string folder)
     {

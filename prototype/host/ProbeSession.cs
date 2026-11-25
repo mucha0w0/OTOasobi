@@ -44,6 +44,7 @@ sealed class ProbeSession : IDisposable
     int _prepareGen;
     volatile bool _preparing;
     string? _folder;
+    string? _projectFile;
     string? _wavPath;
     string? _inputId;
     string? _outputId;
@@ -533,6 +534,8 @@ sealed class ProbeSession : IDisposable
         _fileToken++;
         _fileGen++;
         _folder = null;
+        _projectFile = null;
+        FolderState.Bind(null);
         _wavPath = null;
         _listedNames = [];
         RetirePreview();
@@ -544,10 +547,13 @@ sealed class ProbeSession : IDisposable
     {
         if (_disposed)
             return;
-        string? folder;
+        var picker = new FileOpenPicker();
+        InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(_window));
+        picker.FileTypeFilter.Add(FolderState.Extension);
+        Windows.Storage.StorageFile? file;
         try
         {
-            folder = await WavPicker.PickAsync(WindowNative.GetWindowHandle(_window));
+            file = await picker.PickSingleFileAsync();
         }
         catch (Exception ex)
         {
@@ -555,11 +561,11 @@ sealed class ProbeSession : IDisposable
             return;
         }
 
-        if (string.IsNullOrEmpty(folder) || _disposed)
+        if (file == null || _disposed)
             return;
         try
         {
-            AdoptFolder(folder);
+            AdoptProject(file.Path);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -627,6 +633,7 @@ sealed class ProbeSession : IDisposable
             return;
         }
 
+        var project = Path.Combine(path, name + FolderState.Extension);
         try
         {
             Directory.CreateDirectory(path);
@@ -649,7 +656,7 @@ sealed class ProbeSession : IDisposable
 
         try
         {
-            AdoptFolder(path);
+            AdoptProject(project);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -663,18 +670,19 @@ sealed class ProbeSession : IDisposable
     {
         if (_disposed)
             return;
-        if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path))
+        var project = ResolveProject(path);
+        if (project == null)
         {
             if (!string.IsNullOrWhiteSpace(path))
                 RecentFolders.Forget(path);
             PostRecent();
-            Post(new { type = "failed", message = "フォルダを開けませんでした。" });
+            Post(new { type = "failed", message = "プロジェクトを開けませんでした。" });
             return;
         }
 
         try
         {
-            AdoptFolder(path);
+            AdoptProject(project);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -684,8 +692,13 @@ sealed class ProbeSession : IDisposable
         await Task.CompletedTask;
     }
 
-    void AdoptFolder(string folder)
+    void AdoptProject(string projectFile)
     {
+        var folder = Path.GetDirectoryName(projectFile);
+        if (string.IsNullOrEmpty(folder) || !FolderState.IsProjectFile(projectFile))
+            throw new IOException("プロジェクトを開けませんでした。");
+        FolderState.Bind(projectFile);
+        _projectFile = Path.GetFullPath(projectFile);
         if (!string.Equals(_folder, folder, StringComparison.OrdinalIgnoreCase))
             _fileToken++;
         _folder = folder;
@@ -723,8 +736,35 @@ sealed class ProbeSession : IDisposable
         EnsureWorkSessionFile();
         BeginLoadCache();
         BeginPrepareFolder();
-        RecentFolders.Remember(folder);
+        RecentFolders.Remember(_projectFile);
         PostRecent();
+    }
+
+    static string? ResolveProject(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return null;
+        if (File.Exists(path) && FolderState.IsProjectFile(path))
+            return path;
+        if (!Directory.Exists(path))
+            return null;
+        var standard = Path.Combine(path, FolderState.FileName);
+        if (File.Exists(standard))
+            return standard;
+        string[] found;
+        try
+        {
+            found = Directory.GetFiles(path, "*" + FolderState.Extension);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+
+        if (found.Length == 1)
+            return found[0];
+        var stem = Path.GetFileName(Path.TrimEndingDirectorySeparator(path));
+        return stem.Length == 0 ? null : Path.Combine(path, stem + FolderState.Extension);
     }
 
     void EnsureWorkSessionFile()
@@ -754,7 +794,7 @@ sealed class ProbeSession : IDisposable
     {
         try
         {
-            var data = await Analysis().LoadCacheAsync(folder);
+            var data = await Analysis().LoadCacheAsync(folder, _projectFile);
             if (gen != _cacheGen || _disposed || _folder != folder || data.Cancelled)
                 return;
             if (!data.Ok)
@@ -1890,7 +1930,7 @@ sealed class ProbeSession : IDisposable
             return;
         try
         {
-            await Analysis().SaveCacheAsync(_folder, _oto.Files);
+            await Analysis().SaveCacheAsync(_folder, _oto.Files, _projectFile);
         }
         catch (Exception ex)
         {
@@ -2171,7 +2211,7 @@ sealed class ProbeSession : IDisposable
         {
             var analysis = Analysis();
             var parts = modes.Select(mode => new OtoWritePart(_oto.ExportFor(mode), Array.Empty<OtoAdjustedEntry>())).ToList();
-            var result = await analysis.WriteAsync(_folder, _oto.Files, parts, _oto.ScopeForWrite());
+            var result = await analysis.WriteAsync(_folder, _oto.Files, parts, _oto.ScopeForWrite(), _projectFile);
             if (_disposed)
                 return;
             if (!result.Ok)
@@ -2785,14 +2825,16 @@ sealed class ProbeSession : IDisposable
         var folders = new List<object>();
         foreach (var path in RecentFolders.Load())
         {
-            if (!Directory.Exists(path))
+            var project = ResolveProject(path);
+            if (project == null || !File.Exists(project))
             {
-                RecentFolders.Forget(path);
+                if (!File.Exists(path))
+                    RecentFolders.Forget(path);
                 continue;
             }
 
-            var name = Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
-            folders.Add(new { path, name = name.Length == 0 ? path : name });
+            var name = Path.GetFileNameWithoutExtension(project);
+            folders.Add(new { path = project, name = name.Length == 0 ? project : name });
         }
 
         Post(new { type = "recent", folders });

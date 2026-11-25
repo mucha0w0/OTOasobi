@@ -1770,7 +1770,7 @@ export function App() {
           <div className="mt-2 flex flex-col gap-2">
             <button
               type="button"
-              className="accent-button min-w-52"
+              className="accent-button min-w-64"
               onClick={() => {
                 setCreateName("")
                 setCreateError("")
@@ -1780,25 +1780,24 @@ export function App() {
             >
               新しいプロジェクトを作成する
             </button>
-            <button type="button" className="accent-button min-w-52" onClick={() => sendRef.current({ type: "openFolder" })}>
-              既存のフォルダを選ぶ
+            <button type="button" className="accent-button min-w-64" onClick={() => sendRef.current({ type: "openFolder" })}>
+              既存のプロジェクトファイルを開く
             </button>
           </div>
-          {recentFolders.length > 0 && (
-            <div className="mt-4 w-full max-w-md text-left text-sm">
-              <p className="mb-1 text-[var(--muted)]">最近使ったフォルダ</p>
-              {recentFolders.map((item) => (
-                <button
-                  key={item.path}
-                  type="button"
-                  className="block w-full truncate rounded px-2 py-1 text-left hover:bg-[var(--line)]"
-                  onClick={() => sendRef.current({ type: "openRecent", path: item.path })}
-                >
-                  {item.name}
-                </button>
-              ))}
-            </div>
-          )}
+          <div className="mt-4 w-full max-w-md text-left text-sm">
+            <p className="mb-1 text-[var(--muted)]">最近開いたプロジェクト</p>
+            {recentFolders.map((item) => (
+              <button
+                key={item.path}
+                type="button"
+                className="block w-full truncate rounded px-2 py-1 text-left hover:bg-[var(--line)]"
+                title={item.path}
+                onClick={() => sendRef.current({ type: "openRecent", path: item.path })}
+              >
+                {item.name}
+              </button>
+            ))}
+          </div>
           {!connected && <p className="text-sm text-[var(--muted)]">ホストに接続していません</p>}
         </main>
       )}

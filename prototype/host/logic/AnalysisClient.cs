@@ -80,21 +80,22 @@ sealed class AnalysisClient : IDisposable
         return ReadFolder(doc.RootElement);
     }
 
-    public async Task<FolderData> LoadCacheAsync(string folder)
+    public async Task<FolderData> LoadCacheAsync(string folder, string? project = null)
     {
         using var doc = await SendAsync(
-            id => JsonSerializer.Serialize(new { id, cmd = "cache", folder }),
+            id => JsonSerializer.Serialize(new { id, cmd = "cache", folder, project }),
             null).ConfigureAwait(true);
         return ReadFolder(doc.RootElement);
     }
 
-    public async Task SaveCacheAsync(string folder, IReadOnlyList<WavFile> files)
+    public async Task SaveCacheAsync(string folder, IReadOnlyList<WavFile> files, string? project = null)
     {
         using var doc = await SendAsync(id => JsonSerializer.Serialize(new
         {
             id,
             cmd = "save",
             folder,
+            project,
             files = FilePayload(files),
         }), null).ConfigureAwait(true);
         var root = doc.RootElement;
@@ -132,13 +133,15 @@ sealed class AnalysisClient : IDisposable
         string folder,
         IReadOnlyList<WavFile> files,
         IReadOnlyList<OtoWritePart> parts,
-        string scope)
+        string scope,
+        string? project = null)
     {
         using var doc = await SendAsync(id => JsonSerializer.Serialize(new
         {
             id,
             cmd = "write",
             folder,
+            project,
             files = FilePayload(files),
             scope,
             parts = parts.Select(part => new
