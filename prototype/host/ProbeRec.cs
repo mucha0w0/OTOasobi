@@ -68,9 +68,9 @@ sealed class ProbeRec
             Store("");
     }
 
-    public string? NextUnrecordedSing(string? current)
+    public string? NextSing(string? current, string? filter)
     {
-        if (string.IsNullOrEmpty(_folder) || _lines.Length == 0)
+        if (string.IsNullOrEmpty(_folder) || _lines.Length == 0 || filter == "extra")
             return null;
         var start = -1;
         if (!string.IsNullOrEmpty(current))
@@ -85,19 +85,17 @@ sealed class ProbeRec
             }
         }
 
-        for (var pass = 0; pass < 2; pass++)
+        for (var i = start + 1; i < _lines.Length; i++)
         {
-            var from = pass == 0 ? start + 1 : 0;
-            var to = pass == 0 ? _lines.Length : Math.Max(0, start);
-            for (var i = from; i < to; i++)
-            {
-                var line = _lines[i];
-                if (line.NameError != null)
-                    continue;
-                var wav = RecNames.WavName(line.Sing);
-                if (!File.Exists(Path.Combine(_folder, wav)))
-                    return line.Sing;
-            }
+            var line = _lines[i];
+            if (line.NameError != null)
+                continue;
+            var recorded = File.Exists(Path.Combine(_folder, RecNames.WavName(line.Sing)));
+            if (filter == "done" && !recorded)
+                continue;
+            if (filter == "todo" && recorded)
+                continue;
+            return line.Sing;
         }
 
         return null;

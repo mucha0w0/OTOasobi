@@ -1606,7 +1606,7 @@ sealed class ProbeSession : IDisposable
                         return;
                     if (!advance)
                         return;
-                    var next = _rec.NextUnrecordedSing(_recordStem);
+                    var next = _rec.NextSing(_recordStem, Text(root, "filter"));
                     if (string.IsNullOrEmpty(next))
                         return;
                     _recordStem = next;

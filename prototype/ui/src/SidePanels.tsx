@@ -67,7 +67,7 @@ export function RecPanel({
         {capture?.listenError && <p className="text-[var(--danger)]">{capture.listenError}</p>}
         <label className="flex gap-2">
           <input type="checkbox" checked={advance} onChange={(event) => setAdvance(event.target.checked)} />
-          停止したあとに次の未録音へ進む
+          次の行に進む
         </label>
       </div>
       <div className="flex gap-2 border-t border-[var(--line)] p-3">

@@ -16,7 +16,7 @@ export type PageCommand =
   | { type: "monitor"; on: boolean }
   | { type: "guide"; note: string; semitones: number; speed: number; volume?: number; bpm?: number; moras?: number; moraBeats?: number; countBeats?: number; countBeatsAfter?: number }
   | { type: "guideStop" }
-  | { type: "record"; name?: string; countBeats?: number; countBeatsAfter?: number; bpm?: number; moras?: number; moraBeats?: number; volume?: number; note?: string; semitones?: number; speed?: number; recStartAfter?: number; recEndBefore?: number; useGuide?: boolean; advance?: boolean }
+  | { type: "record"; name?: string; countBeats?: number; countBeatsAfter?: number; bpm?: number; moras?: number; moraBeats?: number; volume?: number; note?: string; semitones?: number; speed?: number; recStartAfter?: number; recEndBefore?: number; useGuide?: boolean; advance?: boolean; filter?: "all" | "todo" | "done" | "extra" }
   | { type: "recordStop" }
   | { type: "recSettings"; note: string; semitones: number; speed: number; volume: number; countBeats: number; countBeatsAfter: number; bpm: number; moras: number; moraBeats: number; advance: boolean; useGuide: boolean; recStartAfter: number; recEndBefore: number }
   | { type: "recList"; op: "none" | "pick" | "open"; path?: string }

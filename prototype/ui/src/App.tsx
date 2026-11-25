@@ -265,6 +265,7 @@ export function App() {
   const recListRef = useRef<RecListEvent | null>(null)
   const recIndexRef = useRef<number | null>(null)
   const advanceRef = useRef(false)
+  const recFilterRef = useRef<"all" | "todo" | "done" | "extra">("all")
   const useGuideRef = useRef(true)
   const guideChainRef = useRef(false)
   const recordNameRef = useRef<string | null>(null)
@@ -298,6 +299,7 @@ export function App() {
   recListRef.current = recList
   recIndexRef.current = recIndex
   advanceRef.current = advance
+  recFilterRef.current = recFilter
   useGuideRef.current = useGuide
   createOpenRef.current = createOpen
   modelRef.current = viewModel()
@@ -1241,6 +1243,24 @@ export function App() {
     return -1
   }
 
+  function nextShown(from: number) {
+    const lines = recListRef.current?.lines ?? []
+    const filter = recFilterRef.current
+    for (let i = from + 1; i < lines.length; i++) {
+      const line = lines[i]
+      if (!line || line.error)
+        continue
+      if (filter === "todo" && line.recorded)
+        continue
+      if (filter === "done" && !line.recorded)
+        continue
+      if (filter === "extra")
+        return -1
+      return i
+    }
+    return -1
+  }
+
   function advanceAfterSave() {
     const name = recordNameRef.current
     recordNameRef.current = null
@@ -1248,7 +1268,7 @@ export function App() {
       return
     const lines = recListRef.current?.lines ?? []
     const index = lines.findIndex((line) => line.sing === name)
-    const next = nextUnrecorded(index)
+    const next = nextShown(index)
     const line = lines[next]
     if (line)
       chooseRec(next, line.wav)
@@ -1272,6 +1292,7 @@ export function App() {
       recEndBefore,
       useGuide: useGuideRef.current,
       advance: advanceRef.current,
+      filter: recFilterRef.current,
     })
   }
 
