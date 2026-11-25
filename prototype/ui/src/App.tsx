@@ -761,6 +761,8 @@ export function App() {
         setOutputs(event.outputs)
         break
       case "files": {
+        if (event.names.some((name) => sameName(name, fileNameRef.current)))
+          missingRef.current = false
         const keep = missingRef.current || event.names.some((name) => sameName(name, fileNameRef.current))
         setCreateOpen(false)
         setCreating(false)
@@ -1447,11 +1449,12 @@ export function App() {
   const aliasSelected = selectedAliasIds(aliasRows, pick.selected)
   const aliasCurrent = shownAliasId(aliasRows, pick.active, focusIndex, oto?.mode, pinnedAlias, aliasStepTarget.current)
   useEffect(() => {
-    if (recLine?.recorded)
-      sendRef.current({ type: "take", op: "wave", name: recLine.wav })
-    else
+    if (!fileName || missingRef.current) {
       setTakeWave(null)
-  }, [recLine?.recorded, recLine?.wav])
+      return
+    }
+    sendRef.current({ type: "take", op: "wave", name: fileName })
+  }, [fileName, names])
   const recNext = recLine && recIndex != null ? recList?.lines[recIndex + 1]?.sing ?? "" : ""
   const recOutside = !recLine && (recList?.outside.some((name) => sameName(name, fileName)) ?? false) ? fileName : ""
   const recStatus = recLine?.error ?? (recLine ? (recLine.recorded ? "録音済み" : "未録音") : recOutside ? "リスト外" : "")
@@ -1647,8 +1650,8 @@ export function App() {
                   <MicPanel
                     bus={bus}
                     appearance={appearance}
-                    recorded={Boolean(recLine?.recorded)}
-                    wave={takeWave && recLine && takeWave.name === recLine.wav ? takeWave : null}
+                    unrecorded={Boolean(recLine && !recLine.recorded && !recLine.error)}
+                    wave={takeWave && sameName(takeWave.name, fileName) ? takeWave : null}
                     playing={takePlay.playing}
                     position={takePlay.position}
                   />

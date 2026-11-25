@@ -292,14 +292,14 @@ export function GuidePanel({
 export function MicPanel({
   bus,
   appearance,
-  recorded,
+  unrecorded,
   wave,
   playing,
   position,
 }: {
   bus: LiveBus
   appearance: string
-  recorded: boolean
+  unrecorded: boolean
   wave: { lo: number[]; hi: number[]; duration: number } | null
   playing: boolean
   position: number
@@ -311,7 +311,9 @@ export function MicPanel({
     if (node)
       canvasContext(node)
   }, [])
-  const shown = recorded ? wave : null
+  const live = capture?.recording ?? false
+  const shown = live ? null : wave
+  const missing = !live && shown == null && unrecorded
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -333,7 +335,9 @@ export function MicPanel({
       return
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0)
     ctx.clearRect(0, 0, width, height)
-    const peaks = shown ?? capture
+    if (missing)
+      return
+    const peaks = live ? capture : shown
     if (peaks)
       drawPeaks(ctx, width, height, peaks.lo, peaks.hi, getCss("--wave"))
     if (shown && shown.duration > 0 && playing) {
@@ -341,13 +345,16 @@ export function MicPanel({
       ctx.fillStyle = getCss("--accent")
       ctx.fillRect(x, 0, 2, height)
     }
-  }, [capture, appearance, shown, playing, position])
+  }, [capture, appearance, shown, live, missing, playing, position])
 
   return (
     <div className="flex h-full min-h-0">
       <LevelMeter peak={capture?.peak ?? 0} />
       <div className="relative min-h-0 min-w-0 flex-1 bg-[var(--canvas)]">
         <canvas ref={bindCanvas} className="h-full w-full" />
+        {missing && (
+          <p className="absolute inset-0 flex items-center justify-center text-sm text-[var(--muted)]">録音されていません</p>
+        )}
       </div>
     </div>
   )
