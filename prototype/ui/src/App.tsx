@@ -1511,6 +1511,7 @@ export function App() {
         canWrite={Boolean(oto?.analyzed && !oto.busy)}
         onOpenFolder={() => sendRef.current({ type: "openFolder" })}
         onLeaveFolder={() => sendRef.current({ type: "leaveFolder" })}
+        onRevealFolder={() => sendRef.current({ type: "revealFolder" })}
         onSaveSettings={() => {
           setSaveName("")
           setSaveOpen(true)
