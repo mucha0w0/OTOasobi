@@ -70,8 +70,8 @@ class WritePartsTests(unittest.TestCase):
             folder = Path(tmp)
             export_folder(folder, [item], OtoSettings(mode="mono"), logs=False)
             self.assertTrue((folder / "oto.ini").is_file())
-            self.assertFalse((folder / "OTOasibi_log.txt").exists())
-            self.assertFalse((folder / "OTOasibi_out.txt").exists())
+            self.assertFalse((folder / "OTOasobi_log.txt").exists())
+            self.assertFalse((folder / "OTOasobi_out.txt").exists())
 
     def test_export_missing_keeps_the_previous_line(self) -> None:
         spans = [Span(0.0, 0.2, "k", "k"), Span(0.2, 0.6, "a", "あ")]

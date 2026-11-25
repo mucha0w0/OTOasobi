@@ -1,4 +1,4 @@
-"""フォルダ内の区間を OTOasibi_cache.json に残す。
+"""フォルダ内の区間を OTOasobi_cache.json に残す。
 
 次回同じフォルダを開いたときは、このファイルを読み、WAV は再解析しない。
 """
@@ -12,7 +12,8 @@ from pathlib import Path
 from otoasobi.wavs import AnalyzedFile, list_wavs
 from otoasobi.segment import Span
 
-CACHE_NAME = "OTOasibi_cache.json"
+CACHE_NAME = "OTOasobi_cache.json"
+LEGACY_CACHE_NAME = "OTOasibi_cache.json"
 CACHE_VERSION = 1
 
 
@@ -58,8 +59,18 @@ def file_from_mapping(item: object) -> AnalyzedFile:
     return AnalyzedFile(name=name, duration=duration, spans=spans, engine=engine.strip())
 
 
-def _cache_files_on_disk(folder: Path) -> list[AnalyzedFile]:
+def _cache_path(folder: Path) -> Path:
     path = folder / CACHE_NAME
+    if path.is_file():
+        return path
+    legacy = folder / LEGACY_CACHE_NAME
+    if legacy.is_file():
+        return legacy
+    return path
+
+
+def _cache_files_on_disk(folder: Path) -> list[AnalyzedFile]:
+    path = _cache_path(folder)
     if not path.is_file():
         return []
     try:
@@ -81,7 +92,7 @@ def _cache_files_on_disk(folder: Path) -> list[AnalyzedFile]:
 
 
 def merge_cache(folder: str | Path, updates: list[AnalyzedFile]) -> Path:
-    """updates で上書きし、既存の OTOasibi_cache.json は他のファイル分を残す。"""
+    """updates で上書きし、既存の OTOasobi_cache.json は他のファイル分を残す。"""
     folder = Path(folder)
     existing = _cache_files_on_disk(folder)
     by_name = {item.name.casefold(): item for item in existing}
@@ -129,29 +140,29 @@ def save_cache(folder: str | Path, files: list[AnalyzedFile]) -> Path:
 def read_cache(folder: str | Path) -> CacheLoad | None:
     """ファイルが無ければ None。あるが使えないときは RuntimeError。"""
     folder = Path(folder)
-    path = folder / CACHE_NAME
+    path = _cache_path(folder)
     if not path.is_file():
         return None
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise RuntimeError(
-            "保存データ（OTOasibi_cache.json）を読めませんでした。削除してから、もう一度開いてください。"
+            "保存データ（OTOasobi_cache.json）を読めませんでした。削除してから、もう一度開いてください。"
         ) from exc
     if not isinstance(data, dict) or data.get("version") != CACHE_VERSION:
         raise RuntimeError(
-            "保存データの形式が対応していません。OTOasibi_cache.json を削除してから、もう一度開いてください。"
+            "保存データの形式が対応していません。OTOasobi_cache.json を削除してから、もう一度開いてください。"
         )
     raw = data.get("files")
     if not isinstance(raw, list) or not raw:
         raise RuntimeError(
-            "保存データに区間がありません。OTOasibi_cache.json を削除してから、もう一度開いてください。"
+            "保存データに区間がありません。OTOasobi_cache.json を削除してから、もう一度開いてください。"
         )
     try:
         files = [file_from_mapping(item) for item in raw]
     except RuntimeError as exc:
         raise RuntimeError(
-            f"{exc} OTOasibi_cache.json を削除してから、もう一度開いてください。"
+            f"{exc} OTOasobi_cache.json を削除してから、もう一度開いてください。"
         ) from exc
     return _match_wavs(folder, files)
 
@@ -174,7 +185,7 @@ def _match_wavs(folder: Path, files: list[AnalyzedFile]) -> CacheLoad:
         loaded.append(item)
     if not loaded:
         raise RuntimeError(
-            "保存データにある WAV が、このフォルダにありません。OTOasibi_cache.json を削除してから、もう一度開いてください。"
+            "保存データにある WAV が、このフォルダにありません。OTOasobi_cache.json を削除してから、もう一度開いてください。"
         )
     extra = [name for key, name in on_disk.items() if key not in seen]
     return CacheLoad(files=loaded, notice=_mismatch_notice(missing, extra))

@@ -2585,7 +2585,11 @@ sealed class ProbeSession : IDisposable
         _waveLoad = null;
         if (_disposed || _folder != folder)
             return;
-        var cache = Path.Combine(folder, OtoSaveStore.CacheFileName);
+        foreach (var cache in new[]
+        {
+            Path.Combine(folder, OtoSaveStore.CacheFileName),
+            Path.Combine(folder, OtoSaveStore.LegacyCacheFileName),
+        })
         try
         {
             if (File.Exists(cache))

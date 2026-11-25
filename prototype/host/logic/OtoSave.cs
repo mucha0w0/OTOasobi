@@ -314,10 +314,13 @@ sealed class OtoSaveSummary
 
 static class OtoSaveStore
 {
-    public const string FilePrefix = "OTOasibi_";
+    public const string FilePrefix = "OTOasobi_";
+    const string LegacyFilePrefix = "OTOasibi_";
     const string SessionStem = "作業中";
-    public const string CacheFileName = "OTOasibi_cache.json";
+    public const string CacheFileName = "OTOasobi_cache.json";
+    public const string LegacyCacheFileName = "OTOasibi_cache.json";
     const string SessionFileName = FilePrefix + SessionStem + ".json";
+    const string LegacySessionFileName = LegacyFilePrefix + SessionStem + ".json";
 
     static readonly string[] ReservedDevices =
     [
@@ -367,7 +370,8 @@ static class OtoSaveStore
             if (!Directory.Exists(folder))
                 return [];
             var result = new List<OtoSaveSummary>();
-            foreach (var path in Directory.EnumerateFiles(folder, FilePrefix + "*.json"))
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var path in EnumerateSaveFiles(folder))
             {
                 if (IsSession(path) || IsCache(path))
                     continue;
@@ -381,7 +385,7 @@ static class OtoSaveStore
                     continue;
                 }
 
-                if (file.Name.Length == 0 || NameError(file.Name) != null)
+                if (file.Name.Length == 0 || NameError(file.Name) != null || !seen.Add(file.Name))
                     continue;
                 result.Add(new OtoSaveSummary
                 {
@@ -414,7 +418,11 @@ static class OtoSaveStore
         {
             var path = SessionPath(folder);
             if (!File.Exists(path))
-                return null;
+            {
+                path = Path.Combine(folder, LegacySessionFileName);
+                if (!File.Exists(path))
+                    return null;
+            }
             return Read(path);
         }
         catch (InvalidDataException)
@@ -495,22 +503,42 @@ static class OtoSaveStore
     static void WriteTo(string path, OtoSaveFile file) =>
         JsonFiles.Write(path, file, JsonFiles.OptionsIgnoringNull);
 
-    static bool IsSession(string path) =>
-        Path.GetFileName(path).Equals(SessionFileName, StringComparison.OrdinalIgnoreCase);
+    static IEnumerable<string> EnumerateSaveFiles(string folder)
+    {
+        foreach (var path in Directory.EnumerateFiles(folder, FilePrefix + "*.json"))
+            yield return path;
+        foreach (var path in Directory.EnumerateFiles(folder, LegacyFilePrefix + "*.json"))
+            yield return path;
+    }
 
-    static bool IsCache(string path) =>
-        Path.GetFileName(path).Equals(CacheFileName, StringComparison.OrdinalIgnoreCase);
+    static bool IsSession(string path)
+    {
+        var file = Path.GetFileName(path);
+        return file.Equals(SessionFileName, StringComparison.OrdinalIgnoreCase)
+            || file.Equals(LegacySessionFileName, StringComparison.OrdinalIgnoreCase);
+    }
+
+    static bool IsCache(string path)
+    {
+        var file = Path.GetFileName(path);
+        return file.Equals(CacheFileName, StringComparison.OrdinalIgnoreCase)
+            || file.Equals(LegacyCacheFileName, StringComparison.OrdinalIgnoreCase);
+    }
 
     static string? DisplayName(string path)
     {
         var file = Path.GetFileName(path);
-        if (!file.StartsWith(FilePrefix, StringComparison.OrdinalIgnoreCase)
-            || !file.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+        if (!file.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
             return null;
         var stem = file[..^".json".Length];
-        if (stem.Length <= FilePrefix.Length)
-            return null;
-        return stem[FilePrefix.Length..];
+        foreach (var prefix in new[] { FilePrefix, LegacyFilePrefix })
+        {
+            if (!stem.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) || stem.Length <= prefix.Length)
+                continue;
+            return stem[prefix.Length..];
+        }
+
+        return null;
     }
 
     static OtoSaveFile Clean(OtoSaveFile file)

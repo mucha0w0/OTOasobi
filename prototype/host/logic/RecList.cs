@@ -173,7 +173,9 @@ sealed class RecFolderFile
 
 static class RecFolderStore
 {
-    public static string FileName { get; } = "OTOasibi_録音.json";
+    public static string FileName { get; } = "OTOasobi_録音.json";
+
+    const string LegacyFileName = "OTOasibi_録音.json";
 
     public static bool ListIsCleared(string? list) =>
         list != null && list.Trim().Length == 0;
@@ -187,8 +189,18 @@ static class RecFolderStore
     public static bool UseManualGuide(bool? saved, string? guide) =>
         saved ?? !IsGuideWav(guide);
 
-    public static RecFolderFile Load(string folder) =>
-        JsonFiles.Read<RecFolderFile>(Path.Combine(folder, FileName)) ?? new RecFolderFile();
+    public static RecFolderFile Load(string folder)
+    {
+        var path = Path.Combine(folder, FileName);
+        if (!File.Exists(path))
+        {
+            var legacy = Path.Combine(folder, LegacyFileName);
+            if (File.Exists(legacy))
+                path = legacy;
+        }
+
+        return JsonFiles.Read<RecFolderFile>(path) ?? new RecFolderFile();
+    }
 
     public static void Save(string folder, RecFolderFile file) =>
         JsonFiles.Write(Path.Combine(folder, FileName), file);

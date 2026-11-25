@@ -151,8 +151,8 @@ def default_log_path(wav_path: str | Path) -> Path:
     return wav_path.with_suffix(".log.txt")
 
 
-BATCH_TXT_NAME = "OTOasibi_out.txt"
-BATCH_LOG_NAME = "OTOasibi_log.txt"
+BATCH_TXT_NAME = "OTOasobi_out.txt"
+BATCH_LOG_NAME = "OTOasobi_log.txt"
 
 
 def _format_batch(entries: list[tuple[str, list[Span]]], to_text: Callable[[list[Span]], str]) -> str:
