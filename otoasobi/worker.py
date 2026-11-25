@@ -8,7 +8,7 @@ file の done は、いま解析しているファイルの 0 から 1。
 応答: {"id": 1, "ok": true, "files": [...], "notice": "..."}
       {"id": 1, "ok": false, "error": "..."}
 
-analyze は oto.ini を書かない。区間はホストの save で OTOasobi_cache.json に残す。
+analyze は oto.ini を書かない。区間はホストの save で OTOasobi.otoasobi に残す。
 cache は保存データだけを返す。無ければ files は空。WAV は再解析しない。
 同じフォルダに保存データがあるときは再解析せず、そのファイルを返す。
 "force": true のときだけ解析し直し、保存データを上書きする。

@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from otoasobi.cache import CACHE_NAME, merge_cache, save_cache
+from otoasobi.cache import PROJECT_NAME, merge_cache, save_cache
 from otoasobi.segment import Span
 from otoasobi.wavs import AnalyzedFile
 
@@ -23,8 +23,8 @@ class CacheMergeTest(unittest.TestCase):
             folder = Path(tmp)
             save_cache(folder, [_file("あ.wav", 0.0, 1.0), _file("い.wav", 0.0, 1.0)])
             merge_cache(folder, [_file("あ.wav", 0.1, 0.9)])
-            raw = json.loads((folder / CACHE_NAME).read_text(encoding="utf-8"))
-            by_name = {item["name"]: item for item in raw["files"]}
+            raw = json.loads((folder / PROJECT_NAME).read_text(encoding="utf-8"))
+            by_name = {item["name"]: item for item in raw["cache"]["files"]}
             self.assertEqual(len(by_name), 2)
             self.assertAlmostEqual(by_name["あ.wav"]["spans"][0]["start"], 0.1)
             self.assertAlmostEqual(by_name["い.wav"]["spans"][0]["start"], 0.0)
@@ -34,8 +34,8 @@ class CacheMergeTest(unittest.TestCase):
             folder = Path(tmp)
             save_cache(folder, [_file("あ.wav", 0.0, 1.0)])
             merge_cache(folder, [_file("い.wav", 0.0, 1.0)])
-            raw = json.loads((folder / CACHE_NAME).read_text(encoding="utf-8"))
-            names = [item["name"] for item in raw["files"]]
+            raw = json.loads((folder / PROJECT_NAME).read_text(encoding="utf-8"))
+            names = [item["name"] for item in raw["cache"]["files"]]
             self.assertEqual(names, ["あ.wav", "い.wav"])
 
 

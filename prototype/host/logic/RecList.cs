@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace Otoasobi;
 
 // 録音リストのテキスト。1 行が 1 テイク。# はメモ、タブの右はコメント。
@@ -173,10 +175,6 @@ sealed class RecFolderFile
 
 static class RecFolderStore
 {
-    public static string FileName { get; } = "OTOasobi_録音.json";
-
-    const string LegacyFileName = "OTOasibi_録音.json";
-
     public static bool ListIsCleared(string? list) =>
         list != null && list.Trim().Length == 0;
 
@@ -191,19 +189,21 @@ static class RecFolderStore
 
     public static RecFolderFile Load(string folder)
     {
-        var path = Path.Combine(folder, FileName);
-        if (!File.Exists(path))
+        var node = FolderState.Section(folder, "recording");
+        if (node == null)
+            return new RecFolderFile();
+        try
         {
-            var legacy = Path.Combine(folder, LegacyFileName);
-            if (File.Exists(legacy))
-                path = legacy;
+            return node.Deserialize<RecFolderFile>(JsonFiles.Options) ?? new RecFolderFile();
         }
-
-        return JsonFiles.Read<RecFolderFile>(path) ?? new RecFolderFile();
+        catch (JsonException)
+        {
+            return new RecFolderFile();
+        }
     }
 
     public static void Save(string folder, RecFolderFile file) =>
-        JsonFiles.Write(Path.Combine(folder, FileName), file);
+        FolderState.WriteSection(folder, "recording", JsonSerializer.SerializeToNode(file, JsonFiles.Options));
 }
 
 // 一度選んだガイド BGM の WAV。音源フォルダではなく、この PC に残す。

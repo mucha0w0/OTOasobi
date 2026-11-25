@@ -733,7 +733,7 @@ sealed class ProbeSession : IDisposable
             return;
         try
         {
-            if (!File.Exists(OtoSaveStore.SessionPath(_folder)))
+            if (!FolderState.HasSession(_folder))
                 _oto.FlushSession();
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
@@ -2602,15 +2602,9 @@ sealed class ProbeSession : IDisposable
         _waveLoad = null;
         if (_disposed || _folder != folder)
             return;
-        foreach (var cache in new[]
-        {
-            Path.Combine(folder, OtoSaveStore.CacheFileName),
-            Path.Combine(folder, OtoSaveStore.LegacyCacheFileName),
-        })
         try
         {
-            if (File.Exists(cache))
-                File.Delete(cache);
+            FolderState.ClearCache(folder);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {

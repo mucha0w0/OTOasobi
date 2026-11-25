@@ -339,8 +339,6 @@ static class OtoSaveStore
     public static string FilePathFor(string folder, string name) =>
         Path.Combine(folder, FilePrefix + name.Trim() + ".json");
 
-    public static string SessionPath(string folder) => Path.Combine(folder, SessionFileName);
-
     public static string? NameError(string raw)
     {
         var basic = PresetUi.BasicNameError(raw);
@@ -416,14 +414,16 @@ static class OtoSaveStore
         keepExisting = false;
         try
         {
-            var path = SessionPath(folder);
-            if (!File.Exists(path))
-            {
-                path = Path.Combine(folder, LegacySessionFileName);
-                if (!File.Exists(path))
-                    return null;
-            }
-            return Read(path);
+            var node = FolderState.Section(folder, "session");
+            if (node == null)
+                return null;
+            var file = node.Deserialize<OtoSaveFile>(JsonFiles.OptionsIgnoringNull)
+                ?? throw new JsonException("空のファイルです。");
+            if (file.Version > OtoSaveFile.CurrentVersion)
+                throw new InvalidDataException("この保存データは、いまの OTOasobi では読めません。");
+            if (file.Kind != OtoSaveFile.KindId)
+                throw new InvalidDataException("このファイルは設定の保存データではありません。");
+            return Clean(file);
         }
         catch (InvalidDataException)
         {
@@ -477,7 +477,7 @@ static class OtoSaveStore
         file.Presets = null;
         file.CvvcPresets = null;
         file.Effects = null;
-        WriteTo(SessionPath(folder), file);
+        FolderState.WriteSection(folder, "session", JsonSerializer.SerializeToNode(file, JsonFiles.OptionsIgnoringNull));
     }
 
     public static void Delete(string folder, string name)
