@@ -2688,14 +2688,14 @@ sealed class ProbeSession : IDisposable
     static double RecStartAfterOf(JsonElement root)
     {
         if (root.TryGetProperty("recStartAfter", out var value) && value.TryGetDouble(out var seconds))
-            return Math.Clamp(seconds, 0, 600);
+            return Math.Clamp(seconds, 0, 3);
         return RecAppSettings.Load().RecStartAfter;
     }
 
     static double RecEndBeforeOf(JsonElement root)
     {
         if (root.TryGetProperty("recEndBefore", out var value) && value.TryGetDouble(out var seconds))
-            return Math.Clamp(seconds, 0, 600);
+            return Math.Clamp(seconds, 0, 3);
         return RecAppSettings.Load().RecEndBefore;
     }
 

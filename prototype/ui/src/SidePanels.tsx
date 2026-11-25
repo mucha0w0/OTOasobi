@@ -159,14 +159,14 @@ export function GuidePanel({
           録音開始位置
           <span className="num text-[var(--muted)]">{recStartAfter.toFixed(1)} s</span>
         </span>
-        <input type="range" min={0} max={60} step={0.1} value={recStartAfter} onChange={(event) => setRecStartAfter(Number(event.target.value))} />
+        <input type="range" min={0} max={3} step={0.1} value={recStartAfter} onChange={(event) => setRecStartAfter(Number(event.target.value))} />
       </label>
       <label className="grid gap-1">
         <span className="flex justify-between">
           録音終了位置
           <span className="num text-[var(--muted)]">{recEndBefore.toFixed(1)} s</span>
         </span>
-        <input type="range" min={0} max={60} step={0.1} value={recEndBefore} onChange={(event) => setRecEndBefore(Number(event.target.value))} />
+        <input type="range" min={0} max={3} step={0.1} value={recEndBefore} onChange={(event) => setRecEndBefore(Number(event.target.value))} />
       </label>
     </>
   )
