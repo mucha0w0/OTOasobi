@@ -80,12 +80,16 @@ export function MenuBar({
         <Item onClick={onClose}>終了</Item>
       </Menu>
       <Menu title="編集" open={open} setOpen={setOpen}>
-        <Item disabled={!canUndo} onClick={onUndo}>元に戻す</Item>
-        <Item disabled={!canRedo} onClick={onRedo}>やり直す</Item>
-        <div className="my-1 border-t border-[var(--line)]" />
+        {canEdit && (
+          <>
+            <Item disabled={!canUndo} onClick={onUndo}>元に戻す</Item>
+            <Item disabled={!canRedo} onClick={onRedo}>やり直す</Item>
+            <div className="my-1 border-t border-[var(--line)]" />
+          </>
+        )}
         <Item onClick={onSettings}>環境設定</Item>
       </Menu>
-      <Menu title="表示" open={open} setOpen={setOpen}>
+      {canEdit && <Menu title="表示" open={open} setOpen={setOpen}>
         {viewFolders.map((group) => (
           <Flyout
             key={group.title}
@@ -122,7 +126,7 @@ export function MenuBar({
           ))}
           <Item onClick={onSaveTemplate}>この配置をテンプレートとして保存</Item>
         </div>
-      </Menu>
+      </Menu>}
     </nav>
   )
 }
