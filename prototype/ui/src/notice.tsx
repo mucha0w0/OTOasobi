@@ -33,17 +33,12 @@ export function ToneRow({ tone, children, className = "mt-2" }: { tone: NoticeTo
   )
 }
 
-function logBorder(tone: NoticeTone) {
-  return tone === "success" ? "var(--success)" : tone === "error" ? "var(--danger)" : "var(--muted)"
-}
-
 export function LogBar({ message, tone }: { message: string; tone: NoticeTone }) {
   const empty = message.length === 0
   return (
     <div
       role={empty ? undefined : tone === "error" ? "alert" : "status"}
-      className="flex h-6 shrink-0 items-center gap-1.5 border-t border-l-[3px] border-[var(--line)] bg-[var(--panel)] px-3 text-xs text-[var(--text)]"
-      style={{ borderLeftColor: empty ? "var(--line)" : logBorder(tone) }}
+      className="flex h-6 shrink-0 items-center gap-1.5 border-t border-[var(--line)] bg-[var(--panel)] px-3 text-xs text-[var(--text)]"
     >
       {!empty && <ToneIcon tone={tone} />}
       <span className="min-w-0 flex-1 truncate">{message}</span>
